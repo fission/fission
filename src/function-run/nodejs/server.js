@@ -1,15 +1,15 @@
 'use strict';
 
-var fs = require('fs');
-var process = require('process');
-var express = require('express');
-var app = express();
-var bodyParser = require('body-parser');
+const fs = require('fs');
+const process = require('process');
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
 
 // Command line opts
 const argv = require('minimist')(process.argv.slice(1));
 if (!argv.codepath || !argv.port) {
-    console.log("Need --codepath and --port");
+    console.error("Need --codepath and --port");
     process.exit(1);
 }
 
@@ -39,7 +39,7 @@ function specialize(req, res) {
         var elapsed = process.hrtime(startTime);
         console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]}ns`);
     } catch(e) {
-        console.log(`eval error: ${e}`);
+        console.error(`eval error: ${e}`);
         res.status(500).send(JSON.stringify(e));
         return;
     }
