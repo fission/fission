@@ -1,0 +1,23 @@
+{
+    "name": "fission-nodejs-runtime",
+    "version": "0.0.0",
+    "author": "Soam Vasani",
+    "contributors": [
+        {
+            "name": "Soam Vasani",
+            "email": "soamvasani@platform9.com"
+        }
+    ],
+    "description": "NodeJS run container for the fission framework",
+    "engines": {
+        "node": ">=4.2.2"
+    },
+    "dependencies": {
+        "express": "",
+        "minimist": "",
+        "body-parser": "",
+
+        "require-from-string": ""
+    },
+    "start": "node server.js --codepath '/fission/function' --port 8888"
+}
