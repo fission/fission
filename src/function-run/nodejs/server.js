@@ -32,14 +32,11 @@ function specialize(req, res) {
     // Read and load the code. It's placed there securely by the fission runtime.
     try {
         var startTime = process.hrtime();
-
-        const code = fs.readFileSync(argv.codepath).toString();
-        userFunction = eval(code);
-
+        userFunction = require(argv.codepath);
         var elapsed = process.hrtime(startTime);
-        console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]}ns`);
+        console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]/1000000}ms`);
     } catch(e) {
-        console.error(`eval error: ${e}`);
+        console.error(`user code load error: ${e}`);
         res.status(500).send(JSON.stringify(e));
         return;
     }
