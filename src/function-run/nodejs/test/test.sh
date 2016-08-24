@@ -3,7 +3,7 @@
 # TODO placeholder until we have better tests :)
 
 set +x
-set -e 
+set -e
 
 DIR=$(dirname $0)
 
@@ -17,7 +17,15 @@ trap cleanup EXIT
 sleep 2
 
 echo "-- Specializing"
-curl -f -X POST http://localhost:8888/specialize 
+curl -f -X POST http://localhost:8888/specialize
 
 echo "-- Running user function"
-curl -f http://localhost:8888 ; echo
+curl -f -X GET http://localhost:8888
+curl -f -X POST http://localhost:8888
+curl -f -X PUT http://localhost:8888
+curl -f -X DELETE http://localhost:8888
+curl -f -X TRACE http://localhost:8888
+curl -f -X OPTIONS http://localhost:8888
+
+# -I causes curl to make a HEAD request.
+curl -f -I http://localhost:8888
