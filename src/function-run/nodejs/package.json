@@ -15,9 +15,6 @@
     "dependencies": {
         "express": "",
         "minimist": "",
-        "body-parser": "",
-
-        "require-from-string": ""
-    },
-    "start": "node server.js --codepath '/fission/function' --port 8888"
+        "body-parser": ""
+    }
 }
