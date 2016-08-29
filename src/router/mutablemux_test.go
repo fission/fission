@@ -55,16 +55,21 @@ func startServer(mr *mutableRouter) {
 	http.ListenAndServe(":3333", mr)
 }
 
-func spamServer() {
+
+func spamServer(quit chan bool) {
 	i := 0
 	for {
-		i = i + 1
-		resp, err := http.Get("http://localhost:3333")
-		if (err != nil) {
-			log.Panicf("failed make get request %v", i)
+		select {
+		case <- quit:
+			break
+		default:
+			i = i + 1
+			resp, err := http.Get("http://localhost:3333")
+			if (err != nil) {
+				log.Panicf("failed make get request %v: %v", i, err)
+			}
+			resp.Body.Close()
 		}
-		resp.Body.Close()
-		log.Printf("request count = %v", i)
 	}
 }
 
@@ -80,9 +85,13 @@ func TestMutableMux(t *testing.T) {
 	go startServer(mr)
 	
 	// continuously make requests, panic if any fails
-	go spamServer()
-	go spamServer()
-	go spamServer()
+	time.Sleep(100 * time.Millisecond)
+	q1 := make(chan bool)
+	go spamServer(q1)
+	q2 := make(chan bool)
+	go spamServer(q2)
+	q3 := make(chan bool)
+	go spamServer(q3)
 
 	time.Sleep(5 * time.Millisecond)
 
@@ -101,7 +110,8 @@ func TestMutableMux(t *testing.T) {
 	verifyRequest("new handler")
 	
 	time.Sleep(5 * time.Millisecond)
-
-	// all done
-	log.Print("ok")
+	q1 <- true
+	q2 <- true
+	q3 <- true
+	time.Sleep(100 * time.Millisecond)
 }
