@@ -18,21 +18,25 @@ package router
 
 import (
 	"testing"
+	"net/url"
 )
 
 func TestFunctionServiceMap(t *testing.T) {
 	m := makeFunctionServiceMap()
 	fn := &function{ name: "foo", uid: "012" }
-	url := "/foo012"
+	u, err := url.Parse("/foo012")
+	if (err != nil) {
+		t.Errorf("can't parse url")
+	}
 
-	m.assign(fn, url)
+	m.assign(fn, u)
 
 	v, err := m.lookup(fn)
 	if (err != nil) {
-		t.Errorf("Lookup error: %s", err)
+		t.Errorf("Lookup error: %v", err)
 	}
-	if (v != url) {
-		t.Errorf("Expected %s, got %s", url, v)
+	if (*v != *u) {
+		t.Errorf("Expected %#v, got %#v", u, v)
 	}
 
 	fn.name = "bar"

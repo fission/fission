@@ -19,6 +19,7 @@ package router
 import (
 	"errors"
 	"log"
+	"net/url"
 )
 
 type requestType int
@@ -30,17 +31,17 @@ const (
 )
 
 type functionServiceMapResponse struct {
-	serviceUrl string
+	serviceUrl url.URL
 	error
 }
 type functionServiceMapRequest struct {
 	function 
-	serviceUrl string
+	serviceUrl url.URL
 	requestType
 	responseChannel chan<- functionServiceMapResponse
 }
 type functionServiceMapEntry struct {
-	serviceUrl string
+	serviceUrl url.URL
 	generation uint64
 }
 
@@ -85,21 +86,21 @@ func (fmap *functionServiceMap) functionServiceMapWork() {
 	}
 }
 
-func (fmap *functionServiceMap) lookup(f *function) (string, error) {
+func (fmap *functionServiceMap) lookup(f *function) (*url.URL, error) {
 	respChannel := make(chan functionServiceMapResponse)
 	fmap.requestChannel <- 
 		&functionServiceMapRequest{ function: *f, requestType: LOOKUP, responseChannel: respChannel }
 	resp := <-respChannel
 	if (resp.error != nil) {
-		return "", resp.error
+		return nil, resp.error
 	} else {
-		return resp.serviceUrl, nil
+		return &resp.serviceUrl, nil
 	}
 }
 
-func (fmap *functionServiceMap) assign(f *function, serviceUrl string) {
+func (fmap *functionServiceMap) assign(f *function, serviceUrl *url.URL) {
 	fmap.requestChannel <- 
-		&functionServiceMapRequest{ function: *f, serviceUrl: serviceUrl, requestType: ASSIGN }
+		&functionServiceMapRequest{ function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN }
 }
 
 func (fmap *functionServiceMap) nextGen() {
