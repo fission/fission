@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 	"log"
-	"io/ioutil"
 	"time"
 )
 
@@ -33,22 +32,8 @@ func NewHandler(responseWriter http.ResponseWriter, request *http.Request) {
 }
 
 func verifyRequest(expectedResponse string) {
-	resp, err := http.Get("http://localhost:3333")
-	if (err != nil) {
-		log.Panic("failed make get request")
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if (err != nil) {
-		log.Panic("failed to read response")
-	}
-
-	bodyStr := string(body)
-	log.Printf("Server responded with %v", bodyStr)
-	if (bodyStr != expectedResponse) {
-		log.Panic("Unexpected response")
-	}
+	targetUrl := "http://localhost:3333"
+	testRequest(targetUrl, expectedResponse)
 }
 
 func startServer(mr *mutableRouter) {
@@ -86,12 +71,8 @@ func TestMutableMux(t *testing.T) {
 	
 	// continuously make requests, panic if any fails
 	time.Sleep(100 * time.Millisecond)
-	q1 := make(chan bool)
-	go spamServer(q1)
-	q2 := make(chan bool)
-	go spamServer(q2)
-	q3 := make(chan bool)
-	go spamServer(q3)
+	q := make(chan bool)
+	go spamServer(q)
 
 	time.Sleep(5 * time.Millisecond)
 
@@ -108,10 +89,7 @@ func TestMutableMux(t *testing.T) {
 	// connect and verify the new handler
 	log.Print("Verify new handler")
 	verifyRequest("new handler")
-	
-	time.Sleep(5 * time.Millisecond)
-	q1 <- true
-	q2 <- true
-	q3 <- true
+
+	q <- true
 	time.Sleep(100 * time.Millisecond)
 }
