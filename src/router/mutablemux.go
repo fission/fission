@@ -17,13 +17,13 @@ limitations under the License.
 package router
 
 import (
-	"net/http"
-	"sync/atomic"
 	"github.com/gorilla/mux"
 	"log"
+	"net/http"
+	"sync/atomic"
 )
 
-// 
+//
 // mutableRouter wraps the mux router, and allows the router to be
 // atomically changed.
 //
@@ -32,8 +32,8 @@ type mutableRouter struct {
 	router atomic.Value // mux.Router
 }
 
-func NewMutableRouter(handler *mux.Router) (*mutableRouter) {
-	mr := mutableRouter{};
+func NewMutableRouter(handler *mux.Router) *mutableRouter {
+	mr := mutableRouter{}
 	mr.router.Store(handler)
 	return &mr
 }
@@ -42,7 +42,7 @@ func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *
 	// Atomically grab the underlying mux router and call it.
 	routerValue := mr.router.Load()
 	router, ok := routerValue.(*mux.Router)
-	if (!ok) {
+	if !ok {
 		log.Panic("Invalid router type")
 	}
 	router.ServeHTTP(responseWriter, request)

@@ -23,7 +23,7 @@ Its job is to:
   1. Keep track of HTTP triggers and their mappings to functions
 
      Use the controller API to get and watch this state.
-  
+
   2. Given a function, get a reference to a routable function run service
 
      Use the ContainerPoolManager API to get a service backed by one
@@ -37,41 +37,39 @@ Its job is to:
 
 */
 
-
 package router
 
 import (
 	"fmt"
-	"net/http"
 	"github.com/gorilla/mux"
 	flag "github.com/ogier/pflag"
+	"net/http"
 )
 
 type (
 	function struct {
 		name string
-		uid string
+		uid  string
 	}
-	
+
 	httptrigger struct {
 		urlPattern string
 		function
 	}
 
 	options struct {
-		port int
+		port           int
 		poolManagerUrl string
-		controllerUrl string
+		controllerUrl  string
 		//...
 	}
-	
 )
 
 // request url ---[mux]---> function(name,uid) ----[fmap]----> k8s service url
 
 // request url ---[trigger]---> function(name, deployment) ----[deployment]----> function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(httpTriggerSet *HTTPTriggerSet) (*mutableRouter) {
+func router(httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	muxRouter := mux.NewRouter()
 	mr := NewMutableRouter(muxRouter)
 	httpTriggerSet.subscribeRouter(mr)
@@ -84,7 +82,7 @@ func server(port int, httpTriggerSet *HTTPTriggerSet) {
 	http.ListenAndServe(url, mr)
 }
 
-func getOptions() (*options) {
+func getOptions() *options {
 	options := &options{}
 
 	flag.IntVar(&options.port, "port", 80, "Port to listen on")
@@ -92,7 +90,7 @@ func getOptions() (*options) {
 	// default to using dns service discovery
 	flag.StringVar(&options.poolManagerUrl, "poolmanager_url", "http://poolmanager/", "URL for the PoolManager service")
 	flag.StringVar(&options.controllerUrl, "controller_url", "http://controller/", "URL for the controller service")
-	
+
 	return options
 }
 

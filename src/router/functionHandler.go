@@ -17,15 +17,15 @@ limitations under the License.
 package router
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"errors"
 	"net/url"
 )
 
 type functionHandler struct {
-	fmap *functionServiceMap
+	fmap           *functionServiceMap
 	poolManagerUrl string
 	function
 }
@@ -36,13 +36,13 @@ func (*functionHandler) getServiceForFunction() (*url.URL, error) {
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	serviceUrl, err := fh.fmap.lookup(&fh.function)
-	if (err != nil) {
+	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
 		serviceUrl, poolErr := fh.getServiceForFunction()
-		if (poolErr != nil) {
+		if poolErr != nil {
 			// now we're really screwed
 			log.Printf("Failed to get service for function (%v,%v): %v",
-				fh.function.name, fh.function.uid, poolErr);
+				fh.function.name, fh.function.uid, poolErr)
 			responseWriter.WriteHeader(500) // TODO: make this smarter based on the actual error
 			return
 		}
@@ -54,7 +54,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	// Proxy off our request to the serviceUrl, and send the response back.
 	// TODO: As an optimization we may want to cache proxies too -- this would get us
 	// connection reuse and possibly better performance
-	director := func(req *http.Request) {	
+	director := func(req *http.Request) {
 		// send this request to serviceurl
 		req.URL.Scheme = serviceUrl.Scheme
 		req.URL.Host = serviceUrl.Host

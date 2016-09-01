@@ -18,13 +18,12 @@ package router
 
 import (
 	"log"
-	"testing"
 	"net/http"
-//	"net/http/httputil"
+	"testing"
+	//	"net/http/httputil"
 	"net/http/httptest"
 	"net/url"
 )
-
 
 func createBackendService(testResponseString string) *url.URL {
 	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,23 +38,23 @@ func createBackendService(testResponseString string) *url.URL {
 }
 
 /*
-    1. Create a service at some URL
-    2. Add it to the function service map
-    3. Create a http server with some trigger url pointed at function handler
-    4. Send a request to that server, ensure it reaches the first service.
+   1. Create a service at some URL
+   2. Add it to the function service map
+   3. Create a http server with some trigger url pointed at function handler
+   4. Send a request to that server, ensure it reaches the first service.
 */
 func TestFunctionProxying(t *testing.T) {
 	testResponseString := "hi"
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &function{name: "foo", uid: "xxx"}	
+	fn := &function{name: "foo", uid: "xxx"}
 	fmap := makeFunctionServiceMap()
 	fmap.assign(fn, backendURL)
-	
+
 	fh := &functionHandler{fmap: fmap, function: *fn}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
-	
+
 	testRequest(fhURL, testResponseString)
 }

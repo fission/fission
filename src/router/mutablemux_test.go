@@ -17,10 +17,10 @@ limitations under the License.
 package router
 
 import (
-	"testing"
-	"net/http"
 	"github.com/gorilla/mux"
 	"log"
+	"net/http"
+	"testing"
 	"time"
 )
 
@@ -40,17 +40,16 @@ func startServer(mr *mutableRouter) {
 	http.ListenAndServe(":3333", mr)
 }
 
-
 func spamServer(quit chan bool) {
 	i := 0
 	for {
 		select {
-		case <- quit:
+		case <-quit:
 			break
 		default:
 			i = i + 1
 			resp, err := http.Get("http://localhost:3333")
-			if (err != nil) {
+			if err != nil {
 				log.Panicf("failed to make get request %v: %v", i, err)
 			}
 			resp.Body.Close()
@@ -64,11 +63,11 @@ func TestMutableMux(t *testing.T) {
 	muxRouter := mux.NewRouter()
 	muxRouter.HandleFunc("/", OldHandler)
 	mr := NewMutableRouter(muxRouter)
-	
+
 	// start http server
 	log.Print("Start http server")
 	go startServer(mr)
-	
+
 	// continuously make requests, panic if any fails
 	time.Sleep(100 * time.Millisecond)
 	q := make(chan bool)
