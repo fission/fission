@@ -26,10 +26,11 @@ import (
 
 type functionHandler struct {
 	fmap *functionServiceMap
+	poolManagerUrl string
 	function
 }
 
-func getService(f *function) (*url.URL, error) {
+func (*functionHandler) getServiceForFunction() (*url.URL, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -37,7 +38,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	serviceUrl, err := fh.fmap.lookup(&fh.function)
 	if (err != nil) {
 		// Cache miss: request the Pool Manager to make a new service.
-		serviceUrl, poolErr := getService(&fh.function)
+		serviceUrl, poolErr := fh.getServiceForFunction()
 		if (poolErr != nil) {
 			// now we're really screwed
 			log.Printf("Failed to get service for function (%v,%v): %v",
@@ -67,4 +68,6 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(responseWriter, request)
+
+	// TODO: handle failures and possibly retry here.
 }
