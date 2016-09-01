@@ -51,7 +51,7 @@ func spamServer(quit chan bool) {
 			i = i + 1
 			resp, err := http.Get("http://localhost:3333")
 			if (err != nil) {
-				log.Panicf("failed make get request %v: %v", i, err)
+				log.Panicf("failed to make get request %v: %v", i, err)
 			}
 			resp.Body.Close()
 		}
@@ -84,7 +84,7 @@ func TestMutableMux(t *testing.T) {
 	log.Print("Change mux router")
 	newMuxRouter := mux.NewRouter()
 	newMuxRouter.HandleFunc("/", NewHandler)
-	mr.UpdateRouter(newMuxRouter)
+	mr.updateRouter(newMuxRouter)
 
 	// connect and verify the new handler
 	log.Print("Verify new handler")
