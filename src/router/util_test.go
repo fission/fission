@@ -9,9 +9,13 @@ import (
 func testRequest(targetUrl string, expectedResponse string) {
 	resp, err := http.Get(targetUrl)
 	if (err != nil) {
-		log.Panic("failed make get request")
+		log.Panicf("failed to make get request: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if (resp.StatusCode != 200) {
+		log.Panicf("response status: %v", resp.StatusCode)
+	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if (err != nil) {
