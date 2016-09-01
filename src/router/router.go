@@ -41,8 +41,10 @@ Its job is to:
 package router
 
 import (
-//	"fmt"
-//	"net/http"
+	"fmt"
+	"net/http"
+	"github.com/gorilla/mux"
+	flag "github.com/ogier/pflag"
 )
 
 type (
@@ -59,12 +61,44 @@ type (
 	options struct {
 		port int
 		poolManagerUrl string
+		controllerUrl string
 		//...
 	}
 	
 )
 
-// request url ---[trigger]---> function(name,uid) ----[pool mgr]----> k8s service url
+// request url ---[mux]---> function(name,uid) ----[fmap]----> k8s service url
 
 // request url ---[trigger]---> function(name, deployment) ----[deployment]----> function(name, uid) ----[pool mgr]---> k8s service url
 
+func router(httpTriggerSet *HTTPTriggerSet) (*mutableRouter) {
+	muxRouter := mux.NewRouter()
+	mr := NewMutableRouter(muxRouter)
+	httpTriggerSet.subscribeRouter(mr)
+	return mr
+}
+
+func server(port int, httpTriggerSet *HTTPTriggerSet) {
+	mr := router(httpTriggerSet)
+	url := fmt.Sprintf(":%v", port)
+	http.ListenAndServe(url, mr)
+}
+
+func getOptions() (*options) {
+	options := &options{}
+
+	flag.IntVar(&options.port, "port", 80, "Port to listen on")
+
+	// default to using dns service discovery
+	flag.StringVar(&options.poolManagerUrl, "poolmanager_url", "http://poolmanager/", "URL for the PoolManager service")
+	flag.StringVar(&options.controllerUrl, "controller_url", "http://controller/", "URL for the controller service")
+	
+	return options
+}
+
+func main() {
+	options := getOptions()
+	fmap := makeFunctionServiceMap()
+	triggers := makeHTTPTriggerSet(fmap, options.controllerUrl, options.poolManagerUrl)
+	server(options.port, triggers)
+}
