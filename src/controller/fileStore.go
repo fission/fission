@@ -19,6 +19,7 @@ package controller
 import (
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 )
 
@@ -27,6 +28,7 @@ type requestType int
 const (
 	READ requestType = iota
 	WRITE
+	DELETE
 )
 
 type (
@@ -67,6 +69,8 @@ func (fs *fileStore) fileStoreService() {
 			response.fileContents, response.error = ioutil.ReadFile(path.Join(fs.root, req.fileName))
 		case WRITE:
 			response.error = ioutil.WriteFile(path.Join(fs.root, req.fileName), req.fileContents, 0600)
+		case DELETE:
+			response.error = os.Remove(path.Join(fs.root, req.fileName))
 		default:
 			log.Panic("bad request")
 		}
@@ -75,24 +79,35 @@ func (fs *fileStore) fileStoreService() {
 }
 
 func (fs *fileStore) read(fileName string) ([]byte, error) {
-	req := &fileStoreRequest{
+	req := fileStoreRequest{
 		requestType:     READ,
 		fileName:        fileName,
 		responseChannel: make(chan fileStoreResponse),
 	}
-	fs.requestChannel <- *req
+	fs.requestChannel <- req
 	response := <-req.responseChannel
 	return response.fileContents, response.error
 }
 
 func (fs *fileStore) write(fileName string, contents []byte) error {
-	req := &fileStoreRequest{
+	req := fileStoreRequest{
 		requestType:     WRITE,
 		fileName:        fileName,
 		fileContents:    contents,
 		responseChannel: make(chan fileStoreResponse),
 	}
-	fs.requestChannel <- *req
+	fs.requestChannel <- req
+	response := <-req.responseChannel
+	return response.error
+}
+
+func (fs *fileStore) delete(fileName string) error {
+	req := fileStoreRequest{
+		requestType:     DELETE,
+		fileName:        fileName,
+		responseChannel: make(chan fileStoreResponse),
+	}
+	fs.requestChannel <- req
 	response := <-req.responseChannel
 	return response.error
 }

@@ -55,4 +55,9 @@ func TestFileStore(t *testing.T) {
 	if string(observedContents) != string(contents) {
 		t.Fatalf("contents don't match")
 	}
+
+	err = fs.delete(path)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
 }
