@@ -23,7 +23,7 @@ import (
 
 func TestFunctionServiceMap(t *testing.T) {
 	m := makeFunctionServiceMap()
-	fn := &function{name: "foo", uid: "012"}
+	fn := &Function{Name: "foo", Uid: "012"}
 	u, err := url.Parse("/foo012")
 	if err != nil {
 		t.Errorf("can't parse url")
@@ -39,7 +39,7 @@ func TestFunctionServiceMap(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", u, v)
 	}
 
-	fn.name = "bar"
+	fn.Name = "bar"
 	_, err2 := m.lookup(fn)
 	if err2 == nil {
 		t.Errorf("No error on missing entry")

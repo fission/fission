@@ -25,11 +25,11 @@ type HTTPTriggerSet struct {
 	*mutableRouter
 	controllerUrl  string
 	poolManagerUrl string
-	triggers       []httptrigger
+	triggers       []HTTPTrigger
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, controllerUrl string, poolManagerUrl string) *HTTPTriggerSet {
-	triggers := make([]httptrigger, 1)
+	triggers := make([]HTTPTrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
@@ -49,10 +49,10 @@ func (triggers *HTTPTriggerSet) getRouterFromTriggers() *mux.Router {
 	for _, trigger := range triggers.triggers {
 		fh := &functionHandler{
 			fmap:           triggers.functionServiceMap,
-			function:       trigger.function,
+			Function:       trigger.Function,
 			poolManagerUrl: triggers.poolManagerUrl,
 		}
-		muxRouter.HandleFunc(trigger.urlPattern, fh.handler)
+		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
 	}
 	return muxRouter
 }

@@ -48,11 +48,11 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &function{name: "foo", uid: "xxx"}
+	fn := &Function{Name: "foo", Uid: "xxx"}
 	fmap := makeFunctionServiceMap()
 	fmap.assign(fn, backendURL)
 
-	fh := &functionHandler{fmap: fmap, function: *fn}
+	fh := &functionHandler{fmap: fmap, Function: *fn}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
 
