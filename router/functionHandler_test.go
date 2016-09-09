@@ -19,10 +19,11 @@ package router
 import (
 	"log"
 	"net/http"
-	"testing"
-	//	"net/http/httputil"
 	"net/http/httptest"
 	"net/url"
+	"testing"
+
+	"github.com/platform9/fission"
 )
 
 func createBackendService(testResponseString string) *url.URL {
@@ -48,11 +49,11 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &function{name: "foo", uid: "xxx"}
+	fn := &fission.Function{Name: "foo", Uid: "xxx"}
 	fmap := makeFunctionServiceMap()
 	fmap.assign(fn, backendURL)
 
-	fh := &functionHandler{fmap: fmap, function: *fn}
+	fh := &functionHandler{fmap: fmap, Function: *fn}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
 

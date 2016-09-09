@@ -47,16 +47,6 @@ import (
 )
 
 type (
-	function struct {
-		name string
-		uid  string
-	}
-
-	httptrigger struct {
-		urlPattern string
-		function
-	}
-
 	options struct {
 		port           int
 		poolManagerUrl string
@@ -65,9 +55,9 @@ type (
 	}
 )
 
-// request url ---[mux]---> function(name,uid) ----[fmap]----> k8s service url
+// request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
 
-// request url ---[trigger]---> function(name, deployment) ----[deployment]----> function(name, uid) ----[pool mgr]---> k8s service url
+// request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
 func router(httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	muxRouter := mux.NewRouter()

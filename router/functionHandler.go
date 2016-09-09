@@ -22,12 +22,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	"github.com/platform9/fission"
 )
 
 type functionHandler struct {
 	fmap           *functionServiceMap
 	poolManagerUrl string
-	function
+	fission.Function
 }
 
 func (*functionHandler) getServiceForFunction() (*url.URL, error) {
@@ -35,20 +37,20 @@ func (*functionHandler) getServiceForFunction() (*url.URL, error) {
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	serviceUrl, err := fh.fmap.lookup(&fh.function)
+	serviceUrl, err := fh.fmap.lookup(&fh.Function)
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
 		serviceUrl, poolErr := fh.getServiceForFunction()
 		if poolErr != nil {
 			// now we're really screwed
 			log.Printf("Failed to get service for function (%v,%v): %v",
-				fh.function.name, fh.function.uid, poolErr)
+				fh.Function.Name, fh.Function.Uid, poolErr)
 			responseWriter.WriteHeader(500) // TODO: make this smarter based on the actual error
 			return
 		}
 
 		// add it to the map
-		fh.fmap.assign(&fh.function, serviceUrl)
+		fh.fmap.assign(&fh.Function, serviceUrl)
 	}
 
 	// Proxy off our request to the serviceUrl, and send the response back.

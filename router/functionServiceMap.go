@@ -20,6 +20,8 @@ import (
 	"errors"
 	"log"
 	"net/url"
+
+	"github.com/platform9/fission"
 )
 
 type requestType int
@@ -36,7 +38,7 @@ type functionServiceMapResponse struct {
 	error
 }
 type functionServiceMapRequest struct {
-	function
+	fission.Function
 	serviceUrl url.URL
 	requestType
 	responseChannel chan<- functionServiceMapResponse
@@ -48,7 +50,7 @@ type functionServiceMapEntry struct {
 
 type functionServiceMap struct {
 	// map (funcname, uid) -> url
-	svc               map[function]functionServiceMapEntry
+	svc               map[fission.Function]functionServiceMapEntry
 	currentGeneration uint64
 	requestChannel    chan *functionServiceMapRequest
 }
@@ -56,7 +58,7 @@ type functionServiceMap struct {
 func makeFunctionServiceMap() *functionServiceMap {
 	fmap := &functionServiceMap{}
 	fmap.requestChannel = make(chan *functionServiceMapRequest)
-	fmap.svc = make(map[function]functionServiceMapEntry)
+	fmap.svc = make(map[fission.Function]functionServiceMapEntry)
 	go fmap.functionServiceMapWork()
 	return fmap
 }
@@ -66,14 +68,14 @@ func (fmap *functionServiceMap) functionServiceMapWork() {
 		req := <-fmap.requestChannel
 		switch req.requestType {
 		case LOOKUP:
-			e, present := fmap.svc[req.function]
+			e, present := fmap.svc[req.Function]
 			if present {
 				req.responseChannel <- functionServiceMapResponse{serviceUrl: e.serviceUrl}
 			} else {
 				req.responseChannel <- functionServiceMapResponse{error: errors.New("not found")}
 			}
 		case ASSIGN:
-			fmap.svc[req.function] =
+			fmap.svc[req.Function] =
 				functionServiceMapEntry{serviceUrl: req.serviceUrl, generation: fmap.currentGeneration}
 			// no response
 		case NEXT_GEN:
@@ -87,9 +89,9 @@ func (fmap *functionServiceMap) functionServiceMapWork() {
 	}
 }
 
-func (fmap *functionServiceMap) lookup(f *function) (*url.URL, error) {
+func (fmap *functionServiceMap) lookup(f *fission.Function) (*url.URL, error) {
 	respChannel := make(chan functionServiceMapResponse)
-	fmap.requestChannel <- &functionServiceMapRequest{function: *f, requestType: LOOKUP, responseChannel: respChannel}
+	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, requestType: LOOKUP, responseChannel: respChannel}
 	resp := <-respChannel
 	if resp.error != nil {
 		return nil, resp.error
@@ -98,8 +100,8 @@ func (fmap *functionServiceMap) lookup(f *function) (*url.URL, error) {
 	}
 }
 
-func (fmap *functionServiceMap) assign(f *function, serviceUrl *url.URL) {
-	fmap.requestChannel <- &functionServiceMapRequest{function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
+func (fmap *functionServiceMap) assign(f *fission.Function, serviceUrl *url.URL) {
+	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
 }
 
 func (fmap *functionServiceMap) nextGen() {

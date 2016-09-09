@@ -14,36 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package router
+package fission
 
-import (
-	"net/url"
-	"testing"
+type (
+	Function struct {
+		Name string
+		Uid  string
+	}
 
-	"github.com/platform9/fission"
+	HTTPTrigger struct {
+		UrlPattern string
+		Function
+	}
 )
-
-func TestFunctionServiceMap(t *testing.T) {
-	m := makeFunctionServiceMap()
-	fn := &fission.Function{Name: "foo", Uid: "012"}
-	u, err := url.Parse("/foo012")
-	if err != nil {
-		t.Errorf("can't parse url")
-	}
-
-	m.assign(fn, u)
-
-	v, err := m.lookup(fn)
-	if err != nil {
-		t.Errorf("Lookup error: %v", err)
-	}
-	if *v != *u {
-		t.Errorf("Expected %#v, got %#v", u, v)
-	}
-
-	fn.Name = "bar"
-	_, err2 := m.lookup(fn)
-	if err2 == nil {
-		t.Errorf("No error on missing entry")
-	}
-}
