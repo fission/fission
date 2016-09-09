@@ -47,16 +47,6 @@ import (
 )
 
 type (
-	Function struct {
-		Name string
-		Uid  string
-	}
-
-	HTTPTrigger struct {
-		UrlPattern string
-		Function
-	}
-
 	options struct {
 		port           int
 		poolManagerUrl string

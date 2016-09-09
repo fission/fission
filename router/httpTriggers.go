@@ -18,6 +18,7 @@ package router
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/platform9/fission"
 )
 
 type HTTPTriggerSet struct {
@@ -25,11 +26,11 @@ type HTTPTriggerSet struct {
 	*mutableRouter
 	controllerUrl  string
 	poolManagerUrl string
-	triggers       []HTTPTrigger
+	triggers       []fission.HTTPTrigger
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, controllerUrl string, poolManagerUrl string) *HTTPTriggerSet {
-	triggers := make([]HTTPTrigger, 1)
+	triggers := make([]fission.HTTPTrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,

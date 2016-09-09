@@ -19,10 +19,11 @@ package router
 import (
 	"log"
 	"net/http"
-	"testing"
-	//	"net/http/httputil"
 	"net/http/httptest"
 	"net/url"
+	"testing"
+
+	"github.com/platform9/fission"
 )
 
 func createBackendService(testResponseString string) *url.URL {
@@ -48,7 +49,7 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &Function{Name: "foo", Uid: "xxx"}
+	fn := &fission.Function{Name: "foo", Uid: "xxx"}
 	fmap := makeFunctionServiceMap()
 	fmap.assign(fn, backendURL)
 

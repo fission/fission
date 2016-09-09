@@ -22,12 +22,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	"github.com/platform9/fission"
 )
 
 type functionHandler struct {
 	fmap           *functionServiceMap
 	poolManagerUrl string
-	Function
+	fission.Function
 }
 
 func (*functionHandler) getServiceForFunction() (*url.URL, error) {
