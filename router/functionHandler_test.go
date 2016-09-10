@@ -49,7 +49,7 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &fission.Function{Name: "foo", Uid: "xxx"}
+	fn := &fission.Metadata{Name: "foo", Uid: "xxx"}
 	fmap := makeFunctionServiceMap()
 	fmap.assign(fn, backendURL)
 

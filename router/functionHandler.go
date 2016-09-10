@@ -29,7 +29,7 @@ import (
 type functionHandler struct {
 	fmap           *functionServiceMap
 	poolManagerUrl string
-	fission.Function
+	Function       fission.Metadata
 }
 
 func (*functionHandler) getServiceForFunction() (*url.URL, error) {

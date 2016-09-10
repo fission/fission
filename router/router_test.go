@@ -26,7 +26,7 @@ import (
 
 func TestRouter(t *testing.T) {
 	fmap := makeFunctionServiceMap()
-	fn := &fission.Function{Name: "foo", Uid: "xxx"}
+	fn := &fission.Metadata{Name: "foo", Uid: "xxx"}
 
 	testResponseString := "hi"
 	testServiceUrl := createBackendService(testResponseString)
@@ -35,7 +35,7 @@ func TestRouter(t *testing.T) {
 
 	triggers := makeHTTPTriggerSet(fmap, "", "")
 	triggerUrl := "/foo"
-	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{triggerUrl, *fn})
+	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn})
 
 	port := 4242
 	go server(port, triggers)

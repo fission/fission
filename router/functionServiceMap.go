@@ -38,7 +38,7 @@ type functionServiceMapResponse struct {
 	error
 }
 type functionServiceMapRequest struct {
-	fission.Function
+	Function   fission.Metadata
 	serviceUrl url.URL
 	requestType
 	responseChannel chan<- functionServiceMapResponse
@@ -50,7 +50,7 @@ type functionServiceMapEntry struct {
 
 type functionServiceMap struct {
 	// map (funcname, uid) -> url
-	svc               map[fission.Function]functionServiceMapEntry
+	svc               map[fission.Metadata]functionServiceMapEntry
 	currentGeneration uint64
 	requestChannel    chan *functionServiceMapRequest
 }
@@ -58,7 +58,7 @@ type functionServiceMap struct {
 func makeFunctionServiceMap() *functionServiceMap {
 	fmap := &functionServiceMap{}
 	fmap.requestChannel = make(chan *functionServiceMapRequest)
-	fmap.svc = make(map[fission.Function]functionServiceMapEntry)
+	fmap.svc = make(map[fission.Metadata]functionServiceMapEntry)
 	go fmap.functionServiceMapWork()
 	return fmap
 }
@@ -89,7 +89,7 @@ func (fmap *functionServiceMap) functionServiceMapWork() {
 	}
 }
 
-func (fmap *functionServiceMap) lookup(f *fission.Function) (*url.URL, error) {
+func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
 	respChannel := make(chan functionServiceMapResponse)
 	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, requestType: LOOKUP, responseChannel: respChannel}
 	resp := <-respChannel
@@ -100,7 +100,7 @@ func (fmap *functionServiceMap) lookup(f *fission.Function) (*url.URL, error) {
 	}
 }
 
-func (fmap *functionServiceMap) assign(f *fission.Function, serviceUrl *url.URL) {
+func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
 	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
 }
 
