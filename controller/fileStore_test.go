@@ -40,7 +40,7 @@ func TestFileStore(t *testing.T) {
 		t.Fatalf("expected an error")
 	}
 
-	path := "foo"
+	path := "fileStoreTest"
 	contents := []byte("bar")
 	err = fs.write(path, contents)
 	if err != nil {

@@ -18,9 +18,10 @@ package controller
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type requestType int
@@ -64,6 +65,7 @@ func (fs *fileStore) fileStoreService() {
 		req := <-fs.requestChannel
 		response := &fileStoreResponse{}
 
+		log.WithFields(log.Fields{"file": req.fileName, "type": req.requestType}).Debug("fileStore request")
 		switch req.requestType {
 		case READ:
 			response.fileContents, response.error = ioutil.ReadFile(path.Join(fs.root, req.fileName))
