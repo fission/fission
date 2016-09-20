@@ -41,10 +41,6 @@ func (hts *HTTPTriggerStore) read(m fission.Metadata) (*fission.HTTPTrigger, err
 }
 
 func (hts *HTTPTriggerStore) update(ht *fission.HTTPTrigger) error {
-	err := validateHTTPTrigger(ht)
-	if err != nil {
-		return err
-	}
 	ht.Metadata.Uid = uuid.NewV4().String()
 	return hts.resourceStore.update(ht)
 }
