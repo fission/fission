@@ -18,22 +18,19 @@ package fission
 
 type (
 	// Metadata is used as the general identifier for all kinds of
-	// resources managed by the controller.  In general, when a
-	// resource is updated, the Name remains the same, but the UID
-	// changes.  In other words, the UID identifies a particular
-	// value of a resource.
+	// resources managed by the controller.
 	Metadata struct {
-		Name string
-		Uid  string
+		Name string `json:"name"`
+		Uid  string `json:"uid,omitempty"`
 	}
 
 	// Function is a unit of executable code.  Though it's called
 	// a function, the code may have more than one function; it's
 	// usually some sort of module or package.
 	Function struct {
-		Metadata
-		Environment Metadata
-		Code        string
+		Metadata    `json:"metadata"`
+		Environment Metadata `json:"environment"`
+		Code        string   `json:"code"`
 	}
 
 	// Environment identifies the language and OS specific
@@ -42,16 +39,33 @@ type (
 	// this will also include build containers, as well as support
 	// tools like debuggers, profilers, etc.
 	Environment struct {
-		Metadata
-		RunContainerImageUrl string
+		Metadata             `json:"metadata"`
+		RunContainerImageUrl string `json:"runContainerImageUrl"`
 	}
 
 	// HTTPTrigger maps URL patterns to functions.  Function.UID
 	// is optional; if absent, the latest version of the function
 	// will automatically be selected.
 	HTTPTrigger struct {
-		Metadata
-		UrlPattern string
-		Function   Metadata
+		Metadata   `json:"metadata"`
+		UrlPattern string   `json:"urlpattern"`
+		Function   Metadata `json:"function"`
 	}
+
+	// Errors returned by the Fission API.
+	Error struct {
+		Code    errorCode `json:"code"`
+		Message string    `json:"message"`
+	}
+	errorCode int
+)
+
+const (
+	ErrorInternal = iota
+
+	ErrorNotAuthorized
+	ErrorNotFound
+	ErrorNameExists
+	ErrorInvalidArgument
+	ErrorNoSpace
 )
