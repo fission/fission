@@ -18,22 +18,15 @@ package controller
 
 import (
 	"errors"
+	"reflect"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
 	"golang.org/x/net/context"
-	"reflect"
 )
 
 type (
-	resource interface {
-		key() string
-	}
-
-	serializer interface {
-		serialize(r resource) ([]byte, error)
-		deserialize(buf []byte, r resource) error
-	}
-
 	resourceStore struct {
 		*fileStore
 		client.KeysAPI
@@ -62,7 +55,7 @@ func getKey(r resource) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rkey := r.key()
+	rkey := r.Key()
 	return (typName + "/" + rkey), nil
 }
 
@@ -139,6 +132,7 @@ func (rs *resourceStore) writeFile(parentKey string, contents []byte) (string, s
 		return "", "", err
 	}
 
+	parentKey = "file/" + parentKey
 	resp, err := rs.KeysAPI.CreateInOrder(context.Background(), parentKey, uid, nil)
 	if err != nil {
 		_ = rs.fileStore.delete(uid)
@@ -149,6 +143,7 @@ func (rs *resourceStore) writeFile(parentKey string, contents []byte) (string, s
 }
 
 func (rs *resourceStore) readFile(key string, uid *string) ([]byte, error) {
+	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
 		return nil, err
@@ -168,7 +163,7 @@ func (rs *resourceStore) readFile(key string, uid *string) ([]byte, error) {
 			}
 		}
 		if !found {
-			return nil, errors.New("Invalid UUID")
+			return nil, errors.New("Invalid UID " + *uid)
 		}
 	}
 
@@ -177,15 +172,57 @@ func (rs *resourceStore) readFile(key string, uid *string) ([]byte, error) {
 }
 
 func (rs *resourceStore) deleteFile(key string, uid string) error {
+	key = "file/" + key
+	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
+	if err != nil {
+		return err
+	}
+
+	var node *client.Node
+	for _, u := range resp.Node.Nodes {
+		if u.Value == uid {
+			node = u
+		}
+	}
+	if node == nil {
+		log.WithFields(log.Fields{"key": key, "uid": uid}).Error("unreferenced file")
+		return errors.New("won't delete unreferenced file")
+	}
+
+	err = rs.fileStore.delete(node.Value)
+	if err != nil {
+		return err
+	}
+
+	_, err = rs.KeysAPI.Delete(context.Background(), node.Key, nil)
+	if err != nil {
+		return err
+	}
+
+	if len(resp.Node.Nodes) == 1 {
+		_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
+		return err
+	}
+	return nil
+}
+
+func (rs *resourceStore) deleteAllFiles(key string) error {
+	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
 		return err
 	}
 	for _, u := range resp.Node.Nodes {
-		if u.Value == uid {
-			err = rs.fileStore.delete(u.Value)
+		err = rs.fileStore.delete(u.Value)
+		if err != nil {
+			return err
+		}
+
+		_, err = rs.KeysAPI.Delete(context.Background(), u.Key, nil)
+		if err != nil {
 			return err
 		}
 	}
-	return errors.New("won't delete unreferenced file")
+	_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
+	return err
 }

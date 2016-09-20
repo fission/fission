@@ -17,12 +17,13 @@ limitations under the License.
 package controller
 
 import (
-	//	"github.com/coreos/etcd/client"
-	"golang.org/x/net/context"
 	"io/ioutil"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
 )
 
 type TestResource struct {
@@ -30,11 +31,11 @@ type TestResource struct {
 	B int
 }
 
-func (tr TestResource) key() string {
+func (tr TestResource) Key() string {
 	return tr.A
 }
 
-func check(err error) {
+func panicIf(err error) {
 	if err != nil {
 		log.Panicf("err: %v", err)
 	}
@@ -46,91 +47,101 @@ func assert(b bool, msg string) {
 	}
 }
 
-func TestResourceStore(t *testing.T) {
+func getTestResourceStore() (*fileStore, client.KeysAPI, *resourceStore) {
 	// make a tmp dir
 	dir, err := ioutil.TempDir("", "testFileStore")
-	check(err)
-	defer os.RemoveAll(dir)
-
+	panicIf(err)
 	fs := makeFileStore(dir)
 
 	// assume etcd is running, connect to it
 	ks := getEtcdKeyAPI([]string{"http://localhost:2379"})
+
 	s := JsonSerializer{}
 	rs := makeResourceStore(fs, ks, s)
+
+	return fs, ks, rs
+}
+
+func TestResourceStore(t *testing.T) {
+	fs, ks, rs := getTestResourceStore()
+	defer os.RemoveAll(fs.root)
+
+	s := JsonSerializer{}
 
 	tr := TestResource{A: "hello", B: 1}
 
 	// Delete the key first, in case of a panic'd previous test run; ignore errors
-	_ = rs.delete("TestResource", tr.key())
+	_ = rs.delete("TestResource", tr.Key())
 
 	// Create
-	err = rs.create(tr)
-	check(err)
-	defer rs.delete("TestResource", tr.key())
+	err := rs.create(tr)
+	panicIf(err)
+	defer ks.Delete(context.Background(), "/TestResource", &client.DeleteOptions{Dir: true})
+	defer rs.delete("TestResource", tr.Key())
 
 	// Etcd key /TestResource/hello should exist
 	_, err = ks.Get(context.Background(), "TestResource/hello", nil)
-	check(err)
+	panicIf(err)
 
 	// Read
 	tr1 := TestResource{}
-	err = rs.read(tr.key(), &tr1)
-	check(err)
+	err = rs.read(tr.Key(), &tr1)
+	panicIf(err)
 	assert(tr1 == tr, "retrieved value must equal created value")
 
 	// Update and Read
 	tr.B += 1
 	err = rs.update(tr)
-	check(err)
-	err = rs.read(tr.key(), &tr1)
-	check(err)
+	panicIf(err)
+	err = rs.read(tr.Key(), &tr1)
+	panicIf(err)
 	assert(tr1 == tr, "retrieved value must equal updated value")
 
 	// Get list
 	results, err := rs.getAll("TestResource")
-	check(err)
+	panicIf(err)
 	res := make([]TestResource, 0, 0)
 	for _, r := range results {
 		tmp := TestResource{}
 		err = s.deserialize([]byte(r), &tmp)
-		check(err)
+		panicIf(err)
 		res = append(res, tmp)
 	}
 	assert(res[0] == tr, "value from retrieved list must equal updated value")
 
 	// file tests
-	fileKey := "foo"
+	fileKey := "resourceStoreTest"
 	fileContents1 := []byte("hello")
 	fileContents2 := []byte("world")
 	key, uid1, err := rs.writeFile(fileKey, fileContents1)
-	check(err)
+	panicIf(err)
 	defer rs.deleteFile(fileKey, uid1)
 	log.Printf("key = %v, uid = %v", key, uid1)
 
 	// read latest
 	contents, err := rs.readFile(fileKey, nil)
-	check(err)
+	panicIf(err)
 	assert(string(contents) == string(fileContents1), "retrieved file contents must match written value")
 
 	// update-- same key new contents
 	_, uid2, err := rs.writeFile(fileKey, fileContents2)
-	check(err)
+	panicIf(err)
 	defer rs.deleteFile(fileKey, uid2)
 
 	// read latest
 	contents, err = rs.readFile(fileKey, nil)
-	check(err)
+	panicIf(err)
 	assert(string(contents) == string(fileContents2), "retrieved file contents must match updated value")
 
 	// read by uid
 	// 1
 	contents, err = rs.readFile(fileKey, &uid1)
-	check(err)
+	panicIf(err)
 	assert(string(contents) == string(fileContents1), "retrieved file contents must match updated value")
 
 	// 2
 	contents, err = rs.readFile(fileKey, &uid2)
-	check(err)
+	panicIf(err)
 	assert(string(contents) == string(fileContents2), "retrieved file contents must match updated value")
+
 }
