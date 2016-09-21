@@ -20,7 +20,7 @@ import (
 	"errors"
 	"reflect"
 	"time"
-	
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
@@ -40,17 +40,17 @@ func makeResourceStore(fs *fileStore, ks client.KeysAPI, s serializer) *resource
 }
 
 func getEtcdKeyAPI(etcdUrls []string) client.KeysAPI {
-        cfg := client.Config{
-                Endpoints: etcdUrls,
-                Transport: client.DefaultTransport,
-                // set timeout per request to fail fast when the target endpoint is unavailable
-                HeaderTimeoutPerRequest: time.Second,
-        }
-        c, err := client.New(cfg)
-        if err != nil {
-                log.Fatalf("failed to connect to etcd: %v", err)
-        }
-        return client.NewKeysAPI(c)
+	cfg := client.Config{
+		Endpoints: etcdUrls,
+		Transport: client.DefaultTransport,
+		// set timeout per request to fail fast when the target endpoint is unavailable
+		HeaderTimeoutPerRequest: time.Second,
+	}
+	c, err := client.New(cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to etcd: %v", err)
+	}
+	return client.NewKeysAPI(c)
 }
 
 func getTypeName(r resource) (string, error) {

@@ -17,8 +17,10 @@ limitations under the License.
 package controller
 
 import (
+	"flag"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -30,19 +32,12 @@ import (
 	"github.com/platform9/fission/controller/client"
 )
 
+var g struct {
+	client *client.Client
+}
+
 func TestFunctionApi(t *testing.T) {
 	log.SetFormatter(&log.TextFormatter{DisableColors: true})
-
-	_, ks, rs := getTestResourceStore()
-	fs := &FunctionStore{resourceStore: *rs}
-	hts := &HTTPTriggerStore{resourceStore: *rs}
-	es := &EnvironmentStore{resourceStore: *rs}
-
-	api := &API{
-		FunctionStore:    *fs,
-		HTTPTriggerStore: *hts,
-		EnvironmentStore: *es,
-	}
 
 	testFunc := &fission.Function{
 		Metadata: fission.Metadata{
@@ -56,35 +51,20 @@ func TestFunctionApi(t *testing.T) {
 		Code: "code1",
 	}
 
-	go api.serve(8888)
-	time.Sleep(500 * time.Millisecond)
-
-	resp, err := http.Get("http://localhost:8888/")
-	panicIf(err)
-	_, err = ioutil.ReadAll(resp.Body)
-	panicIf(err)
-
-	client := client.New("http://localhost:8888")
-
-	_, err = ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
-	if err != nil {
-		log.Printf("failed to delete: %v", err)
-	}
-
-	m, err := client.FunctionCreate(testFunc)
+	m, err := g.client.FunctionCreate(testFunc)
 	panicIf(err)
 	uid1 := m.Uid
 	log.Printf("Created function %v: %v", m.Name, m.Uid)
 
 	testFunc.Code = "code2"
-	m, err = client.FunctionUpdate(testFunc)
+	m, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
 	uid2 := m.Uid
 	log.Printf("Updated function %v: %v", m.Name, m.Uid)
 
 	m.Uid = uid1
 	testFunc.Code = "code1"
-	f, err := client.FunctionGet(m)
+	f, err := g.client.FunctionGet(m)
 	panicIf(err)
 
 	testFunc.Metadata.Uid = m.Uid
@@ -95,7 +75,7 @@ func TestFunctionApi(t *testing.T) {
 	m.Uid = uid2
 	testFunc.Metadata.Uid = m.Uid
 	testFunc.Code = "code2"
-	f, err = client.FunctionGet(m)
+	f, err = g.client.FunctionGet(m)
 	panicIf(err)
 
 	assert(*f == *testFunc, "second version should match when read by uid")
@@ -103,22 +83,99 @@ func TestFunctionApi(t *testing.T) {
 	m.Uid = ""
 	testFunc.Metadata.Uid = uid2
 	testFunc.Code = "code2"
-	f, err = client.FunctionGet(m)
+	f, err = g.client.FunctionGet(m)
 	panicIf(err)
 
 	assert(*f == *testFunc, "second version should match when read as latest")
 
 	testFunc.Metadata.Name = "bar"
-	m, err = client.FunctionCreate(testFunc)
+	m, err = g.client.FunctionCreate(testFunc)
 	panicIf(err)
 
-	funcs, err := client.FunctionList()
+	funcs, err := g.client.FunctionList()
 	panicIf(err)
 	assert(len(funcs) == 2,
 		"created two functions, but didn't find them")
 
-	err = client.FunctionDelete(&fission.Metadata{Name: "foo"})
+	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo"})
 	panicIf(err)
-	err = client.FunctionDelete(&fission.Metadata{Name: "bar"})
+	err = g.client.FunctionDelete(&fission.Metadata{Name: "bar"})
 	panicIf(err)
+}
+
+func TestHTTPTriggerApi(t *testing.T) {
+	testTrigger := &fission.HTTPTrigger{
+		Metadata: fission.Metadata{
+			Name: "xxx",
+			Uid:  "yyy",
+		},
+		UrlPattern: "/hello",
+		Function: fission.Metadata{
+			Name: "foo",
+			Uid:  "",
+		},
+	}
+	uid, err := g.client.HTTPTriggerCreate(testTrigger)
+	panicIf(err)
+	m := &fission.Metadata{
+		Name: testTrigger.Metadata.Name,
+		Uid:  uid,
+	}
+	defer g.client.HTTPTriggerDelete(m)
+
+	tr, err := g.client.HTTPTriggerGet(m)
+	panicIf(err)
+	testTrigger.Metadata.Uid = m.Uid
+	assert(*testTrigger == *tr, "trigger should match after reading")
+
+	testTrigger.UrlPattern = "/hi"
+	uid2, err := g.client.HTTPTriggerUpdate(testTrigger)
+	panicIf(err)
+
+	m.Uid = uid2
+	tr, err = g.client.HTTPTriggerGet(m)
+	panicIf(err)
+	testTrigger.Metadata.Uid = m.Uid
+	assert(*testTrigger == *tr, "trigger should match after reading")
+
+	testTrigger.Metadata.Name = "yyy"
+	uid, err = g.client.HTTPTriggerCreate(testTrigger)
+	panicIf(err)
+	m = &fission.Metadata{
+		Name: testTrigger.Metadata.Name,
+		Uid:  uid,
+	}
+	defer g.client.HTTPTriggerDelete(m)
+
+	ts, err := g.client.HTTPTriggerList()
+	panicIf(err)
+	assert(len(ts) == 2, "created two triggers, but didn't find them")
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	fileStore, ks, rs := getTestResourceStore()
+	defer os.RemoveAll(fileStore.root)
+
+	api := &API{
+		FunctionStore:    FunctionStore{resourceStore: *rs},
+		HTTPTriggerStore: HTTPTriggerStore{resourceStore: *rs},
+		EnvironmentStore: EnvironmentStore{resourceStore: *rs},
+	}
+	g.client = client.New("http://localhost:8888")
+
+	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
+	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
+
+	go api.serve(8888)
+	time.Sleep(500 * time.Millisecond)
+
+	resp, err := http.Get("http://localhost:8888/")
+	panicIf(err)
+	assert(resp.StatusCode == 200, "http get status code on root")
+	_, err = ioutil.ReadAll(resp.Body)
+	panicIf(err)
+
+	os.Exit(m.Run())
 }

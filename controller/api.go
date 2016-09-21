@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime/debug"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/handlers"
@@ -45,7 +46,7 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	var code int
 	var msg string
-
+	debug.PrintStack()
 	fe, ok := err.(fission.Error)
 	if ok {
 		msg = fe.Message
@@ -83,11 +84,11 @@ func (api *API) serve(port int) {
 	r.HandleFunc("/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
 	r.HandleFunc("/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
 
-	// r.HandleFunc("/triggers/http", api.HTTPTriggerApiList).Methods("GET")
-	// r.HandleFunc("/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
-	// r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiGet).Methods("GET")
-	// r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
-	// r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
+	r.HandleFunc("/triggers/http", api.HTTPTriggerApiList).Methods("GET")
+	r.HandleFunc("/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
+	r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiGet).Methods("GET")
+	r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
+	r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
 
 	// r.HandleFunc("/environments", api.EnvironmentApiList).Methods("GET")
 	// r.HandleFunc("/environments", api.EnvironmentApiCreate).Methods("POST")
