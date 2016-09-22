@@ -179,7 +179,9 @@ func (c *Client) FunctionGetRaw(m *fission.Metadata) ([]byte, error) {
 }
 
 func (c *Client) FunctionUpdate(f *fission.Function) (*fission.Metadata, error) {
+	orig := f.Code
 	f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
+	defer func() { f.Code = orig }()
 
 	reqbody, err := json.Marshal(f)
 	if err != nil {
