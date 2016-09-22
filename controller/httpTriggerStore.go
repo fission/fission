@@ -26,12 +26,12 @@ type HTTPTriggerStore struct {
 	resourceStore
 }
 
-func (hts *HTTPTriggerStore) create(ht *fission.HTTPTrigger) error {
+func (hts *HTTPTriggerStore) Create(ht *fission.HTTPTrigger) (string, error) {
 	ht.Metadata.Uid = uuid.NewV4().String()
-	return hts.resourceStore.create(ht)
+	return ht.Metadata.Uid, hts.resourceStore.create(ht)
 }
 
-func (hts *HTTPTriggerStore) read(m fission.Metadata) (*fission.HTTPTrigger, error) {
+func (hts *HTTPTriggerStore) Get(m *fission.Metadata) (*fission.HTTPTrigger, error) {
 	var ht fission.HTTPTrigger
 	err := hts.resourceStore.read(m.Name, &ht)
 	if err != nil {
@@ -40,12 +40,12 @@ func (hts *HTTPTriggerStore) read(m fission.Metadata) (*fission.HTTPTrigger, err
 	return &ht, nil
 }
 
-func (hts *HTTPTriggerStore) update(ht *fission.HTTPTrigger) error {
+func (hts *HTTPTriggerStore) Update(ht *fission.HTTPTrigger) (string, error) {
 	ht.Metadata.Uid = uuid.NewV4().String()
-	return hts.resourceStore.update(ht)
+	return ht.Metadata.Uid, hts.resourceStore.update(ht)
 }
 
-func (hts *HTTPTriggerStore) delete(m fission.Metadata) error {
+func (hts *HTTPTriggerStore) Delete(m fission.Metadata) error {
 	typeName, err := getTypeName(fission.HTTPTrigger{})
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (hts *HTTPTriggerStore) delete(m fission.Metadata) error {
 	return hts.resourceStore.delete(typeName, m.Name)
 }
 
-func (hts *HTTPTriggerStore) list() ([]fission.HTTPTrigger, error) {
+func (hts *HTTPTriggerStore) List() ([]fission.HTTPTrigger, error) {
 	typeName, err := getTypeName(fission.HTTPTrigger{})
 	if err != nil {
 		return nil, err

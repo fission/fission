@@ -76,6 +76,26 @@ func (c *Client) url(relativeUrl string) string {
 	return c.Url + "/" + relativeUrl
 }
 
+func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
+	if resp.StatusCode != 200 {
+		var errCode int
+		switch resp.StatusCode {
+		case 403:
+			errCode = fission.ErrorNotAuthorized
+		case 404:
+			errCode = fission.ErrorNotFound
+		case 400:
+			errCode = fission.ErrorInvalidArgument
+		default:
+			errCode = fission.ErrorInternal
+		}
+		return nil, fission.MakeError(errCode,
+			fmt.Sprintf("HTTP error %v", resp.StatusCode))
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	return body, err
+}
+
 func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) {
 	reqbody, err := json.Marshal(f)
 	if err != nil {
@@ -88,17 +108,13 @@ func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := c.handleResponse(resp)
 	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
 		log.WithFields(log.Fields{
-			"function": f.Metadata.Name,
-			"status":   resp.StatusCode,
+			"name": f.Metadata.Name,
+			"err":  err,
 		}).Error("Failed to create function")
-		return nil, errors.New("failed to create function")
+		return nil, err
 	}
 
 	var m fission.Metadata
@@ -122,7 +138,7 @@ func (c *Client) FunctionGet(m *fission.Metadata) (*fission.Function, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := c.handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +165,7 @@ func (c *Client) FunctionUpdate(f *fission.Function) (*fission.Metadata, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := c.handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +193,7 @@ func (c *Client) FunctionList() ([]fission.Function, error) {
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := c.handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -191,16 +207,116 @@ func (c *Client) FunctionList() ([]fission.Function, error) {
 	return funcs, nil
 }
 
-// func (c *Client) HTTPTriggerCreate(f *fission.Function) (string, error) {
-// }
-// func (c *Client) HTTPTriggerGet(m *fission.Metadata) (*fission.HTTPTrigger, error) {
-// }
-// func (c *Client) HTTPTriggerUpdate(f *fission.HTTPTrigger) (string, error) {
-// }
-// func (c *Client) HTTPTriggerDelete(m *fission.Metadata) error {
-// }
-// func (c *Client) HTTPTriggerList() ([]fission.HTTPTrigger, error) {
-// }
+func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (string, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.Post(c.url("triggers/http"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"name": t.Metadata.Name,
+			"err":  err,
+		}).Error("Failed to create http trigger")
+		return "", err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return "", err
+	}
+
+	return m.Uid, nil
+}
+
+func (c *Client) HTTPTriggerGet(m *fission.Metadata) (*fission.HTTPTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var t fission.HTTPTrigger
+	err = json.Unmarshal(body, &t)
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func (c *Client) HTTPTriggerUpdate(t *fission.HTTPTrigger) (string, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return "", err
+	}
+	relativeUrl := fmt.Sprintf("triggers/http/%v", t.Metadata.Name)
+
+	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return "", err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return "", err
+	}
+	return m.Uid, nil
+}
+
+func (c *Client) HTTPTriggerDelete(m *fission.Metadata) error {
+	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+	err := c.delete(relativeUrl)
+	return err
+}
+
+func (c *Client) HTTPTriggerList() ([]fission.HTTPTrigger, error) {
+	resp, err := http.Get(c.url("triggers/http"))
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	triggers := make([]fission.HTTPTrigger, 0)
+	err = json.Unmarshal(body, &triggers)
+	if err != nil {
+		return nil, err
+	}
+
+	return triggers, nil
+}
 
 // func (c *Client) EnvironmentCreate(f *fission.Environment) (string, error) {
 // }
