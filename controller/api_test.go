@@ -56,6 +56,10 @@ func TestFunctionApi(t *testing.T) {
 	uid1 := m.Uid
 	log.Printf("Created function %v: %v", m.Name, m.Uid)
 
+	code, err := g.client.FunctionGetRaw(m)
+	panicIf(err)
+	assert(string(code) == testFunc.Code, "code from FunctionGetRaw must match created function")
+
 	testFunc.Code = "code2"
 	m, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
