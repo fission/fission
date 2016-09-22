@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,6 +98,10 @@ func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
 }
 
 func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) {
+	orig := f.Code
+	f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
+	defer func() { f.Code = orig }()
+
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
@@ -149,10 +154,33 @@ func (c *Client) FunctionGet(m *fission.Metadata) (*fission.Function, error) {
 		return nil, err
 	}
 
+	dec, err := base64.StdEncoding.DecodeString(f.Code)
+	if err != nil {
+		return nil, err
+	}
+	f.Code = string(dec)
+
 	return &f, nil
 }
 
+func (c *Client) FunctionGetRaw(m *fission.Metadata) ([]byte, error) {
+	relativeUrl := fmt.Sprintf("functions/%v?raw=1", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("&uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return c.handleResponse(resp)
+}
+
 func (c *Client) FunctionUpdate(f *fission.Function) (*fission.Metadata, error) {
+	f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
+
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err

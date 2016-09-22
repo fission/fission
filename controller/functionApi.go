@@ -24,6 +24,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 
+	"encoding/base64"
 	"github.com/platform9/fission"
 )
 
@@ -56,6 +57,13 @@ func (api *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dec, err := base64.StdEncoding.DecodeString(f.Code)
+	if err != nil {
+		api.respondWithError(w, err)
+		return
+	}
+	f.Code = string(dec)
+
 	uid, err := api.FunctionStore.Create(&f)
 	if err != nil {
 		api.respondWithError(w, err)
@@ -78,6 +86,7 @@ func (api *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	m.Name = vars["function"]
 	m.Uid = r.FormValue("uid") // empty if uid is absent
+	raw := r.FormValue("raw")  // just the code
 
 	f, err := api.FunctionStore.Get(&m)
 	if err != nil {
@@ -85,12 +94,17 @@ func (api *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := json.Marshal(f)
-	if err != nil {
-		api.respondWithError(w, err)
-		return
+	var resp []byte
+	if raw != "" {
+		resp = []byte(f.Code)
+	} else {
+		f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
+		resp, err = json.Marshal(f)
+		if err != nil {
+			api.respondWithError(w, err)
+			return
+		}
 	}
-
 	api.respondWithSuccess(w, resp)
 }
 
@@ -115,6 +129,13 @@ func (api *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		api.respondWithError(w, err)
 		return
 	}
+
+	dec, err := base64.StdEncoding.DecodeString(f.Code)
+	if err != nil {
+		api.respondWithError(w, err)
+		return
+	}
+	f.Code = string(dec)
 
 	uid, err := api.FunctionStore.Update(&f)
 	if err != nil {
