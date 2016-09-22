@@ -152,6 +152,51 @@ func TestHTTPTriggerApi(t *testing.T) {
 	assert(len(ts) == 2, "created two triggers, but didn't find them")
 }
 
+func TestEnvironmentApi(t *testing.T) {
+	testEnv := &fission.Environment{
+		Metadata: fission.Metadata{
+			Name: "xxx",
+			Uid:  "yyy",
+		},
+		RunContainerImageUrl: "gcr.io/xyz",
+	}
+	uid, err := g.client.EnvironmentCreate(testEnv)
+	panicIf(err)
+	m := &fission.Metadata{
+		Name: testEnv.Metadata.Name,
+		Uid:  uid,
+	}
+	defer g.client.EnvironmentDelete(m)
+
+	tr, err := g.client.EnvironmentGet(m)
+	panicIf(err)
+	testEnv.Metadata.Uid = m.Uid
+	assert(*testEnv == *tr, "env should match after reading")
+
+	testEnv.RunContainerImageUrl = "/hi"
+	uid2, err := g.client.EnvironmentUpdate(testEnv)
+	panicIf(err)
+
+	m.Uid = uid2
+	tr, err = g.client.EnvironmentGet(m)
+	panicIf(err)
+	testEnv.Metadata.Uid = m.Uid
+	assert(*testEnv == *tr, "env should match after reading")
+
+	testEnv.Metadata.Name = "yyy"
+	uid, err = g.client.EnvironmentCreate(testEnv)
+	panicIf(err)
+	m = &fission.Metadata{
+		Name: testEnv.Metadata.Name,
+		Uid:  uid,
+	}
+	defer g.client.EnvironmentDelete(m)
+
+	ts, err := g.client.EnvironmentList()
+	panicIf(err)
+	assert(len(ts) == 2, "created two envs, but didn't find them")
+}
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 
@@ -167,6 +212,7 @@ func TestMain(m *testing.M) {
 
 	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
+	ks.Delete(context.Background(), "Environment", &etcdClient.DeleteOptions{Recursive: true})
 
 	go api.serve(8888)
 	time.Sleep(500 * time.Millisecond)

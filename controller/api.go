@@ -90,11 +90,11 @@ func (api *API) serve(port int) {
 	r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
 
-	// r.HandleFunc("/environments", api.EnvironmentApiList).Methods("GET")
-	// r.HandleFunc("/environments", api.EnvironmentApiCreate).Methods("POST")
-	// r.HandleFunc("/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
-	// r.HandleFunc("/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
-	// r.HandleFunc("/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
+	r.HandleFunc("/environments", api.EnvironmentApiList).Methods("GET")
+	r.HandleFunc("/environments", api.EnvironmentApiCreate).Methods("POST")
+	r.HandleFunc("/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
+	r.HandleFunc("/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
+	r.HandleFunc("/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
 
 	address := fmt.Sprintf(":%v", port)
 

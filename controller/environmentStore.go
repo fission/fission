@@ -26,12 +26,12 @@ type EnvironmentStore struct {
 	resourceStore
 }
 
-func (es *EnvironmentStore) create(e *fission.Environment) error {
+func (es *EnvironmentStore) Create(e *fission.Environment) (string, error) {
 	e.Metadata.Uid = uuid.NewV4().String()
-	return es.resourceStore.create(e)
+	return e.Metadata.Uid, es.resourceStore.create(e)
 }
 
-func (es *EnvironmentStore) read(m fission.Metadata) (*fission.Environment, error) {
+func (es *EnvironmentStore) Get(m *fission.Metadata) (*fission.Environment, error) {
 	var e fission.Environment
 	err := es.resourceStore.read(m.Name, &e)
 	if err != nil {
@@ -40,12 +40,12 @@ func (es *EnvironmentStore) read(m fission.Metadata) (*fission.Environment, erro
 	return &e, nil
 }
 
-func (es *EnvironmentStore) update(e *fission.Environment) error {
+func (es *EnvironmentStore) Update(e *fission.Environment) (string, error) {
 	e.Metadata.Uid = uuid.NewV4().String()
-	return es.resourceStore.update(e)
+	return e.Metadata.Uid, es.resourceStore.update(e)
 }
 
-func (es *EnvironmentStore) delete(m fission.Metadata) error {
+func (es *EnvironmentStore) Delete(m fission.Metadata) error {
 	typeName, err := getTypeName(fission.Environment{})
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (es *EnvironmentStore) delete(m fission.Metadata) error {
 	return es.resourceStore.delete(typeName, m.Name)
 }
 
-func (es *EnvironmentStore) list() ([]fission.Environment, error) {
+func (es *EnvironmentStore) List() ([]fission.Environment, error) {
 	typeName, err := getTypeName(fission.Environment{})
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (es *EnvironmentStore) list() ([]fission.Environment, error) {
 		return nil, err
 	}
 
-	triggers := make([]fission.Environment, 0, len(bufs))
+	envs := make([]fission.Environment, 0, len(bufs))
 	js := JsonSerializer{}
 	for _, buf := range bufs {
 		var e fission.Environment
@@ -72,8 +72,8 @@ func (es *EnvironmentStore) list() ([]fission.Environment, error) {
 		if err != nil {
 			return nil, err
 		}
-		triggers = append(triggers, e)
+		envs = append(envs, e)
 	}
 
-	return triggers, nil
+	return envs, nil
 }
