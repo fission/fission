@@ -27,14 +27,14 @@ import (
 	"github.com/platform9/fission"
 )
 
-func (api *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := api.HTTPTriggerStore.List()
+func (api *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
+	envs, err := api.EnvironmentStore.List()
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(triggers)
+	resp, err := json.Marshal(envs)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
@@ -43,26 +43,26 @@ func (api *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	api.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
+func (api *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
 	}
 
-	var t fission.HTTPTrigger
-	err = json.Unmarshal(body, &t)
+	var env fission.Environment
+	err = json.Unmarshal(body, &env)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.HTTPTriggerStore.Create(&t)
+	uid, err := api.EnvironmentStore.Create(&env)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
+	m := &fission.Metadata{Name: env.Metadata.Name, Uid: uid}
 	resp, err := json.Marshal(m)
 	if err != nil {
 		api.respondWithError(w, err)
@@ -72,20 +72,20 @@ func (api *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	api.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
+func (api *API) EnvironmentApiGet(w http.ResponseWriter, r *http.Request) {
 	var m fission.Metadata
 
 	vars := mux.Vars(r)
-	m.Name = vars["httpTrigger"]
+	m.Name = vars["environment"]
 	m.Uid = r.FormValue("uid") // empty if uid is absent
 
-	t, err := api.HTTPTriggerStore.Get(&m)
+	env, err := api.EnvironmentStore.Get(&m)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(t)
+	resp, err := json.Marshal(env)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
@@ -94,35 +94,35 @@ func (api *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	api.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (api *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["httpTrigger"]
+	name := vars["environment"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
 	}
 
-	var t fission.HTTPTrigger
-	err = json.Unmarshal(body, &t)
+	var env fission.Environment
+	err = json.Unmarshal(body, &env)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	if name != t.Metadata.Name {
-		err = fission.MakeError(fission.ErrorInvalidArgument, "HTTPTrigger name doesn't match URL")
+	if name != env.Metadata.Name {
+		err = fission.MakeError(fission.ErrorInvalidArgument, "Environment name doesn't match URL")
 		api.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.HTTPTriggerStore.Update(&t)
+	uid, err := api.EnvironmentStore.Update(&env)
 	if err != nil {
 		api.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
+	m := &fission.Metadata{Name: env.Metadata.Name, Uid: uid}
 	resp, err := json.Marshal(m)
 	if err != nil {
 		api.respondWithError(w, err)
@@ -131,17 +131,17 @@ func (api *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 	api.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
+func (api *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	var m fission.Metadata
-	m.Name = vars["httpTrigger"]
+	m.Name = vars["environment"]
 
 	m.Uid = r.FormValue("uid") // empty if uid is absent
 	if len(m.Uid) == 0 {
 		log.WithFields(log.Fields{"httpTrigger": m.Name}).Info("Deleting all versions")
 	}
 
-	err := api.HTTPTriggerStore.Delete(m)
+	err := api.EnvironmentStore.Delete(m)
 	if err != nil {
 		api.respondWithError(w, err)
 		return

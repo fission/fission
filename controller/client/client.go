@@ -318,13 +318,113 @@ func (c *Client) HTTPTriggerList() ([]fission.HTTPTrigger, error) {
 	return triggers, nil
 }
 
-// func (c *Client) EnvironmentCreate(f *fission.Environment) (string, error) {
-// }
-// func (c *Client) EnvironmentGet(m *fission.Metadata) (*fission.Environment, error) {
-// }
-// func (c *Client) EnvironmentUpdate(f *fission.Environment) (string, error) {
-// }
-// func (c *Client) EnvironmentDelete(m *fission.Metadata) error {
-// }
-// func (c *Client) EnvironmentList() ([]fission.Environment, error) {
-// }
+func (c *Client) EnvironmentCreate(env *fission.Environment) (string, error) {
+	reqbody, err := json.Marshal(env)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.Post(c.url("environments"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"name": env.Metadata.Name,
+			"err":  err,
+		}).Error("Failed to create environment")
+		return "", err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return "", err
+	}
+
+	return m.Uid, nil
+}
+
+func (c *Client) EnvironmentGet(m *fission.Metadata) (*fission.Environment, error) {
+	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var env fission.Environment
+	err = json.Unmarshal(body, &env)
+	if err != nil {
+		return nil, err
+	}
+
+	return &env, nil
+}
+
+func (c *Client) EnvironmentUpdate(env *fission.Environment) (string, error) {
+	reqbody, err := json.Marshal(env)
+	if err != nil {
+		return "", err
+	}
+	relativeUrl := fmt.Sprintf("environments/%v", env.Metadata.Name)
+
+	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return "", err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return "", err
+	}
+	return m.Uid, nil
+}
+
+func (c *Client) EnvironmentDelete(m *fission.Metadata) error {
+	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+	err := c.delete(relativeUrl)
+	return err
+}
+
+func (c *Client) EnvironmentList() ([]fission.Environment, error) {
+	resp, err := http.Get(c.url("environments"))
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	envs := make([]fission.Environment, 0)
+	err = json.Unmarshal(body, &envs)
+	if err != nil {
+		return nil, err
+	}
+
+	return envs, nil
+}
