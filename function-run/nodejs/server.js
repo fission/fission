@@ -8,9 +8,13 @@ const bodyParser = require('body-parser');
 
 // Command line opts
 const argv = require('minimist')(process.argv.slice(1));
-if (!argv.codepath || !argv.port) {
-    console.error("Need --codepath and --port");
-    process.exit(1);
+if (!argv.codepath) {
+    console.log("Codepath defaulting to /user.js");
+    argv.codepath = "/user.js";
+}
+if (!argv.port) {
+    console.log("Port defaulting to 8888");
+    argv.port = 8888;
 }
 
 // User function.  Starts out undefined.
@@ -44,7 +48,10 @@ function specialize(req, res) {
 }
 
 
+app.use(bodyParser.urlencoded());
 app.use(bodyParser.json());
+app.use(bodyParser.raw());
+
 app.post('/specialize', specialize);
 
 // Generic route -- all http requests go to the user function.
@@ -56,7 +63,7 @@ app.all('/', function (req, res) {
     const context = {
         request: req,
         response: res
-        // TODO: context should also have: URL template params, query string, ...anything else?
+        // TODO: context should also have: URL template params, query string
     };
     function callback(status, body, headers) {
         if (!status)
