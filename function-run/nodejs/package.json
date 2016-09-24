@@ -15,6 +15,7 @@
     "dependencies": {
         "express": "",
         "minimist": "",
-        "body-parser": ""
+        "body-parser": "",
+        "morgan": ""
     }
 }

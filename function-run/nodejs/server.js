@@ -5,6 +5,7 @@ const process = require('process');
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
+const morgan = require('morgan');
 
 // Command line opts
 const argv = require('minimist')(process.argv.slice(1));
@@ -48,7 +49,10 @@ function specialize(req, res) {
 }
 
 
-app.use(bodyParser.urlencoded());
+// Request logger
+app.use(morgan('combined'))
+
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(bodyParser.raw());
 
