@@ -74,7 +74,7 @@ func (c *Client) put(relativeUrl string, contentType string, body []byte) (*http
 }
 
 func (c *Client) url(relativeUrl string) string {
-	return c.Url + "/" + relativeUrl
+	return c.Url + "/v1/" + relativeUrl
 }
 
 func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
