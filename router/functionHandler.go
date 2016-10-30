@@ -42,10 +42,11 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		// Cache miss: request the Pool Manager to make a new service.
 		serviceUrl, poolErr := fh.getServiceForFunction()
 		if poolErr != nil {
-			// now we're really screwed
 			log.Printf("Failed to get service for function (%v,%v): %v",
 				fh.Function.Name, fh.Function.Uid, poolErr)
-			responseWriter.WriteHeader(500) // TODO: make this smarter based on the actual error
+			// We might want a specific error code or header for fission
+			// failures as opposed to user function bugs.
+			http.Error(responseWriter, poolErr.Error(), 500)
 			return
 		}
 

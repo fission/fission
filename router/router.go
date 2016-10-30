@@ -42,17 +42,7 @@ package router
 import (
 	"fmt"
 	"github.com/gorilla/mux"
-	flag "github.com/ogier/pflag"
 	"net/http"
-)
-
-type (
-	options struct {
-		port           int
-		poolManagerUrl string
-		controllerUrl  string
-		//...
-	}
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -66,27 +56,14 @@ func router(httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	return mr
 }
 
-func server(port int, httpTriggerSet *HTTPTriggerSet) {
+func serve(port int, httpTriggerSet *HTTPTriggerSet) {
 	mr := router(httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
 	http.ListenAndServe(url, mr)
 }
 
-func getOptions() *options {
-	options := &options{}
-
-	flag.IntVar(&options.port, "port", 80, "Port to listen on")
-
-	// default to using dns service discovery
-	flag.StringVar(&options.poolManagerUrl, "poolmanager_url", "http://poolmanager/", "URL for the PoolManager service")
-	flag.StringVar(&options.controllerUrl, "controller_url", "http://controller/", "URL for the controller service")
-
-	return options
-}
-
-func main() {
-	options := getOptions()
+func Start(port int, controllerUrl string, poolmgrUrl string) {
 	fmap := makeFunctionServiceMap()
-	triggers := makeHTTPTriggerSet(fmap, options.controllerUrl, options.poolManagerUrl)
-	server(options.port, triggers)
+	triggers := makeHTTPTriggerSet(fmap, controllerUrl, poolmgrUrl)
+	serve(port, triggers)
 }
