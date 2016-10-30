@@ -47,19 +47,16 @@ func assert(b bool, msg string) {
 	}
 }
 
-func getTestResourceStore() (*fileStore, client.KeysAPI, *resourceStore) {
+func getTestResourceStore() (*FileStore, client.KeysAPI, *ResourceStore) {
 	// make a tmp dir
 	dir, err := ioutil.TempDir("", "testFileStore")
 	panicIf(err)
-	fs := makeFileStore(dir)
+	fs := MakeFileStore(dir)
 
-	// assume etcd is running, connect to it
-	ks := getEtcdKeyAPI([]string{"http://localhost:2379"})
+	rs, err := MakeResourceStore(fs, []string{"http://localhost:2379"})
+	panicIf(err)
 
-	s := JsonSerializer{}
-	rs := makeResourceStore(fs, ks, s)
-
-	return fs, ks, rs
+	return fs, rs.KeysAPI, rs
 }
 
 func TestResourceStore(t *testing.T) {
@@ -110,7 +107,7 @@ func TestResourceStore(t *testing.T) {
 	assert(res[0] == tr, "value from retrieved list must equal updated value")
 
 	// file tests
-	fileKey := "resourceStoreTest"
+	fileKey := "ResourceStoreTest"
 	fileContents1 := []byte("hello")
 	fileContents2 := []byte("world")
 	key, uid1, err := rs.writeFile(fileKey, fileContents1)

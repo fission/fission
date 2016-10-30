@@ -23,17 +23,17 @@ import (
 )
 
 type EnvironmentStore struct {
-	resourceStore
+	ResourceStore
 }
 
 func (es *EnvironmentStore) Create(e *fission.Environment) (string, error) {
 	e.Metadata.Uid = uuid.NewV4().String()
-	return e.Metadata.Uid, es.resourceStore.create(e)
+	return e.Metadata.Uid, es.ResourceStore.create(e)
 }
 
 func (es *EnvironmentStore) Get(m *fission.Metadata) (*fission.Environment, error) {
 	var e fission.Environment
-	err := es.resourceStore.read(m.Name, &e)
+	err := es.ResourceStore.read(m.Name, &e)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (es *EnvironmentStore) Get(m *fission.Metadata) (*fission.Environment, erro
 
 func (es *EnvironmentStore) Update(e *fission.Environment) (string, error) {
 	e.Metadata.Uid = uuid.NewV4().String()
-	return e.Metadata.Uid, es.resourceStore.update(e)
+	return e.Metadata.Uid, es.ResourceStore.update(e)
 }
 
 func (es *EnvironmentStore) Delete(m fission.Metadata) error {
@@ -50,7 +50,7 @@ func (es *EnvironmentStore) Delete(m fission.Metadata) error {
 	if err != nil {
 		return err
 	}
-	return es.resourceStore.delete(typeName, m.Name)
+	return es.ResourceStore.delete(typeName, m.Name)
 }
 
 func (es *EnvironmentStore) List() ([]fission.Environment, error) {
@@ -59,7 +59,7 @@ func (es *EnvironmentStore) List() ([]fission.Environment, error) {
 		return nil, err
 	}
 
-	bufs, err := es.resourceStore.getAll(typeName)
+	bufs, err := es.ResourceStore.getAll(typeName)
 	if err != nil {
 		return nil, err
 	}

@@ -23,12 +23,12 @@ import (
 )
 
 type FunctionStore struct {
-	resourceStore
+	ResourceStore
 }
 
 func (fs *FunctionStore) Create(f *fission.Function) (string, error) {
 	code := []byte(f.Code)
-	_, uid, err := fs.resourceStore.writeFile(f.Key(), code)
+	_, uid, err := fs.ResourceStore.writeFile(f.Key(), code)
 	if err != nil {
 		return "", err
 	}
@@ -36,9 +36,9 @@ func (fs *FunctionStore) Create(f *fission.Function) (string, error) {
 	f.Metadata.Uid = uid
 	f.Code = ""
 
-	err = fs.resourceStore.create(f)
+	err = fs.ResourceStore.create(f)
 	if err != nil {
-		fs.resourceStore.deleteFile(f.Key(), uid) // ignore errors
+		fs.ResourceStore.deleteFile(f.Key(), uid) // ignore errors
 		return "", err
 	}
 	return f.Metadata.Uid, nil
@@ -46,7 +46,7 @@ func (fs *FunctionStore) Create(f *fission.Function) (string, error) {
 
 func (fs *FunctionStore) Get(m *fission.Metadata) (*fission.Function, error) {
 	var f fission.Function
-	err := fs.resourceStore.read(m.Name, &f)
+	err := fs.ResourceStore.read(m.Name, &f)
 	if err != nil {
 		return nil, err
 	}
@@ -54,10 +54,10 @@ func (fs *FunctionStore) Get(m *fission.Metadata) (*fission.Function, error) {
 	var code []byte
 	if len(m.Uid) > 0 {
 		log.WithFields(log.Fields{"Uid": m.Uid}).Info("fetching by uid")
-		code, err = fs.resourceStore.readFile(m.Name, &m.Uid)
+		code, err = fs.ResourceStore.readFile(m.Name, &m.Uid)
 		f.Metadata = *m
 	} else {
-		code, err = fs.resourceStore.readFile(m.Name, nil)
+		code, err = fs.ResourceStore.readFile(m.Name, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -69,24 +69,24 @@ func (fs *FunctionStore) Get(m *fission.Metadata) (*fission.Function, error) {
 
 func (fs *FunctionStore) Update(f *fission.Function) (string, error) {
 	code := []byte(f.Code)
-	_, uid, err := fs.resourceStore.writeFile(f.Key(), code)
+	_, uid, err := fs.ResourceStore.writeFile(f.Key(), code)
 	if err != nil {
 		return "", err
 	}
 
 	var fnew fission.Function
-	err = fs.resourceStore.read(f.Metadata.Name, &fnew)
+	err = fs.ResourceStore.read(f.Metadata.Name, &fnew)
 	if err != nil {
-		fs.resourceStore.deleteFile(f.Key(), uid) // ignore err
+		fs.ResourceStore.deleteFile(f.Key(), uid) // ignore err
 		return "", err
 	}
 
 	fnew.Metadata.Uid = uid
 	fnew.Environment = f.Environment
 
-	err = fs.resourceStore.update(fnew)
+	err = fs.ResourceStore.update(fnew)
 	if err != nil {
-		fs.resourceStore.deleteFile(f.Key(), uid) // ignore err
+		fs.ResourceStore.deleteFile(f.Key(), uid) // ignore err
 		return "", err
 	}
 	return uid, err
@@ -94,12 +94,12 @@ func (fs *FunctionStore) Update(f *fission.Function) (string, error) {
 
 func (fs *FunctionStore) Delete(m fission.Metadata) error {
 	if len(m.Uid) == 0 {
-		err := fs.resourceStore.deleteAllFiles(m.Name)
+		err := fs.ResourceStore.deleteAllFiles(m.Name)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := fs.resourceStore.deleteFile(m.Name, m.Uid)
+		err := fs.ResourceStore.deleteFile(m.Name, m.Uid)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (fs *FunctionStore) Delete(m fission.Metadata) error {
 	if err != nil {
 		return err
 	}
-	return fs.resourceStore.delete(typeName, m.Name)
+	return fs.ResourceStore.delete(typeName, m.Name)
 }
 
 func (fs *FunctionStore) List() ([]fission.Function, error) {
@@ -117,7 +117,7 @@ func (fs *FunctionStore) List() ([]fission.Function, error) {
 		return nil, err
 	}
 
-	bufs, err := fs.resourceStore.getAll(typeName)
+	bufs, err := fs.ResourceStore.getAll(typeName)
 	if err != nil {
 		return nil, err
 	}
