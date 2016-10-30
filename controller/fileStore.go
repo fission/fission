@@ -33,7 +33,7 @@ const (
 )
 
 type (
-	fileStore struct {
+	FileStore struct {
 		root           string // abs path of root of filestore
 		requestChannel chan fileStoreRequest
 	}
@@ -51,8 +51,8 @@ type (
 	}
 )
 
-func makeFileStore(path string) *fileStore {
-	fileStore := &fileStore{
+func MakeFileStore(path string) *FileStore {
+	fileStore := &FileStore{
 		root:           path,
 		requestChannel: make(chan fileStoreRequest),
 	}
@@ -60,7 +60,7 @@ func makeFileStore(path string) *fileStore {
 	return fileStore
 }
 
-func (fs *fileStore) fileStoreService() {
+func (fs *FileStore) fileStoreService() {
 	for {
 		req := <-fs.requestChannel
 		response := &fileStoreResponse{}
@@ -80,7 +80,7 @@ func (fs *fileStore) fileStoreService() {
 	}
 }
 
-func (fs *fileStore) read(fileName string) ([]byte, error) {
+func (fs *FileStore) read(fileName string) ([]byte, error) {
 	req := fileStoreRequest{
 		requestType:     READ,
 		fileName:        fileName,
@@ -91,7 +91,7 @@ func (fs *fileStore) read(fileName string) ([]byte, error) {
 	return response.fileContents, response.error
 }
 
-func (fs *fileStore) write(fileName string, contents []byte) error {
+func (fs *FileStore) write(fileName string, contents []byte) error {
 	req := fileStoreRequest{
 		requestType:     WRITE,
 		fileName:        fileName,
@@ -103,7 +103,7 @@ func (fs *fileStore) write(fileName string, contents []byte) error {
 	return response.error
 }
 
-func (fs *fileStore) delete(fileName string) error {
+func (fs *FileStore) delete(fileName string) error {
 	req := fileStoreRequest{
 		requestType:     DELETE,
 		fileName:        fileName,

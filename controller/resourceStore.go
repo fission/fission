@@ -28,18 +28,23 @@ import (
 )
 
 type (
-	resourceStore struct {
-		*fileStore
+	ResourceStore struct {
+		*FileStore
 		client.KeysAPI
 		serializer
 	}
 )
 
-func makeResourceStore(fs *fileStore, ks client.KeysAPI, s serializer) *resourceStore {
-	return &resourceStore{fileStore: fs, KeysAPI: ks, serializer: s}
+func MakeResourceStore(fs *FileStore, etcdUrls []string) (*ResourceStore, error) {
+	ks, err := getEtcdKeyAPI(etcdUrls)
+	if err != nil {
+		return nil, err
+	}
+	s := JsonSerializer{}
+	return &ResourceStore{FileStore: fs, KeysAPI: ks, serializer: s}, nil
 }
 
-func getEtcdKeyAPI(etcdUrls []string) client.KeysAPI {
+func getEtcdKeyAPI(etcdUrls []string) (client.KeysAPI, error) {
 	cfg := client.Config{
 		Endpoints: etcdUrls,
 		Transport: client.DefaultTransport,
@@ -48,9 +53,10 @@ func getEtcdKeyAPI(etcdUrls []string) client.KeysAPI {
 	}
 	c, err := client.New(cfg)
 	if err != nil {
-		log.Fatalf("failed to connect to etcd: %v", err)
+		log.Printf("failed to connect to etcd: %v", err)
+		return nil, err
 	}
-	return client.NewKeysAPI(c)
+	return client.NewKeysAPI(c), nil
 }
 
 func getTypeName(r resource) (string, error) {
@@ -74,7 +80,7 @@ func getKey(r resource) (string, error) {
 	return (typName + "/" + rkey), nil
 }
 
-func (rs *resourceStore) create(r resource) error {
+func (rs *ResourceStore) create(r resource) error {
 	key, err := getKey(r)
 	if err != nil {
 		return err
@@ -90,7 +96,7 @@ func (rs *resourceStore) create(r resource) error {
 	return err
 }
 
-func (rs *resourceStore) read(rkey string, res resource) error {
+func (rs *ResourceStore) read(rkey string, res resource) error {
 	typName, err := getTypeName(res)
 	if err != nil {
 		return err
@@ -104,7 +110,7 @@ func (rs *resourceStore) read(rkey string, res resource) error {
 	return rs.serializer.deserialize([]byte(resp.Node.Value), res)
 }
 
-func (rs *resourceStore) update(r resource) error {
+func (rs *ResourceStore) update(r resource) error {
 	key, err := getKey(r)
 	if err != nil {
 		return err
@@ -120,13 +126,13 @@ func (rs *resourceStore) update(r resource) error {
 	return err
 }
 
-func (rs *resourceStore) delete(typename, rkey string) error {
+func (rs *ResourceStore) delete(typename, rkey string) error {
 	key := typename + "/" + rkey
 	_, err := rs.KeysAPI.Delete(context.Background(), key, nil) // ignore response
 	return err
 }
 
-func (rs *resourceStore) getAll(key string) ([]string, error) {
+func (rs *ResourceStore) getAll(key string) ([]string, error) {
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Recursive: true})
 	if err != nil {
 		return nil, err
@@ -139,10 +145,10 @@ func (rs *resourceStore) getAll(key string) ([]string, error) {
 	return res, nil
 }
 
-func (rs *resourceStore) writeFile(parentKey string, contents []byte) (string, string, error) {
+func (rs *ResourceStore) writeFile(parentKey string, contents []byte) (string, string, error) {
 	uid := uuid.NewV4().String()
 
-	err := rs.fileStore.write(uid, contents)
+	err := rs.FileStore.write(uid, contents)
 	if err != nil {
 		return "", "", err
 	}
@@ -150,14 +156,14 @@ func (rs *resourceStore) writeFile(parentKey string, contents []byte) (string, s
 	parentKey = "file/" + parentKey
 	resp, err := rs.KeysAPI.CreateInOrder(context.Background(), parentKey, uid, nil)
 	if err != nil {
-		_ = rs.fileStore.delete(uid)
+		_ = rs.FileStore.delete(uid)
 		return "", "", err
 	}
 
 	return resp.Node.Key, uid, nil
 }
 
-func (rs *resourceStore) readFile(key string, uid *string) ([]byte, error) {
+func (rs *ResourceStore) readFile(key string, uid *string) ([]byte, error) {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
@@ -182,11 +188,11 @@ func (rs *resourceStore) readFile(key string, uid *string) ([]byte, error) {
 		}
 	}
 
-	contents, err := rs.fileStore.read(*uid)
+	contents, err := rs.FileStore.read(*uid)
 	return contents, err
 }
 
-func (rs *resourceStore) deleteFile(key string, uid string) error {
+func (rs *ResourceStore) deleteFile(key string, uid string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
@@ -204,7 +210,7 @@ func (rs *resourceStore) deleteFile(key string, uid string) error {
 		return errors.New("won't delete unreferenced file")
 	}
 
-	err = rs.fileStore.delete(node.Value)
+	err = rs.FileStore.delete(node.Value)
 	if err != nil {
 		return err
 	}
@@ -221,14 +227,14 @@ func (rs *resourceStore) deleteFile(key string, uid string) error {
 	return nil
 }
 
-func (rs *resourceStore) deleteAllFiles(key string) error {
+func (rs *ResourceStore) deleteAllFiles(key string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
 		return err
 	}
 	for _, u := range resp.Node.Nodes {
-		err = rs.fileStore.delete(u.Value)
+		err = rs.FileStore.delete(u.Value)
 		if err != nil {
 			return err
 		}

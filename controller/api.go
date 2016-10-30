@@ -44,29 +44,9 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 }
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
-	var code int
-	var msg string
 	debug.PrintStack()
-	fe, ok := err.(fission.Error)
-	if ok {
-		msg = fe.Message
-		switch fe.Code {
-		case fission.ErrorNotFound:
-			code = 404
-		case fission.ErrorInvalidArgument:
-			code = 400
-		case fission.ErrorNoSpace:
-			code = 500
-		case fission.ErrorNotAuthorized:
-			code = 403
-		default:
-			code = 500
-		}
-	} else {
-		code = 500
-		msg = err.Error()
-	}
-	log.Printf("Error: %v: %v", code, msg)
+	code, msg := fission.GetHTTPError(err)
+	log.Errorf("Error: %v: %v", code, msg)
 	http.Error(w, msg, code)
 }
 
@@ -74,7 +54,7 @@ func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Fission API")
 }
 
-func (api *API) serve(port int) {
+func (api *API) Serve(port int) {
 	r := mux.NewRouter()
 	r.HandleFunc("/", api.HomeHandler)
 

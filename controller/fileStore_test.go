@@ -33,7 +33,7 @@ func TestFileStore(t *testing.T) {
 	log.Printf("temp dir at %v", dir)
 
 	// file store
-	fs := makeFileStore(dir)
+	fs := MakeFileStore(dir)
 
 	_, err = fs.read("nonexistent")
 	if err == nil {

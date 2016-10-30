@@ -27,3 +27,34 @@ func (e Error) Error() string {
 func MakeError(code int, msg string) Error {
 	return Error{Code: errorCode(code), Message: msg}
 }
+
+func (err Error) HTTPStatus() int {
+	var code int
+	switch err.Code {
+	case ErrorNotFound:
+		code = 404
+	case ErrorInvalidArgument:
+		code = 400
+	case ErrorNoSpace:
+		code = 500
+	case ErrorNotAuthorized:
+		code = 403
+	default:
+		code = 500
+	}
+	return code
+}
+
+func GetHTTPError(err error) (int, string) {
+	var msg string
+	var code int
+	fe, ok := err.(Error)
+	if ok {
+		msg = fe.Message
+		code = fe.HTTPStatus()
+	} else {
+		code = 500
+		msg = err.Error()
+	}
+	return code, msg
+}

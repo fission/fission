@@ -208,9 +208,9 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(fileStore.root)
 
 	api := &API{
-		FunctionStore:    FunctionStore{resourceStore: *rs},
-		HTTPTriggerStore: HTTPTriggerStore{resourceStore: *rs},
-		EnvironmentStore: EnvironmentStore{resourceStore: *rs},
+		FunctionStore:    FunctionStore{ResourceStore: *rs},
+		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
+		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
 	}
 	g.client = client.New("http://localhost:8888")
 
@@ -218,7 +218,7 @@ func TestMain(m *testing.M) {
 	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "Environment", &etcdClient.DeleteOptions{Recursive: true})
 
-	go api.serve(8888)
+	go api.Serve(8888)
 	time.Sleep(500 * time.Millisecond)
 
 	resp, err := http.Get("http://localhost:8888/")

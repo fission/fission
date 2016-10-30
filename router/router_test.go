@@ -38,7 +38,7 @@ func TestRouter(t *testing.T) {
 	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn})
 
 	port := 4242
-	go server(port, triggers)
+	go serve(port, triggers)
 	time.Sleep(100 * time.Millisecond)
 
 	testUrl := fmt.Sprintf("http://localhost:%v%v", port, triggerUrl)

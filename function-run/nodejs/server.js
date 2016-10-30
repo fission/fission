@@ -10,8 +10,8 @@ const morgan = require('morgan');
 // Command line opts
 const argv = require('minimist')(process.argv.slice(1));
 if (!argv.codepath) {
-    console.log("Codepath defaulting to /user.js");
-    argv.codepath = "/user.js";
+    argv.codepath = "/userfunc/user";
+    console.log("Codepath defaulting to ", argv.codepath);
 }
 if (!argv.port) {
     console.log("Port defaulting to 8888");
@@ -79,7 +79,11 @@ app.all('/', function (req, res) {
         }
         res.status(status).send(body);
     }
-    userFunction(context, callback);
+    try {
+        userFunction(context, callback);
+    } catch(e) {
+        callback(500, "Internal server error")
+    }
 });
 
 app.listen(argv.port);
