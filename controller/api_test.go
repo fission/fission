@@ -54,7 +54,7 @@ func TestFunctionApi(t *testing.T) {
 	m, err := g.client.FunctionCreate(testFunc)
 	panicIf(err)
 	uid1 := m.Uid
-	log.Printf("Created function %v: %v", m.Name, m.Uid)
+	//log.Printf("Created function %v: %v", m.Name, m.Uid)
 
 	code, err := g.client.FunctionGetRaw(m)
 	panicIf(err)
@@ -64,7 +64,7 @@ func TestFunctionApi(t *testing.T) {
 	m, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
 	uid2 := m.Uid
-	log.Printf("Updated function %v: %v", m.Name, m.Uid)
+	//log.Printf("Updated function %v: %v", m.Name, m.Uid)
 
 	m.Uid = uid1
 	testFunc.Code = "code1"
@@ -72,8 +72,8 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 
 	testFunc.Metadata.Uid = m.Uid
-	log.Printf("f = %#v", f)
-	log.Printf("testFunc = %#v", testFunc)
+	//log.Printf("f = %#v", f)
+	//log.Printf("testFunc = %#v", testFunc)
 	assert(*f == *testFunc, "first version should match when read by uid")
 
 	m.Uid = uid2
@@ -212,7 +212,7 @@ func TestMain(m *testing.M) {
 		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
 		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
 	}
-	g.client = client.New("http://localhost:8888")
+	g.client = client.MakeClient("http://localhost:8888")
 
 	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
