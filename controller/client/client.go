@@ -36,7 +36,7 @@ type (
 	}
 )
 
-func New(serverUrl string) *Client {
+func MakeClient(serverUrl string) *Client {
 	return &Client{Url: serverUrl}
 }
 
