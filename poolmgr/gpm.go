@@ -18,14 +18,15 @@ package poolmgr
 
 import (
 	"github.com/platform9/fission"
-	clientUnversioned "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/client-go/1.4/kubernetes"
 )
 
 type (
 	GenericPoolManager struct {
 		pools            map[fission.Environment]*GenericPool
-		kubernetesClient *clientUnversioned.Client
+		kubernetesClient *kubernetes.Clientset
 		namespace        string
+		controllerUrl    string
 
 		requestChannel chan *request
 	}
@@ -39,11 +40,12 @@ type (
 	}
 )
 
-func MakeGenericPoolManager(client *clientUnversioned.Client, namespace string) *GenericPoolManager {
+func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.Clientset, namespace string) *GenericPoolManager {
 	gpm := &GenericPoolManager{
 		pools:            make(map[fission.Environment]*GenericPool),
-		kubernetesClient: client,
+		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
+		controllerUrl:    controllerUrl,
 		requestChannel:   make(chan *request),
 	}
 	go gpm.service()
@@ -56,7 +58,7 @@ func (gpm *GenericPoolManager) service() {
 		case req := <-gpm.requestChannel:
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
-				pool, err := MakeGenericPool(gpm.kubernetesClient, req.env, 3, gpm.namespace)
+				pool, err := MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue

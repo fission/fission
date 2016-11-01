@@ -18,14 +18,19 @@ package poolmgr
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 
 	"github.com/platform9/fission"
 	"github.com/platform9/fission/cache"
 	controllerclient "github.com/platform9/fission/controller/client"
-	"io/ioutil"
-	"log"
 )
 
 type funcSvc struct {
@@ -42,6 +47,15 @@ type API struct {
 	functionEnv     *cache.Cache // map[fission.Metadata]fission.Environment
 	functionService *cache.Cache // map[fission.Metadata]funcSvc
 	controller      *controllerclient.Client
+}
+
+func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client) *API {
+	return &API{
+		poolMgr:         gpm,
+		functionEnv:     cache.MakeCache(),
+		functionService: cache.MakeCache(),
+		controller:      controller,
+	}
 }
 
 func (api *API) lookupApi(w http.ResponseWriter, r *http.Request) {
@@ -135,4 +149,13 @@ func (api *API) lookup(m *fission.Metadata) (string, error) {
 	}
 
 	return funcSvc.serviceName, nil
+}
+
+func (api *API) Serve(port int) {
+	r := mux.NewRouter()
+	r.HandleFunc("/v1/lookup", api.lookupApi).Methods("GET")
+
+	address := fmt.Sprintf(":%v", port)
+	log.Printf("starting poolmgr at port %v", port)
+	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }
