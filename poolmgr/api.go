@@ -58,7 +58,7 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client) *API 
 	}
 }
 
-func (api *API) lookupApi(w http.ResponseWriter, r *http.Request) {
+func (api *API) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", 500)
@@ -73,15 +73,14 @@ func (api *API) lookupApi(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceUrl, err := api.lookup(&m)
+	serviceName, err := api.getServiceForFunction(&m)
 	if err != nil {
 		code, msg := fission.GetHTTPError(err)
 		log.Printf("Error: %v: %v", code, msg)
 		http.Error(w, msg, code)
 	}
 
-	// return serviceUrl
-	w.Write([]byte(serviceUrl))
+	w.Write([]byte(serviceName))
 }
 
 func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error) {
@@ -112,7 +111,7 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 	return env, nil
 }
 
-func (api *API) lookup(m *fission.Metadata) (string, error) {
+func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// Check function -> svc map
 	result, err := api.functionService.Get(m)
 	if err == nil {
@@ -153,7 +152,7 @@ func (api *API) lookup(m *fission.Metadata) (string, error) {
 
 func (api *API) Serve(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/lookup", api.lookupApi).Methods("GET")
+	r.HandleFunc("/v1/getServiceForFunction", api.getServiceForFunctionApi).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)

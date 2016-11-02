@@ -17,29 +17,40 @@ limitations under the License.
 package router
 
 import (
-	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
 	"github.com/platform9/fission"
+	poolmgrClient "github.com/platform9/fission/poolmgr/client"
 )
 
 type functionHandler struct {
-	fmap           *functionServiceMap
-	poolManagerUrl string
-	Function       fission.Metadata
+	fmap     *functionServiceMap
+	poolmgr  *poolmgrClient.Client
+	Function fission.Metadata
 }
 
-func (*functionHandler) getServiceForFunction() (*url.URL, error) {
-	return nil, errors.New("not implemented")
+func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
+	// call poolmgr, get a url for a function
+	svcName, err := fh.poolmgr.GetServiceForFunction(&fh.Function)
+	if err != nil {
+		return nil, err
+	}
+	svcUrl, err := url.Parse(fmt.Sprintf("http://%v", svcName))
+	if err != nil {
+		return nil, err
+	}
+	return svcUrl, nil
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	serviceUrl, err := fh.fmap.lookup(&fh.Function)
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
+		log.Printf("Not cached, getting new service for %v", fh.Function)
 		serviceUrl, poolErr := fh.getServiceForFunction()
 		if poolErr != nil {
 			log.Printf("Failed to get service for function (%v,%v): %v",
@@ -55,9 +66,11 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	}
 
 	// Proxy off our request to the serviceUrl, and send the response back.
-	// TODO: As an optimization we may want to cache proxies too -- this would get us
+	// TODO: As an optimization we may want to cache proxies too -- this might get us
 	// connection reuse and possibly better performance
 	director := func(req *http.Request) {
+		log.Printf("Proxying request for %v", req.URL)
+
 		// send this request to serviceurl
 		req.URL.Scheme = serviceUrl.Scheme
 		req.URL.Host = serviceUrl.Host
