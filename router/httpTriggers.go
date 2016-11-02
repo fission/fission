@@ -18,6 +18,8 @@ package router
 
 import (
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -69,11 +71,30 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 		return
 	}
 
-	failureCount := 0
+	// the number of connection failures we'll accept before quitting
+	var err error
 	maxFailures := 5
+	maxFailuresEnv := os.Getenv("FISSION_ROUTER_MAX_FAILURES")
+	if len(maxFailuresEnv) != 0 {
+		maxFailures, err = strconv.Atoi(maxFailuresEnv)
+		if err != nil {
+			log.Fatalf("FISSION_ROUTER_MAX_FAILURES must be an integer, found %v", maxFailuresEnv)
+		}
+	}
+
+	// amount of time to sleep between polling calls
+	pollSleepSec := 3
+	pollSleepEnv := os.Getenv("FISSION_ROUTER_POLL_SLEEP_SECONDS")
+	if len(pollSleepEnv) != 0 {
+		pollSleepSec, err = strconv.Atoi(pollSleepEnv)
+		if err != nil {
+			log.Fatalf("FISSION_ROUTER_POLL_SLEEP_SECONDS must be an integer, found %v", pollSleepEnv)
+		}
+	}
 
 	// Watch controller for updates to triggers and update the router accordingly.
 	// TODO change this to use a watch API; or maybe even watch etcd directly.
+	failureCount := 0
 	for {
 		triggers, err := ts.controller.HTTPTriggerList()
 		if err != nil {
@@ -82,11 +103,8 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 				log.Fatalf("Failed to connect to controller after %v retries: %v", failureCount, err)
 			}
 		}
-		log.Printf("Updating router, %v triggers", len(triggers))
-
 		ts.triggers = triggers
 		ts.mutableRouter.updateRouter(ts.getRouterFromTriggers())
-
-		time.Sleep(3 * time.Second)
+		time.Sleep(time.Duration(pollSleepSec) * time.Second)
 	}
 }

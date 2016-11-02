@@ -49,6 +49,5 @@ func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *
 }
 
 func (mr *mutableRouter) updateRouter(newHandler *mux.Router) {
-	log.Println("Updating router")
 	mr.router.Store(newHandler)
 }
