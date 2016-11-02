@@ -57,7 +57,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 				fh.Function.Name, fh.Function.Uid, poolErr)
 			// We might want a specific error code or header for fission
 			// failures as opposed to user function bugs.
-			http.Error(responseWriter, poolErr.Error(), 500)
+			http.Error(responseWriter, "Internal server error (fission)", 500)
 			return
 		}
 
