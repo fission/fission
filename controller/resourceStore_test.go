@@ -69,9 +69,17 @@ func TestResourceStore(t *testing.T) {
 
 	// Delete the key first, in case of a panic'd previous test run; ignore errors
 	_ = rs.delete("TestResource", tr.Key())
+	ks.Delete(context.Background(), "/TestResource", &client.DeleteOptions{Dir: true})
+
+	// Verify getAll for empty db
+	trs, err := rs.getAll("TestResource")
+	panicIf(err)
+	if len(trs) != 0 {
+		log.Fatalf("Expected zero length slice, got %v", trs)
+	}
 
 	// Create
-	err := rs.create(tr)
+	err = rs.create(tr)
 	panicIf(err)
 	defer ks.Delete(context.Background(), "/TestResource", &client.DeleteOptions{Dir: true})
 	defer rs.delete("TestResource", tr.Key())
