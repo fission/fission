@@ -32,20 +32,24 @@ func (fetcher *Fetcher) handler(w http.ResponseWriter, r *http.Request) {
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		log.Printf("Error reading request body")
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	req := FetchRequest{}
+	var req FetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
+		log.Printf("Error reading request body: %v", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	log.Printf("fetcher request: %v", req)
 
 	// fetch the file and save it to tmp path
 	resp, err := http.Get(req.Url)
 	if err != nil {
 		e := fmt.Sprintf("Failed to fetch from url: %v", err)
+		log.Printf(e)
 		http.Error(w, e, 400)
 		return
 	}
@@ -53,6 +57,7 @@ func (fetcher *Fetcher) handler(w http.ResponseWriter, r *http.Request) {
 	body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		e := fmt.Sprintf("Failed to read from url: %v", err)
+		log.Printf(e)
 		http.Error(w, e, 400)
 		return
 	}
@@ -61,6 +66,7 @@ func (fetcher *Fetcher) handler(w http.ResponseWriter, r *http.Request) {
 	err = ioutil.WriteFile(tmpPath, body, 0600)
 	if err != nil {
 		e := fmt.Sprintf("Failed to write file: %v", err)
+		log.Printf(e)
 		http.Error(w, e, 500)
 		return
 	}
@@ -71,6 +77,7 @@ func (fetcher *Fetcher) handler(w http.ResponseWriter, r *http.Request) {
 	err = os.Rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
 		e := fmt.Sprintf("Failed to move file: %v", err)
+		log.Printf(e)
 		http.Error(w, e, 500)
 		return
 	}

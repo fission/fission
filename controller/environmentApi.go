@@ -48,10 +48,12 @@ func (api *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		api.respondWithError(w, err)
 	}
+	defer r.Body.Close()
 
 	var env fission.Environment
 	err = json.Unmarshal(body, &env)
 	if err != nil {
+		log.Printf("Failed to unmarshal request body: [%v]", body)
 		api.respondWithError(w, err)
 		return
 	}

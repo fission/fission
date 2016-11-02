@@ -65,6 +65,7 @@ func MakeGenericPool(
 	initialReplicas int32,
 	namespace string) (*GenericPool, error) {
 
+	log.Printf("Creating pool for environment %v", env.Metadata)
 	gp := &GenericPool{
 		env:              env,
 		replicas:         initialReplicas,
@@ -82,6 +83,7 @@ func MakeGenericPool(
 	}
 
 	// wait for at least one pod to be ready
+	log.Printf("[%v] Deployment created, waiting for a ready pod", env.Metadata)
 	err = gp.waitForReadyPod()
 	if err != nil {
 		return nil, err
@@ -124,6 +126,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 	for {
 		// Retries took too long, error out.
 		if time.Now().Sub(startTime) > gp.podReadyTimeout {
+			log.Printf("[%v] Erroring out, timed out", newLabels)
 			return nil, errors.New("timeout: waited too long to get a ready pod")
 		}
 
@@ -146,6 +149,8 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 				readyPods = append(readyPods, pod)
 			}
 		}
+		log.Printf("[%v] found %v ready pods of %v total",
+			newLabels, len(readyPods), len(podList.Items))
 
 		// If there are no ready pods, wait and retry.
 		if len(readyPods) == 0 {
@@ -170,7 +175,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 			log.Printf("failed to relabel pod: %v", err)
 			continue
 		}
-		log.Printf("Chose a pod: %v", chosenPod.ObjectMeta.Name)
+		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Now().Sub(startTime))
 		return &chosenPod, nil
 	}
 }
@@ -188,6 +193,7 @@ func labelsForMetadata(metadata *fission.Metadata) map[string]string {
 func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error) {
 	newLabels := labelsForMetadata(metadata)
 
+	log.Printf("[%v] Choosing pod from pool", metadata)
 	pod, err := gp.choosePod(newLabels)
 	if err != nil {
 		return nil, err
@@ -205,6 +211,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 		gp.controllerUrl, metadata.Name, metadata.Uid)
 	fetcherRequest := fmt.Sprintf("{\"url\": \"%v\", \"filename\": \"user\"}", functionUrl)
 
+	log.Printf("[%v] calling fetcher to copy function", metadata)
 	resp, err := http.Post(fetcherUrl, "application/json", bytes.NewReader([]byte(fetcherRequest)))
 	if err != nil {
 		return nil, err
@@ -215,6 +222,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	}
 
 	// get function run container to specialize
+	log.Printf("[%v] specializing pod", metadata)
 	specializeUrl := fmt.Sprintf("http://%v:8888/specialize", podIP)
 	resp2, err := http.Post(specializeUrl, "", bytes.NewReader([]byte{}))
 	if err != nil {

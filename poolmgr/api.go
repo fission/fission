@@ -94,12 +94,14 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 	}
 
 	// Cache miss -- get func from controller
+	log.Printf("[%v] getting function from controller", m)
 	f, err := api.controller.FunctionGet(m)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get env from metadata
+	log.Printf("[%v] getting env from controller", m)
 	env, err = api.controller.EnvironmentGet(&f.Environment)
 	if err != nil {
 		return nil, err
@@ -113,6 +115,7 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 
 func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// Check function -> svc map
+	log.Printf("[%v] Checking for cached function service", m.Name)
 	result, err := api.functionService.Get(m)
 	if err == nil {
 		//    Ok:     return svc name
@@ -121,20 +124,24 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	}
 
 	//    None exists, so create a new funcSvc:
+	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
 	//      from Func -> get Env
+	log.Printf("[%v] getting environment for function", m.Name)
 	env, err := api.getFunctionEnv(m)
 	if err != nil {
 		return "", err
 	}
 
 	//      from Env -> get GenericPool
+	log.Printf("[%v] getting generic pool for env", m.Name)
 	pool, err := api.poolMgr.GetPool(env)
 	if err != nil {
 		return "", err
 	}
 
 	//      from GenericPool -> get one function container
+	log.Printf("[%v] getting function service from pool", m.Name)
 	funcSvc, err := pool.GetFuncSvc(m)
 	if err != nil {
 		return "", err
