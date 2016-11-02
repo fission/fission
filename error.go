@@ -18,6 +18,7 @@ package fission
 
 import (
 	"fmt"
+	"net/http"
 )
 
 func (e Error) Error() string {
@@ -26,6 +27,25 @@ func (e Error) Error() string {
 
 func MakeError(code int, msg string) Error {
 	return Error{Code: errorCode(code), Message: msg}
+}
+
+func MakeErrorFromHTTP(resp *http.Response) error {
+	if resp.StatusCode == 200 {
+		return nil
+	}
+
+	var errCode int
+	switch resp.StatusCode {
+	case 403:
+		errCode = ErrorNotAuthorized
+	case 404:
+		errCode = ErrorNotFound
+	case 400:
+		errCode = ErrorInvalidArgument
+	default:
+		errCode = ErrorInternal
+	}
+	return MakeError(errCode, resp.Status)
 }
 
 func (err Error) HTTPStatus() int {
