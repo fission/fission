@@ -33,7 +33,7 @@ func TestRouter(t *testing.T) {
 
 	fmap.assign(fn, testServiceUrl)
 
-	triggers := makeHTTPTriggerSet(fmap, "", "")
+	triggers := makeHTTPTriggerSet(fmap, nil, nil)
 	triggerUrl := "/foo"
 	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn})
 

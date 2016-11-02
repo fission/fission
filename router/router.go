@@ -41,8 +41,13 @@ package router
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
 	"net/http"
+
+	"github.com/gorilla/mux"
+
+	controllerClient "github.com/platform9/fission/controller/client"
+	poolmgrClient "github.com/platform9/fission/poolmgr/client"
+	"log"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -64,6 +69,10 @@ func serve(port int, httpTriggerSet *HTTPTriggerSet) {
 
 func Start(port int, controllerUrl string, poolmgrUrl string) {
 	fmap := makeFunctionServiceMap()
-	triggers := makeHTTPTriggerSet(fmap, controllerUrl, poolmgrUrl)
+	controller := controllerClient.MakeClient(controllerUrl)
+	poolmgr := poolmgrClient.MakeClient(poolmgrUrl)
+
+	triggers := makeHTTPTriggerSet(fmap, controller, poolmgr)
+	log.Printf("Starting router at port %v\n", port)
 	serve(port, triggers)
 }

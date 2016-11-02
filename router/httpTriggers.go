@@ -17,47 +17,76 @@ limitations under the License.
 package router
 
 import (
+	"log"
+	"time"
+
 	"github.com/gorilla/mux"
+
 	"github.com/platform9/fission"
+	controllerClient "github.com/platform9/fission/controller/client"
+	poolmgrClient "github.com/platform9/fission/poolmgr/client"
 )
 
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
-	controllerUrl  string
-	poolManagerUrl string
-	triggers       []fission.HTTPTrigger
+	controller *controllerClient.Client
+	poolmgr    *poolmgrClient.Client
+	triggers   []fission.HTTPTrigger
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, controllerUrl string, poolManagerUrl string) *HTTPTriggerSet {
+func makeHTTPTriggerSet(fmap *functionServiceMap, controller *controllerClient.Client, poolmgr *poolmgrClient.Client) *HTTPTriggerSet {
 	triggers := make([]fission.HTTPTrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
-		controllerUrl:      controllerUrl,
-		poolManagerUrl:     poolManagerUrl,
+		controller:         controller,
+		poolmgr:            poolmgr,
 	}
 }
 
-func (triggers *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
-	triggers.mutableRouter = mr
-	mr.updateRouter(triggers.getRouterFromTriggers())
-	go triggers.watchTriggers()
+func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
+	ts.mutableRouter = mr
+	mr.updateRouter(ts.getRouterFromTriggers())
+	go ts.watchTriggers()
 }
 
-func (triggers *HTTPTriggerSet) getRouterFromTriggers() *mux.Router {
+func (ts *HTTPTriggerSet) getRouterFromTriggers() *mux.Router {
 	muxRouter := mux.NewRouter()
-	for _, trigger := range triggers.triggers {
+	for _, trigger := range ts.triggers {
 		fh := &functionHandler{
-			fmap:           triggers.functionServiceMap,
-			Function:       trigger.Function,
-			poolManagerUrl: triggers.poolManagerUrl,
+			fmap:     ts.functionServiceMap,
+			Function: trigger.Function,
+			poolmgr:  ts.poolmgr,
 		}
 		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
 	}
 	return muxRouter
 }
 
-func (triggers *HTTPTriggerSet) watchTriggers() {
-	// watch controller for updates to triggers and update the router accordingly
+func (ts *HTTPTriggerSet) watchTriggers() {
+	if ts.controller == nil {
+		return
+	}
+
+	failureCount := 0
+	maxFailures := 5
+
+	// Watch controller for updates to triggers and update the router accordingly.
+	// TODO change this to use a watch API; or maybe even watch etcd directly.
+	for {
+		triggers, err := ts.controller.HTTPTriggerList()
+		if err != nil {
+			failureCount += 1
+			if failureCount >= maxFailures {
+				log.Fatalf("Failed to connect to controller after %v retries: %v", failureCount, err)
+			}
+		}
+		log.Printf("Updating router, %v triggers", len(triggers))
+
+		ts.triggers = triggers
+		ts.mutableRouter.updateRouter(ts.getRouterFromTriggers())
+
+		time.Sleep(3 * time.Second)
+	}
 }
