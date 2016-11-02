@@ -52,6 +52,19 @@ type (
 )
 
 func MakeFileStore(path string) *FileStore {
+
+	// create directory if necessary
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(path, os.ModeDir|0700)
+			if err != nil {
+				log.Printf("Failed to create directory %v", path)
+				return nil
+			}
+			log.Printf("Created directory %v", path)
+		}
+	}
+
 	fileStore := &FileStore{
 		root:           path,
 		requestChannel: make(chan fileStoreRequest),
