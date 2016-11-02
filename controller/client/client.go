@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -37,7 +38,7 @@ type (
 )
 
 func MakeClient(serverUrl string) *Client {
-	return &Client{Url: serverUrl}
+	return &Client{Url: strings.TrimSuffix(serverUrl, "/")}
 }
 
 func (c *Client) delete(relativeUrl string) error {
