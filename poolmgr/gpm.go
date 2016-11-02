@@ -64,7 +64,6 @@ func (gpm *GenericPoolManager) service() {
 					continue
 				}
 				gpm.pools[*req.env] = pool
-				req.responseChannel <- &response{pool: pool}
 			}
 			req.responseChannel <- &response{pool: pool}
 		}
