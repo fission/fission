@@ -71,12 +71,18 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	// TODO: As an optimization we may want to cache proxies too -- this might get us
 	// connection reuse and possibly better performance
 	director := func(req *http.Request) {
-		log.Printf("Proxying request for %v", req.URL)
+		log.Printf("Proxying request for %v to %v", req.URL, serviceUrl.Host)
 
 		// send this request to serviceurl
 		req.URL.Scheme = serviceUrl.Scheme
 		req.URL.Host = serviceUrl.Host
-		req.URL.Path = serviceUrl.Path
+
+		// To keep the function run container simple, it
+		// doesn't do any routing.  In the future if we have
+		// multiple functions per container, we could use the
+		// function metadata here.
+		req.URL.Path = "/"
+
 		// leave the query string intact (req.URL.RawQuery)
 
 		if _, ok := req.Header["User-Agent"]; !ok {
