@@ -19,9 +19,11 @@ package router
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/platform9/fission"
 	poolmgrClient "github.com/platform9/fission/poolmgr/client"
@@ -44,6 +46,38 @@ func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
 		return nil, err
 	}
 	return svcUrl, nil
+}
+
+// A layer on top of http.DefaultTransport, with retries.
+type RetryingRoundTripper struct {
+	maxRetries    int
+	initalTimeout time.Duration
+}
+
+func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	timeout := rrt.initalTimeout
+	transport := http.DefaultTransport.(*http.Transport)
+
+	// Do max-1 retries; the last one uses default transport timeouts
+	for i := rrt.maxRetries - 1; i > 0; i-- {
+		// update timeout in transport
+		transport.DialContext = (&net.Dialer{
+			Timeout:   timeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext
+
+		resp, err := transport.RoundTrip(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		timeout *= time.Duration(2)
+		log.Printf("Retrying request to %v in %v", req.URL.Host, timeout)
+		time.Sleep(timeout)
+	}
+
+	// finally, one more retry with the default timeout
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -90,8 +124,15 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 			req.Header.Set("User-Agent", "")
 		}
 	}
-	proxy := &httputil.ReverseProxy{Director: director}
-	proxy.ServeHTTP(responseWriter, request)
 
-	// TODO: handle failures and possibly retry here.
+	// Initial requests to new k8s services sometimes seem to
+	// fail, but retries work.  So use a transport that does retries.
+	proxy := &httputil.ReverseProxy{
+		Director: director,
+		Transport: RetryingRoundTripper{
+			maxRetries:    10,
+			initalTimeout: 50 * time.Millisecond,
+		},
+	}
+	proxy.ServeHTTP(responseWriter, request)
 }
