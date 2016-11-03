@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"k8s.io/client-go/1.4/kubernetes"
@@ -30,6 +32,7 @@ import (
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.4/pkg/labels"
+	"k8s.io/client-go/1.4/pkg/util/intstr"
 
 	"github.com/platform9/fission"
 )
@@ -139,14 +142,15 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		if err != nil {
 			return nil, err
 		}
-		readyPods := make([]v1.Pod, len(podList.Items))
+		readyPods := make([]*v1.Pod, 0, len(podList.Items))
 		for _, pod := range podList.Items {
 			podReady := true
 			for _, cs := range pod.Status.ContainerStatuses {
 				podReady = podReady && cs.Ready
 			}
 			if podReady {
-				readyPods = append(readyPods, pod)
+				log.Printf("pod %v is ready", pod.ObjectMeta.Name)
+				readyPods = append(readyPods, &pod)
 			}
 		}
 		log.Printf("[%v] found %v ready pods of %v total",
@@ -170,13 +174,14 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		// modified, this should fail; in that case just
 		// retry.
 		chosenPod.ObjectMeta.Labels = newLabels
-		_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(&chosenPod)
+		log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
+		_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
 		if err != nil {
-			log.Printf("failed to relabel pod: %v", err)
+			log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
 			continue
 		}
 		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Now().Sub(startTime))
-		return &chosenPod, nil
+		return chosenPod, nil
 	}
 }
 
@@ -224,11 +229,28 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
 	specializeUrl := fmt.Sprintf("http://%v:8888/specialize", podIP)
-	resp2, err := http.Post(specializeUrl, "", bytes.NewReader([]byte{}))
-	if err != nil {
-		return nil, err
+
+	// retry the specialize call a few times in case the env server hasn't come up yet
+	maxRetries := 20
+	for i := 0; i < maxRetries; i++ {
+		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
+		if err != nil {
+			if urlErr, ok := err.(*url.Error); ok {
+				if netErr, ok := urlErr.Err.(*net.OpError); ok {
+					if netErr.Op == "dial" { // && netErr.Err == syscall.ECONNREFUSED
+						log.Printf("Error connecting to pod (%v)", netErr)
+						if i < maxRetries-1 {
+							time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+							continue
+						}
+					}
+				}
+			}
+			return nil, err
+		}
+		resp2.Body.Close()
 	}
-	resp2.Body.Close()
+
 	return pod, nil
 }
 
@@ -338,8 +360,9 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 			Type: v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				v1.ServicePort{
-					Protocol: v1.ProtocolTCP,
-					Port:     8888,
+					Protocol:   v1.ProtocolTCP,
+					Port:       80,
+					TargetPort: intstr.FromInt(8888),
 				},
 			},
 			Selector: labels,
@@ -370,10 +393,14 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 		return nil, errors.New(fmt.Sprintf("sanity check failed for svc %v", svc.ObjectMeta.Name))
 	}
 
+	// the fission router isn't in the same namespace, so return a
+	// namespace-qualified hostname
+	svcHost := fmt.Sprintf("%v.%v", svcName, gp.namespace)
+
 	fsvc := &funcSvc{
 		function:    m,
 		environment: gp.env,
-		serviceName: svcName,
+		serviceName: svcHost,
 		ctime:       time.Now(),
 		atime:       time.Now(),
 	}
