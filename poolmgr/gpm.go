@@ -56,9 +56,10 @@ func (gpm *GenericPoolManager) service() {
 	for {
 		select {
 		case req := <-gpm.requestChannel:
+			var err error
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
-				pool, err := MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace)
+				pool, err = MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
