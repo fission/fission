@@ -45,6 +45,7 @@ type (
 		namespace       string              // namespace to keep our resources
 		podReadyTimeout time.Duration       // timeout for generic pods to become ready
 		controllerUrl   string
+		useSvc          bool
 
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *choosePodRequest
@@ -77,6 +78,7 @@ func MakeGenericPool(
 		namespace:        namespace,
 		podReadyTimeout:  5 * time.Minute,
 		controllerUrl:    controllerUrl,
+		useSvc:           false,
 	}
 
 	// create the pool
@@ -149,7 +151,6 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 				podReady = podReady && cs.Ready
 			}
 			if podReady {
-				log.Printf("pod %v is ready", pod.ObjectMeta.Name)
 				readyPods = append(readyPods, &pod)
 			}
 		}
@@ -189,6 +190,7 @@ func labelsForMetadata(metadata *fission.Metadata) map[string]string {
 	return map[string]string{
 		"functionName": metadata.Name,
 		"functionUid":  metadata.Uid,
+		"unmanaged":    "true", // this allows us to easily find pods not managed by the deployment
 	}
 }
 
@@ -219,6 +221,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	log.Printf("[%v] calling fetcher to copy function", metadata)
 	resp, err := http.Post(fetcherUrl, "application/json", bytes.NewReader([]byte(fetcherRequest)))
 	if err != nil {
+		// TODO we should retry this call in case fetcher hasn't come up yet
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -257,8 +260,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
-	poolDeploymentName := fmt.Sprintf("deployment-%v-%v-0",
-		gp.env.Metadata.Name, gp.env.Metadata.Uid)
+	poolDeploymentName := fmt.Sprintf("%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Uid)
 
 	podLabels := map[string]string{
 		"pool": poolDeploymentName,
@@ -379,23 +381,29 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	}
 	log.Printf("Specialized pod: %v", pod.ObjectMeta.Name)
 
-	svcName := fmt.Sprintf("svc-%v", m.Name)
-	if len(m.Uid) > 0 {
-		svcName += ("-" + m.Uid)
-	}
+	var svcHost string
+	if gp.useSvc {
+		svcName := fmt.Sprintf("svc-%v", m.Name)
+		if len(m.Uid) > 0 {
+			svcName += ("-" + m.Uid)
+		}
 
-	labels := labelsForMetadata(m)
-	svc, err := gp.createSvc(svcName, labels)
-	if err != nil {
-		return nil, err
-	}
-	if svc.ObjectMeta.Name != svcName {
-		return nil, errors.New(fmt.Sprintf("sanity check failed for svc %v", svc.ObjectMeta.Name))
-	}
+		labels := labelsForMetadata(m)
+		svc, err := gp.createSvc(svcName, labels)
+		if err != nil {
+			return nil, err
+		}
+		if svc.ObjectMeta.Name != svcName {
+			return nil, errors.New(fmt.Sprintf("sanity check failed for svc %v", svc.ObjectMeta.Name))
+		}
 
-	// the fission router isn't in the same namespace, so return a
-	// namespace-qualified hostname
-	svcHost := fmt.Sprintf("%v.%v", svcName, gp.namespace)
+		// the fission router isn't in the same namespace, so return a
+		// namespace-qualified hostname
+		svcHost = fmt.Sprintf("%v.%v", svcName, gp.namespace)
+	} else {
+		log.Printf("Using pod IP for specialized pod")
+		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
+	}
 
 	fsvc := &funcSvc{
 		function:    m,
