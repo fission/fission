@@ -97,9 +97,10 @@ Options:
 	}
 
 	namespace := getStringArgWithDefault(arguments["--namespace"], "fission-function")
-	controllerUrl := getStringArgWithDefault(arguments["--controllerUrl"], "http://controller")
+
+	controllerUrl := getStringArgWithDefault(arguments["--controllerUrl"], "http://controller.fission")
 	etcdUrl := getStringArgWithDefault(arguments["--etcdUrl"], "http://etcd:2379")
-	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr")
+	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
