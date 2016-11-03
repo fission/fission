@@ -51,7 +51,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
 		log.Printf("Not cached, getting new service for %v", fh.Function)
-		serviceUrl, poolErr := fh.getServiceForFunction()
+
+		var poolErr error
+		serviceUrl, poolErr = fh.getServiceForFunction()
 		if poolErr != nil {
 			log.Printf("Failed to get service for function (%v,%v): %v",
 				fh.Function.Name, fh.Function.Uid, poolErr)
