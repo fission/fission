@@ -17,8 +17,13 @@ limitations under the License.
 package poolmgr
 
 import (
-	"github.com/platform9/fission"
+	"log"
+	"time"
+
 	"k8s.io/client-go/1.4/kubernetes"
+
+	"github.com/platform9/fission"
+	"github.com/platform9/fission/controller/client"
 )
 
 type (
@@ -27,6 +32,7 @@ type (
 		kubernetesClient *kubernetes.Clientset
 		namespace        string
 		controllerUrl    string
+		controllerClient *client.Client
 
 		requestChannel chan *request
 	}
@@ -46,9 +52,12 @@ func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.C
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
 		controllerUrl:    controllerUrl,
+		controllerClient: client.MakeClient(controllerUrl),
 		requestChannel:   make(chan *request),
 	}
 	go gpm.service()
+	go gpm.eagerPoolCreator()
+
 	return gpm
 }
 
@@ -76,4 +85,30 @@ func (gpm *GenericPoolManager) GetPool(env *fission.Environment) (*GenericPool, 
 	gpm.requestChannel <- &request{env: env, responseChannel: c}
 	resp := <-c
 	return resp.pool, resp.error
+}
+
+func (gpm *GenericPoolManager) eagerPoolCreator() {
+	failureCount := 0
+	maxFailures := 5
+	pollSleep := time.Duration(2 * time.Second)
+	for {
+		time.Sleep(pollSleep)
+
+		// get list of envs from controller
+		envs, err := gpm.controllerClient.EnvironmentList()
+		if err != nil {
+			failureCount++
+			if failureCount >= maxFailures {
+				log.Fatalf("Failed to connect to controller %v times: %v", maxFailures, err)
+			}
+		}
+
+		// Create pools for all envs.  TODO: we should make this a bit less eager, only
+		// creating pools for envs that are actually used by functions.  Also we might want
+		// to keep these eagerly created pools smaller than the ones created when there are
+		// actual function calls.
+		for _, env := range envs {
+			gpm.GetPool(&env)
+		}
+	}
 }
