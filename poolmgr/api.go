@@ -23,6 +23,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -45,7 +46,8 @@ type funcSvc struct {
 type API struct {
 	poolMgr         *GenericPoolManager
 	functionEnv     *cache.Cache // map[fission.Metadata]fission.Environment
-	functionService *cache.Cache // map[fission.Metadata]funcSvc
+	functionService *cache.Cache // map[fission.Metadata]*funcSvc
+	urlFuncSvc      *cache.Cache // map[string]*funcSvc
 	controller      *controllerclient.Client
 }
 
@@ -54,6 +56,7 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client) *API 
 		poolMgr:         gpm,
 		functionEnv:     cache.MakeCache(),
 		functionService: cache.MakeCache(),
+		urlFuncSvc:      cache.MakeCache(),
 		controller:      controller,
 	}
 }
@@ -120,6 +123,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	if err == nil {
 		//    Ok:     return svc name
 		svc := result.(*funcSvc)
+		svc.atime = time.Now()
 		return svc.serviceName, nil
 	}
 
@@ -151,15 +155,46 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	err = api.functionService.Set(m, funcSvc)
 	if err != nil {
 		// log and ignore error
-		log.Printf("Error saving function service: %v", err)
+		log.Printf("Error caching function service: %v", err)
+	}
+
+	// cache by svc hostname, for tapService()
+	err = api.urlFuncSvc.Set(funcSvc.serviceName, funcSvc)
+	if err != nil {
+		// log and ignore error
+		log.Printf("Error caching function service by name: %v", err)
 	}
 
 	return funcSvc.serviceName, nil
 }
 
+// find funcSvc and update its atime
+func (api *API) tapService(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", 500)
+		return
+	}
+	svcName := string(body)
+	svcHost := strings.TrimPrefix(svcName, "http://")
+
+	log.Printf("tap svc: %v", svcHost)
+
+	funcSvcI, err := api.urlFuncSvc.Get(svcHost)
+	if err != nil {
+		http.Error(w, "Not found", 404)
+		return
+	}
+
+	(funcSvcI.(*funcSvc)).atime = time.Now()
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (api *API) Serve(port int) {
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/getServiceForFunction", api.getServiceForFunctionApi).Methods("POST")
+	r.HandleFunc("/v1/tapService", api.tapService).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)
