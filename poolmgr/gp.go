@@ -45,7 +45,10 @@ type (
 		namespace       string              // namespace to keep our resources
 		podReadyTimeout time.Duration       // timeout for generic pods to become ready
 		controllerUrl   string
-		useSvc          bool
+		idlePodReapTime time.Duration // pods unused for idlePodReapTime are deleted
+
+		useSvc     bool         // create service for
+		podFuncSvc *cache.Cache // map[pod.ObjectMeta.Name]*funcSvc
 
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *choosePodRequest
@@ -70,15 +73,20 @@ func MakeGenericPool(
 	namespace string) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
+	// TODO: in general we need to provide the user a way to configure pools.  Initial
+	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
 		env:              env,
-		replicas:         initialReplicas,
+		replicas:         initialReplicas, // TODO make this an env param instead?
 		requestChannel:   make(chan *choosePodRequest),
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
-		podReadyTimeout:  5 * time.Minute,
+		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
 		controllerUrl:    controllerUrl,
-		useSvc:           false,
+		idlePodReapTime:  3 * time.Minute, // TODO make this configurable
+
+		useSvc:     false,
+		podFuncSvc: cache.MakeCache(0),
 	}
 
 	// create the pool
@@ -95,6 +103,9 @@ func MakeGenericPool(
 	}
 
 	go gp.choosePodService()
+
+	go gp.idlePodReaper()
+
 	return gp, nil
 }
 
@@ -412,5 +423,27 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 		ctime:       time.Now(),
 		atime:       time.Now(),
 	}
+	gp.podFuncSvc[pod.ObjectMeta.Name].Set(fsvc)
 	return fsvc, nil
+}
+
+func (gp *GenericPool) idlePodReaper() {
+	for {
+		podmap := gp.podFuncSvc.Copy()
+		for podNameI, funcSvcI := range podmap {
+			podName := podNameI.(string)
+			funcSvc := funcSvcI.(*funcSvc)
+			lastAccessTime := funcSvc.atime
+			if time.Now().Sub(lastAccessTime) < gp.idlePodReapTime {
+				continue
+			}
+
+			log.Printf("Reaping idle pod %v (last used at %v)", podName, lastAccessTime)
+			err := gp.kubernetesClient.Core().Pods(gp.namespace).Delete(podName)
+			if err != nil {
+				log.Printf("Error reaping pod: %v", err)
+				continue
+			}
+		}
+	}
 }
