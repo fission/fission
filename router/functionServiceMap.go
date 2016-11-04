@@ -17,97 +17,36 @@ limitations under the License.
 package router
 
 import (
-	"errors"
 	"log"
 	"net/url"
 
 	"github.com/platform9/fission"
+	"github.com/platform9/fission/cache"
 )
-
-type requestType int
-
-const (
-	LOOKUP   requestType = iota // lookup the map
-	ASSIGN                      // assign function
-	NEXT_GEN                    // increment current generation
-	SWEEP                       // delete all but the current generation
-)
-
-type functionServiceMapResponse struct {
-	serviceUrl url.URL
-	error
-}
-type functionServiceMapRequest struct {
-	Function   fission.Metadata
-	serviceUrl url.URL
-	requestType
-	responseChannel chan<- functionServiceMapResponse
-}
-type functionServiceMapEntry struct {
-	serviceUrl url.URL
-	generation uint64
-}
 
 type functionServiceMap struct {
-	// map (funcname, uid) -> url
-	svc               map[fission.Metadata]functionServiceMapEntry
-	currentGeneration uint64
-	requestChannel    chan *functionServiceMapRequest
+	svc *cache.Cache // map[fission.Metadata]*url.URL
 }
 
 func makeFunctionServiceMap() *functionServiceMap {
-	fmap := &functionServiceMap{}
-	fmap.requestChannel = make(chan *functionServiceMapRequest)
-	fmap.svc = make(map[fission.Metadata]functionServiceMapEntry)
-	go fmap.functionServiceMapWork()
-	return fmap
-}
-
-func (fmap *functionServiceMap) functionServiceMapWork() {
-	for {
-		req := <-fmap.requestChannel
-		switch req.requestType {
-		case LOOKUP:
-			e, present := fmap.svc[req.Function]
-			if present {
-				req.responseChannel <- functionServiceMapResponse{serviceUrl: e.serviceUrl}
-			} else {
-				req.responseChannel <- functionServiceMapResponse{error: errors.New("not found")}
-			}
-		case ASSIGN:
-			fmap.svc[req.Function] =
-				functionServiceMapEntry{serviceUrl: req.serviceUrl, generation: fmap.currentGeneration}
-			// no response
-		case NEXT_GEN:
-			fmap.currentGeneration++
-			// no response
-		case SWEEP:
-			log.Panic("not implemented")
-		default:
-			log.Panic("bad request")
-		}
+	return &functionServiceMap{
+		svc: cache.MakeCache(),
 	}
 }
 
 func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
-	respChannel := make(chan functionServiceMapResponse)
-	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, requestType: LOOKUP, responseChannel: respChannel}
-	resp := <-respChannel
-	if resp.error != nil {
-		return nil, resp.error
-	} else {
-		return &resp.serviceUrl, nil
+	item, err := fmap.svc.Get(*f)
+	if err != nil {
+		return nil, err
 	}
+	u := item.(*url.URL)
+	return u, nil
 }
 
 func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
-	fmap.requestChannel <- &functionServiceMapRequest{Function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
-}
-
-func (fmap *functionServiceMap) nextGen() {
-	fmap.requestChannel <- &functionServiceMapRequest{requestType: NEXT_GEN}
-}
-
-func (fmap *functionServiceMap) sweep() {
-	fmap.requestChannel <- &functionServiceMapRequest{requestType: SWEEP}
+	//fmap.requestChannel <- &functionServiceMapRequest{Function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
+	err := fmap.svc.Set(*f, serviceUrl)
+	if err != nil {
+		log.Printf("error caching svc for function: %v", err)
+	}
 }

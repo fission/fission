@@ -81,6 +81,9 @@ func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 func (fh *functionHandler) tapService(serviceUrl *url.URL) {
+	if fh.poolmgr == nil {
+		return
+	}
 	err := fh.poolmgr.TapService(serviceUrl)
 	if err != nil {
 		log.Printf("tap service error: %v", serviceUrl.String())
