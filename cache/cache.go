@@ -29,6 +29,7 @@ const (
 	GET requestType = iota
 	SET
 	DELETE
+	EXPIRE
 )
 
 type (
@@ -39,6 +40,7 @@ type (
 	}
 	Cache struct {
 		cache          map[interface{}]Value
+		expiryTime     time.Duration
 		requestChannel chan *request
 	}
 
@@ -54,12 +56,26 @@ type (
 	}
 )
 
-func MakeCache() *Cache {
+func (c *Cache) IsOld(v *Value) bool {
+	if c.expiryTime == 0 {
+		return false
+	}
+	if time.Now().Sub(v.atime) > c.expiryTime {
+		return true
+	}
+	return false
+}
+
+func MakeCache(expiryTime time.Duration) *Cache {
 	c := &Cache{
 		cache:          make(map[interface{}]Value),
+		expiryTime:     expiryTime,
 		requestChannel: make(chan *request),
 	}
 	go c.service()
+	if expiryTime != time.Duration(0) {
+		go c.expiryService()
+	}
 	return c
 }
 
@@ -73,11 +89,16 @@ func (c *Cache) service() {
 			if !ok {
 				resp.error = fission.MakeError(fission.ErrorNotFound,
 					fmt.Sprintf("key '%v' not found", req.key))
+			} else if c.IsOld(&val) {
+				resp.error = fission.MakeError(fission.ErrorNotFound,
+					fmt.Sprintf("key '%v' expired (atime %v)", req.key, val.atime))
+				delete(c.cache, req.key)
+			} else {
+				// update atime
+				val.atime = time.Now()
+				c.cache[req.key] = val
+				resp.value = val.value
 			}
-			val.atime = time.Now()
-			c.cache[req.key] = val
-
-			resp.value = val.value
 			req.responseChannel <- resp
 		case SET:
 			now := time.Now()
@@ -90,6 +111,13 @@ func (c *Cache) service() {
 		case DELETE:
 			delete(c.cache, req.key)
 			req.responseChannel <- resp
+		case EXPIRE:
+			for k, v := range c.cache {
+				if c.IsOld(&v) {
+					delete(c.cache, k)
+				}
+			}
+			// no response
 		default:
 			resp.error = fission.MakeError(fission.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -130,4 +158,13 @@ func (c *Cache) Delete(key interface{}) error {
 	}
 	resp := <-respChannel
 	return resp.error
+}
+
+func (c *Cache) expiryService() {
+	for {
+		time.Sleep(time.Minute)
+		c.requestChannel <- &request{
+			requestType: EXPIRE,
+		}
+	}
 }
