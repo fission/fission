@@ -35,9 +35,11 @@ import (
 )
 
 type funcSvc struct {
-	function    *fission.Metadata    // function this thing is for
+	function    *fission.Metadata    // function this pod/service is for
 	environment *fission.Environment // env it was obtained from
 	serviceName string               // name of k8s svc
+
+	reaped bool // if true, the pod has been deleted
 
 	ctime time.Time
 	atime time.Time
