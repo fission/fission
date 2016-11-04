@@ -54,9 +54,9 @@ type API struct {
 func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client) *API {
 	return &API{
 		poolMgr:         gpm,
-		functionEnv:     cache.MakeCache(),
-		functionService: cache.MakeCache(),
-		urlFuncSvc:      cache.MakeCache(),
+		functionEnv:     cache.MakeCache(0),
+		functionService: cache.MakeCache(time.Minute),
+		urlFuncSvc:      cache.MakeCache(time.Minute),
 		controller:      controller,
 	}
 }
@@ -90,7 +90,7 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 	var env *fission.Environment
 
 	// Cached ?
-	result, err := api.functionEnv.Get(m)
+	result, err := api.functionEnv.Get(*m)
 	if err == nil {
 		env = result.(*fission.Environment)
 		return env, nil
@@ -111,7 +111,7 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 	}
 
 	// cache for future
-	api.functionEnv.Set(m, env)
+	api.functionEnv.Set(*m, env)
 
 	return env, nil
 }
@@ -119,7 +119,7 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// Check function -> svc map
 	log.Printf("[%v] Checking for cached function service", m.Name)
-	result, err := api.functionService.Get(m)
+	result, err := api.functionService.Get(*m)
 	if err == nil {
 		//    Ok:     return svc name
 		svc := result.(*funcSvc)
@@ -152,7 +152,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	}
 
 	// add to cache
-	err = api.functionService.Set(m, funcSvc)
+	err = api.functionService.Set(*m, funcSvc)
 	if err != nil {
 		// log and ignore error
 		log.Printf("Error caching function service: %v", err)
