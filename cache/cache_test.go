@@ -31,11 +31,18 @@ func TestCache(t *testing.T) {
 
 	err := c.Set("a", "b")
 	checkErr(err)
+	err = c.Set("p", "q")
+	checkErr(err)
 
 	val, err := c.Get("a")
 	checkErr(err)
 	if val != "b" {
 		log.Panicf("value %v", val)
+	}
+
+	cc := c.Copy()
+	if len(cc) != 2 {
+		log.Panicf("expected 2 items")
 	}
 
 	err = c.Delete("a")

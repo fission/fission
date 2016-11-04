@@ -30,6 +30,7 @@ const (
 	SET
 	DELETE
 	EXPIRE
+	COPY
 )
 
 type (
@@ -52,15 +53,16 @@ type (
 	}
 	response struct {
 		error
-		value interface{}
+		mapCopy map[interface{}]interface{}
+		value   interface{}
 	}
 )
 
 func (c *Cache) IsOld(v *Value) bool {
-	if c.expiryTime == 0 {
+	if c.expiryTime == time.Duration(0) {
 		return false
 	}
-	if time.Now().Sub(v.atime) > c.expiryTime {
+	if time.Now().Sub(v.ctime) > c.expiryTime {
 		return true
 	}
 	return false
@@ -118,6 +120,12 @@ func (c *Cache) service() {
 				}
 			}
 			// no response
+		case COPY:
+			resp.mapCopy = make(map[interface{}]interface{})
+			for k, v := range c.cache {
+				resp.mapCopy[k] = v
+			}
+			req.responseChannel <- resp
 		default:
 			resp.error = fission.MakeError(fission.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -158,6 +166,16 @@ func (c *Cache) Delete(key interface{}) error {
 	}
 	resp := <-respChannel
 	return resp.error
+}
+
+func (c *Cache) Copy() map[interface{}]interface{} {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     COPY,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.mapCopy
 }
 
 func (c *Cache) expiryService() {
