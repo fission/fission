@@ -19,23 +19,24 @@ package router
 import (
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/platform9/fission"
 	"github.com/platform9/fission/cache"
 )
 
 type functionServiceMap struct {
-	svc *cache.Cache // map[fission.Metadata]*url.URL
+	cache *cache.Cache // map[fission.Metadata]*url.URL
 }
 
-func makeFunctionServiceMap() *functionServiceMap {
+func makeFunctionServiceMap(expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
-		svc: cache.MakeCache(),
+		cache: cache.MakeCache(expiry),
 	}
 }
 
 func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
-	item, err := fmap.svc.Get(*f)
+	item, err := fmap.cache.Get(*f)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +45,8 @@ func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
 }
 
 func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
-	//fmap.requestChannel <- &functionServiceMapRequest{Function: *f, serviceUrl: *serviceUrl, requestType: ASSIGN}
-	err := fmap.svc.Set(*f, serviceUrl)
+	err := fmap.cache.Set(*f, serviceUrl)
 	if err != nil {
-		log.Printf("error caching svc for function: %v", err)
+		log.Printf("error caching service url for function: %v", err)
 	}
 }
