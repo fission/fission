@@ -49,6 +49,7 @@ type (
 	HTTPTrigger struct {
 		Metadata   `json:"metadata"`
 		UrlPattern string   `json:"urlpattern"`
+		Method     string   `json:"method"`
 		Function   Metadata `json:"function"`
 	}
 
