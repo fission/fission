@@ -238,15 +238,15 @@ func (c *Client) FunctionList() ([]fission.Function, error) {
 	return funcs, nil
 }
 
-func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (string, error) {
+func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (*fission.Metadata, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	resp, err := http.Post(c.url("triggers/http"), "application/json", bytes.NewReader(reqbody))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -256,16 +256,16 @@ func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (string, error) {
 			"name": t.Metadata.Name,
 			"err":  err,
 		}).Error("Failed to create http trigger")
-		return "", err
+		return nil, err
 	}
 
 	var m fission.Metadata
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return m.Uid, nil
+	return &m, nil
 }
 
 func (c *Client) HTTPTriggerGet(m *fission.Metadata) (*fission.HTTPTrigger, error) {
@@ -294,30 +294,30 @@ func (c *Client) HTTPTriggerGet(m *fission.Metadata) (*fission.HTTPTrigger, erro
 	return &t, nil
 }
 
-func (c *Client) HTTPTriggerUpdate(t *fission.HTTPTrigger) (string, error) {
+func (c *Client) HTTPTriggerUpdate(t *fission.HTTPTrigger) (*fission.Metadata, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	relativeUrl := fmt.Sprintf("triggers/http/%v", t.Metadata.Name)
 
 	resp, err := c.put(relativeUrl, "application/json", reqbody)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var m fission.Metadata
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return m.Uid, nil
+	return &m, nil
 }
 
 func (c *Client) HTTPTriggerDelete(m *fission.Metadata) error {
@@ -349,15 +349,15 @@ func (c *Client) HTTPTriggerList() ([]fission.HTTPTrigger, error) {
 	return triggers, nil
 }
 
-func (c *Client) EnvironmentCreate(env *fission.Environment) (string, error) {
+func (c *Client) EnvironmentCreate(env *fission.Environment) (*fission.Metadata, error) {
 	reqbody, err := json.Marshal(env)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	resp, err := http.Post(c.url("environments"), "application/json", bytes.NewReader(reqbody))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -367,16 +367,16 @@ func (c *Client) EnvironmentCreate(env *fission.Environment) (string, error) {
 			"name": env.Metadata.Name,
 			"err":  err,
 		}).Error("Failed to create environment")
-		return "", err
+		return nil, err
 	}
 
 	var m fission.Metadata
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return m.Uid, nil
+	return &m, nil
 }
 
 func (c *Client) EnvironmentGet(m *fission.Metadata) (*fission.Environment, error) {
@@ -405,30 +405,30 @@ func (c *Client) EnvironmentGet(m *fission.Metadata) (*fission.Environment, erro
 	return &env, nil
 }
 
-func (c *Client) EnvironmentUpdate(env *fission.Environment) (string, error) {
+func (c *Client) EnvironmentUpdate(env *fission.Environment) (*fission.Metadata, error) {
 	reqbody, err := json.Marshal(env)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	relativeUrl := fmt.Sprintf("environments/%v", env.Metadata.Name)
 
 	resp, err := c.put(relativeUrl, "application/json", reqbody)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var m fission.Metadata
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return m.Uid, nil
+	return &m, nil
 }
 
 func (c *Client) EnvironmentDelete(m *fission.Metadata) error {

@@ -119,12 +119,8 @@ func TestHTTPTriggerApi(t *testing.T) {
 			Uid:  "",
 		},
 	}
-	uid, err := g.client.HTTPTriggerCreate(testTrigger)
+	m, err := g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
-	m := &fission.Metadata{
-		Name: testTrigger.Metadata.Name,
-		Uid:  uid,
-	}
 	defer g.client.HTTPTriggerDelete(m)
 
 	tr, err := g.client.HTTPTriggerGet(m)
@@ -133,22 +129,18 @@ func TestHTTPTriggerApi(t *testing.T) {
 	assert(*testTrigger == *tr, "trigger should match after reading")
 
 	testTrigger.UrlPattern = "/hi"
-	uid2, err := g.client.HTTPTriggerUpdate(testTrigger)
+	m2, err := g.client.HTTPTriggerUpdate(testTrigger)
 	panicIf(err)
 
-	m.Uid = uid2
+	m.Uid = m2.Uid
 	tr, err = g.client.HTTPTriggerGet(m)
 	panicIf(err)
 	testTrigger.Metadata.Uid = m.Uid
 	assert(*testTrigger == *tr, "trigger should match after reading")
 
 	testTrigger.Metadata.Name = "yyy"
-	uid, err = g.client.HTTPTriggerCreate(testTrigger)
+	m, err = g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
-	m = &fission.Metadata{
-		Name: testTrigger.Metadata.Name,
-		Uid:  uid,
-	}
 	defer g.client.HTTPTriggerDelete(m)
 
 	ts, err := g.client.HTTPTriggerList()
@@ -164,12 +156,8 @@ func TestEnvironmentApi(t *testing.T) {
 		},
 		RunContainerImageUrl: "gcr.io/xyz",
 	}
-	uid, err := g.client.EnvironmentCreate(testEnv)
+	m, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
-	m := &fission.Metadata{
-		Name: testEnv.Metadata.Name,
-		Uid:  uid,
-	}
 	defer g.client.EnvironmentDelete(m)
 
 	tr, err := g.client.EnvironmentGet(m)
@@ -178,22 +166,18 @@ func TestEnvironmentApi(t *testing.T) {
 	assert(*testEnv == *tr, "env should match after reading")
 
 	testEnv.RunContainerImageUrl = "/hi"
-	uid2, err := g.client.EnvironmentUpdate(testEnv)
+	m2, err := g.client.EnvironmentUpdate(testEnv)
 	panicIf(err)
 
-	m.Uid = uid2
+	m.Uid = m2.Uid
 	tr, err = g.client.EnvironmentGet(m)
 	panicIf(err)
 	testEnv.Metadata.Uid = m.Uid
 	assert(*testEnv == *tr, "env should match after reading")
 
 	testEnv.Metadata.Name = "yyy"
-	uid, err = g.client.EnvironmentCreate(testEnv)
+	m, err = g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
-	m = &fission.Metadata{
-		Name: testEnv.Metadata.Name,
-		Uid:  uid,
-	}
 	defer g.client.EnvironmentDelete(m)
 
 	ts, err := g.client.EnvironmentList()
