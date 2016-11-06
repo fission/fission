@@ -33,6 +33,7 @@ type (
 		namespace        string
 		controllerUrl    string
 		controllerClient *client.Client
+		fsCache          *functionServiceCache
 
 		requestChannel chan *request
 	}
@@ -46,13 +47,14 @@ type (
 	}
 )
 
-func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.Clientset, namespace string) *GenericPoolManager {
+func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.Clientset, namespace string, fsCache *functionServiceCache) *GenericPoolManager {
 	gpm := &GenericPoolManager{
 		pools:            make(map[fission.Environment]*GenericPool),
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
 		controllerUrl:    controllerUrl,
 		controllerClient: client.MakeClient(controllerUrl),
+		fsCache:          fsCache,
 		requestChannel:   make(chan *request),
 	}
 	go gpm.service()
@@ -68,7 +70,7 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
-				pool, err = MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace)
+				pool, err = MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace, gpm.fsCache)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
@@ -108,7 +110,10 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
 		for _, env := range envs {
-			gpm.GetPool(&env)
+			_, err := gpm.GetPool(&env)
+			if err != nil {
+				log.Printf("eager-create pool failed: %v", err)
+			}
 		}
 	}
 }

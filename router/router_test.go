@@ -25,7 +25,7 @@ import (
 )
 
 func TestRouter(t *testing.T) {
-	fmap := makeFunctionServiceMap()
+	fmap := makeFunctionServiceMap(0)
 	fn := &fission.Metadata{Name: "foo", Uid: "xxx"}
 
 	testResponseString := "hi"

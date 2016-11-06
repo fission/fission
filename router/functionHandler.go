@@ -80,7 +80,19 @@ func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	return http.DefaultTransport.RoundTrip(req)
 }
 
+func (fh *functionHandler) tapService(serviceUrl *url.URL) {
+	if fh.poolmgr == nil {
+		return
+	}
+	err := fh.poolmgr.TapService(serviceUrl)
+	if err != nil {
+		log.Printf("tap service error: %v", serviceUrl.String())
+	}
+}
+
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+
+	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(&fh.Function)
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
@@ -99,6 +111,10 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 		// add it to the map
 		fh.fmap.assign(&fh.Function, serviceUrl)
+	} else {
+		// if we're using our cache, asynchronously tell
+		// poolmgr we're using this service
+		go fh.tapService(serviceUrl)
 	}
 
 	// Proxy off our request to the serviceUrl, and send the response back.

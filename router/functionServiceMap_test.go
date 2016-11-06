@@ -24,7 +24,7 @@ import (
 )
 
 func TestFunctionServiceMap(t *testing.T) {
-	m := makeFunctionServiceMap()
+	m := makeFunctionServiceMap(0)
 	fn := &fission.Metadata{Name: "foo", Uid: "012"}
 	u, err := url.Parse("/foo012")
 	if err != nil {

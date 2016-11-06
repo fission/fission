@@ -25,8 +25,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/dchest/uniuri"
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
 	"k8s.io/client-go/1.4/pkg/api/v1"
@@ -39,14 +41,16 @@ import (
 
 type (
 	GenericPool struct {
-		env             *fission.Environment
-		replicas        int32               // num containers
-		deployment      *v1beta1.Deployment // kubernetes deployment
-		namespace       string              // namespace to keep our resources
-		podReadyTimeout time.Duration       // timeout for generic pods to become ready
-		controllerUrl   string
-		useSvc          bool
-
+		env              *fission.Environment
+		replicas         int32               // num containers
+		deployment       *v1beta1.Deployment // kubernetes deployment
+		namespace        string              // namespace to keep our resources
+		podReadyTimeout  time.Duration       // timeout for generic pods to become ready
+		controllerUrl    string
+		idlePodReapTime  time.Duration         // pods unused for idlePodReapTime are deleted
+		fsCache          *functionServiceCache // cache funcSvc's by function, address and podname
+		useSvc           bool                  // create service
+		poolInstanceId   string                // small random string to uniquify pod names
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *choosePodRequest
 	}
@@ -67,18 +71,25 @@ func MakeGenericPool(
 	kubernetesClient *kubernetes.Clientset,
 	env *fission.Environment,
 	initialReplicas int32,
-	namespace string) (*GenericPool, error) {
+	namespace string,
+	fsCache *functionServiceCache) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
+	// TODO: in general we need to provide the user a way to configure pools.  Initial
+	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
 		env:              env,
-		replicas:         initialReplicas,
+		replicas:         initialReplicas, // TODO make this an env param instead?
 		requestChannel:   make(chan *choosePodRequest),
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
-		podReadyTimeout:  5 * time.Minute,
+		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
 		controllerUrl:    controllerUrl,
-		useSvc:           false,
+		idlePodReapTime:  3 * time.Minute, // TODO make this configurable
+		fsCache:          fsCache,
+		poolInstanceId:   uniuri.NewLen(8),
+
+		useSvc: false,
 	}
 
 	// create the pool
@@ -95,6 +106,9 @@ func MakeGenericPool(
 	}
 
 	go gp.choosePodService()
+
+	go gp.idlePodReaper()
+
 	return gp, nil
 }
 
@@ -260,7 +274,8 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
-	poolDeploymentName := fmt.Sprintf("%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Uid)
+	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
+		gp.env.Metadata.Name, gp.env.Metadata.Uid, strings.ToLower(gp.poolInstanceId))
 
 	podLabels := map[string]string{
 		"pool": poolDeploymentName,
@@ -408,9 +423,59 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	fsvc := &funcSvc{
 		function:    m,
 		environment: gp.env,
-		serviceName: svcHost,
+		address:     svcHost,
+		podName:     pod.ObjectMeta.Name,
 		ctime:       time.Now(),
 		atime:       time.Now(),
 	}
+
+	err, existingFsvc := gp.fsCache.Add(*fsvc)
+	if err != nil {
+		// Some other thread beat us to it -- return the other thread's fsvc and clean up
+		// our own.  TODO: this is grossly inefficient, improve it with some sort of state
+		// machine
+		log.Printf("func svc already exists: %v", existingFsvc.podName)
+		go gp.CleanupFunctionService(fsvc.podName)
+		return existingFsvc, nil
+	}
 	return fsvc, nil
+}
+
+func (gp *GenericPool) CleanupFunctionService(podName string) error {
+	// remove ourselves from fsCache (only if we're still old)
+	deleted, err := gp.fsCache.DeleteByPod(podName, gp.idlePodReapTime)
+	if err != nil {
+		return err
+	}
+
+	if !deleted {
+		log.Printf("Not deleting %v, in use", podName)
+		return nil
+	}
+
+	// delete pod
+	err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(podName, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (gp *GenericPool) idlePodReaper() {
+	for {
+		time.Sleep(time.Minute)
+		podNames, err := gp.fsCache.ListOld(gp.idlePodReapTime)
+		if err != nil {
+			log.Printf("Error reaping idle pods: %v", err)
+			continue
+		}
+		for _, podName := range podNames {
+			log.Printf("Reaping idle pod '%v'", podName)
+			err := gp.CleanupFunctionService(podName)
+			if err != nil {
+				log.Printf("Error deleting idle pod '%v': %v", podName, err)
+			}
+		}
+	}
 }

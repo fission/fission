@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"github.com/platform9/fission"
 	"io/ioutil"
+	"net/url"
 )
 
 type Client struct {
@@ -57,4 +58,20 @@ func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, erro
 	}
 
 	return string(svcName), nil
+}
+
+func (c *Client) TapService(serviceUrl *url.URL) error {
+	url := c.poolmgrUrl + "/v1/tapService"
+
+	serviceUrlStr := serviceUrl.String()
+
+	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fission.MakeErrorFromHTTP(resp)
+	}
+	return nil
 }

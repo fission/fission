@@ -18,30 +18,46 @@ package cache
 
 import "testing"
 import "log"
+import "time"
+
+func checkErr(err error) {
+	if err != nil {
+		log.Panicf("err: %v", err)
+	}
+}
 
 func TestCache(t *testing.T) {
-	c := MakeCache()
+	c := MakeCache(100 * time.Millisecond)
 
 	err := c.Set("a", "b")
-	if err != nil {
-		log.Panicf("error: %v", err)
-	}
+	checkErr(err)
+	err = c.Set("p", "q")
+	checkErr(err)
 
 	val, err := c.Get("a")
-	if err != nil {
-		log.Panicf("error: %v", err)
-	}
+	checkErr(err)
 	if val != "b" {
 		log.Panicf("value %v", val)
 	}
 
-	err = c.Delete("a")
-	if err != nil {
-		log.Panicf("error: %v", err)
+	cc := c.Copy()
+	if len(cc) != 2 {
+		log.Panicf("expected 2 items")
 	}
+
+	err = c.Delete("a")
+	checkErr(err)
 
 	_, err = c.Get("a")
 	if err == nil {
-		log.Panicf("error: %v", err)
+		log.Panicf("found deleted element")
+	}
+
+	err = c.Set("expires", "42")
+	checkErr(err)
+	time.Sleep(150 * time.Millisecond)
+	_, err = c.Get("expires")
+	if err == nil {
+		log.Panicf("found expired element")
 	}
 }
