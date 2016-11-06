@@ -31,7 +31,7 @@ type functionServiceMap struct {
 
 func makeFunctionServiceMap(expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
-		cache: cache.MakeCache(expiry),
+		cache: cache.MakeCache(expiry, 0),
 	}
 }
 
@@ -45,8 +45,9 @@ func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
 }
 
 func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
-	err := fmap.cache.Set(*f, serviceUrl)
+	err, _ := fmap.cache.Set(*f, serviceUrl)
 	if err != nil {
 		log.Printf("error caching service url for function: %v", err)
+		// ignore error
 	}
 }
