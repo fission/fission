@@ -56,9 +56,11 @@ func StartPoolmgr(controllerUrl string, namespace string, port int) error {
 		return err
 	}
 
-	gpm := MakeGenericPoolManager(controllerUrl, kubernetesClient, namespace)
+	fsCache := MakeFunctionServiceCache()
 
-	api := MakeAPI(gpm, controllerClient)
+	gpm := MakeGenericPoolManager(controllerUrl, kubernetesClient, namespace, fsCache)
+	api := MakeAPI(gpm, controllerClient, fsCache)
+
 	go api.Serve(port)
 
 	return nil

@@ -37,29 +37,29 @@ import (
 type funcSvc struct {
 	function    *fission.Metadata    // function this pod/service is for
 	environment *fission.Environment // env it was obtained from
-	serviceName string               // name of k8s svc
-
-	reaped bool // if true, the pod has been deleted
+	address     string               // Host:Port or IP:Port that the service can be reached at.
+	podName     string               // pod name (within the function namespace)
 
 	ctime time.Time
 	atime time.Time
 }
 
 type API struct {
-	poolMgr         *GenericPoolManager
-	functionEnv     *cache.Cache // map[fission.Metadata]fission.Environment
-	functionService *cache.Cache // map[fission.Metadata]*funcSvc
-	urlFuncSvc      *cache.Cache // map[string]*funcSvc
-	controller      *controllerclient.Client
+	poolMgr     *GenericPoolManager
+	functionEnv *cache.Cache // map[fission.Metadata]fission.Environment
+	fsCache     *functionServiceCache
+	controller  *controllerclient.Client
+
+	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
+	//urlFuncSvc      *cache.Cache // map[string]*funcSvc
 }
 
-func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client) *API {
+func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCache *functionServiceCache) *API {
 	return &API{
-		poolMgr:         gpm,
-		functionEnv:     cache.MakeCache(0),
-		functionService: cache.MakeCache(time.Minute),
-		urlFuncSvc:      cache.MakeCache(time.Minute),
-		controller:      controller,
+		poolMgr:     gpm,
+		functionEnv: cache.MakeCache(time.Minute, 0),
+		fsCache:     fsCache,
+		controller:  controller,
 	}
 }
 
@@ -121,53 +121,40 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// Check function -> svc map
 	log.Printf("[%v] Checking for cached function service", m.Name)
-	result, err := api.functionService.Get(*m)
+	fsvc, err := api.fsCache.GetByFunction(m)
 	if err == nil {
-		//    Ok:     return svc name
-		svc := result.(*funcSvc)
-		svc.atime = time.Now()
-		return svc.serviceName, nil
+		// Cached, return svc name
+		return fsvc.address, nil
 	}
 
-	//    None exists, so create a new funcSvc:
+	api.fsCache.Log()
+
+	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
-	//      from Func -> get Env
+	// from Func -> get Env
 	log.Printf("[%v] getting environment for function", m.Name)
 	env, err := api.getFunctionEnv(m)
 	if err != nil {
 		return "", err
 	}
 
-	//      from Env -> get GenericPool
+	// from Env -> get GenericPool
 	log.Printf("[%v] getting generic pool for env", m.Name)
 	pool, err := api.poolMgr.GetPool(env)
 	if err != nil {
 		return "", err
 	}
 
-	//      from GenericPool -> get one function container
+	// from GenericPool -> get one function container
+	// (this also adds to the cache)
 	log.Printf("[%v] getting function service from pool", m.Name)
 	funcSvc, err := pool.GetFuncSvc(m)
 	if err != nil {
 		return "", err
 	}
 
-	// add to cache
-	err = api.functionService.Set(*m, funcSvc)
-	if err != nil {
-		// log and ignore error
-		log.Printf("Error caching function service: %v", err)
-	}
-
-	// cache by svc hostname, for tapService()
-	err = api.urlFuncSvc.Set(funcSvc.serviceName, funcSvc)
-	if err != nil {
-		// log and ignore error
-		log.Printf("Error caching function service by name: %v", err)
-	}
-
-	return funcSvc.serviceName, nil
+	return funcSvc.address, nil
 }
 
 // find funcSvc and update its atime
@@ -180,16 +167,12 @@ func (api *API) tapService(w http.ResponseWriter, r *http.Request) {
 	svcName := string(body)
 	svcHost := strings.TrimPrefix(svcName, "http://")
 
-	log.Printf("tap svc: %v", svcHost)
-
-	funcSvcI, err := api.urlFuncSvc.Get(svcHost)
+	err = api.fsCache.TouchByAddress(svcHost)
 	if err != nil {
+		log.Printf("funcSvc tap error: %v", err)
 		http.Error(w, "Not found", 404)
 		return
 	}
-
-	(funcSvcI.(*funcSvc)).atime = time.Now()
-
 	w.WriteHeader(http.StatusOK)
 }
 
