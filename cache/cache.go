@@ -19,6 +19,7 @@ package cache
 import (
 	"time"
 
+	"errors"
 	"fmt"
 	"github.com/platform9/fission"
 )
@@ -40,8 +41,9 @@ type (
 		value interface{}
 	}
 	Cache struct {
-		cache          map[interface{}]Value
-		expiryTime     time.Duration
+		cache          map[interface{}]*Value
+		ctimeExpiry    time.Duration
+		atimeExpiry    time.Duration
 		requestChannel chan *request
 	}
 
@@ -53,29 +55,33 @@ type (
 	}
 	response struct {
 		error
-		mapCopy map[interface{}]interface{}
-		value   interface{}
+		existingValue interface{}
+		mapCopy       map[interface{}]interface{}
+		value         interface{}
 	}
 )
 
 func (c *Cache) IsOld(v *Value) bool {
-	if c.expiryTime == time.Duration(0) {
-		return false
-	}
-	if time.Now().Sub(v.ctime) > c.expiryTime {
+	if (c.ctimeExpiry != time.Duration(0)) && (time.Now().Sub(v.ctime) > c.ctimeExpiry) {
 		return true
 	}
+
+	if (c.atimeExpiry != time.Duration(0)) && (time.Now().Sub(v.atime) > c.atimeExpiry) {
+		return true
+	}
+
 	return false
 }
 
-func MakeCache(expiryTime time.Duration) *Cache {
+func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
 	c := &Cache{
-		cache:          make(map[interface{}]Value),
-		expiryTime:     expiryTime,
+		cache:          make(map[interface{}]*Value),
+		ctimeExpiry:    ctimeExpiry,
+		atimeExpiry:    atimeExpiry,
 		requestChannel: make(chan *request),
 	}
 	go c.service()
-	if expiryTime != time.Duration(0) {
+	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
 		go c.expiryService()
 	}
 	return c
@@ -91,7 +97,7 @@ func (c *Cache) service() {
 			if !ok {
 				resp.error = fission.MakeError(fission.ErrorNotFound,
 					fmt.Sprintf("key '%v' not found", req.key))
-			} else if c.IsOld(&val) {
+			} else if c.IsOld(val) {
 				resp.error = fission.MakeError(fission.ErrorNotFound,
 					fmt.Sprintf("key '%v' expired (atime %v)", req.key, val.atime))
 				delete(c.cache, req.key)
@@ -104,10 +110,17 @@ func (c *Cache) service() {
 			req.responseChannel <- resp
 		case SET:
 			now := time.Now()
-			c.cache[req.key] = Value{
-				value: req.value,
-				ctime: now,
-				atime: now,
+			if _, ok := c.cache[req.key]; ok {
+				val := c.cache[req.key]
+				val.atime = time.Now()
+				resp.existingValue = val.value
+				resp.error = errors.New("value already exists")
+			} else {
+				c.cache[req.key] = &Value{
+					value: req.value,
+					ctime: now,
+					atime: now,
+				}
 			}
 			req.responseChannel <- resp
 		case DELETE:
@@ -115,7 +128,7 @@ func (c *Cache) service() {
 			req.responseChannel <- resp
 		case EXPIRE:
 			for k, v := range c.cache {
-				if c.IsOld(&v) {
+				if c.IsOld(v) {
 					delete(c.cache, k)
 				}
 			}
@@ -123,7 +136,7 @@ func (c *Cache) service() {
 		case COPY:
 			resp.mapCopy = make(map[interface{}]interface{})
 			for k, v := range c.cache {
-				resp.mapCopy[k] = v
+				resp.mapCopy[k] = v.value
 			}
 			req.responseChannel <- resp
 		default:
@@ -145,7 +158,9 @@ func (c *Cache) Get(key interface{}) (interface{}, error) {
 	return resp.value, resp.error
 }
 
-func (c *Cache) Set(key interface{}, value interface{}) error {
+// if key exists in the cache, the new value is NOT set; instead an
+// error and the old value are returned
+func (c *Cache) Set(key interface{}, value interface{}) (error, interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     SET,
@@ -154,7 +169,7 @@ func (c *Cache) Set(key interface{}, value interface{}) error {
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.error
+	return resp.error, resp.existingValue
 }
 
 func (c *Cache) Delete(key interface{}) error {
