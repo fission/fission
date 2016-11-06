@@ -435,16 +435,47 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 		// our own.  TODO: this is grossly inefficient, improve it with some sort of state
 		// machine
 		log.Printf("func svc already exists: %v", existingFsvc.podName)
-		go gp.CleanupFunctionService(fsvc)
+		go gp.CleanupFunctionService(fsvc.podName)
 		return existingFsvc, nil
 	}
 	return fsvc, nil
 }
 
-func (gp *GenericPool) CleanupFunctionService(fsvc *funcSvc) {
+func (gp *GenericPool) CleanupFunctionService(podName string) error {
+	// remove ourselves from fsCache (only if we're still old)
+	deleted, err := gp.fsCache.DeleteByPod(podName, gp.idlePodReapTime)
+	if err != nil {
+		return err
+	}
+
+	if !deleted {
+		log.Printf("Not deleting %v, in use", podName)
+		return nil
+	}
+
 	// delete pod
-	// remove ourselves from fsCache
+	err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(podName, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (gp *GenericPool) idlePodReaper() {
+	for {
+		time.Sleep(time.Minute)
+		podNames, err := gp.fsCache.ListOld(gp.idlePodReapTime)
+		if err != nil {
+			log.Printf("Error reaping idle pods: %v", err)
+			continue
+		}
+		for _, podName := range podNames {
+			log.Printf("Reaping idle pod '%v'", podName)
+			err := gp.CleanupFunctionService(podName)
+			if err != nil {
+				log.Printf("Error deleting idle pod '%v': %v", podName, err)
+			}
+		}
+	}
 }

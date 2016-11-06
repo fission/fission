@@ -127,8 +127,6 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return fsvc.address, nil
 	}
 
-	api.fsCache.Log()
-
 	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
