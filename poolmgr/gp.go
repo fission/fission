@@ -251,21 +251,30 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	maxRetries := 20
 	for i := 0; i < maxRetries; i++ {
 		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
-		if err != nil {
-			if urlErr, ok := err.(*url.Error); ok {
-				if netErr, ok := urlErr.Err.(*net.OpError); ok {
-					if netErr.Op == "dial" { // && netErr.Err == syscall.ECONNREFUSED
-						log.Printf("Error connecting to pod (%v)", netErr)
-						if i < maxRetries-1 {
-							time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-							continue
-						}
+		defer resp2.Body.Close()
+
+		if err == nil && resp2.StatusCode < 300 {
+			return pod, nil
+		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						continue
 					}
 				}
 			}
-			return nil, err
 		}
-		resp2.Body.Close()
+
+		if err == nil {
+			err = fission.MakeErrorFromHTTP(resp2)
+		}
+		log.Printf("Failed to specialize pod: %v", err)
+		return nil, err
 	}
 
 	return pod, nil
