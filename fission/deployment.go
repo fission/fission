@@ -69,7 +69,7 @@ spec:
       - name: controller
         image: fission/fission-bundle
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888", "--filepath", "/tmp"]
+        args: ["--controllerPort", "8888", "--filepath", "/filestore"]
 
 ---
 apiVersion: v1
