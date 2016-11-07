@@ -24,6 +24,9 @@ import (
 
 func main() {
 	app := cli.NewApp()
+	app.Name = "fission"
+	app.Usage = "Serverless functions for Kubernetes"
+
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Usage: "Fission server URL", EnvVar: "FISSION_URL"},
 	}
@@ -49,7 +52,7 @@ func main() {
 	htFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	htFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
 	htSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, htFnUidFlag}, Action: htCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, htFnUidFlag}, Action: htCreate},
 		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag}, Action: htGet},
 		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, htFnUidFlag}, Action: htUpdate},
 		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: htDelete},

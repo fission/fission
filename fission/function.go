@@ -31,9 +31,20 @@ func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need --name argument.")
+	}
+
 	envName := c.String("env")
+	if len(envName) == 0 {
+		fatal("Need --env argument.")
+	}
 
 	fileName := c.String("code")
+	if len(fileName) == 0 {
+		fatal("Need --code argument.")
+	}
+
 	code, err := ioutil.ReadFile(fileName)
 	checkErr(err, fmt.Sprintf("read %v", fileName))
 
@@ -106,10 +117,10 @@ func fnUpdate(c *cli.Context) error {
 		function.Code = string(code)
 	}
 
-	_, err = client.FunctionCreate(function)
+	_, err = client.FunctionUpdate(function)
 	checkErr(err, "update function")
 
-	fmt.Printf("function '%v' created\n", fnName)
+	fmt.Printf("function '%v' updated\n", fnName)
 	return err
 }
 
