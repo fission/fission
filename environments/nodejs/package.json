@@ -16,6 +16,12 @@
         "express": "",
         "minimist": "",
         "body-parser": "",
-        "morgan": ""
+        "morgan": "",
+
+        "co": "~4.6.0",
+        "request": "",
+        "request-promise": "^1.0.2",
+        "mz": "~2.1.0",
+        "underscore": ">=1.8.3"
     }
 }
