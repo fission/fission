@@ -44,17 +44,24 @@ FISSION_URL and FISSION_ROUTER, respectively.
 ### Install the client CLI
 
   $ curl http://fission.io/fission > fission
+
   $ chmod +x fission
+
   $ sudo mv fission /usr/local/bin/
 
 ### Run an example
 
   $ fission env create --name nodejs --image fission/node-env
+  
   $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
+
   $ fission function create --name hello --env nodejs --code hello.js
+  
   $ fission route create --method GET --url /hello --function hello
+  
   $ curl http://$FISSION_ROUTER/hello
   Hello, world!
+
 
 Status
 ======
