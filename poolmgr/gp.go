@@ -251,9 +251,8 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	maxRetries := 20
 	for i := 0; i < maxRetries; i++ {
 		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
-		defer resp2.Body.Close()
-
 		if err == nil && resp2.StatusCode < 300 {
+			resp2.Body.Close()
 			return pod, nil
 		}
 
