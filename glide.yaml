@@ -1,0 +1,31 @@
+package: github.com/platform9/fission
+import:
+- package: github.com/Sirupsen/logrus
+  version: ^0.11.0
+- package: github.com/coreos/etcd
+  subpackages:
+  - client
+- package: github.com/dchest/uniuri
+- package: github.com/docopt/docopt-go
+  version: ^0.6.2
+- package: github.com/gorilla/handlers
+  version: ^1.1.0
+- package: github.com/gorilla/mux
+  version: ^1.1.0
+- package: github.com/satori/go.uuid
+  version: ^1.1.0
+- package: github.com/urfave/cli
+  version: ^1.18.1
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: k8s.io/client-go
+  version: 1.4
+  subpackages:
+  - 1.4/kubernetes
+  - 1.4/pkg/api
+  - 1.4/pkg/api/v1
+  - 1.4/pkg/apis/extensions/v1beta1
+  - 1.4/pkg/labels
+  - 1.4/pkg/util/intstr
+  - 1.4/rest
