@@ -7,7 +7,7 @@ developer productivity and high performance.
 It's customizable (with sensible defaults), extensible to any
 language, and interoperates well with other infrastructure.
 
-See https://fission.io for more.
+See http://fission.io for more.
 
 
 Running Fission
