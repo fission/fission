@@ -15,13 +15,9 @@ Running Fission
 
 ### Setup Kubernetes
 
-On your laptop:
+You can install Kubernetes on your laptop with minikube: https://github.com/kubernetes/minikube
 
-```
-  https://github.com/kubernetes/minikube
-```
-
-Or use Google Container Engine to get a cluster.
+Or, you can use Google Container Engine's free trial to get a 3 node cluster.
 
 
 ### Verify access to the cluster
