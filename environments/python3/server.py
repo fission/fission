@@ -3,11 +3,15 @@
 import imp
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-#
-# Load the file.
-#
 codepath = '/userfunc/user'
 userfunc = None
+
+#
+# Request context that's passed to user functions
+#
+class Context:
+    def __init__(self, handler):
+        self.handler = handler
 
 class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -23,7 +27,8 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
         global userfunc
         try:
             print("GET request")
-            message = userfunc(None)
+            ctx = Context(self)
+            message = userfunc(ctx)
             self.send_response(200)
             self.end_headers()
             self.wfile.write(bytes(message, "utf8"))
