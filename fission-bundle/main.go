@@ -2,9 +2,7 @@ package main
 
 import (
 	"log"
-	"os"
 	"strconv"
-	//"time"
 
 	"github.com/docopt/docopt-go"
 	"github.com/platform9/fission/controller"
