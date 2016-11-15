@@ -13,14 +13,7 @@ import (
 )
 
 func runController(port int, etcdUrl string, filepath string) {
-	_, err := os.Stat(filepath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.Fatalf("Error: path %v does not exist", filepath)
-		} else {
-			log.Fatalf("Error: can't access path %v", filepath)
-		}
-	}
+	// filePath will be created if it doesn't exist.
 	fileStore := controller.MakeFileStore(filepath)
 
 	rs, err := controller.MakeResourceStore(fileStore, []string{etcdUrl})
