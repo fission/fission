@@ -51,7 +51,7 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 }
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "{message: \"Fission API\", version: \"0.1.0\"}\n")
+	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.1.0\"}\n")
 }
 
 func (api *API) Serve(port int) {
