@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
@@ -154,4 +155,56 @@ func fnList(c *cli.Context) error {
 	w.Flush()
 
 	return err
+}
+
+func fnEdit(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+	fnUid := c.String("uid")
+
+	// get function meta
+	function, err := client.FunctionGet(&fission.Metadata{Name: fnName, Uid: fnUid})
+	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
+
+	// write to tmp file
+	tmpFile, err := ioutil.TempFile("", fnName)
+	checkErr(err, "create temp file")
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write([]byte(function.Code))
+	checkErr(err, "write temp file")
+	tmpFile.Close()
+
+	// invoke $EDITOR on tmp file and wait for it
+	editor := os.Getenv("EDITOR")
+	if len(editor) == 0 {
+		editor = "vi"
+	}
+	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%v %v", editor, tmpFile.Name()))
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err = cmd.Start()
+	checkErr(err, "start editor")
+
+	err = cmd.Wait()
+	checkErr(err, "wait for editor")
+
+	// read new code out of the file
+	contents, err := ioutil.ReadFile(tmpFile.Name())
+	checkErr(err, "read temp file")
+
+	function.Code = string(contents)
+
+	// upload the updated function
+	newfn, err := client.FunctionUpdate(function)
+	checkErr(err, "upload edited function")
+
+	fmt.Printf("function %v updated, new uuid: %v\n", newfn.Name, newfn.Uid)
+	return nil
 }
