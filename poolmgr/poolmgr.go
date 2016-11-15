@@ -20,8 +20,8 @@ import (
 	"log"
 	"strings"
 
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/rest"
+	"k8s.io/client-go/1.5/kubernetes"
+	"k8s.io/client-go/1.5/rest"
 
 	controllerclient "github.com/platform9/fission/controller/client"
 )

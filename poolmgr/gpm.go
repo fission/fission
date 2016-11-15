@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.5/kubernetes"
 
 	"github.com/platform9/fission"
 	"github.com/platform9/fission/controller/client"
