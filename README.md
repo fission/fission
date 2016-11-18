@@ -44,15 +44,15 @@ A _trigger_ is something that maps an event to a function; Fission
 supports HTTP routes as triggers today, with upcoming support for
 other types of event triggers, such as timers and Kubernetes events.
 
-Fission 101
------------
+Usage
+-----
 
 ```bash
 
   # Add the stock NodeJS env to your Fission deployment
   $ fission env create --name nodejs --image fission/node-env
 
-  # A one-liner that prints "hello world"
+  # A javascript one-liner that prints "hello world"
   $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
 
   # Upload your function code to fission
@@ -169,7 +169,8 @@ If you're changing the CLI:
 Status
 ======
 
-Fission is in early alpha.  Don't use it in production just yet.
-We're looking for developer feedback -- tell us which languages you
-care about, what use cases you might use it for, and so on.
+Fission is in early alpha.  Don't use it in production just yet!
 
+Right now, we're looking for developer feedback -- tell us which
+languages you care about, what use cases you might use it for, and so
+on.
