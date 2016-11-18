@@ -30,8 +30,8 @@ microservices, and Kubernetes is a great framework to bring these
 together seamlessly.
 
 Building on Kubernetes also means that anything you do for operations
-on your Kubernetes cluster -- such as monitoring or log aggregation --
-also helps with ops on your Fission deployment.
+on your Kubernetes cluster &mdash; such as monitoring or log
+aggregation &mdash; also helps with ops on your Fission deployment.
 
 
 Fission Concepts
