@@ -5,9 +5,9 @@ Fission: Serverless Functions for Kubernetes
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
 
-Fission operates on _just code_: Docker and Kubernetes are abstracted
-away under normal operation, though you can use both to extend Fission
-if you want to.
+Fission operates on _just the code_: Docker and Kubernetes are
+abstracted away under normal operation, though you can use both to
+extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
@@ -28,6 +28,10 @@ We're built on Kubernetes because we think any non-trivial app will
 use a combination of serverless functions and more conventional
 microservices, and Kubernetes is a great framework to bring these
 together seamlessly.
+
+Building on Kubernetes also means that anything you do for operations
+on your Kubernetes cluster -- such as monitoring or log aggregation --
+also helps with ops on your Fission deployment.
 
 
 Fission Concepts
