@@ -1,17 +1,46 @@
-Fission
-=======
+Fission: Serverless Functions for Kubernetes
+============================================
 
 Fission is a fast serverless framework for Kubernetes with a focus on
-developer productivity and high performance.
+developer productivity and high performance.  See http://fission.io
+for more.
 
-It's customizable (with sensible defaults), extensible to any
-language, and interoperates well with other infrastructure.
+Fission operates on just code: you don't deal with Docker or
+Kubernetes, they're abstracted away.
 
-See http://fission.io for more.
+We're built on Kubernetes because we think any non-trivial app will
+use a combination of serverless functions and more conventional
+microservices, and Kubernetes is a great framework to bring these
+together seamlessly.
+
+Fission maintains a pool of "warm" containers that each contain a
+small dynamic loader.  When a function is first called,
+i.e. "cold-started", a running container is chosen and the function is
+loaded.  This pool is what makes Fission fast: cold-start latencies
+are typically about 100msec.
+
+Fission is extensible to any language.  It currently supports NodeJS
+and Python, with more languages coming soon.
+
+Fission Concepts
+================
+
+A _function_ is a piece of code with an entry point.
+
+An _environment_ is a container with a webserver and dynamic loader
+for functions.  Today, Fission comes with NodeJS and Python
+environments and you can also add your own.  So for example if you
+want to add some binaries to your Python image and call them from your
+code, you can edit the Python environment's Dockerfile, rebuild it,
+and add it to Fission.
+
+A _trigger_ is something that maps an event to a function; Fission
+supports HTTP triggers today, with upcoming support for other types of
+event triggers.
 
 
-Running Fission
-===============
+Running Fission on your Cluster
+===============================
 
 ### Setup Kubernetes
 
@@ -70,6 +99,10 @@ for the examples below to work.)
 Compiling Fission
 =================
 
+[You only need to do this if you're making Fission changes; if you're
+just deploying Fission, use fission.yaml which points to prebuilt
+images.]
+
 You'll need go installed, along with the glide dependecy management
 tool.  You'll also need docker for building images.
 
@@ -108,17 +141,7 @@ If you're changing the CLI:
 Status
 ======
 
-Fission is in early alpha.  Don't use it in production just yet, but
-play with it and give us feedback!
-
-
-
-
-Performance
-===========
-
-The alpha release has focussed on cold-start latency performance.  For
-requests that don't have a running instance, i.e. a "cold start",
-fission has a latency overhead of less than 100 msec for the NodeJS
-environment.
+Fission is in early alpha.  Don't use it in production just yet.
+We're looking for developer feedback -- tell us which languages you
+care about, what use cases you might use it for, and so on.
 
