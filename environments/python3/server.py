@@ -1,42 +1,32 @@
 #!/usr/bin/env python
 
 import imp
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-#
-# Load the file.
-#
+from flask import Flask
+from flask import request
+from flask import abort
+
+app = Flask(__name__)
+
 codepath = '/userfunc/user'
+
 userfunc = None
 
-class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        global userfunc
-        userfunc = (imp.load_source('user', codepath)).main
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(bytes("ok\n", "utf8"))
-        return
+@app.route('/specialize', methods=['POST'])
+def load():
+    global userfunc
+    userfunc = (imp.load_source('user', codepath)).main
+    return ""
 
-    # GET
-    def do_GET(self):
-        global userfunc
-        try:
-            print("GET request")
-            message = userfunc(None)
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(bytes(message, "utf8"))
-            return
-        except:
-            self.send_response(500)
-            self.end_headers()
+@app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])
+def f():
+    if userfunc == None:
+        print("Generic container: no requests supported")
+        abort(500)
+    return userfunc()    
 
-def run():
-    print('starting server...')
-    server_address = ('0.0.0.0', 8888)
-    httpd = HTTPServer(server_address, testHTTPServer_RequestHandler)
-    httpd.serve_forever()
-
-
-run()
+#
+# TODO: this starts the built-in server, which isn't the most
+# efficient.  We should use something better.
+#
+app.run(host='0.0.0.0', port='8888')

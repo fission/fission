@@ -1,2 +1,2 @@
-def main(context):
-    return "Hello, world!"
+def main():
+    return "Hello, world!\n"
