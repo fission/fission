@@ -45,7 +45,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: fission/fission-bundle
+        image: fission/fission-bundle:alpha
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--filepath", "/filestore"]
 
@@ -81,7 +81,7 @@ spec:
     spec:
       containers:
       - name: router
-        image: fission/fission-bundle
+        image: fission/fission-bundle:alpha
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888"]
 
@@ -115,7 +115,7 @@ spec:
     spec:
       containers:
       - name: poolmgr
-        image: fission/fission-bundle
+        image: fission/fission-bundle:alpha
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888"]
 
