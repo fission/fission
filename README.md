@@ -95,8 +95,7 @@ If you're using GKE, use the fission.yaml unmodified.  If you're using
 minikube, change all instances of LoadBalancer services to NodePort.
 
 ```
-  $ curl http://fission.io/fission.yaml | kubectl create -f -
-
+  $ kubectl create -f http://fission.io/fission.yaml 
   $ kubectl --namespace fission get services
 ```
 
