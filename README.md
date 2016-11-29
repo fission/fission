@@ -82,7 +82,6 @@ You can install Kubernetes on your laptop with minikube: https://github.com/kube
 
 Or, you can use Google Container Engine's free trial to get a 3 node cluster.
 
-
 ### Verify access to the cluster
 
 ```
@@ -91,18 +90,45 @@ Or, you can use Google Container Engine's free trial to get a 3 node cluster.
 
 ### Get and Run Fission
 
-If you're using GKE, use the fission.yaml unmodified.  If you're using
-minikube, change all instances of LoadBalancer services to NodePort.
+Deploy the fission services and deployments.
 
 ```
-  $ kubectl create -f http://fission.io/fission.yaml 
+  $ kubectl create -f http://fission.io/fission.yaml
+```
+
+#### local and no cloud provider
+
+If you're using minikube or no cloud provider use the services with NodePort.
+
+```
+  $ kubectl create -f http://fission.io/fission-nodeport.yaml
+```
+
+#### Cloud
+
+If you're using GKE or any other cloud provider, use the services with a LoadBalancer.
+
+```
+  $ kubectl create -f http://fission.io/fission-cloud.yaml
+```
+
+### Set fission URLs
+
+```
   $ kubectl --namespace fission get services
 ```
 
 Save the external IP addresses of controller and router services in
 FISSION_URL and FISSION_ROUTER, respectively.  FISSION_URL is used by
 the fission CLI to find the server.  (FISSION_ROUTER is only needed
-for the examples below to work.)
+for the examples below to work.) Below is an example
+for Minikube with NodePort.
+
+```
+  $ export FISSION_ROUTER=$(minikube ip):31314
+
+  $ export FISSION_URL=http://$(minikube ip):31313
+```
 
 ### Install the client CLI
 
@@ -118,7 +144,7 @@ for the examples below to work.)
 
 ```
   $ fission env create --name nodejs --image fission/node-env
-  
+
   $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
 
   $ fission function create --name hello --env nodejs --code hello.js
