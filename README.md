@@ -80,7 +80,7 @@ Running Fission on your Cluster
 
 You can install Kubernetes on your laptop with minikube: https://github.com/kubernetes/minikube
 
-Or, you can use Google Container Engine's free trial to get a 3 node cluster.
+Or, you can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to get a 3 node cluster.
 
 ### Verify access to the cluster
 
@@ -99,11 +99,13 @@ and 31314.
   $ kubectl create -f http://fission.io/fission-nodeport.yaml
 ```
 
-Set FISSION_URL and FISSION_ROUTER environment variables FISSION_URL
-should be prefixed with a `http://`.  FISSION_URL is used by the
-fission CLI to find the server.  (FISSION_ROUTER is only needed for
-the examples below to work.) Below is an example for Minikube with
-NodePort.
+Set the FISSION_URL and FISSION_ROUTER environment variables.
+FISSION_URL should be prefixed with a `http://`.
+
+FISSION_URL is used by the fission CLI to find the server.
+(FISSION_ROUTER is only needed for the examples below to work.)
+
+If you're using minikube, use these commands:
 
 ```
   $ export FISSION_ROUTER=$(minikube ip):31314
