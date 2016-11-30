@@ -135,7 +135,10 @@ svc```).  Then:
 ### Install the client CLI
 
 ```
-  $ curl http://fission.io/fission > fission
+  # Choose the right command, for Mac or Linux:
+  $ curl http://fission.io/mac/fission > fission
+  OR
+  $ curl http://fission.io/linux/fission > fission
 
   $ chmod +x fission
 
@@ -143,6 +146,8 @@ svc```).  Then:
 ```
 
 ### Run an example
+
+Finally, you're ready to use Fission!
 
 ```
   $ fission env create --name nodejs --image fission/node-env
