@@ -119,7 +119,7 @@ If you're using GKE or any other cloud provider, use the services with a LoadBal
 ```
 
 Save the external IP addresses of controller and router services in
-FISSION_URL and FISSION_ROUTER, respectively.  FISSION_URL is used by
+FISSION_URL and FISSION_ROUTER, respectively. FISSION_URL should be prefixed with a `http://`.  FISSION_URL is used by
 the fission CLI to find the server.  (FISSION_ROUTER is only needed
 for the examples below to work.) Below is an example
 for Minikube with NodePort.
