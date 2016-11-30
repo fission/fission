@@ -14,23 +14,6 @@ metadata:
     name: fission-function
 
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: controller
-  namespace: fission
-  labels:
-    svc: controller
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    targetPort: 8888
-    nodePort: 31313
-  selector:
-    svc: controller
-
----
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -48,23 +31,6 @@ spec:
         image: fission/fission-bundle:alpha
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--filepath", "/filestore"]
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: router
-  namespace: fission
-  labels:
-    svc: router
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    targetPort: 8888
-    nodePort: 31314
-  selector:
-    svc: router
 
 ---
 apiVersion: extensions/v1beta1
