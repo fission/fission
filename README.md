@@ -99,15 +99,11 @@ and 31314.
   $ kubectl create -f http://fission.io/fission-nodeport.yaml
 ```
 
-```
-  $ kubectl --namespace fission get services
-```
-
-Save the external IP addresses of controller and router services in
-FISSION_URL and FISSION_ROUTER, respectively. FISSION_URL should be
-prefixed with a `http://`.  FISSION_URL is used by the fission CLI to
-find the server.  (FISSION_ROUTER is only needed for the examples
-below to work.) Below is an example for Minikube with NodePort.
+Set FISSION_URL and FISSION_ROUTER environment variables FISSION_URL
+should be prefixed with a `http://`.  FISSION_URL is used by the
+fission CLI to find the server.  (FISSION_ROUTER is only needed for
+the examples below to work.) Below is an example for Minikube with
+NodePort.
 
 ```
   $ export FISSION_ROUTER=$(minikube ip):31314
@@ -126,24 +122,15 @@ LoadBalancer service type, use these commands:
   $ kubectl create -f http://fission.io/fission-cloud.yaml
 ```
 
-Wait for services to get IP addresses (check this with ```kubectl
---namespace fission get svc```).  Then:
+Save the external IP addresses of controller and router services in
+FISSION_URL and FISSION_ROUTER, respectively.  Wait for services to
+get IP addresses (check this with ```kubectl --namespace fission get
+svc```).  Then:
 
 ```
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
 ```
-
-
-### Set fission URLs
-
-
-Save the external IP addresses of controller and router services in
-FISSION_URL and FISSION_ROUTER, respectively. FISSION_URL should be
-prefixed with a `http://`.  FISSION_URL is used by the fission CLI to
-find the server.  (FISSION_ROUTER is only needed for the examples
-below to work.) Below is an example for Minikube with NodePort.
-
 
 ### Install the client CLI
 
