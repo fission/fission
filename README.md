@@ -100,17 +100,15 @@ and 31314.
 ```
 
 Set the FISSION_URL and FISSION_ROUTER environment variables.
-FISSION_URL should be prefixed with a `http://`.
-
 FISSION_URL is used by the fission CLI to find the server.
-(FISSION_ROUTER is only needed for the examples below to work.)
+FISSION_URL should be prefixed with a `http://`.  (FISSION_ROUTER is
+only needed for the examples below to work.)
 
 If you're using minikube, use these commands:
 
 ```
-  $ export FISSION_ROUTER=$(minikube ip):31314
-
   $ export FISSION_URL=http://$(minikube ip):31313
+  $ export FISSION_ROUTER=$(minikube ip):31314
 ```
 
 
