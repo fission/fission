@@ -80,7 +80,7 @@ Running Fission on your Cluster
 
 You can install Kubernetes on your laptop with minikube: https://github.com/kubernetes/minikube
 
-Or, you can use Google Container Engine's free trial to get a 3 node cluster.
+Or, you can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to get a 3 node cluster.
 
 ### Verify access to the cluster
 
@@ -88,59 +88,67 @@ Or, you can use Google Container Engine's free trial to get a 3 node cluster.
   $ kubectl version
 ```
 
-### Get and Run Fission
+### Get and Run Fission: Minikube or Local cluster
 
-Deploy the fission services and deployments.
+If you're using minikube or no cloud provider, use these commands to
+set up services with NodePort.  This exposes fission on ports 31313
+and 31314.
 
 ```
   $ kubectl create -f http://fission.io/fission.yaml
-```
-
-#### local and no cloud provider
-
-If you're using minikube or no cloud provider use the services with NodePort.
-
-```
   $ kubectl create -f http://fission.io/fission-nodeport.yaml
 ```
 
-#### Cloud
+Set the FISSION_URL and FISSION_ROUTER environment variables.
+FISSION_URL is used by the fission CLI to find the server.
+FISSION_URL should be prefixed with a `http://`.  (FISSION_ROUTER is
+only needed for the examples below to work.)
 
-If you're using GKE or any other cloud provider, use the services with a LoadBalancer.
+If you're using minikube, use these commands:
 
 ```
+  $ export FISSION_URL=http://$(minikube ip):31313
+  $ export FISSION_ROUTER=$(minikube ip):31314
+```
+
+
+### Get and Run Fission: GKE or other Cloud
+
+If you're using GKE or any other cloud provider that supports the
+LoadBalancer service type, use these commands:
+
+```
+  $ kubectl create -f http://fission.io/fission.yaml
   $ kubectl create -f http://fission.io/fission-cloud.yaml
 ```
 
-### Set fission URLs
-
-```
-  $ kubectl --namespace fission get services
-```
-
 Save the external IP addresses of controller and router services in
-FISSION_URL and FISSION_ROUTER, respectively. FISSION_URL should be prefixed with a `http://`.  FISSION_URL is used by
-the fission CLI to find the server.  (FISSION_ROUTER is only needed
-for the examples below to work.) Below is an example
-for Minikube with NodePort.
+FISSION_URL and FISSION_ROUTER, respectively.  Wait for services to
+get IP addresses (check this with ```kubectl --namespace fission get
+svc```).  Then:
 
 ```
-  $ export FISSION_ROUTER=$(minikube ip):31314
-
-  $ export FISSION_URL=http://$(minikube ip):31313
+  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
+  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
 ```
 
 ### Install the client CLI
 
+Get the CLI binary for Mac:
+
 ```
-  $ curl http://fission.io/fission > fission
+  $ curl http://fission.io/mac/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+```
 
-  $ chmod +x fission
+Or Linux:
 
-  $ sudo mv fission /usr/local/bin/
+```
+  $ curl http://fission.io/linux/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 ### Run an example
+
+Finally, you're ready to use Fission!
 
 ```
   $ fission env create --name nodejs --image fission/node-env
