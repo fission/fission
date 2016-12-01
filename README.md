@@ -134,15 +134,16 @@ svc```).  Then:
 
 ### Install the client CLI
 
+Get the CLI binary for Mac:
+
 ```
-  # Choose the right command, for Mac or Linux:
-  $ curl http://fission.io/mac/fission > fission
-  OR
-  $ curl http://fission.io/linux/fission > fission
+  $ curl http://fission.io/mac/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+```
 
-  $ chmod +x fission
+Or Linux:
 
-  $ sudo mv fission /usr/local/bin/
+```
+  $ curl http://fission.io/linux/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 ### Run an example
