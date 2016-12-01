@@ -74,7 +74,7 @@ func main() {
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
-		{Name: "environemnt", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
+		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 
 		// Misc commands
 		{
