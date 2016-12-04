@@ -20,7 +20,7 @@ import:
   subpackages:
   - context
 - package: k8s.io/client-go
-  version: 1.5
+  version: v1.5.0
   subpackages:
   - 1.5/kubernetes
   - 1.5/pkg/api
