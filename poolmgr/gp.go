@@ -309,7 +309,7 @@ func (gp *GenericPool) createPool() error {
 				},
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
-						v1.Volume{
+						{
 							Name: "userfunc",
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{},
@@ -317,25 +317,25 @@ func (gp *GenericPool) createPool() error {
 						},
 					},
 					Containers: []v1.Container{
-						v1.Container{
+						{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.RunContainerImageUrl,
 							ImagePullPolicy:        v1.PullIfNotPresent,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
-								v1.VolumeMount{
+								{
 									Name:      "userfunc",
 									MountPath: sharedMountPath,
 								},
 							},
 						},
-						v1.Container{
+						{
 							Name:                   "fetcher",
 							Image:                  "fission/fetcher",
 							ImagePullPolicy:        v1.PullIfNotPresent,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
-								v1.VolumeMount{
+								{
 									Name:      "userfunc",
 									MountPath: sharedMountPath,
 								},
@@ -384,7 +384,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 		Spec: v1.ServiceSpec{
 			Type: v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
-				v1.ServicePort{
+				{
 					Protocol:   v1.ProtocolTCP,
 					Port:       80,
 					TargetPort: intstr.FromInt(8888),
