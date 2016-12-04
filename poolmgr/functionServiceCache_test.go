@@ -58,10 +58,14 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-	err = fsc.DeleteByPod(fsvc.podName)
+	deleted, err := fsc.DeleteByPod(fsvc.podName, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)
+	}
+	if !deleted {
+		fsc.Log()
+		log.Panicf("Did not delete fsvc")
 	}
 
 	_, err = fsc.GetByFunction(fsvc.function)
