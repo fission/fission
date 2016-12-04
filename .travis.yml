@@ -1,0 +1,17 @@
+sudo: required
+dist: trusty
+
+language: go
+go:
+    - 1.7.4
+
+install:
+   - go get github.com/Masterminds/glide
+
+script:
+   - cd ${TRAVIS_BUILD_DIR}
+   - glide install
+   - ./fission-bundle/build.sh
+   - hack/verify-gofmt.sh
+   - go test -v -i $(go list ./... | grep -v '/vendor/')
+   - go test -v $(go list ./... | grep -v '/vendor/')
