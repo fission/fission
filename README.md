@@ -1,7 +1,6 @@
 Fission: Serverless Functions for Kubernetes
 ============================================
 [fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
-[![Build Status](https://travis-ci.org/platform9/fission.svg?branch=master)](https://travis-ci.org/platform9/fission)
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
