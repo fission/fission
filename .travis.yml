@@ -8,11 +8,13 @@ go:
 
 install:
    - go get github.com/Masterminds/glide
+   - curl -L https://github.com/coreos/etcd/releases/download/v3.0.15/etcd-v3.0.15-linux-amd64.tar.gz -o /tmp/etcd-v3.0.15-linux-amd64.tar.gz && mkdir -p /tmp/test-etcd && tar xzvf /tmp/etcd-v3.0.15-linux-amd64.tar.gz -C /tmp/test-etcd --strip-components=1
 
 script:
    - cd ${TRAVIS_BUILD_DIR}
    - glide install
    - ./fission-bundle/build.sh
    - hack/verify-gofmt.sh
+   - /tmp/test-etcd/etcd &
    - go test -v -i $(go list ./... | grep -v '/vendor/')
    - go test -v $(go list ./... | grep -v '/vendor/')
