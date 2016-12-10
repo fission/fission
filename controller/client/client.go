@@ -459,3 +459,90 @@ func (c *Client) EnvironmentList() ([]fission.Environment, error) {
 
 	return envs, nil
 }
+
+func (c *Client) WatchCreate(w *fission.Watch) (*fission.Metadata, error) {
+	reqbody, err := json.Marshal(w)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(c.url("watches"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m, nil
+}
+
+func (c *Client) WatchGet(m *fission.Metadata) (*fission.Watch, error) {
+	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var w fission.Watch
+	err = json.Unmarshal(body, &w)
+	if err != nil {
+		return nil, err
+	}
+
+	return &w, nil
+}
+
+func (c *Client) WatchUpdate(w *fission.Watch) (*fission.Metadata, error) {
+	return nil, fission.MakeError(fission.ErrorNotImplmented,
+		"watch update not implemented")
+}
+
+func (c *Client) WatchDelete(m *fission.Metadata) error {
+	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+	err := c.delete(relativeUrl)
+	return err
+
+}
+
+func (c *Client) WatchList() ([]fission.Watch, error) {
+	resp, err := http.Get(c.url("watches"))
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	watches := make([]fission.Watch, 0)
+	err = json.Unmarshal(body, &watches)
+	if err != nil {
+		return nil, err
+	}
+
+	return watches, err
+}

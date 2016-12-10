@@ -185,22 +185,55 @@ func TestEnvironmentApi(t *testing.T) {
 	assert(len(ts) == 2, "created two envs, but didn't find them")
 }
 
+func TestWatchApi(t *testing.T) {
+	testWatch := &fission.Watch{
+		Metadata: fission.Metadata{
+			Name: "xxx",
+			Uid:  "yyy",
+		},
+		Namespace:     "default",
+		ObjType:       "pod",
+		LabelSelector: "",
+		FieldSelector: "",
+		Function: fission.Metadata{
+			Name: "foo",
+			Uid:  "",
+		},
+		Url: "",
+	}
+	m, err := g.client.WatchCreate(testWatch)
+	panicIf(err)
+	defer g.client.WatchDelete(m)
+
+	w, err := g.client.WatchGet(m)
+	panicIf(err)
+	testWatch.Metadata.Uid = m.Uid
+	w.Url = ""
+	assert(*testWatch == *w, "watch should match after reading")
+
+	testWatch.Metadata.Name = "yyy"
+	m2, err := g.client.WatchCreate(testWatch)
+	panicIf(err)
+	defer g.client.WatchDelete(m2)
+
+	ws, err := g.client.WatchList()
+	panicIf(err)
+	assert(len(ws) == 2, "created two envs, but didn't find them")
+}
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 
 	fileStore, ks, rs := getTestResourceStore()
 	defer os.RemoveAll(fileStore.root)
 
-	api := &API{
-		FunctionStore:    FunctionStore{ResourceStore: *rs},
-		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
-		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
-	}
+	api := MakeAPI(rs)
 	g.client = client.MakeClient("http://localhost:8888")
 
 	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "Environment", &etcdClient.DeleteOptions{Recursive: true})
+	ks.Delete(context.Background(), "Watch", &etcdClient.DeleteOptions{Recursive: true})
 
 	go api.Serve(8888)
 	time.Sleep(500 * time.Millisecond)

@@ -33,6 +33,17 @@ type API struct {
 	FunctionStore
 	HTTPTriggerStore
 	EnvironmentStore
+	WatchStore
+}
+
+func MakeAPI(rs *ResourceStore) *API {
+	api := &API{
+		FunctionStore:    FunctionStore{ResourceStore: *rs},
+		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
+		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
+		WatchStore:       WatchStore{ResourceStore: *rs},
+	}
+	return api
 }
 
 func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
@@ -75,6 +86,12 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
 	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
+
+	r.HandleFunc("/v1/watches", api.WatchApiList).Methods("GET")
+	r.HandleFunc("/v1/watches", api.WatchApiCreate).Methods("POST")
+	r.HandleFunc("/v1/watches/{watch}", api.WatchApiGet).Methods("GET")
+	r.HandleFunc("/v1/watches/{watch}", api.WatchApiUpdate).Methods("PUT")
+	r.HandleFunc("/v1/watches/{watch}", api.WatchApiDelete).Methods("DELETE")
 
 	address := fmt.Sprintf(":%v", port)
 
