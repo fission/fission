@@ -53,6 +53,20 @@ type (
 		Function   Metadata `json:"function"`
 	}
 
+	// Watch is a specification of Kubernetes watch along with a URL to post events to.
+	Watch struct {
+		Metadata `json:"metadata"`
+
+		Namespace     string `json:"namespace"`
+		ObjType       string `json:"objtype"`
+		LabelSelector string `json:"labelselector"`
+		FieldSelector string `json:"fieldselector"`
+
+		Function Metadata `json:"function"`
+
+		Url string `json:"url"` // POST request made to this URL.
+	}
+
 	// Errors returned by the Fission API.
 	Error struct {
 		Code    errorCode `json:"code"`
@@ -69,4 +83,5 @@ const (
 	ErrorNameExists
 	ErrorInvalidArgument
 	ErrorNoSpace
+	ErrorNotImplmented
 )
