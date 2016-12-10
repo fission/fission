@@ -22,7 +22,7 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: controller
     spec:
@@ -41,7 +41,7 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: router
     spec:
@@ -75,7 +75,7 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: poolmgr
     spec:
@@ -84,6 +84,25 @@ spec:
         image: fission/fission-bundle:alpha
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888"]
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: controller
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: controller
+    spec:
+      containers:
+      - name: controller
+        image: fission/fission-bundle:alpha
+        command: ["/fission-bundle"]
+        args: ["--kubewatcher"]
 
 ---
 apiVersion: v1
