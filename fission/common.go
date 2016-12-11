@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/platform9/fission/controller/client"
 )
@@ -33,6 +34,8 @@ func getClient(serverUrl string) *client.Client {
 	if len(serverUrl) == 0 {
 		fatal("Need --server or FISSION_URL set to your fission server.")
 	}
+
+	serverUrl = "http://" + strings.TrimPrefix(serverUrl, "http://")
 
 	return client.MakeClient(serverUrl)
 }
