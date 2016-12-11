@@ -49,12 +49,13 @@ func (p *Poster) svc() {
 		r := <-p.requestChannel
 
 		url := p.routerUrl + r.relativeUrl
+		log.Printf("Making request to %v", url)
 		req, err := http.NewRequest("POST", url, r.body)
 		if err != nil {
 			log.Printf("Failed to create request to %v", r.relativeUrl)
 		}
+		req.Header.Add("Content-Type", "application/json")
 		req.Header.Add("X-Kubernetes-Event-Type", r.eventType)
-		req.Header.Add("X-Fission-Request-Async", "true")
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
