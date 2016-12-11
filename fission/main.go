@@ -49,7 +49,7 @@ func main() {
 	// httptriggers
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
 	htMethodFlag := cli.StringFlag{Name: "method", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD; defaults to GET"}
-	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (see TODO for supported patterns)"}
+	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
 	htFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	htFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
 	htSubcommands := []cli.Command{
@@ -71,10 +71,26 @@ func main() {
 		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{}, Action: envList},
 	}
 
+	// watches
+	wNameFlag := cli.StringFlag{Name: "name", Usage: "Watch name"}
+	wFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
+	wFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
+	wNamespaceFlag := cli.StringFlag{Name: "ns", Usage: "Namespace of resource to watch"}
+	wObjTypeFlag := cli.StringFlag{Name: "type", Usage: "Type of resource to watch (Pod, Service, etc.)"}
+	wLabelsFlag := cli.StringFlag{Name: "labels", Usage: "Label selector of the form a=b,c=d"}
+	wSubCommands := []cli.Command{
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create a watch", Flags: []cli.Flag{wFnNameFlag, wFnUidFlag, wNamespaceFlag, wObjTypeFlag, wLabelsFlag}, Action: wCreate},
+		{Name: "get", Usage: "Get details about a watch", Flags: []cli.Flag{wNameFlag}, Action: wGet},
+		// TODO add update flag when supported
+		{Name: "delete", Usage: "Delete watch", Flags: []cli.Flag{wNameFlag}, Action: wDelete},
+		{Name: "list", Usage: "List all watches", Flags: []cli.Flag{}, Action: wList},
+	}
+
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
+		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 
 		// Misc commands
 		{
