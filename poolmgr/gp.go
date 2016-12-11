@@ -443,7 +443,9 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 		// our own.  TODO: this is grossly inefficient, improve it with some sort of state
 		// machine
 		log.Printf("func svc already exists: %v", existingFsvc.podName)
-		go gp.CleanupFunctionService(fsvc.podName)
+		go func() {
+			gp.kubernetesClient.Core().Pods(gp.namespace).Delete(fsvc.podName, nil)
+		}()
 		return existingFsvc, nil
 	}
 	return fsvc, nil
