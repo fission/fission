@@ -56,13 +56,7 @@ func (api *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	function, err := api.FunctionStore.Get(&watch.Function)
-	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-
-	watch.Url = fission.UrlForFunction(&function.Metadata)
+	watch.Url = fission.UrlForFunction(&watch.Function)
 
 	uid, err := api.WatchStore.Create(&watch)
 	if err != nil {

@@ -71,7 +71,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	for _, function := range ts.functions {
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			Function: function.Metadata,
+			Function: fission.Metadata{Name: function.Metadata.Name},
 			poolmgr:  ts.poolmgr,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(&function.Metadata),
