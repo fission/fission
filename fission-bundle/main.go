@@ -87,6 +87,7 @@ Options:
   --etcdUrl=<etcdUrl>      Etcd URL.
   --filepath=<filepath>    Directory to store functions in.
   --namespace=<namespace>  Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
+  --kubewatcher            Start Kubernetes events watcher.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {
@@ -115,7 +116,7 @@ Options:
 		runPoolmgr(port, controllerUrl, namespace)
 	}
 
-	if arguments["--kubewatcher"] != nil {
+	if arguments["--kubewatcher"] == true {
 		runKubeWatcher(controllerUrl, routerUrl)
 	}
 
