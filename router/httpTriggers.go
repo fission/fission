@@ -67,15 +67,15 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
 	}
 
-	// Internal triggers for each function
+	// Internal triggers for (the latest version of) each function
 	for _, function := range ts.functions {
+		m := fission.Metadata{Name: function.Metadata.Name}
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			Function: fission.Metadata{Name: function.Metadata.Name},
+			Function: m,
 			poolmgr:  ts.poolmgr,
 		}
-		muxRouter.HandleFunc(fission.UrlForFunction(&function.Metadata),
-			fh.handler)
+		muxRouter.HandleFunc(fission.UrlForFunction(&m), fh.handler)
 	}
 
 	return muxRouter
