@@ -18,6 +18,7 @@ package kubewatcher
 
 import (
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -30,6 +31,7 @@ type (
 	}
 	postRequest struct {
 		eventType   string
+		objType     string
 		relativeUrl string
 		body        io.Reader
 	}
@@ -56,6 +58,7 @@ func (p *Poster) svc() {
 		}
 		req.Header.Add("Content-Type", "application/json")
 		req.Header.Add("X-Kubernetes-Event-Type", r.eventType)
+		req.Header.Add("X-Kubernetes-Object-Type", r.objType)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -63,17 +66,22 @@ func (p *Poster) svc() {
 			// TODO retries, persistence, etc.
 		}
 
-		resp.Body.Close()
 		if resp.StatusCode != 200 {
 			log.Printf("request failed: %v", resp.StatusCode)
+			body, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				log.Printf("request error: %v", body)
+			}
 			// TODO retries etc.
 		}
+		resp.Body.Close()
 	}
 }
 
-func (p *Poster) Post(eventType, relativeUrl string, body io.Reader) {
+func (p *Poster) Post(eventType, objType, relativeUrl string, body io.Reader) {
 	p.requestChannel <- &postRequest{
 		eventType:   eventType,
+		objType:     objType,
 		relativeUrl: relativeUrl,
 		body:        body,
 	}

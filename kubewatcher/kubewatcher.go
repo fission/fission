@@ -194,6 +194,6 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 		if err != nil {
 			log.Println("Failed to serialize object: %v", err)
 		}
-		poster.Post(string(ev.Type), ws.Watch.Url, &buf)
+		poster.Post(string(ev.Type), ws.Watch.ObjType, ws.Watch.Url, &buf)
 	}
 }
