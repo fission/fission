@@ -24,6 +24,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync/atomic"
 
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
@@ -43,6 +44,7 @@ type (
 	watchSubscription struct {
 		fission.Watch
 		kubeWatch watch.Interface
+		stopped   *int32
 	}
 
 	kubeWatcherRequest struct {
@@ -159,9 +161,11 @@ func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
 	if err != nil {
 		return err
 	}
+	var stopped int32 = 0
 	ws := &watchSubscription{
 		Watch:     *w,
 		kubeWatch: wi,
+		stopped:   &stopped,
 	}
 	kw.watches[w.Metadata.Uid] = *ws
 	go ws.eventDispatchLoop(kw.poster)
@@ -175,8 +179,9 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 		return fission.MakeError(fission.ErrorNotFound,
 			fmt.Sprintf("watch doesn't exist: %v", w.Metadata))
 	}
-	ws.kubeWatch.Stop()
 	delete(kw.watches, w.Metadata.Uid)
+	atomic.StoreInt32(ws.stopped, 1)
+	ws.kubeWatch.Stop()
 	return nil
 }
 
@@ -186,7 +191,7 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 		ev, more := <-ws.kubeWatch.ResultChan()
 		if !more {
 			log.Println("Watch stopped", ws.Watch.Metadata.Name)
-			return
+			break
 		}
 
 		var buf bytes.Buffer
@@ -195,5 +200,9 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 			log.Println("Failed to serialize object: %v", err)
 		}
 		poster.Post(string(ev.Type), ws.Watch.ObjType, ws.Watch.Url, &buf)
+	}
+	if !atomic.LoadInt32(ws.stopped) {
+		// TODO re-watch.  What about resource version?
+		log.Panicf("Watch channel closed unexpectedly")
 	}
 }
