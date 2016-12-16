@@ -1,6 +1,7 @@
 Fission: Serverless Functions for Kubernetes
 ============================================
 [![Build Status](https://travis-ci.org/platform9/fission.svg?branch=master)](https://travis-ci.org/platform9/fission)
+[![Go Report Card](https://goreportcard.com/badge/github.com/platform9/fission)](https://goreportcard.com/report/github.com/platform9/fission)
 
 [fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
 
@@ -204,7 +205,7 @@ If you're changing the CLI:
 
 ```
   # Build Fission CLI
-  $ cd fission-cli && go install
+  $ cd fission && go install
 ```
 
 Status
