@@ -129,6 +129,10 @@ func fnDelete(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+
 	fnUid := c.String("uid")
 	m := &fission.Metadata{Name: fnName, Uid: fnUid}
 
