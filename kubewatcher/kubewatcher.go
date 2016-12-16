@@ -205,7 +205,7 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 		// sends a different type when ev.Type == ERROR?)
 		poster.Post(string(ev.Type), ws.Watch.ObjType, ws.Watch.Url, &buf)
 	}
-	if !atomic.LoadInt32(ws.stopped) {
+	if atomic.LoadInt32(ws.stopped) != 0 {
 		// TODO re-watch.  What about resource version?
 		log.Panicf("Watch channel closed unexpectedly")
 	}
