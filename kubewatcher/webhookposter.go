@@ -72,7 +72,7 @@ func (p *Poster) svc() {
 			if err == nil {
 				log.Printf("request error: %v", body)
 			}
-			// TODO retries etc.
+			// TODO retries, persistence, etc.
 		}
 		resp.Body.Close()
 	}

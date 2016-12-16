@@ -199,6 +199,10 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 		if err != nil {
 			log.Println("Failed to serialize object: %v", err)
 		}
+		// TODO re: objtype -- mabye we should use runtime
+		// type info to get the obj type, in case the watch
+		// can send multiple types of objects (it probably
+		// sends a different type when ev.Type == ERROR?)
 		poster.Post(string(ev.Type), ws.Watch.ObjType, ws.Watch.Url, &buf)
 	}
 	if !atomic.LoadInt32(ws.stopped) {
