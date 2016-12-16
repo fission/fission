@@ -83,18 +83,15 @@ Running Fission on your Cluster
 
 You can install Kubernetes on your laptop with [minikube](https://github.com/kubernetes/minikube):
 
-Install minikube on OSX:
+#### Install and start Kubernetes on OSX:
 ```bash
   $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.14.0/minikube-darwin-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+  $ minikube start
 ```
 
-Or, install it on Linux:
+#### Or, install and start Kubernetes on Linux:
 ```bash
   $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.14.0/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
-```
-
-And start Kubernetes:
-```
   $ minikube start
 ```
 
