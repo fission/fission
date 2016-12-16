@@ -81,7 +81,17 @@ Running Fission on your Cluster
 
 ### Setup Kubernetes
 
-You can install Kubernetes on your laptop with minikube: https://github.com/kubernetes/minikube
+You can install Kubernetes on your laptop with
+[minikube](https://github.com/kubernetes/minikube):
+
+```bash
+  # Install minikube:
+  $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.14.0/minikube-darwin-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+
+  # Start Kubernetes:
+  $ minikube start
+
+```
 
 Or, you can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to get a 3 node cluster.
 
