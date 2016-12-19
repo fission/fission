@@ -41,6 +41,13 @@ const (
 )
 
 type (
+	KubeWatcher struct {
+		watches          map[string]watchSubscription
+		kubernetesClient *kubernetes.Clientset
+		requestChannel   chan *kubeWatcherRequest
+		publisher        Publisher
+	}
+
 	watchSubscription struct {
 		fission.Watch
 		kubeWatch watch.Interface
@@ -55,20 +62,13 @@ type (
 	kubeWatcherResponse struct {
 		error
 	}
-
-	KubeWatcher struct {
-		watches          map[string]watchSubscription
-		kubernetesClient *kubernetes.Clientset
-		poster           *Poster
-		requestChannel   chan *kubeWatcherRequest
-	}
 )
 
-func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, poster *Poster) *KubeWatcher {
+func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		watches:          make(map[string]watchSubscription),
 		kubernetesClient: kubernetesClient,
-		poster:           poster,
+		publisher:        publisher,
 		requestChannel:   make(chan *kubeWatcherRequest),
 	}
 	go kw.svc()
@@ -112,7 +112,7 @@ func (kw *KubeWatcher) svc() {
 	}
 }
 
-// lifted from kubernetes/pkg/kubectl/resource_printer.go
+// TODO lifted from kubernetes/pkg/kubectl/resource_printer.go.
 func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	switch obj := obj.(type) {
 	case *runtime.Unknown:
@@ -168,7 +168,7 @@ func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
 		stopped:   &stopped,
 	}
 	kw.watches[w.Metadata.Uid] = *ws
-	go ws.eventDispatchLoop(kw.poster)
+	go ws.eventDispatchLoop(kw.publisher)
 	return nil
 }
 
@@ -185,7 +185,7 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 	return nil
 }
 
-func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
+func (ws *watchSubscription) eventDispatchLoop(publisher Publisher) {
 	log.Println("Listening to watch ", ws.Watch.Metadata.Name)
 	for {
 		ev, more := <-ws.kubeWatch.ResultChan()
@@ -193,20 +193,11 @@ func (ws *watchSubscription) eventDispatchLoop(poster *Poster) {
 			log.Println("Watch stopped", ws.Watch.Metadata.Name)
 			break
 		}
-
-		var buf bytes.Buffer
-		err := printKubernetesObject(ev.Object, &buf)
-		if err != nil {
-			log.Println("Failed to serialize object: %v", err)
-		}
-		// TODO re: objtype -- mabye we should use runtime
-		// type info to get the obj type, in case the watch
-		// can send multiple types of objects (it probably
-		// sends a different type when ev.Type == ERROR?)
-		poster.Post(string(ev.Type), ws.Watch.ObjType, ws.Watch.Url, &buf)
+		publisher.Publish(ev, ws.Watch.Target)
 	}
 	if atomic.LoadInt32(ws.stopped) != 0 {
-		// TODO re-watch.  What about resource version?
+		// TODO can this happen?  How do we start the watch again from the right
+		// point?
 		log.Panicf("Watch channel closed unexpectedly")
 	}
 }

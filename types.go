@@ -64,7 +64,7 @@ type (
 
 		Function Metadata `json:"function"`
 
-		Url string `json:"url"` // POST request made to this URL.
+		Target string `json:"target"` // Watch publish target (URL, NATS stream, etc)
 	}
 
 	// Errors returned by the Fission API.

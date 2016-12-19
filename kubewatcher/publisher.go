@@ -14,19 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission
+package kubewatcher
 
 import (
-	"fmt"
+	"k8s.io/client-go/1.5/pkg/watch"
 )
 
-func UrlForFunction(m *Metadata) string {
-	// TODO this assumes the router's namespace is the same as whatever is hitting
-	// this url -- so e.g. kubewatcher will have to run in the same ns as router.
-	prefix := "http://router/fission-function"
-	if len(m.Uid) > 0 {
-		return fmt.Sprintf("%v/%v/%v", prefix, m.Name, m.Uid)
-	} else {
-		return fmt.Sprintf("%v/%v", prefix, m.Name)
+type (
+	Publisher interface {
+		// Publish an event to a "target".  Target's meaning depends on the
+		// publisher: it's a URL in the case of a webhook publisher, or a queue
+		// name in a queue-based publisher such as NATS.
+		Publish(event watch.Event, target string)
 	}
-}
+)
