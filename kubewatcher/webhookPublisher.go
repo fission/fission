@@ -98,13 +98,14 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	// Event and object type aren't in the serialized object
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Kubernetes-Event-Type", string(r.watchEvent.Type))
-	req.Header.Add("X-Kubernetes-Object-Type", reflect.TypeOf(r.watchEvent.Object).Name())
+	req.Header.Add("X-Kubernetes-Object-Type", reflect.TypeOf(r.watchEvent.Object).Elem().Name())
 
 	// Make the request
 	resp, err := http.DefaultClient.Do(req)
+
+	// All done if the request succeeded with 200 OK.
 	if err == nil && resp.StatusCode == 200 {
 		resp.Body.Close()
-		// all done.
 		return
 	}
 
@@ -120,7 +121,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 		}
 	}
 
-	// Schedule a retry, or give up
+	// Schedule a retry, or give up if out of retries
 	r.retries--
 	if r.retries > 0 {
 		r.retryDelay *= time.Duration(2)
