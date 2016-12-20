@@ -21,9 +21,7 @@ import (
 )
 
 func UrlForFunction(m *Metadata) string {
-	// TODO this assumes the router's namespace is the same as whatever is hitting
-	// this url -- so e.g. kubewatcher will have to run in the same ns as router.
-	prefix := "http://router/fission-function"
+	prefix := "/fission-function"
 	if len(m.Uid) > 0 {
 		return fmt.Sprintf("%v/%v/%v", prefix, m.Name, m.Uid)
 	} else {
