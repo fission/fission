@@ -199,7 +199,7 @@ func TestWatchApi(t *testing.T) {
 			Name: "foo",
 			Uid:  "",
 		},
-		Url: "",
+		Target: "",
 	}
 	m, err := g.client.WatchCreate(testWatch)
 	panicIf(err)
@@ -208,7 +208,7 @@ func TestWatchApi(t *testing.T) {
 	w, err := g.client.WatchGet(m)
 	panicIf(err)
 	testWatch.Metadata.Uid = m.Uid
-	w.Url = ""
+	w.Target = ""
 	assert(*testWatch == *w, "watch should match after reading")
 
 	testWatch.Metadata.Name = "yyy"
