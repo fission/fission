@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/client-go/1.5/pkg/watch"
@@ -34,6 +35,8 @@ type (
 
 		maxRetries int
 		retryDelay time.Duration
+
+		baseUrl string
 	}
 	publishRequest struct {
 		url        string
@@ -43,11 +46,10 @@ type (
 	}
 )
 
-// The caller must make one of these per URL
-func MakeWebhookPublisher() *WebhookPublisher {
+func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 	p := &WebhookPublisher{
+		baseUrl:        baseUrl,
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
-
 		// TODO make this configurable
 		maxRetries: 10,
 		retryDelay: 500 * time.Millisecond,
@@ -74,7 +76,8 @@ func (p *WebhookPublisher) svc() {
 
 func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 
-	log.Printf("Making HTTP request to %v", r.url)
+	url := p.baseUrl + "/" + strings.TrimPrefix(r.url, "/")
+	log.Printf("Making HTTP request to %v", url)
 
 	// Serialize the object
 	var buf bytes.Buffer
@@ -85,9 +88,9 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	}
 
 	// Create request
-	req, err := http.NewRequest("POST", r.url, &buf)
+	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
-		log.Printf("Failed to create request to %v", r.url)
+		log.Printf("Failed to create request to %v", url)
 		// can't do anything more, drop the event.
 		return
 	}
@@ -113,7 +116,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 		body, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err == nil {
-			log.Printf("request error: %v", body)
+			log.Printf("request error: %v", string(body))
 		}
 	}
 
@@ -125,7 +128,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 			p.requestChannel <- r
 		})
 	} else {
-		log.Printf("Final retry failed, giving up on %v", r.url)
+		log.Printf("Final retry failed, giving up on %v", url)
 		// Event dropped
 	}
 }

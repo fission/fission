@@ -49,7 +49,7 @@ func Start(controllerUrl string, routerUrl string) error {
 	if err != nil {
 		return err
 	}
-	poster := MakeWebhookPublisher()
+	poster := MakeWebhookPublisher(routerUrl)
 	kubeWatch := MakeKubeWatcher(kubeClient, poster)
 
 	client := client.MakeClient(controllerUrl)
