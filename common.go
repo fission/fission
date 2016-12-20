@@ -14,34 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package fission
 
 import (
 	"fmt"
-	"os"
-	"strings"
-
-	"github.com/platform9/fission/controller/client"
 )
 
-func fatal(msg string) {
-	os.Stderr.WriteString(msg + "\n")
-	os.Exit(1)
-}
-
-func getClient(serverUrl string) *client.Client {
-
-	if len(serverUrl) == 0 {
-		fatal("Need --server or FISSION_URL set to your fission server.")
-	}
-
-	serverUrl = "http://" + strings.TrimPrefix(serverUrl, "http://")
-
-	return client.MakeClient(serverUrl)
-}
-
-func checkErr(err error, msg string) {
-	if err != nil {
-		fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
+func UrlForFunction(m *Metadata) string {
+	prefix := "/fission-function"
+	if len(m.Uid) > 0 {
+		return fmt.Sprintf("%v/%v/%v", prefix, m.Name, m.Uid)
+	} else {
+		return fmt.Sprintf("%v/%v", prefix, m.Name)
 	}
 }

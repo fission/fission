@@ -6,6 +6,7 @@ import (
 
 	"github.com/docopt/docopt-go"
 	"github.com/platform9/fission/controller"
+	"github.com/platform9/fission/kubewatcher"
 	"github.com/platform9/fission/poolmgr"
 	"github.com/platform9/fission/router"
 )
@@ -19,11 +20,7 @@ func runController(port int, etcdUrl string, filepath string) {
 		log.Fatalf("Error: %v", err)
 	}
 
-	api := &controller.API{
-		FunctionStore:    controller.FunctionStore{ResourceStore: *rs},
-		HTTPTriggerStore: controller.HTTPTriggerStore{ResourceStore: *rs},
-		EnvironmentStore: controller.EnvironmentStore{ResourceStore: *rs},
-	}
+	api := controller.MakeAPI(rs)
 	api.Serve(port)
 	log.Fatalf("Error: Controller exited.")
 }
@@ -37,6 +34,13 @@ func runPoolmgr(port int, controllerUrl string, namespace string) {
 	err := poolmgr.StartPoolmgr(controllerUrl, namespace, port)
 	if err != nil {
 		log.Fatalf("Error starting poolmgr: %v", err)
+	}
+}
+
+func runKubeWatcher(controllerUrl, routerUrl string) {
+	err := kubewatcher.Start(controllerUrl, routerUrl)
+	if err != nil {
+		log.Fatalf("Error starting kubewatcher: %v", err)
 	}
 }
 
@@ -72,15 +76,18 @@ Usage:
   fission-bundle --controllerPort=<port> [--etcdUrl=<etcdUrl>] --filepath=<filepath>
   fission-bundle --routerPort=<port> [--controllerUrl=<url> --poolmgrUrl=<url>]
   fission-bundle --poolmgrPort=<port> [--controllerUrl=<url>]
+  fission-bundle --kubewatcher [--controllerUrl=<url> --routerUrl=<url>]
 Options:
   --controllerPort=<port>  Port that the controller should listen on.
   --routerPort=<port>      Port that the router should listen on.
   --poolmgrPort=<port>     Port that the poolmgr should listen on.
   --controllerUrl=<url>    Controller URL. Not required if --controllerPort is specified.
-  --poolmgrUrl=<url>       Controller URL. Not required if --poolmgrPort is specified.
+  --poolmgrUrl=<url>       Poolmgr URL. Not required if --poolmgrPort is specified.
+  --routerUrl=<url>        Router URL.
   --etcdUrl=<etcdUrl>      Etcd URL.
   --filepath=<filepath>    Directory to store functions in.
   --namespace=<namespace>  Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
+  --kubewatcher            Start Kubernetes events watcher.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {
@@ -92,6 +99,7 @@ Options:
 	controllerUrl := getStringArgWithDefault(arguments["--controllerUrl"], "http://controller.fission")
 	etcdUrl := getStringArgWithDefault(arguments["--etcdUrl"], "http://etcd:2379")
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
+	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
@@ -106,6 +114,10 @@ Options:
 	if arguments["--poolmgrPort"] != nil {
 		port := getPort(arguments["--poolmgrPort"])
 		runPoolmgr(port, controllerUrl, namespace)
+	}
+
+	if arguments["--kubewatcher"] == true {
+		runKubeWatcher(controllerUrl, routerUrl)
 	}
 
 	select {}

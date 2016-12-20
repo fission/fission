@@ -82,6 +82,7 @@ app.all('/', function (req, res) {
     try {
         userFunction(context, callback);
     } catch(e) {
+        console.log(`Function error: ${e}`);
         callback(500, "Internal server error")
     }
 });

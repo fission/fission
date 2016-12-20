@@ -14,34 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package kubewatcher
 
 import (
-	"fmt"
-	"os"
-	"strings"
-
-	"github.com/platform9/fission/controller/client"
+	"k8s.io/client-go/1.5/pkg/watch"
 )
 
-func fatal(msg string) {
-	os.Stderr.WriteString(msg + "\n")
-	os.Exit(1)
-}
-
-func getClient(serverUrl string) *client.Client {
-
-	if len(serverUrl) == 0 {
-		fatal("Need --server or FISSION_URL set to your fission server.")
+type (
+	Publisher interface {
+		// Publish an event to a "target".  Target's meaning depends on the
+		// publisher: it's a URL in the case of a webhook publisher, or a queue
+		// name in a queue-based publisher such as NATS.
+		Publish(event watch.Event, target string)
 	}
-
-	serverUrl = "http://" + strings.TrimPrefix(serverUrl, "http://")
-
-	return client.MakeClient(serverUrl)
-}
-
-func checkErr(err error, msg string) {
-	if err != nil {
-		fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
-	}
-}
+)

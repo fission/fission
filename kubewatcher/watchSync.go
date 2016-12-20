@@ -1,0 +1,59 @@
+/*
+Copyright 2016 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package kubewatcher
+
+import (
+	"log"
+	"time"
+
+	"github.com/platform9/fission/controller/client"
+)
+
+type (
+	WatchSync struct {
+		client      *client.Client
+		kubeWatcher *KubeWatcher
+	}
+)
+
+func MakeWatchSync(client *client.Client, kubeWatcher *KubeWatcher) *WatchSync {
+	ws := &WatchSync{
+		client:      client,
+		kubeWatcher: kubeWatcher,
+	}
+	go ws.syncSvc()
+	return ws
+}
+
+func (ws *WatchSync) syncSvc() {
+	failureCount := 0
+	maxFailures := 6
+	for {
+		watches, err := ws.client.WatchList()
+		if err != nil {
+			failureCount++
+			if failureCount > maxFailures {
+				log.Fatalf("Failed to connect to controller: %v", err)
+			}
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		ws.kubeWatcher.Sync(watches)
+		time.Sleep(3 * time.Second)
+	}
+}

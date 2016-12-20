@@ -35,6 +35,7 @@ type HTTPTriggerSet struct {
 	controller *controllerClient.Client
 	poolmgr    *poolmgrClient.Client
 	triggers   []fission.HTTPTrigger
+	functions  []fission.Function
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, controller *controllerClient.Client, poolmgr *poolmgrClient.Client) *HTTPTriggerSet {
@@ -49,12 +50,14 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, controller *controllerClient.C
 
 func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
 	ts.mutableRouter = mr
-	mr.updateRouter(ts.getRouterFromTriggers())
+	mr.updateRouter(ts.getRouter())
 	go ts.watchTriggers()
 }
 
-func (ts *HTTPTriggerSet) getRouterFromTriggers() *mux.Router {
+func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
+
+	// HTTP triggers setup by the user
 	for _, trigger := range ts.triggers {
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
@@ -63,6 +66,18 @@ func (ts *HTTPTriggerSet) getRouterFromTriggers() *mux.Router {
 		}
 		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
 	}
+
+	// Internal triggers for (the latest version of) each function
+	for _, function := range ts.functions {
+		m := fission.Metadata{Name: function.Metadata.Name}
+		fh := &functionHandler{
+			fmap:     ts.functionServiceMap,
+			Function: m,
+			poolmgr:  ts.poolmgr,
+		}
+		muxRouter.HandleFunc(fission.UrlForFunction(&m), fh.handler)
+	}
+
 	return muxRouter
 }
 
@@ -102,9 +117,18 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 			if failureCount >= maxFailures {
 				log.Fatalf("Failed to connect to controller after %v retries: %v", failureCount, err)
 			}
+			time.Sleep(time.Duration(pollSleepSec) * time.Second)
+			continue
 		}
 		ts.triggers = triggers
-		ts.mutableRouter.updateRouter(ts.getRouterFromTriggers())
+
+		functions, err := ts.controller.FunctionList()
+		if err != nil {
+			log.Fatalf("Failed to get function list")
+		}
+		ts.functions = functions
+
+		ts.mutableRouter.updateRouter(ts.getRouter())
 		time.Sleep(time.Duration(pollSleepSec) * time.Second)
 	}
 }

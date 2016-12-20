@@ -22,13 +22,13 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: controller
     spec:
       containers:
       - name: controller
-        image: fission/fission-bundle:alpha
+        image: fission/fission-bundle:alpha10
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--filepath", "/filestore"]
 
@@ -41,13 +41,13 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: router
     spec:
       containers:
       - name: router
-        image: fission/fission-bundle:alpha
+        image: fission/fission-bundle:alpha10
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888"]
 
@@ -75,15 +75,34 @@ metadata:
 spec:
   replicas: 1
   template:
-    metadata: 
+    metadata:
       labels:
         svc: poolmgr
     spec:
       containers:
       - name: poolmgr
-        image: fission/fission-bundle:alpha
+        image: fission/fission-bundle:alpha10
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888"]
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kubewatcher
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: kubewatcher
+    spec:
+      containers:
+      - name: kubewatcher
+        image: fission/fission-bundle:alpha10
+        command: ["/fission-bundle"]
+        args: ["--kubewatcher"]
 
 ---
 apiVersion: v1

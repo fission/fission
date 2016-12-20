@@ -43,8 +43,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
 	controllerClient "github.com/platform9/fission/controller/client"
@@ -65,7 +67,7 @@ func router(httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 func serve(port int, httpTriggerSet *HTTPTriggerSet) {
 	mr := router(httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
-	http.ListenAndServe(url, mr)
+	http.ListenAndServe(url, handlers.LoggingHandler(os.Stdout, mr))
 }
 
 func Start(port int, controllerUrl string, poolmgrUrl string) {
