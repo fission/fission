@@ -31,13 +31,17 @@ func main() {
 		cli.StringFlag{Name: "server", Usage: "Fission server URL", EnvVar: "FISSION_URL"},
 	}
 
+	// trigger method and url flags (used in function and route CLIs)
+	htMethodFlag := cli.StringFlag{Name: "method", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD; defaults to GET"}
+	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
+
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "file containing source code, or - for stdin"}
 	fnUidFlag := cli.StringFlag{Name: "uid", Usage: "function uid, optional (use latest if unspecified)"}
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, htUrlFlag, htMethodFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag, fnUidFlag}, Action: fnGet},
 		{Name: "edit", Usage: "Edit function source code in $EDITOR", Flags: []cli.Flag{fnNameFlag, fnUidFlag}, Action: fnEdit},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag, fnUidFlag}, Action: fnGetMeta},
@@ -48,8 +52,6 @@ func main() {
 
 	// httptriggers
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
-	htMethodFlag := cli.StringFlag{Name: "method", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD; defaults to GET"}
-	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
 	htFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	htFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
 	htSubcommands := []cli.Command{
