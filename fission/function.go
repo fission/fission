@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"text/tabwriter"
 
+	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 
 	"github.com/platform9/fission"
@@ -59,6 +60,31 @@ func fnCreate(c *cli.Context) error {
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
+
+	// Allow the user to specify an HTTP trigger while creating a function.
+	triggerUrl := c.String("url")
+	if len(triggerUrl) == 0 {
+		return nil
+	}
+	method := c.String("method")
+	if len(method) == 0 {
+		method = "GET"
+	}
+	triggerName := uuid.NewV4().String()
+	ht := &fission.HTTPTrigger{
+		Metadata: fission.Metadata{
+			Name: triggerName,
+		},
+		UrlPattern: triggerUrl,
+		Method:     getMethod(method),
+		Function: fission.Metadata{
+			Name: fnName,
+		},
+	}
+	_, err = client.HTTPTriggerCreate(ht)
+	checkErr(err, "create HTTP trigger")
+	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, fnName)
+
 	return err
 }
 
