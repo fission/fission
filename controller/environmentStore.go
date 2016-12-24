@@ -19,7 +19,7 @@ package controller
 import (
 	"github.com/satori/go.uuid"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 type EnvironmentStore struct {

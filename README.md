@@ -1,7 +1,7 @@
 Fission: Serverless Functions for Kubernetes
 ============================================
-[![Build Status](https://travis-ci.org/platform9/fission.svg?branch=master)](https://travis-ci.org/platform9/fission)
-[![Go Report Card](https://goreportcard.com/badge/github.com/platform9/fission)](https://goreportcard.com/report/github.com/platform9/fission)
+[![Build Status](https://travis-ci.org/fission/fission.svg?branch=master)](https://travis-ci.org/fission/fission)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
 
 [fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
 

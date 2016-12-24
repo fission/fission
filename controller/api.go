@@ -26,7 +26,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 type API struct {

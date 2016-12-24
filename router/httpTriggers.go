@@ -24,9 +24,9 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/platform9/fission"
-	controllerClient "github.com/platform9/fission/controller/client"
-	poolmgrClient "github.com/platform9/fission/poolmgr/client"
+	"github.com/fission/fission"
+	controllerClient "github.com/fission/fission/controller/client"
+	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
 
 type HTTPTriggerSet struct {

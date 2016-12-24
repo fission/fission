@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/rest"
 
-	controllerclient "github.com/platform9/fission/controller/client"
+	controllerclient "github.com/fission/fission/controller/client"
 )
 
 // Get a kubernetes client using the pod's service account.  This only

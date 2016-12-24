@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 func TestFunctionServiceMap(t *testing.T) {

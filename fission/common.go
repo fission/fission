@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/platform9/fission/controller/client"
+	"github.com/fission/fission/controller/client"
 )
 
 func fatal(msg string) {

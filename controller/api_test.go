@@ -28,8 +28,8 @@ import (
 	etcdClient "github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 
-	"github.com/platform9/fission"
-	"github.com/platform9/fission/controller/client"
+	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 )
 
 var g struct {

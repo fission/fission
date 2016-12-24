@@ -25,7 +25,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"encoding/base64"
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 func (api *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {

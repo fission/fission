@@ -22,8 +22,8 @@ import (
 
 	"k8s.io/client-go/1.5/kubernetes"
 
-	"github.com/platform9/fission"
-	"github.com/platform9/fission/controller/client"
+	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 )
 
 type (

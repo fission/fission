@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/platform9/fission/controller/client"
+	"github.com/fission/fission/controller/client"
 )
 
 type (

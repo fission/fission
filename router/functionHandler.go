@@ -25,8 +25,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/platform9/fission"
-	poolmgrClient "github.com/platform9/fission/poolmgr/client"
+	"github.com/fission/fission"
+	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
 
 type functionHandler struct {
