@@ -1,4 +1,4 @@
-package: github.com/platform9/fission
+package: github.com/fission/fission
 import:
 - package: github.com/Sirupsen/logrus
   version: ^0.11.0
