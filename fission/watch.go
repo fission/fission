@@ -24,7 +24,7 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 func wCreate(c *cli.Context) error {

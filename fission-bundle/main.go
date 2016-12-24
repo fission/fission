@@ -5,10 +5,10 @@ import (
 	"strconv"
 
 	"github.com/docopt/docopt-go"
-	"github.com/platform9/fission/controller"
-	"github.com/platform9/fission/kubewatcher"
-	"github.com/platform9/fission/poolmgr"
-	"github.com/platform9/fission/router"
+	"github.com/fission/fission/controller"
+	"github.com/fission/fission/kubewatcher"
+	"github.com/fission/fission/poolmgr"
+	"github.com/fission/fission/router"
 )
 
 func runController(port int, etcdUrl string, filepath string) {

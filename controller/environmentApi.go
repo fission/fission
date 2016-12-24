@@ -24,7 +24,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 func (api *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {

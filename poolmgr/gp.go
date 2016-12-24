@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 type (

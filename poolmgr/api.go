@@ -29,9 +29,9 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
-	"github.com/platform9/fission"
-	"github.com/platform9/fission/cache"
-	controllerclient "github.com/platform9/fission/controller/client"
+	"github.com/fission/fission"
+	"github.com/fission/fission/cache"
+	controllerclient "github.com/fission/fission/controller/client"
 )
 
 type funcSvc struct {

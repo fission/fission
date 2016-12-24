@@ -28,7 +28,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 type (

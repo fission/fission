@@ -22,7 +22,7 @@ import (
 
 	"bytes"
 	"encoding/json"
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 	"io/ioutil"
 	"net/url"
 )

@@ -49,8 +49,8 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
-	controllerClient "github.com/platform9/fission/controller/client"
-	poolmgrClient "github.com/platform9/fission/poolmgr/client"
+	controllerClient "github.com/fission/fission/controller/client"
+	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url

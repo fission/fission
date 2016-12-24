@@ -22,7 +22,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 	"os"
 )
 

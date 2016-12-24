@@ -31,7 +31,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/runtime"
 	"k8s.io/client-go/1.5/pkg/watch"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 type requestType int

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/platform9/fission"
+	"github.com/fission/fission"
 )
 
 func TestRouter(t *testing.T) {

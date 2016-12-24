@@ -21,8 +21,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/platform9/fission"
-	"github.com/platform9/fission/cache"
+	"github.com/fission/fission"
+	"github.com/fission/fission/cache"
 )
 
 type functionServiceMap struct {
