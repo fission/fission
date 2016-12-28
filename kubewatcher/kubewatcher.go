@@ -50,8 +50,10 @@ type (
 
 	watchSubscription struct {
 		fission.Watch
-		kubeWatch watch.Interface
-		stopped   *int32
+		kubeWatch        watch.Interface
+		stopped          *int32
+		kubernetesClient *kubernetes.Clientset
+		publisher        Publisher
 	}
 
 	kubeWatcherRequest struct {
@@ -135,7 +137,7 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-func (kw *KubeWatcher) createKubernetesWatch(w *fission.Watch) (watch.Interface, error) {
+func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
 
@@ -144,9 +146,9 @@ func (kw *KubeWatcher) createKubernetesWatch(w *fission.Watch) (watch.Interface,
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.ObjType) {
 	case "POD":
-		wi, err = kw.kubernetesClient.Core().Pods(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Core().Pods(w.Namespace).Watch(listOptions)
 	case "SERVICE":
-		wi, err = kw.kubernetesClient.Core().Services(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Core().Services(w.Namespace).Watch(listOptions)
 	default:
 		msg := fmt.Sprintf("Error: unknown obj type '%v'", w.ObjType)
 		log.Println(msg)
@@ -157,18 +159,11 @@ func (kw *KubeWatcher) createKubernetesWatch(w *fission.Watch) (watch.Interface,
 
 func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
 	log.Printf("Adding watch %v: %v", w.Metadata.Name, w.Function.Name)
-	wi, err := kw.createKubernetesWatch(w)
+	ws, err := MakeWatchSubscription(w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
 		return err
 	}
-	var stopped int32 = 0
-	ws := &watchSubscription{
-		Watch:     *w,
-		kubeWatch: wi,
-		stopped:   &stopped,
-	}
 	kw.watches[w.Metadata.Uid] = *ws
-	go ws.eventDispatchLoop(kw.publisher)
 	return nil
 }
 
@@ -185,19 +180,73 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 	return nil
 }
 
-func (ws *watchSubscription) eventDispatchLoop(publisher Publisher) {
+// 	wi, err := kw.createKubernetesWatch(w)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	var stopped int32 = 0
+// 	ws := &watchSubscription{
+// 		Watch:     *w,
+// 		kubeWatch: wi,
+// 		stopped:   &stopped,
+// 	}
+// 	kw.watches[w.Metadata.Uid] = *ws
+// 	go ws.eventDispatchLoop(kw.publisher)
+// 	return nil
+// }
+
+func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher Publisher) (*watchSubscription, error) {
+	var stopped int32 = 0
+	ws := &watchSubscription{
+		Watch:            *w,
+		kubeWatch:        nil,
+		stopped:          &stopped,
+		kubernetesClient: kubeClient,
+		publisher:        publisher,
+	}
+
+	err := ws.restartWatch()
+	if err != nil {
+		return err
+	}
+
+	go ws.eventDispatchLoop()
+}
+
+func (ws *watchSubscription) restartWatch() error {
+	retries := 60
+	for {
+		wi, err := createKubernetesWatch(kubeClient, w)
+		if err != nil {
+			retries--
+			if retries > 0 {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			} else {
+				return err
+			}
+		}
+		ws.kubeWatch = wi
+		return
+	}
+}
+
+func (ws *watchSubscription) eventDispatchLoop() {
 	log.Println("Listening to watch ", ws.Watch.Metadata.Name)
 	for {
-		ev, more := <-ws.kubeWatch.ResultChan()
-		if !more {
-			log.Println("Watch stopped", ws.Watch.Metadata.Name)
-			break
+		for {
+			ev, more := <-ws.kubeWatch.ResultChan()
+			if !more {
+				log.Println("Watch stopped", ws.Watch.Metadata.Name)
+				break
+			}
+			ws.publisher.Publish(ev, ws.Watch.Target)
 		}
-		publisher.Publish(ev, ws.Watch.Target)
-	}
-	if atomic.LoadInt32(ws.stopped) != 0 {
-		// TODO can this happen?  How do we start the watch again from the right
-		// point?
-		log.Panicf("Watch channel closed unexpectedly")
+		if atomic.LoadInt32(ws.stopped) == 0 {
+			err := ws.restartWatch()
+			if err != nil {
+				log.Panicf("Failed to restart watch: %v", err)
+			}
+		}
 	}
 }
