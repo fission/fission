@@ -215,6 +215,12 @@ func (gp *GenericPool) labelsForMetadata(metadata *fission.Metadata) map[string]
 	}
 }
 
+func (gp *GenericPool) tryDeletePod(name string) {
+	go func() {
+		gp.kubernetesClient.Core().Pods(gp.namespace).Delete(name, nil)
+	}()
+}
+
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
@@ -230,6 +236,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
+		gp.tryDeletePod(pod.ObjectMeta.Name)
 		return nil, errors.New("Pod has no IP")
 	}
 
@@ -242,11 +249,13 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	log.Printf("[%v] calling fetcher to copy function", metadata)
 	resp, err := http.Post(fetcherUrl, "application/json", bytes.NewReader([]byte(fetcherRequest)))
 	if err != nil {
+		gp.tryDeletePod(pod.ObjectMeta.Name)
 		// TODO we should retry this call in case fetcher hasn't come up yet
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
+		gp.tryDeletePod(pod.ObjectMeta.Name)
 		return nil, errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
@@ -280,6 +289,7 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 			err = fission.MakeErrorFromHTTP(resp2)
 		}
 		log.Printf("Failed to specialize pod: %v", err)
+		gp.tryDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
 
