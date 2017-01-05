@@ -99,6 +99,22 @@ func htGet(c *cli.Context) error {
 }
 
 func htUpdate(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+	htName := c.String("name")
+	if len(htName) == 0 {
+		fatal("Need name of trigger, use --name")
+	}
+
+	ht, err := client.HTTPTriggerGet(&fission.Metadata{Name: htName})
+	checkErr(err, "get HTTP trigger")
+
+	newUid := c.String("uid")
+	ht.Function.Uid = newUid
+
+	_, err = client.HTTPTriggerUpdate(ht)
+	checkErr(err, "update HTTP trigger")
+
+	fmt.Printf("trigger '%v' updated\n", htName)
 	return nil
 }
 
