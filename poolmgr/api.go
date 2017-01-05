@@ -119,11 +119,19 @@ func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error
 }
 
 func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
-	// Check function -> svc map
+	// Make sure we have the full metadata.  This ensures that
+	// poolmgr does not implicitly interpret empty-UID as latest
+	// version.
+	if len(m.Uid) == 0 {
+		return "", fission.MakeError(fission.ErrorInvalidArgument,
+			fmt.Sprintf("invalid metadata for function %v", m.Name))
+	}
+
+	// Check function -> svc cache
 	log.Printf("[%v] Checking for cached function service", m.Name)
 	fsvc, err := api.fsCache.GetByFunction(m)
 	if err == nil {
-		// Cached, return svc name
+		// Cached, return svc address
 		return fsvc.address, nil
 	}
 

@@ -18,8 +18,6 @@ package router
 
 import (
 	"log"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -57,11 +55,22 @@ func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
 
+	// make a name -> latest version map
+	latestVersions := make(map[string]string)
+	for _, f := range ts.functions {
+		latestVersions[f.Metadata.Name] = f.Metadata.Uid
+	}
+
 	// HTTP triggers setup by the user
 	for _, trigger := range ts.triggers {
+		m := trigger.Function
+		if len(m.Uid) == 0 {
+			// explicitly use the latest function version
+			m.Uid = latestVersions[m.Name]
+		}
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			Function: trigger.Function,
+			Function: m,
 			poolmgr:  ts.poolmgr,
 		}
 		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
@@ -87,25 +96,10 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 	}
 
 	// the number of connection failures we'll accept before quitting
-	var err error
 	maxFailures := 5
-	maxFailuresEnv := os.Getenv("FISSION_ROUTER_MAX_FAILURES")
-	if len(maxFailuresEnv) != 0 {
-		maxFailures, err = strconv.Atoi(maxFailuresEnv)
-		if err != nil {
-			log.Fatalf("FISSION_ROUTER_MAX_FAILURES must be an integer, found %v", maxFailuresEnv)
-		}
-	}
 
 	// amount of time to sleep between polling calls
-	pollSleepSec := 3
-	pollSleepEnv := os.Getenv("FISSION_ROUTER_POLL_SLEEP_SECONDS")
-	if len(pollSleepEnv) != 0 {
-		pollSleepSec, err = strconv.Atoi(pollSleepEnv)
-		if err != nil {
-			log.Fatalf("FISSION_ROUTER_POLL_SLEEP_SECONDS must be an integer, found %v", pollSleepEnv)
-		}
-	}
+	pollSleepDuration := 3 * time.Second
 
 	// Watch controller for updates to triggers and update the router accordingly.
 	// TODO change this to use a watch API; or maybe even watch etcd directly.
@@ -117,7 +111,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 			if failureCount >= maxFailures {
 				log.Fatalf("Failed to connect to controller after %v retries: %v", failureCount, err)
 			}
-			time.Sleep(time.Duration(pollSleepSec) * time.Second)
+			time.Sleep(pollSleepDuration)
 			continue
 		}
 		ts.triggers = triggers
@@ -129,6 +123,6 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 		ts.functions = functions
 
 		ts.mutableRouter.updateRouter(ts.getRouter())
-		time.Sleep(time.Duration(pollSleepSec) * time.Second)
+		time.Sleep(pollSleepDuration)
 	}
 }
