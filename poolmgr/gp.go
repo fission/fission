@@ -220,6 +220,7 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 		// The sleep allows debugging or collecting logs from the pod before it's
 		// cleaned up.  (We need a better solutions for both those things; log
 		// aggregation and storage will help.)
+		log.Printf("Error in pod '%v', scheduling cleanup", name)
 		time.Sleep(5 * time.Minute)
 		gp.kubernetesClient.Core().Pods(gp.namespace).Delete(name, nil)
 	}()
