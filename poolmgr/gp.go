@@ -435,9 +435,11 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 		labels := gp.labelsForMetadata(m)
 		svc, err := gp.createSvc(svcName, labels)
 		if err != nil {
+			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, err
 		}
 		if svc.ObjectMeta.Name != svcName {
+			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, errors.New(fmt.Sprintf("sanity check failed for svc %v", svc.ObjectMeta.Name))
 		}
 
