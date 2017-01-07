@@ -215,8 +215,12 @@ func (gp *GenericPool) labelsForMetadata(metadata *fission.Metadata) map[string]
 	}
 }
 
-func (gp *GenericPool) tryDeletePod(name string) {
+func (gp *GenericPool) scheduleDeletePod(name string) {
 	go func() {
+		// The sleep allows debugging or collecting logs from the pod before it's
+		// cleaned up.  (We need a better solutions for both those things; log
+		// aggregation and storage will help.)
+		time.Sleep(5 * time.Minute)
 		gp.kubernetesClient.Core().Pods(gp.namespace).Delete(name, nil)
 	}()
 }
@@ -224,23 +228,14 @@ func (gp *GenericPool) tryDeletePod(name string) {
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
-func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error) {
-	newLabels := gp.labelsForMetadata(metadata)
-
-	log.Printf("[%v] Choosing pod from pool", metadata)
-	pod, err := gp.choosePod(newLabels)
-	if err != nil {
-		return nil, err
-	}
-
+func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) error {
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
-		gp.tryDeletePod(pod.ObjectMeta.Name)
-		return nil, errors.New("Pod has no IP")
+		return errors.New("Pod has no IP")
 	}
 
-	// tell fetcher to get the function
+	// tell fetcher to get the function.
 	fetcherUrl := fmt.Sprintf("http://%v:8000/", podIP)
 	functionUrl := fmt.Sprintf("%v/v1/functions/%v?uid=%v&raw=1",
 		gp.controllerUrl, metadata.Name, metadata.Uid)
@@ -249,14 +244,12 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	log.Printf("[%v] calling fetcher to copy function", metadata)
 	resp, err := http.Post(fetcherUrl, "application/json", bytes.NewReader([]byte(fetcherRequest)))
 	if err != nil {
-		gp.tryDeletePod(pod.ObjectMeta.Name)
 		// TODO we should retry this call in case fetcher hasn't come up yet
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		gp.tryDeletePod(pod.ObjectMeta.Name)
-		return nil, errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
+		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
 	// get function run container to specialize
@@ -268,8 +261,9 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 	for i := 0; i < maxRetries; i++ {
 		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
 		if err == nil && resp2.StatusCode < 300 {
+			// Success
 			resp2.Body.Close()
-			return pod, nil
+			return nil
 		}
 
 		// Only retry for the specific case of a connection error.
@@ -289,11 +283,10 @@ func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error
 			err = fission.MakeErrorFromHTTP(resp2)
 		}
 		log.Printf("Failed to specialize pod: %v", err)
-		gp.tryDeletePod(pod.ObjectMeta.Name)
-		return nil, err
+		return err
 	}
 
-	return pod, nil
+	return nil
 }
 
 // A pool is a deployment of generic containers for an env.  This
@@ -417,8 +410,17 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 }
 
 func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
-	pod, err := gp.specializePod(m)
+
+	log.Printf("[%v] Choosing pod from pool", m)
+	newLabels := gp.labelsForMetadata(m)
+	pod, err := gp.choosePod(newLabels)
 	if err != nil {
+		return nil, err
+	}
+
+	err = gp.specializePod(pod, m)
+	if err != nil {
+		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
 	log.Printf("Specialized pod: %v", pod.ObjectMeta.Name)
