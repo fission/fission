@@ -20,6 +20,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/dchest/uniuri"
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/rest"
 
@@ -56,11 +57,13 @@ func StartPoolmgr(controllerUrl string, namespace string, port int) error {
 		return err
 	}
 
+	instanceId := uniuri.NewLen(8)
+	cleanupOldPoolmgrResources(kubernetesClient, namespace, instanceId)
+
 	fsCache := MakeFunctionServiceCache()
+	gpm := MakeGenericPoolManager(controllerUrl, kubernetesClient, namespace, fsCache, instanceId)
 
-	gpm := MakeGenericPoolManager(controllerUrl, kubernetesClient, namespace, fsCache)
 	api := MakeAPI(gpm, controllerClient, fsCache)
-
 	go api.Serve(port)
 
 	return nil

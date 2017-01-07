@@ -34,8 +34,8 @@ type (
 		controllerUrl    string
 		controllerClient *client.Client
 		fsCache          *functionServiceCache
-
-		requestChannel chan *request
+		instanceId       string
+		requestChannel   chan *request
 	}
 	request struct {
 		env             *fission.Environment
@@ -47,7 +47,13 @@ type (
 	}
 )
 
-func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.Clientset, namespace string, fsCache *functionServiceCache) *GenericPoolManager {
+func MakeGenericPoolManager(
+	controllerUrl string,
+	kubernetesClient *kubernetes.Clientset,
+	namespace string,
+	fsCache *functionServiceCache,
+	instanceId string) *GenericPoolManager {
+
 	gpm := &GenericPoolManager{
 		pools:            make(map[fission.Environment]*GenericPool),
 		kubernetesClient: kubernetesClient,
@@ -55,6 +61,7 @@ func MakeGenericPoolManager(controllerUrl string, kubernetesClient *kubernetes.C
 		controllerUrl:    controllerUrl,
 		controllerClient: client.MakeClient(controllerUrl),
 		fsCache:          fsCache,
+		instanceId:       instanceId,
 		requestChannel:   make(chan *request),
 	}
 	go gpm.service()
@@ -70,7 +77,10 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
-				pool, err = MakeGenericPool(gpm.controllerUrl, gpm.kubernetesClient, req.env, 3, gpm.namespace, gpm.fsCache)
+				pool, err = MakeGenericPool(
+					gpm.controllerUrl, gpm.kubernetesClient, req.env,
+					3, // TODO configurable/autoscalable
+					gpm.namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue

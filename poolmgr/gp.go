@@ -39,6 +39,8 @@ import (
 	"github.com/fission/fission"
 )
 
+const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
+
 type (
 	GenericPool struct {
 		env              *fission.Environment
@@ -52,7 +54,9 @@ type (
 		useSvc           bool                  // create service
 		poolInstanceId   string                // small random string to uniquify pod names
 		kubernetesClient *kubernetes.Clientset
-		requestChannel   chan *choosePodRequest
+		instanceId       string
+
+		requestChannel chan *choosePodRequest
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -72,7 +76,8 @@ func MakeGenericPool(
 	env *fission.Environment,
 	initialReplicas int32,
 	namespace string,
-	fsCache *functionServiceCache) (*GenericPool, error) {
+	fsCache *functionServiceCache,
+	instanceId string) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
@@ -88,6 +93,7 @@ func MakeGenericPool(
 		idlePodReapTime:  3 * time.Minute, // TODO make this configurable
 		fsCache:          fsCache,
 		poolInstanceId:   uniuri.NewLen(8),
+		instanceId:       instanceId,
 
 		useSvc: false,
 	}
@@ -200,11 +206,12 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 	}
 }
 
-func labelsForMetadata(metadata *fission.Metadata) map[string]string {
+func (gp *GenericPool) labelsForMetadata(metadata *fission.Metadata) map[string]string {
 	return map[string]string{
-		"functionName": metadata.Name,
-		"functionUid":  metadata.Uid,
-		"unmanaged":    "true", // this allows us to easily find pods not managed by the deployment
+		"functionName":           metadata.Name,
+		"functionUid":            metadata.Uid,
+		"unmanaged":              "true", // this allows us to easily find pods not managed by the deployment
+		POOLMGR_INSTANCEID_LABEL: gp.instanceId,
 	}
 }
 
@@ -212,7 +219,7 @@ func labelsForMetadata(metadata *fission.Metadata) map[string]string {
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
 func (gp *GenericPool) specializePod(metadata *fission.Metadata) (*v1.Pod, error) {
-	newLabels := labelsForMetadata(metadata)
+	newLabels := gp.labelsForMetadata(metadata)
 
 	log.Printf("[%v] Choosing pod from pool", metadata)
 	pod, err := gp.choosePod(newLabels)
@@ -287,6 +294,7 @@ func (gp *GenericPool) createPool() error {
 
 	podLabels := map[string]string{
 		"pool": poolDeploymentName,
+		POOLMGR_INSTANCEID_LABEL: gp.instanceId,
 	}
 
 	sharedMountPath := "/userfunc"
@@ -294,8 +302,9 @@ func (gp *GenericPool) createPool() error {
 		ObjectMeta: v1.ObjectMeta{
 			Name: poolDeploymentName,
 			Labels: map[string]string{
-				"environmentName": gp.env.Metadata.Name,
-				"environmentUid":  gp.env.Metadata.Uid,
+				"environmentName":        gp.env.Metadata.Name,
+				"environmentUid":         gp.env.Metadata.Uid,
+				POOLMGR_INSTANCEID_LABEL: gp.instanceId,
 			},
 		},
 		Spec: v1beta1.DeploymentSpec{
@@ -411,7 +420,7 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 			svcName += ("-" + m.Uid)
 		}
 
-		labels := labelsForMetadata(m)
+		labels := gp.labelsForMetadata(m)
 		svc, err := gp.createSvc(svcName, labels)
 		if err != nil {
 			return nil, err
