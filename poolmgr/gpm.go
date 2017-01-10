@@ -26,6 +26,13 @@ import (
 	"github.com/fission/fission/controller/client"
 )
 
+type requestType int
+
+const (
+	GET_POOL requestType = iota
+	CLEANUP_POOLS
+)
+
 type (
 	GenericPoolManager struct {
 		pools            map[fission.Environment]*GenericPool
@@ -38,7 +45,9 @@ type (
 		requestChannel   chan *request
 	}
 	request struct {
+		requestType
 		env             *fission.Environment
+		currentEnvs     []fission.Environment
 		responseChannel chan *response
 	}
 	response struct {
@@ -72,8 +81,9 @@ func MakeGenericPoolManager(
 
 func (gpm *GenericPoolManager) service() {
 	for {
-		select {
-		case req := <-gpm.requestChannel:
+		req := <-gpm.requestChannel
+		switch req.requestType {
+		case GET_POOL:
 			var err error
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
@@ -88,6 +98,18 @@ func (gpm *GenericPoolManager) service() {
 				gpm.pools[*req.env] = pool
 			}
 			req.responseChannel <- &response{pool: pool}
+		case CLEANUP_POOLS:
+			uids := make(map[string]bool)
+			for _, env := range req.currentEnvs {
+				uids[env.Metadata.Uid] = true
+			}
+			for env, pool := range gpm.pools {
+				_, ok := uids[env.Metadata.Uid]
+				if !ok {
+					// Env no longer exists -- remove from gpm.pools
+					// map and delete the pool
+				}
+			}
 		}
 	}
 }
@@ -115,15 +137,20 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 			}
 		}
 
+		envUids := make(map[string]bool)
 		// Create pools for all envs.  TODO: we should make this a bit less eager, only
 		// creating pools for envs that are actually used by functions.  Also we might want
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
 		for _, env := range envs {
+			envUids[env.Metadata.Uid] = true
 			_, err := gpm.GetPool(&env)
 			if err != nil {
 				log.Printf("eager-create pool failed: %v", err)
 			}
 		}
+
+		// Clean up pools whose env was deleted
+
 	}
 }
