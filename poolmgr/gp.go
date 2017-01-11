@@ -44,19 +44,19 @@ const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
 type (
 	GenericPool struct {
 		env              *fission.Environment
-		replicas         int32               // num containers
+		replicas         int32               // num idle pods
 		deployment       *v1beta1.Deployment // kubernetes deployment
 		namespace        string              // namespace to keep our resources
 		podReadyTimeout  time.Duration       // timeout for generic pods to become ready
 		controllerUrl    string
 		idlePodReapTime  time.Duration         // pods unused for idlePodReapTime are deleted
 		fsCache          *functionServiceCache // cache funcSvc's by function, address and podname
-		useSvc           bool                  // create service
+		useSvc           bool                  // create k8s service for specialized pods
 		poolInstanceId   string                // small random string to uniquify pod names
 		kubernetesClient *kubernetes.Clientset
-		instanceId       string
-
-		requestChannel chan *choosePodRequest
+		instanceId       string // poolmgr instance id
+		labelsForPool    map[string]string
+		requestChannel   chan *choosePodRequest
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -95,7 +95,14 @@ func MakeGenericPool(
 		poolInstanceId:   uniuri.NewLen(8),
 		instanceId:       instanceId,
 
-		useSvc: false,
+		useSvc: false, // defaults off -- svc takes a second or more to become routable, slowing cold start
+	}
+
+	// Labels for generic deployment/RS/pods.
+	gp.labelsForPool = map[string]string{
+		"environmentName":        gp.env.Metadata.Name,
+		"environmentUid":         gp.env.Metadata.Uid,
+		POOLMGR_INSTANCEID_LABEL: gp.instanceId,
 	}
 
 	// create the pool
@@ -206,7 +213,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 	}
 }
 
-func (gp *GenericPool) labelsForMetadata(metadata *fission.Metadata) map[string]string {
+func (gp *GenericPool) labelsForFunction(metadata *fission.Metadata) map[string]string {
 	return map[string]string{
 		"functionName":           metadata.Name,
 		"functionUid":            metadata.Uid,
@@ -296,29 +303,20 @@ func (gp *GenericPool) createPool() error {
 	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
 		gp.env.Metadata.Name, gp.env.Metadata.Uid, strings.ToLower(gp.poolInstanceId))
 
-	podLabels := map[string]string{
-		"pool": poolDeploymentName,
-		POOLMGR_INSTANCEID_LABEL: gp.instanceId,
-	}
-
 	sharedMountPath := "/userfunc"
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
-			Name: poolDeploymentName,
-			Labels: map[string]string{
-				"environmentName":        gp.env.Metadata.Name,
-				"environmentUid":         gp.env.Metadata.Uid,
-				POOLMGR_INSTANCEID_LABEL: gp.instanceId,
-			},
+			Name:   poolDeploymentName,
+			Labels: gp.labelsForPool,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &gp.replicas,
 			Selector: &v1beta1.LabelSelector{
-				MatchLabels: podLabels,
+				MatchLabels: gp.labelsForPool,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: v1.ObjectMeta{
-					Labels: podLabels,
+					Labels: gp.labelsForPool,
 				},
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
@@ -413,7 +411,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 
 	log.Printf("[%v] Choosing pod from pool", m)
-	newLabels := gp.labelsForMetadata(m)
+	newLabels := gp.labelsForFunction(m)
 	pod, err := gp.choosePod(newLabels)
 	if err != nil {
 		return nil, err
@@ -433,7 +431,7 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 			svcName += ("-" + m.Uid)
 		}
 
-		labels := gp.labelsForMetadata(m)
+		labels := gp.labelsForFunction(m)
 		svc, err := gp.createSvc(svcName, labels)
 		if err != nil {
 			gp.scheduleDeletePod(pod.ObjectMeta.Name)
@@ -512,4 +510,44 @@ func (gp *GenericPool) idlePodReaper() {
 			}
 		}
 	}
+}
+
+// destroys the pool -- the deployment, replicaset and pods
+func (gp *GenericPool) destroy() error {
+	// Destroy deployment
+	err := gp.kubernetesClient.Extensions().Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, nil)
+	if err != nil {
+		log.Printf("Error destroying deployment: %v", err)
+		return err
+	}
+
+	// Destroy ReplicaSet.  Pre-1.6 K8s versions don't do this
+	// automatically but post-1.6 K8s will, and may beat us to it,
+	// so don't error out if we fail.
+	rsList, err := gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).List(api.ListOptions{
+		LabelSelector: labels.Set(gp.labelsForPool).AsSelector(),
+	})
+	if len(rsList.Items) >= 0 {
+		for _, rs := range rsList.Items {
+			err = gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).Delete(rs.ObjectMeta.Name, nil)
+			if err != nil {
+				log.Printf("Error deleting replicaset, ignoring: %v", err)
+			}
+		}
+	}
+
+	// Destroy Pods.  See note above.
+	podList, err := gp.kubernetesClient.Core().Pods(gp.namespace).List(api.ListOptions{
+		LabelSelector: labels.Set(gp.labelsForPool).AsSelector(),
+	})
+	if len(podList.Items) >= 0 {
+		for _, pod := range podList.Items {
+			err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil)
+			if err != nil {
+				log.Printf("Error deleting pod, ignoring: %v", err)
+			}
+		}
+	}
+
+	return nil
 }

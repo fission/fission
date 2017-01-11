@@ -26,6 +26,13 @@ import (
 	"github.com/fission/fission/controller/client"
 )
 
+type requestType int
+
+const (
+	GET_POOL requestType = iota
+	CLEANUP_POOLS
+)
+
 type (
 	GenericPoolManager struct {
 		pools            map[fission.Environment]*GenericPool
@@ -38,7 +45,9 @@ type (
 		requestChannel   chan *request
 	}
 	request struct {
+		requestType
 		env             *fission.Environment
+		envList         []fission.Environment
 		responseChannel chan *response
 	}
 	response struct {
@@ -72,8 +81,9 @@ func MakeGenericPoolManager(
 
 func (gpm *GenericPoolManager) service() {
 	for {
-		select {
-		case req := <-gpm.requestChannel:
+		req := <-gpm.requestChannel
+		switch req.requestType {
+		case GET_POOL:
 			var err error
 			pool, ok := gpm.pools[*req.env]
 			if !ok {
@@ -88,15 +98,43 @@ func (gpm *GenericPoolManager) service() {
 				gpm.pools[*req.env] = pool
 			}
 			req.responseChannel <- &response{pool: pool}
+		case CLEANUP_POOLS:
+			uids := make(map[string]bool)
+			for _, env := range req.envList {
+				uids[env.Metadata.Uid] = true
+			}
+			for env, pool := range gpm.pools {
+				_, ok := uids[env.Metadata.Uid]
+				if !ok {
+					// Env no longer exists -- remove our cache
+					log.Printf("Destroying generic pool for environment [%v]", env)
+					delete(gpm.pools, env)
+
+					// and delete the pool asynchronously.
+					go pool.destroy()
+				}
+			}
+			// no response, caller doesn't wait
 		}
 	}
 }
 
 func (gpm *GenericPoolManager) GetPool(env *fission.Environment) (*GenericPool, error) {
 	c := make(chan *response)
-	gpm.requestChannel <- &request{env: env, responseChannel: c}
+	gpm.requestChannel <- &request{
+		requestType:     GET_POOL,
+		env:             env,
+		responseChannel: c,
+	}
 	resp := <-c
 	return resp.pool, resp.error
+}
+
+func (gpm *GenericPoolManager) CleanupPools(envs []fission.Environment) {
+	gpm.requestChannel <- &request{
+		requestType: CLEANUP_POOLS,
+		envList:     envs,
+	}
 }
 
 func (gpm *GenericPoolManager) eagerPoolCreator() {
@@ -125,5 +163,8 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 				log.Printf("eager-create pool failed: %v", err)
 			}
 		}
+
+		// Clean up pools whose env was deleted
+		gpm.CleanupPools(envs)
 	}
 }
