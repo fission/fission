@@ -75,7 +75,7 @@ Use it to start one or more of the fission servers:
 Usage:
   fission-bundle --controllerPort=<port> [--etcdUrl=<etcdUrl>] --filepath=<filepath>
   fission-bundle --routerPort=<port> [--controllerUrl=<url> --poolmgrUrl=<url>]
-  fission-bundle --poolmgrPort=<port> [--controllerUrl=<url>]
+  fission-bundle --poolmgrPort=<port> [--controllerUrl=<url> --namespace=<namespace>]
   fission-bundle --kubewatcher [--controllerUrl=<url> --routerUrl=<url>]
 Options:
   --controllerPort=<port>  Port that the controller should listen on.
