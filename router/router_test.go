@@ -35,7 +35,7 @@ func TestRouter(t *testing.T) {
 
 	triggers := makeHTTPTriggerSet(fmap, nil, nil)
 	triggerUrl := "/foo"
-	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn})
+	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn, Method: "GET"})
 
 	port := 4242
 	go serve(port, triggers)
