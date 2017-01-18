@@ -2,3 +2,5 @@ Flask===0.11.1
 httplib2
 python-dateutil
 requests==2.7.0
+redis
+hiredis
