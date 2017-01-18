@@ -73,7 +73,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			Function: m,
 			poolmgr:  ts.poolmgr,
 		}
-		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler)
+		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler).Methods(trigger.Method)
 	}
 
 	// Internal triggers for (the latest version of) each function
