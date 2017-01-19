@@ -8,11 +8,12 @@ requirements.txt file.
 
 ## Customizing this image
 
-Most commonly you might want to add package dependencies.  Edit
-requirements.txt to add what you need, and rebuild this image.
+To add package dependencies, edit requirements.txt to add what you
+need, and rebuild this image (instructions below).
 
 You also may want to customize what's available to the function in its
-context.  You can do this by editing server.py.
+request context.  You can do this by editing server.py (see the
+comment in that file about customizing request context).
 
 ## Rebuilding and pushing the image
 

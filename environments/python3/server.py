@@ -24,6 +24,8 @@ def f():
         print("Generic container: no requests supported")
         abort(500)
     #
+    # Customizing the request context
+    #
     # If you want to pass something to the function, you can add it to 'g':
     #   g.myKey = myValue
     # And the user func can then access that (after doing a "from flask import g").
