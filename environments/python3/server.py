@@ -4,9 +4,7 @@ import logging
 import sys
 import imp
 
-from flask import Flask
-from flask import request
-from flask import abort
+from flask import Flask, request, abort, g
 
 app = Flask(__name__)
 
@@ -25,6 +23,11 @@ def f():
     if userfunc == None:
         print("Generic container: no requests supported")
         abort(500)
+    #
+    # If you want to pass something to the function, you can add it to 'g':
+    #   g.myKey = myValue
+    # And the user func can then access that (after doing a "from flask import g").
+    #
     return userfunc()
 
 #
