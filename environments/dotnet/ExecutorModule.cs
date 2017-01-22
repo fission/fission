@@ -1,4 +1,5 @@
 using Fission.DotNetCore.Compiler;
+using Fission.DotNetCore.Api;
 using System.Collections.Generic;
 using Nancy;
 using System.IO;
@@ -8,9 +9,13 @@ namespace Fission.DotNetCore
 {
     public class ExecutorModule : NancyModule
     {
+#if DEBUG
+        private const string CODE_PATH = "/tmp/func.cs";
+#else
         private const string CODE_PATH = "/userfunc/user";
-
+#endif
         private static Function _userFunc;
+        private static Logger _logger = new Logger();
 
         public ExecutorModule()
         {
@@ -21,7 +26,6 @@ namespace Fission.DotNetCore
             Head("/", _ => Run());
             Options("/", _ => Run());
             Delete("/", _ => Run());
-
         }
 
         private object Specialize()
@@ -34,7 +38,7 @@ namespace Fission.DotNetCore
                 if (_userFunc == null)
                 {
                     var errstr = string.Join(Environment.NewLine, errors);
-                    Console.WriteLine(errstr);
+                    _logger.WriteError(errstr);
                     var response = (Response)errstr;
                     response.StatusCode = HttpStatusCode.InternalServerError;
                     return response;
@@ -44,7 +48,9 @@ namespace Fission.DotNetCore
             }
             else
             {
-                var response = (Response)"Unable to locate code";
+                var errstr = $"Unable to locate code at '{CODE_PATH}'";
+                _logger.WriteError(errstr);
+                var response = (Response)errstr;
                 response.StatusCode = HttpStatusCode.InternalServerError;
                 return response;
             }
@@ -59,7 +65,18 @@ namespace Fission.DotNetCore
                 return response;
             }
             var args = ((DynamicDictionary)Request.Query).ToDictionary();
-            return _userFunc.Invoke(args);
+            try
+            {
+                return _userFunc.Invoke(new FissionContext(args, new Logger()));
+            }
+            catch (Exception e)
+            {
+                _logger.WriteError(e.ToString());
+                var response = (Response)e.Message;
+                response.StatusCode = HttpStatusCode.BadRequest;
+                return response;
+            }
         }
     }
 }
+

@@ -13,18 +13,9 @@ namespace Fission.DotNetCore
                .UseContentRoot(Directory.GetCurrentDirectory())
                .UseKestrel()
                .UseUrls("http://*:8888")
-               .UseStartup<Startup>()
+               .Configure(app => app.UseOwin(x => x.UseNancy()))
                .Build();
             host.Run();
-        }
-
-
-    }
-    public class Startup
-    {
-        public void Configure(IApplicationBuilder app)
-        {
-            app.UseOwin(x => x.UseNancy());
         }
     }
 }

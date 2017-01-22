@@ -12,19 +12,22 @@ One workaround for this would be to add the references to this project's
 project.json file and rebuild the container.
 
 The environment works via convention where you create a C# class
-called Fission which has a static method named Run taking a single
-parameter, a dictionary containing any querystring parameters.
+called FissionFunction which has a  method named Execute taking a single
+parameter, a FissionContext object.
+
+The FissionContext object gives access to the arguments and other items 
+like logging. Please see FissionContext.cs for public API.
 
 Example of simplest possible class to be executed:
 
 ```
 using System;
-using System.Collections.Generic;
+using Fission.DotNetCore.Api;
 
-public class Fission {
-	public static string Run(Dictionary<string, object> args) {
-		return null;
-	}
+public class FissionFunction {
+    public string Execute(FissionContext context) {
+        return null;
+    }
 }
 ```
 
@@ -96,12 +99,14 @@ Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
 using System;
-using System.Collections.Generic;
+using Fission.DotNetCore.Api;
 
-public class Fission {
-	public static string Run(Dictionary<string, object> args) {
-		return (string)args["text"];
-	}
+public class FissionFunction 
+{
+    public string Execute(FissionContext context){
+        context.Logger.WriteInfo("executing.. {0}", context.Arguments["text"]);
+        return (string)context.Arguments["text"];
+    }
 }
 ``` 
 ### Run the example
@@ -132,14 +137,15 @@ Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
 using System;
-using System.Collections.Generic;
+using Fission.DotNetCore.Api;
 
-public class Fission {
-	public static string Run(Dictionary<string, object> args) {
-        var x = Convert.ToInt32(args["x"]);
-        var y = Convert.ToInt32(args["y"]);
+public class FissionFunction 
+{
+    public string Execute(FissionContext context){
+        var x = Convert.ToInt32(context.Arguments["x"]);
+        var y = Convert.ToInt32(context.Arguments["y"]);
         return (x+y).ToString();
-	}
+    }
 }
 ``` 
 ### Run the example
@@ -156,3 +162,37 @@ $ fission route create --method GET --url /add --function addition
 $ curl "http://$FISSION_ROUTER/add?x=30&y=12"
   42
 ```
+
+## Developing/debugging the enviroment locally
+
+The easiest way to debug the environment is to open the directory in
+Visual Studio Code (VSCode) as that will setup debugger for you the
+first time.
+
+Remember to install the excellent extension 
+"C# for Visual Studio Code(powered by OmniSharp)" to get statement completion
+
+The class ExecutorModule contain preprocessor directive overriding where 
+the input code file should be found:
+
+```
+#if DEBUG
+        private const string CODE_PATH = "/tmp/func.cs";
+#else
+        private const string CODE_PATH = "/userfunc/user";
+#endif
+```
+
+So what you need to do is:
+1. Open the directory in VSCode. 
+This will prompt restore of packages and query is debugger setup is needed. Accept both prompts.
+2. Press F5 to start the web server. Set breakpoints etc..
+3. Add a code file containing valid C# at /tmp/func.cs 
+4. Specialize the service with curl via post
+```
+$ curl -XPOST http://localhost:8888/specialize
+```
+5. Call your function with curl
+```
+$ curl -XGET http://localhost:8888
+``` 
