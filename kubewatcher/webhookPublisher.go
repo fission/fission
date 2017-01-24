@@ -83,7 +83,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	var buf bytes.Buffer
 	err := printKubernetesObject(r.watchEvent.Object, &buf)
 	if err != nil {
-		log.Println("Failed to serialize object: %v", err)
+		log.Printf("Failed to serialize object: %v", err)
 		// TODO send a POST request indicating error
 	}
 
