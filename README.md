@@ -76,6 +76,7 @@ Usage
   Hello, world!
 ```
 
+See the [examples](examples) directory for more.
 
 Running Fission on your Cluster
 ===============================
@@ -226,9 +227,12 @@ If you're changing the CLI:
 Status
 ======
 
-Fission is in early alpha.  Don't use it in production just yet!
+Fission is in early alpha.  It's not suitable for production use just
+yet.  
 
-Right now, we're looking for developer feedback -- tell us which
-languages you care about, what use cases you might use it for, and so
-on.
+We're looking for early developer feedback -- if you do use Fission,
+we'd love to hear how it's working for you, what parts in particular
+you'd like to see improved, and so on.  Talk to us on
+[slack](http://slack.fission.io) or
+[twitter](https://twitter.com/fissionio).
 
