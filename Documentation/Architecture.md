@@ -1,107 +1,113 @@
 
 A high level view of the internals of Fission.
 
+How it works
+============
+
+Fission is a FaaS -- users create functions (source level), register
+them with fission using a CLI, and associate functions with triggers.
+
+Fission wraps those functions into a service, and runs them on
+Kubernetes on demand.
+
+Here's an overview of the services that make up fission.
+
 Components
 ==========
 
 Language-neutral components:
 
- * Controller
- * Container Pool Manager
- * Container Specializer
- * Router
+ * controller
+ * poolmgr
+ * router
+ * kubewatcher
 
 Language-specific components:
 
- * Language Build Container
- * Language Run Container
+ * Environment container
 
 
 Controller
 ----------
 
-Function and Trigger CRUD APIs.  APIs to watch for changes are also
-included (useful for other components that cache state).
-
-See api/swagger.json for API details.
+The controller contains CRUD APIs for functions, http triggers,
+environments, Kubernetes event watches.  This is the component that
+the client talks to.
 
 This is the only stateful component.  It needs to be configured with a
 URL to an etcd cluster and a path to a persistent volume.  The volume
-will be used to store the functions' source code.
+is used to store the functions' source code.  Etcd is used as the DB.
 
-Etcd is used as the DB.
+[Work to extend to other storage backends is planned, see issue #83.]
 
+Pool Manager 
+------------
 
-Container Pool Manager 
-----------------------
+Poolmgr manages pools of generic containers and function containers.
 
-Manage pool of generic containers.
+It has a simple API; both these endpoints are called by the router.
 
-Probably use K8s RCs.  Can we Use labels to move pods from one rc to
-another?  What about jobs?
+* GetFunctionService takes function metadata and returns the address
+  of a service.
+  
+* TapService lets poolmgr know a service is being used; if it's not
+  called for a few minutes the pod(s) backing the service are killed.
 
-Container Specializer
----------------------
+Poolmgr watches the controller API and eagerly creates generic pools
+for environments.  It uses Kubernetes deployments to do that.  The
+environment container runs in a pod with the 'fetcher' container.
+Fetcher is a very simple utility that downloads a URL sent to it and
+saves it at a configured location.
 
-Inputs: a running generic language run container, a user function,
-optionally an http trigger URL.
+GetFunctionService "specializes" a pod.  The implementation chooses a
+pod from the pool, relabels it to "orphan" the pod from the
+deployment, invokes fetcher to copy the function into the pod, and
+hits the the specialize endpoint on the environment container.  This
+causes the function to be loaded.  The pod is now specific to that
+function.
 
-Calls Language Run Container and sets up Router to point to it.
-
+This function pod is cached; it's cleaned up if it's unused for a few
+minutes.
 
 Router
 ------
 
-- Cache trigger -> container instance mapping; implement cache miss and expiration.
+The router forwards HTTP requests to function pods.  If there's no
+running service for a function, it requests one from poolmgr, while
+holding on to the request; when the function's service is ready it
+forwards the request.
 
-- Invoke Specializer, setup up k8s API 
+The router is stateless and can be scaled up if needed, according to
+load.
 
-- Forward requests
+Kubewatcher
+-----------
 
-The Router is stateless -- it can be scaled or killed at any time.
+Kubewatcher watches the Kubernetes API and invokes functions
+associated with watches, sending the watch event to the function.
 
-There's a lot of functionality overlap with K8S Ingress Controllers.
-We should clearly use Ingress and Ingress Controllers in some way.
-It's not exactly clear at the moment how -- should make a whole new
-Ingress Controller perhaps based on the contrib/nginx
+The controller keeps track of user's requested watches and associated
+functions.  Kubewatcher watches the API based on these requests; when
+a watch event occurs, it serializes the object and calls the function
+via the router.
 
+While a few simple retries are done, there isn't yet a reliable
+message bus between Kubewatcher and the function.  Work for this is
+tracked in issue #64.
 
-Autoscaler
-----------
+Environment Container
+---------------------
 
-This autoscales the language run containers that are backing a
-trigger.
+Environment containers run user-defined functions.  Environment
+containers are language specific.  They must contain an HTTP server
+and a loader for functions.
 
-What metrics this is based on is TBD.
+Poolmgr deploys the environment container into a pod with fetcher
+(fetcher is a simple utility that can fetch an HTTP url to a file at a
+configured location).  This pod forms a "generic pod", because it can
+be loaded with any function.
 
-- Number of requests/sec
-- "Backlog" -- number of outstanding requests not yet started -- how to measure this?
-- Change in turn-around time?
-
-
-Language Build Container
-------------------------
-
-* The Language Build Container is a container that is invoked for a
-  build.  It takes one user-created function and outputs something
-  that can be run by the corresponding Language Run Container.
-
-* The Build Container must implement the Language Build Container
-  interface.
-
-
-Language Run Container
-----------------------
-
-* The Language Run Container is the container in which user functions
-  run.
-
-* The Run Container is started without the user function.  It must
-  start as a "Generic Container".  It must implement the
-  "specialization interface".  In short, it must implement an HTTP
-  server that can receive a piece of code, verify its signature, and
-  map it to an HTTP endpoint.  See
-  Documentation/specs/LanguageRunContainerSpec.md for details.
-
-
-
+When poolmgr needs to create a service for a function, it calls
+fetcher to fetch the function.  Fetcher downloads the function into a
+volume shared between fetcher and this environment container.  Poolmgr
+then requests the container to load the function.
