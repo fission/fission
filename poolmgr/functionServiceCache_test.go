@@ -71,6 +71,6 @@ func TestFunctionServiceCache(t *testing.T) {
 	_, err = fsc.GetByFunction(fsvc.function)
 	if err == nil {
 		fsc.Log()
-		log.Panicf("found fsvc while expecting empty cache", err)
+		log.Panicf("found fsvc while expecting empty cache: %v", err)
 	}
 }
