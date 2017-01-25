@@ -173,10 +173,18 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		}
 		readyPods := make([]*v1.Pod, 0, len(podList.Items))
 		for _, pod := range podList.Items {
+			// If a pod has no IP it's not ready
+			if len(pod.Status.PodIP) == 0 {
+				continue
+			}
+
+			// Wait for all containers in the pod to be ready
 			podReady := true
 			for _, cs := range pod.Status.ContainerStatuses {
 				podReady = podReady && cs.Ready
 			}
+
+			// add it to the list of ready pods
 			if podReady {
 				readyPods = append(readyPods, &pod)
 			}
