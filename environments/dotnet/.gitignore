@@ -1,0 +1,6 @@
+bin/*
+obj/*
+out/*
+.vscode/*
+project.lock*
+TODO_dotnet
