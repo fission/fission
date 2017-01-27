@@ -37,6 +37,11 @@ container.
   annoying to wait until runtime to see a syntax error that could have
   been caught on function upload.
 
+* Starting a Pod without knowing the functions has its limitations: we
+  can't set CPU/memory limits, we can't mount volumes (persistent
+  volumes, secrets, configmaps).  We also can't change the namespace
+  the Pod is in.
+
 * Not great for a large code base
 
 * Some people want to operate at the image level but still get the
@@ -156,7 +161,8 @@ So a NodeJS function manifest could contain a reference to
 package.json.  A "builder" container in the NodeJS environment would
 then run npm on that function.
 
-```     $ cat func.yaml
+```
+	$ cat func.yaml
         type: Function
         metadata: ...
         environment: ...
