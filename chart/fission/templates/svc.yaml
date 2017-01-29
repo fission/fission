@@ -5,6 +5,7 @@ metadata:
   namespace: fission
   labels:
     svc: router
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   type: {{ .Values.serviceType }}
   ports:
@@ -22,6 +23,7 @@ metadata:
   namespace: fission
   labels:
     svc: controller
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   type: {{ .Values.serviceType }}
   ports:

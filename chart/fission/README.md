@@ -10,10 +10,10 @@
 
 ## Installing the chart
 
-To install chart,
+To install the chart with the release name `my-release`,
 
 ```bash
-$ helm install fission
+$ helm install --name my-release ./fission
 ```
 
 ## Uninstalling the chart
@@ -21,7 +21,7 @@ $ helm install fission
 To uninstall/delete chart,
 
 ```bash
-$ helm delete fission
+$ helm delete my-release
 ```
 
 ## Configuration

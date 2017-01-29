@@ -4,6 +4,7 @@ metadata:
   name: fission
   labels:
     name: fission
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 
 ---
 apiVersion: v1
@@ -12,6 +13,7 @@ metadata:
   name: fission-function
   labels:
     name: fission-function
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 
 ---
 apiVersion: extensions/v1beta1
@@ -38,6 +40,8 @@ kind: Deployment
 metadata:
   name: router
   namespace: fission
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   template:
@@ -59,6 +63,7 @@ metadata:
   namespace: fission
   labels:
     svc: poolmgr
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   ports:
   - port: 80
@@ -72,6 +77,8 @@ kind: Deployment
 metadata:
   name: poolmgr
   namespace: fission
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   template:
@@ -91,6 +98,8 @@ kind: Deployment
 metadata:
   name: kubewatcher
   namespace: fission
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   template:
@@ -112,6 +121,7 @@ metadata:
   namespace: fission
   labels:
     svc: etcd
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   ports:
   - port: 2379
@@ -125,6 +135,8 @@ kind: Deployment
 metadata:
   name: etcd
   namespace: fission
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   template:
