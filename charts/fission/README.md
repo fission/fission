@@ -45,7 +45,7 @@ $ helm install --name my-release \
 
 Default values.yml can also ignored with custom file.
 ```bash
-$ helm install --name my-release -f values.yaml stable/postgresql
+$ helm install --name my-release -f values.yaml fission
 ```
 
 For reference check [values.yaml](values.yaml).
