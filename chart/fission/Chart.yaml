@@ -1,0 +1,12 @@
+apiVersion: v1
+name: fission
+version: 0.1.0
+description: A Helm chart for Fission. Fission is a fast serverless framework for Kubernetes.
+keywords:
+- fission
+- serverless
+home: http://fission.io/
+maintainers:
+  - name: Sanket Sudake
+    email: sanketsudake@gmail.com
+engine: gotpl
