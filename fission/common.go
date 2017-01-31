@@ -35,7 +35,12 @@ func getClient(serverUrl string) *client.Client {
 		fatal("Need --server or FISSION_URL set to your fission server.")
 	}
 
-	serverUrl = "http://" + strings.TrimPrefix(serverUrl, "http://")
+	isHttps := strings.Index(serverUrl, "https://") == 0
+	isHttp := strings.Index(serverUrl, "http://") == 0
+
+	if !isHttp && !isHttps {
+		serverUrl = "http://" + serverUrl
+	}
 
 	return client.MakeClient(serverUrl)
 }
