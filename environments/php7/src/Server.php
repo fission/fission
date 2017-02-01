@@ -12,8 +12,12 @@ class Server {
     private $server;
 
     public function __construct(){
-        $codepath = '/app/usercode.php';
-        //$codepath = '/userfunc/user';
+        $codepath = '/userfunc/user';
+
+        //if i have a local function i use it
+        $devcodepath = '/app/userfuncdev.php';
+        if(file_exists($devcodepath))
+            $codepath = $devcodepath;
 
         $logger = new Logger("Function");
         $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
