@@ -12,8 +12,8 @@ class Server {
     private $server;
 
     public function __construct(){
-        //$codepath = '/app/usercode.php';
-        $codepath = '/userfunc/user';
+        $codepath = '/app/usercode.php';
+        //$codepath = '/userfunc/user';
 
         $logger = new Logger("Function");
         $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
