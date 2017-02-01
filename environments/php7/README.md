@@ -20,11 +20,11 @@ A few common extensions are included :
 - pgsql
 - SimpleXML
 - xmlrpc
+- zip
 
 ## Customizing this image
 
-To add other extensions you need to edit the Dockerfile and rebuild this image (instructions below).
-
+To add other extensions or packages(composer.json) you need to edit the Dockerfile and rebuild this image (instructions below).
 
 ## Rebuilding and pushing the image
 
