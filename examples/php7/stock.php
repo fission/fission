@@ -9,7 +9,14 @@ function sendError($response,$message){
     return $response;
 }
 
-function handler(ServerRequestInterface $request, ResponseInterface $response,LoggerInterface $logger){
+function handler($context){
+    /** @var ResponseInterface $response */
+    $response = $context["response"];
+    /** @var ServerRequestInterface $request */
+    $request = $context["request"];
+    /** @var LoggerInterface $logger */
+    $logger = $context["logger"];
+    
     $logger->debug("Request : ",$request->getParsedBody());
     if($request->getMethod() != "POST")
         return sendError($response,"You must use POST method");

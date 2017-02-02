@@ -41,7 +41,7 @@ class Server {
                     //If the function as an handler class it will be called with request, response and logger
                     if(function_exists("handler")){
                         ob_end_clean();
-                        return handler($request, $response,$logger);
+                        return handler(array("request"=>$request, "response"=>$response,"logger"=>$logger));
                     }
                     //php code didn't have handler function, i will return the content
                     $bodyRowContent = ob_get_contents();
