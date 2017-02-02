@@ -23,7 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/satori/go.uuid"
@@ -32,12 +32,11 @@ import (
 	"github.com/fission/fission"
 )
 
-func _fnFetchCode(filePath string) []byte {
+func fnFetchCode(filePath string) []byte {
 	var code []byte
 	var err error
 
-	isURL, _ := regexp.MatchString("\\Ahttp(s|)://", filePath)
-	if isURL {
+	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
 		var resp *http.Response
 		resp, err = http.Get(filePath)
 		if err != nil {
@@ -81,7 +80,7 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --code argument.")
 	}
 
-	code := _fnFetchCode(fileName)
+	code := fnFetchCode(fileName)
 
 	function := &fission.Function{
 		Metadata:    fission.Metadata{Name: fnName},
@@ -171,7 +170,7 @@ func fnUpdate(c *cli.Context) error {
 
 	fileName := c.String("code")
 	if len(fileName) > 0 {
-		code := _fnFetchCode(fileName)
+		code := fnFetchCode(fileName)
 
 		function.Code = string(code)
 	}
