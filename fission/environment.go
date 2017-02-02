@@ -30,7 +30,14 @@ func envCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	envName := c.String("name")
+	if len(envName) == 0 {
+		fatal("Need a name, use --name.")
+	}
+
 	envImg := c.String("image")
+	if len(envImg) == 0 {
+		fatal("Need an image, use --image.")
+	}
 
 	env := &fission.Environment{
 		Metadata: fission.Metadata{
@@ -50,6 +57,10 @@ func envGet(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	envName := c.String("name")
+	if len(envName) == 0 {
+		fatal("Need a name, use --name.")
+	}
+
 	m := &fission.Metadata{Name: envName}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
@@ -66,12 +77,20 @@ func envUpdate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	envName := c.String("name")
-	image := c.String("image")
+	if len(envName) == 0 {
+		fatal("Need a name, use --name.")
+	}
+
+	envImg := c.String("image")
+	if len(envImg) == 0 {
+		fatal("Need an image, use --image.")
+	}
+
 	env := &fission.Environment{
 		Metadata: fission.Metadata{
 			Name: envName,
 		},
-		RunContainerImageUrl: image,
+		RunContainerImageUrl: envImg,
 	}
 
 	_, err := client.EnvironmentUpdate(env)
@@ -85,6 +104,10 @@ func envDelete(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	envName := c.String("name")
+	if len(envName) == 0 {
+		fatal("Need a name , use --name.")
+	}
+
 	m := &fission.Metadata{Name: envName}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")
