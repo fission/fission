@@ -17,10 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/satori/go.uuid"
@@ -28,6 +31,36 @@ import (
 
 	"github.com/fission/fission"
 )
+
+func fnFetchCode(filePath string) []byte {
+	var code []byte
+	var err error
+
+	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
+		var resp *http.Response
+		resp, err = http.Get(filePath)
+		if err != nil {
+			checkErr(err, fmt.Sprintf("download function"))
+		}
+
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+
+			err = errors.New(fmt.Sprintf("%v - HTTP response returned non 200 status",
+				resp.StatusCode))
+			checkErr(err, fmt.Sprintf("download function"))
+		}
+
+		code, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			checkErr(err, fmt.Sprintf("download function body %v", filePath))
+		}
+	} else {
+		code, err = ioutil.ReadFile(filePath)
+		checkErr(err, fmt.Sprintf("read %v", filePath))
+	}
+	return code
+}
 
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
@@ -47,8 +80,7 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --code argument.")
 	}
 
-	code, err := ioutil.ReadFile(fileName)
-	checkErr(err, fmt.Sprintf("read %v", fileName))
+	code := fnFetchCode(fileName)
 
 	function := &fission.Function{
 		Metadata:    fission.Metadata{Name: fnName},
@@ -56,7 +88,7 @@ func fnCreate(c *cli.Context) error {
 		Code:        string(code),
 	}
 
-	_, err = client.FunctionCreate(function)
+	_, err := client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -138,8 +170,7 @@ func fnUpdate(c *cli.Context) error {
 
 	fileName := c.String("code")
 	if len(fileName) > 0 {
-		code, err := ioutil.ReadFile(fileName)
-		checkErr(err, fmt.Sprintf("read %v", fileName))
+		code := fnFetchCode(fileName)
 
 		function.Code = string(code)
 	}
