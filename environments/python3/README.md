@@ -41,5 +41,5 @@ Or, if you already have an environment, you can update its image:
    fission env update --name python --image USER/python-env   
 ```
 
-After this, fission functions that have the env parmeter set to the
+After this, fission functions that have the env parameter set to the
 same environment name as this command will use this environment.
