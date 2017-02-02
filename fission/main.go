@@ -38,7 +38,7 @@ func main() {
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
-	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "file containing source code, or - for stdin"}
+	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "file containing source code, URL, or - for stdin"}
 	fnUidFlag := cli.StringFlag{Name: "uid", Usage: "function uid, optional (use latest if unspecified)"}
 	fnSubcommands := []cli.Command{
 		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, htUrlFlag, htMethodFlag}, Action: fnCreate},
