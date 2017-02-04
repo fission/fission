@@ -64,10 +64,10 @@ namespace Fission.DotNetCore
                 response.StatusCode = HttpStatusCode.InternalServerError;
                 return response;
             }
-            var args = ((DynamicDictionary)Request.Query).ToDictionary();
+            
             try
             {
-                return _userFunc.Invoke(new FissionContext(args, new Logger()));
+                return _userFunc.Invoke(FissionContext.Build(Request, new Logger()));
             }
             catch (Exception e)
             {
