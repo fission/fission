@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Nancy;
 
 namespace Fission.DotNetCore.Api
@@ -84,6 +85,15 @@ namespace Fission.DotNetCore.Api
         }
 
         public Stream Body { get { return _request.Body; } }
+
+        public string BodyAsString()
+        {
+            int length = (int)_request.Body.Length;
+            byte[] data = new byte[length];
+            _request.Body.Read(data, 0, length);
+            return Encoding.UTF8.GetString(data);
+        }
+        
         public Dictionary<string, IEnumerable<string>> Headers
         {
             get

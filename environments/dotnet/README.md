@@ -163,7 +163,7 @@ $ curl "http://$FISSION_ROUTER/add?x=30&y=12"
   42
 ```
 
-## Accessing Http request information example
+## Accessing http request information example
 
 ### Setup fission environment
 First you need to setup the fission according to your cluster setup as 
@@ -213,6 +213,60 @@ Host
 User-Agent
 	curl/7.47.0
 Url: http://fissionserver:8888, method: GET
+
+```
+
+## Accessing http request body example
+
+### Setup fission environment
+First you need to setup the fission according to your cluster setup as 
+specified here: https://github.com/fission/fission
+
+
+### Create the class to run
+
+Secondly you need to create a file /tmp/func.cs containing the following code:
+
+```
+using System.IO;
+using System.Runtime.Serialization.Json;
+using Fission.DotNetCore.Api;
+
+public class FissionFunction
+{
+    public string Execute(FissionContext context)
+    {
+        var person = Person.Deserialize(context.Request.Body);
+        return $"Hello, my name is {person.Name} and I am {person.Age} years old.";
+    }
+}
+
+public class Person
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+
+    public static Person Deserialize(Stream json)
+    {
+        var serializer = new DataContractJsonSerializer(typeof(Person));
+        return (Person)serializer.ReadObject(json);
+    }
+}
+
+``` 
+### Run the example
+
+Lastly to run the example:
+
+```
+$ fission env create --name dotnet --image fission/dotnet-env
+
+$ fission function create --name httpbody --env dotnet --code /tmp/func.cs
+
+$ fission route create --method GET --url /http_body --function httpbody
+
+$ curl -XPOST "http://$FISSION_ROUTER/http_body" -d '{ "Name":"Arthur", "Age":42}'
+Hello, my name is Arthur and I am 42 years old.
 
 ```
 
