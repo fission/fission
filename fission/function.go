@@ -141,6 +141,10 @@ func fnGetMeta(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+
 	fnUid := c.String("uid")
 	m := &fission.Metadata{Name: fnName, Uid: fnUid}
 
@@ -159,6 +163,9 @@ func fnUpdate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
 
 	function, err := client.FunctionGet(&fission.Metadata{Name: fnName})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
