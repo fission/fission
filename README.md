@@ -189,15 +189,18 @@ Compiling Fission
 just deploying Fission, use fission.yaml which points to prebuilt
 images.]
 
-You'll need go installed, along with the glide dependecy management
-tool.  You'll also need docker for building images.
+You'll need go installed, along with the [glide dependency management
+tool](https://github.com/Masterminds/glide#install).
+You'll also need docker for building images.
 
 The server side is compiled as one binary ("fission-bundle") which
 contains controller, poolmgr and router; it invokes the right one
 based on command-line arguments.
 
 To build fission-bundle: clone this repo, then from the top level
-directory:
+directory (if you want to build the image with the docker inside
+minikube, you'll need to set the proper environment variables with
+`eval $(minikube docker-env)`):
 
 ```
   # Get dependencies
@@ -207,7 +210,8 @@ directory:
   $ pushd fission-bundle
   $ ./build.sh
 
-  # Edit push.sh to point to your registry
+  # Edit push.sh to point to your registry, or comment out the `docker push`
+  # line if building into your local minikube for dev purposes
   $ $EDITOR push.sh
   $ ./push.sh
   $ popd
