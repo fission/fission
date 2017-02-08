@@ -27,16 +27,20 @@ client and invokes fission functions based on the subscriptions.
 
 A NATS Subscription is a mapping of a NATS subject to a fission function.
 
+```go
+import "github.com/fission/fission"
+
 type NATSSubscription struct {
-     fission.Metadata
-     Subject string
-     Function fission.Metadata
+     Metadata   fission.Metadata
+     Subject    string
+     Function   fission.Metadata
 }
+```
 
 A Subscriptions CRUD API will be added to the controller, client and
 CLI. So for example, user can do
 
-```
+```bash
 fission nats subscribe --subject xxx --function yyy
 fission nats unsubscribe --subject xxx --function yyy
 ```
