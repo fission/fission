@@ -165,6 +165,10 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	testTrigger.Metadata.Name = "yyy"
 	m, err = g.client.HTTPTriggerCreate(testTrigger)
+	assert(err != nil, "duplicate trigger should not be allowed")
+
+	testTrigger.UrlPattern = "/hi2"
+	m, err = g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
 	defer g.client.HTTPTriggerDelete(m)
 
