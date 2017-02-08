@@ -63,7 +63,7 @@ func (api *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, url := range triggers {
 		if url.UrlPattern == t.UrlPattern && url.Method == t.Method {
-			err = fission.MakeError(fission.ErrorResourceExists,
+			err = fission.MakeError(fission.ErrorNameExists,
 				"HTTPTrigger with same URL & method already exists")
 			api.respondWithError(w, err)
 			return

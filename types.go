@@ -84,5 +84,4 @@ const (
 	ErrorInvalidArgument
 	ErrorNoSpace
 	ErrorNotImplmented
-	ErrorResourceExists
 )
