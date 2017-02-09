@@ -80,6 +80,12 @@ app.all('/', function (req, res) {
         res.status(status).send(body);
     }
     try {
+        //
+        // Customizing the request context
+        //
+        // If you want to modify the context to add anything to it,
+        // you can do that here by adding properties to the context.
+        //
         userFunction(context, callback);
     } catch(e) {
         console.log(`Function error: ${e}`);
