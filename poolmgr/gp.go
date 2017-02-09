@@ -110,13 +110,7 @@ func MakeGenericPool(
 	if err != nil {
 		return nil, err
 	}
-
-	// wait for at least one pod to be ready
-	log.Printf("[%v] Deployment created, waiting for a ready pod", env.Metadata)
-	err = gp.waitForReadyPod()
-	if err != nil {
-		return nil, err
-	}
+	log.Printf("[%v] Deployment created", env.Metadata)
 
 	go gp.choosePodService()
 
