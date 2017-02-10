@@ -25,6 +25,9 @@ import (
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
 	"golang.org/x/net/context"
+
+	"fmt"
+	"github.com/fission/fission"
 )
 
 type (
@@ -93,7 +96,7 @@ func (rs *ResourceStore) create(r resource) error {
 
 	_, err = rs.KeysAPI.Set(context.Background(), key, string(serialized),
 		&client.SetOptions{PrevExist: client.PrevNoExist})
-	return err
+	return handleEtcdError(err)
 }
 
 func (rs *ResourceStore) read(rkey string, res resource) error {
@@ -105,7 +108,7 @@ func (rs *ResourceStore) read(rkey string, res resource) error {
 
 	resp, err := rs.KeysAPI.Get(context.Background(), key, nil)
 	if err != nil {
-		return err
+		return handleEtcdError(err)
 	}
 	return rs.serializer.deserialize([]byte(resp.Node.Value), res)
 }
@@ -123,13 +126,13 @@ func (rs *ResourceStore) update(r resource) error {
 
 	_, err = rs.KeysAPI.Set(context.Background(), key, string(serialized),
 		&client.SetOptions{PrevExist: client.PrevExist})
-	return err
+	return handleEtcdError(err)
 }
 
 func (rs *ResourceStore) delete(typename, rkey string) error {
 	key := typename + "/" + rkey
 	_, err := rs.KeysAPI.Delete(context.Background(), key, nil) // ignore response
-	return err
+	return handleEtcdError(err)
 }
 
 // getAll finds all entries under key.  If none or found or key
@@ -140,7 +143,7 @@ func (rs *ResourceStore) getAll(key string) ([]string, error) {
 		if client.IsKeyNotFound(err) {
 			return []string{}, nil
 		}
-		return nil, err
+		return nil, handleEtcdError(err)
 	}
 
 	res := make([]string, 0, len(resp.Node.Nodes))
@@ -162,7 +165,7 @@ func (rs *ResourceStore) writeFile(parentKey string, contents []byte) (string, s
 	resp, err := rs.KeysAPI.CreateInOrder(context.Background(), parentKey, uid, nil)
 	if err != nil {
 		_ = rs.FileStore.delete(uid)
-		return "", "", err
+		return "", "", handleEtcdError(err)
 	}
 
 	return resp.Node.Key, uid, nil
@@ -172,7 +175,7 @@ func (rs *ResourceStore) readFile(key string, uid *string) ([]byte, error) {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return nil, err
+		return nil, handleEtcdError(err)
 	}
 
 	if uid == nil {
@@ -194,14 +197,14 @@ func (rs *ResourceStore) readFile(key string, uid *string) ([]byte, error) {
 	}
 
 	contents, err := rs.FileStore.read(*uid)
-	return contents, err
+	return contents, handleEtcdError(err)
 }
 
 func (rs *ResourceStore) deleteFile(key string, uid string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return err
+		return handleEtcdError(err)
 	}
 
 	var node *client.Node
@@ -222,12 +225,12 @@ func (rs *ResourceStore) deleteFile(key string, uid string) error {
 
 	_, err = rs.KeysAPI.Delete(context.Background(), node.Key, nil)
 	if err != nil {
-		return err
+		return handleEtcdError(err)
 	}
 
 	if len(resp.Node.Nodes) == 1 {
 		_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
-		return err
+		return handleEtcdError(err)
 	}
 	return nil
 }
@@ -236,7 +239,7 @@ func (rs *ResourceStore) deleteAllFiles(key string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return err
+		return handleEtcdError(err)
 	}
 	for _, u := range resp.Node.Nodes {
 		err = rs.FileStore.delete(u.Value)
@@ -246,9 +249,26 @@ func (rs *ResourceStore) deleteAllFiles(key string) error {
 
 		_, err = rs.KeysAPI.Delete(context.Background(), u.Key, nil)
 		if err != nil {
-			return err
+			return handleEtcdError(err)
 		}
 	}
 	_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
-	return err
+	return handleEtcdError(err)
+}
+
+func handleEtcdError(e error) error {
+	ee, ok := e.(client.Error)
+	if !ok {
+		return e
+	}
+	code := fission.ErrorInternal
+	msg := ee.Error()
+
+	//TODO: handle any other etcd error codes we care about
+	switch ee.Code {
+	case client.ErrorCodeNodeExist:
+		code = fission.ErrorNameExists
+		msg = fmt.Sprintf("%v (%v)", ee.Message, ee.Cause)
+	}
+	return fission.MakeError(code, msg)
 }

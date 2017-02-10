@@ -36,6 +36,13 @@ var g struct {
 	client *client.Client
 }
 
+func assertNameReuseFails(err error, name string) {
+	assert(err != nil, "recreating "+name+" with same name must fail")
+	fe, ok := err.(fission.Error)
+	assert(ok, "error must be a fission Error")
+	assert(fe.Code == fission.ErrorNameExists, "error must be a name exists error")
+}
+
 func TestFunctionApi(t *testing.T) {
 	log.SetFormatter(&log.TextFormatter{DisableColors: true})
 
@@ -55,6 +62,9 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 	uid1 := m.Uid
 	//log.Printf("Created function %v: %v", m.Name, m.Uid)
+
+	_, err = g.client.FunctionCreate(testFunc)
+	assertNameReuseFails(err, "function")
 
 	code, err := g.client.FunctionGetRaw(m)
 	panicIf(err)
@@ -123,6 +133,9 @@ func TestHTTPTriggerApi(t *testing.T) {
 	panicIf(err)
 	defer g.client.HTTPTriggerDelete(m)
 
+	_, err = g.client.HTTPTriggerCreate(testTrigger)
+	assertNameReuseFails(err, "trigger")
+
 	tr, err := g.client.HTTPTriggerGet(m)
 	panicIf(err)
 	testTrigger.Metadata.Uid = m.Uid
@@ -159,6 +172,9 @@ func TestEnvironmentApi(t *testing.T) {
 	m, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
 	defer g.client.EnvironmentDelete(m)
+
+	_, err = g.client.EnvironmentCreate(testEnv)
+	assertNameReuseFails(err, "environment")
 
 	tr, err := g.client.EnvironmentGet(m)
 	panicIf(err)
@@ -204,6 +220,9 @@ func TestWatchApi(t *testing.T) {
 	m, err := g.client.WatchCreate(testWatch)
 	panicIf(err)
 	defer g.client.WatchDelete(m)
+
+	_, err = g.client.WatchCreate(testWatch)
+	assertNameReuseFails(err, "watch")
 
 	w, err := g.client.WatchGet(m)
 	panicIf(err)
