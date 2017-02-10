@@ -1,4 +1,6 @@
 *~
+vendor/
+fission-bundle/fission-bundle
 
 # Pycharm IDE
 .idea
