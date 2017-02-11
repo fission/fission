@@ -86,6 +86,9 @@ func (fs *FileStore) fileStoreService() {
 			response.error = ioutil.WriteFile(path.Join(fs.root, req.fileName), req.fileContents, 0600)
 		case DELETE:
 			response.error = os.Remove(path.Join(fs.root, req.fileName))
+			if os.IsNotExist(response.error) {
+				response.error = nil
+			}
 		default:
 			log.Panic("bad request")
 		}
