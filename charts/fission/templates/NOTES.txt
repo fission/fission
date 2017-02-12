@@ -16,7 +16,7 @@ FISSION_URL should be prefixed with a http://. (FISSION_ROUTER is only needed fo
 
 {{- else if contains "LoadBalancer" .Values.serviceType }}
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-        You can watch the status of by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fisssion get svc -w router'
+        You can watch the status of by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fission get svc -w router'
 
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
