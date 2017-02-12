@@ -1,7 +1,10 @@
-*~
-vendor/
 fission-bundle/fission-bundle
-
 # Pycharm IDE
 .idea
 environments/php7/vendor/
+
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*~
