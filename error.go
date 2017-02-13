@@ -18,7 +18,9 @@ package fission
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 func (e Error) Error() string {
@@ -36,29 +38,39 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 
 	var errCode int
 	switch resp.StatusCode {
+	case 400:
+		errCode = ErrorInvalidArgument
 	case 403:
 		errCode = ErrorNotAuthorized
 	case 404:
 		errCode = ErrorNotFound
-	case 400:
-		errCode = ErrorInvalidArgument
+	case 409:
+		errCode = ErrorNameExists
 	default:
 		errCode = ErrorInternal
 	}
-	return MakeError(errCode, resp.Status)
+
+	msg := resp.Status
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err == nil && len(body) > 0 {
+		msg = strings.TrimSpace(string(body))
+	}
+
+	return MakeError(errCode, msg)
 }
 
 func (err Error) HTTPStatus() int {
 	var code int
 	switch err.Code {
-	case ErrorNotFound:
-		code = 404
 	case ErrorInvalidArgument:
 		code = 400
-	case ErrorNoSpace:
-		code = 500
 	case ErrorNotAuthorized:
 		code = 403
+	case ErrorNotFound:
+		code = 404
+	case ErrorNameExists:
+		code = 409
 	default:
 		code = 500
 	}
@@ -70,8 +82,8 @@ func GetHTTPError(err error) (int, string) {
 	var code int
 	fe, ok := err.(Error)
 	if ok {
-		msg = fe.Message
 		code = fe.HTTPStatus()
+		msg = fe.Message
 	} else {
 		code = 500
 		msg = err.Error()

@@ -80,19 +80,7 @@ func (c *Client) url(relativeUrl string) string {
 
 func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode != 200 {
-		var errCode int
-		switch resp.StatusCode {
-		case 403:
-			errCode = fission.ErrorNotAuthorized
-		case 404:
-			errCode = fission.ErrorNotFound
-		case 400:
-			errCode = fission.ErrorInvalidArgument
-		default:
-			errCode = fission.ErrorInternal
-		}
-		return nil, fission.MakeError(errCode,
-			fmt.Sprintf("HTTP error %v", resp.StatusCode))
+		return nil, fission.MakeErrorFromHTTP(resp)
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	return body, err
