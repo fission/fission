@@ -263,12 +263,16 @@ func handleEtcdError(e error) error {
 	}
 	code := fission.ErrorInternal
 	msg := ee.Error()
+	simpleMsg := fmt.Sprintf("%v (%v)", ee.Message, ee.Cause)
 
 	//TODO: handle any other etcd error codes we care about
 	switch ee.Code {
 	case client.ErrorCodeNodeExist:
 		code = fission.ErrorNameExists
-		msg = fmt.Sprintf("%v (%v)", ee.Message, ee.Cause)
+		msg = simpleMsg
+	case client.ErrorCodeKeyNotFound:
+		code = fission.ErrorNotFound
+		msg = simpleMsg
 	}
 	return fission.MakeError(code, msg)
 }
