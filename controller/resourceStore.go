@@ -18,7 +18,9 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -26,7 +28,6 @@ import (
 	"github.com/satori/go.uuid"
 	"golang.org/x/net/context"
 
-	"fmt"
 	"github.com/fission/fission"
 )
 
@@ -96,7 +97,7 @@ func (rs *ResourceStore) create(r resource) error {
 
 	_, err = rs.KeysAPI.Set(context.Background(), key, string(serialized),
 		&client.SetOptions{PrevExist: client.PrevNoExist})
-	return handleEtcdError(err)
+	return handleEtcdErrorForResource(err, r)
 }
 
 func (rs *ResourceStore) read(rkey string, res resource) error {
@@ -108,7 +109,7 @@ func (rs *ResourceStore) read(rkey string, res resource) error {
 
 	resp, err := rs.KeysAPI.Get(context.Background(), key, nil)
 	if err != nil {
-		return handleEtcdError(err)
+		return handleEtcdError(err, typName, rkey)
 	}
 	return rs.serializer.deserialize([]byte(resp.Node.Value), res)
 }
@@ -126,13 +127,13 @@ func (rs *ResourceStore) update(r resource) error {
 
 	_, err = rs.KeysAPI.Set(context.Background(), key, string(serialized),
 		&client.SetOptions{PrevExist: client.PrevExist})
-	return handleEtcdError(err)
+	return handleEtcdErrorForResource(err, r)
 }
 
 func (rs *ResourceStore) delete(typename, rkey string) error {
 	key := typename + "/" + rkey
 	_, err := rs.KeysAPI.Delete(context.Background(), key, nil) // ignore response
-	return handleEtcdError(err)
+	return handleEtcdError(err, typename, rkey)
 }
 
 // getAll finds all entries under key.  If none or found or key
@@ -143,7 +144,7 @@ func (rs *ResourceStore) getAll(key string) ([]string, error) {
 		if client.IsKeyNotFound(err) {
 			return []string{}, nil
 		}
-		return nil, handleEtcdError(err)
+		return nil, handleEtcdError(err, "", key)
 	}
 
 	res := make([]string, 0, len(resp.Node.Nodes))
@@ -165,7 +166,7 @@ func (rs *ResourceStore) writeFile(parentKey string, contents []byte) (string, s
 	resp, err := rs.KeysAPI.CreateInOrder(context.Background(), parentKey, uid, nil)
 	if err != nil {
 		_ = rs.FileStore.delete(uid)
-		return "", "", handleEtcdError(err)
+		return "", "", handleEtcdError(err, "file", parentKey)
 	}
 
 	return resp.Node.Key, uid, nil
@@ -175,7 +176,7 @@ func (rs *ResourceStore) readFile(key string, uid *string) ([]byte, error) {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return nil, handleEtcdError(err)
+		return nil, handleEtcdError(err, "file", key)
 	}
 
 	if uid == nil {
@@ -197,14 +198,14 @@ func (rs *ResourceStore) readFile(key string, uid *string) ([]byte, error) {
 	}
 
 	contents, err := rs.FileStore.read(*uid)
-	return contents, handleEtcdError(err)
+	return contents, err
 }
 
 func (rs *ResourceStore) deleteFile(key string, uid string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return handleEtcdError(err)
+		return handleEtcdError(err, "file", key)
 	}
 
 	var node *client.Node
@@ -225,12 +226,12 @@ func (rs *ResourceStore) deleteFile(key string, uid string) error {
 
 	_, err = rs.KeysAPI.Delete(context.Background(), node.Key, nil)
 	if err != nil {
-		return handleEtcdError(err)
+		return handleEtcdError(err, "", node.Key)
 	}
 
 	if len(resp.Node.Nodes) == 1 {
 		_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
-		return handleEtcdError(err)
+		return handleEtcdError(err, "file", key)
 	}
 	return nil
 }
@@ -239,7 +240,7 @@ func (rs *ResourceStore) deleteAllFiles(key string) error {
 	key = "file/" + key
 	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Sort: true})
 	if err != nil {
-		return handleEtcdError(err)
+		return handleEtcdError(err, "file", key)
 	}
 	for _, u := range resp.Node.Nodes {
 		err = rs.FileStore.delete(u.Value)
@@ -249,30 +250,38 @@ func (rs *ResourceStore) deleteAllFiles(key string) error {
 
 		_, err = rs.KeysAPI.Delete(context.Background(), u.Key, nil)
 		if err != nil {
-			return handleEtcdError(err)
+			return handleEtcdError(err, "", u.Key)
 		}
 	}
 	_, err = rs.KeysAPI.Delete(context.Background(), key, &client.DeleteOptions{Dir: true})
-	return handleEtcdError(err)
+	return handleEtcdError(err, "file", key)
 }
 
-func handleEtcdError(e error) error {
+func handleEtcdErrorForResource(e error, r resource) error {
+	resourceType, _ := getTypeName(r)
+	return handleEtcdError(e, resourceType, r.Key())
+}
+
+func handleEtcdError(e error, resourceType string, resourceKey string) error {
 	ee, ok := e.(client.Error)
 	if !ok {
 		return e
 	}
 	code := fission.ErrorInternal
 	msg := ee.Error()
-	simpleMsg := fmt.Sprintf("%v (%v)", ee.Message, ee.Cause)
+
+	if len(resourceType) > 0 {
+		resourceType = strings.ToLower(resourceType) + " "
+	}
 
 	//TODO: handle any other etcd error codes we care about
 	switch ee.Code {
 	case client.ErrorCodeNodeExist:
 		code = fission.ErrorNameExists
-		msg = simpleMsg
+		msg = fmt.Sprintf("%s'%s' already exists", resourceType, resourceKey)
 	case client.ErrorCodeKeyNotFound:
 		code = fission.ErrorNotFound
-		msg = simpleMsg
+		msg = fmt.Sprintf("%s'%s' does not exist", resourceType, resourceKey)
 	}
 	return fission.MakeError(code, msg)
 }
