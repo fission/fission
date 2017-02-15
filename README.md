@@ -63,7 +63,7 @@ Usage
   $ fission env create --name nodejs --image fission/node-env
 
   # A javascript one-liner that prints "hello world"
-  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
+  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\\n"); }' > hello.js  
 
   # Upload your function code to fission
   $ fission function create --name hello --env nodejs --code hello.js
@@ -172,7 +172,7 @@ Finally, you're ready to use Fission!
 ```
   $ fission env create --name nodejs --image fission/node-env
 
-  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
+  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\\n"); }' > hello.js  
 
   $ fission function create --name hello --env nodejs --code hello.js
   
