@@ -3,22 +3,21 @@
 # 
 
 ## Kubernetes configuration
-## For minikube, set this to NodePort, elsewhere use LoadBalancer
-##
+## For minikube, set this to NodePort, elsewhere use LoadBalancer.
 serviceType: LoadBalancer
 
 ## Fission image repostiroy
 image: fission/fission-bundle
+
 ## Fission image version
 imageTag: alpha20170124
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
-## Port at which Fission controller service should be exposed
+
+## Port at which Fission router service should be exposed
 routerPort: 31314
 
-## Namespace in which to run fission deployments and services
-fissionNamespace: fission
-
-## Namespace in which to run fission functions
+## Namespace in which to run fission functions (this is different from
+## the release namespace)
 fissionFunctionNamespace: fission-function

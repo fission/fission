@@ -35,7 +35,6 @@ The following table lists the configurable parameters of the Fission chart and t
 | `imageTag`          | Fission image tag                          | `alpha20170124`          |
 | `controllerPort`    | Fission Controller Service Port            | `31313`                  |
 | `routerPort`        | Fission Router Service Port                | `31314`                  |
-| `namespace`         | Namespace for Fission deployments/services | `fission`                |
 | `functionNamespace` | Namespace for Fission functions            | `fission-function`       |
 
 
