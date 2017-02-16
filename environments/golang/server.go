@@ -18,11 +18,21 @@ func loadPlugin() http.HandlerFunc {
 	if err != nil {
 		panic(err)
 	}
-	sym, err := p.Lookup("HandlerFunc")
+	sym, err := p.Lookup("Handler")
 	if err != nil {
-		panic("Entry point missing: func HandlerFunc(w http.ResponseWriter, r *http.Request)")
+		panic("Entry point not found")
 	}
-	return sym.(func(http.ResponseWriter, *http.Request))
+
+	switch h := sym.(type) {
+	case *http.Handler:
+		return (*h).ServeHTTP
+	case *http.HandlerFunc:
+		return *h
+	case func(http.ResponseWriter, *http.Request):
+		return h
+	default:
+		panic("Entry point not found")
+	}
 }
 
 func specializeHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +53,7 @@ func specializeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Printf("Specializing... ")
+	fmt.Println("Specializing... ")
 	userFunc = loadPlugin()
 	fmt.Println("Done")
 }
@@ -61,6 +71,6 @@ func main() {
 		userFunc(w, r)
 	})
 
-	fmt.Println("Listening on :8888 ...")
+	fmt.Println("Listening on 8888 ...")
 	http.ListenAndServe(":8888", nil)
 }
