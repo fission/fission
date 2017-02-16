@@ -72,6 +72,7 @@ type (
 		Code    errorCode `json:"code"`
 		Message string    `json:"message"`
 	}
+
 	errorCode int
 )
 
@@ -85,3 +86,14 @@ const (
 	ErrorNoSpace
 	ErrorNotImplmented
 )
+
+// must match order and len of the above const
+var errorDescriptions = []string{
+	"Internal error",
+	"Not authorized",
+	"Resource not found",
+	"Resource exists",
+	"Invalid argument",
+	"No space",
+	"Not implemented",
+}
