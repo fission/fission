@@ -62,6 +62,9 @@ func MakeFileStore(path string) *FileStore {
 				return nil
 			}
 			log.Printf("Created directory %v", path)
+		} else {
+			log.Printf("Unknown error initializing filestore: %v", err)
+			return nil
 		}
 	}
 
