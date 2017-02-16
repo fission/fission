@@ -16,3 +16,9 @@ imageTag: alpha20170124
 controllerPort: 31313
 ## Port at which Fission controller service should be exposed
 routerPort: 31314
+
+## Namespace in which to run fission deployments and services
+fissionNamespace: fission
+
+## Namespace in which to run fission functions
+fissionFunctionNamespace: fission-function

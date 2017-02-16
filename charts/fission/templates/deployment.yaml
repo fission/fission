@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: fission
+  name: {{ .Values.namespace }}
   labels:
     name: fission
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -10,7 +10,7 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: fission-function
+  name: {{ .Values.functionNamespace }}
   labels:
     name: fission-function
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -20,7 +20,9 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: controller
-  namespace: fission
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   template:
@@ -39,7 +41,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: router
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
@@ -60,7 +62,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: poolmgr
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     svc: poolmgr
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -76,7 +78,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: poolmgr
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
@@ -90,14 +92,14 @@ spec:
       - name: poolmgr
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
-        args: ["--poolmgrPort", "8888"]
+        args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
 
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: kubewatcher
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
@@ -118,7 +120,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: etcd
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     svc: etcd
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -134,7 +136,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: etcd
-  namespace: fission
+  namespace: {{ .Values.namespace }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
