@@ -101,7 +101,7 @@ Finally, you're ready to use Fission!
 ```
   $ fission env create --name nodejs --image fission/node-env
 
-  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
+  $ curl https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js > hello.js
 
   $ fission function create --name hello --env nodejs --code hello.js
   
