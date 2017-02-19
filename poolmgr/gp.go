@@ -265,6 +265,18 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
+	logRequest := fmt.Sprintf("{\"namespace\":\"%s\",\"pod\":\"%s\",\"container\":\"%s\",\"funcuid\":\"%s\"}", pod.Namespace, pod.Name, gp.env.Metadata.Name, metadata.Uid)
+	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Spec.NodeName)
+	resp, err = http.Post(loggerUrl, "application/json", bytes.NewReader([]byte(logRequest)))
+	if err != nil && resp.StatusCode != 200 {
+		// Failed
+		resp.Body.Close()
+		if err == nil {
+			return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
+		}
+		return nil
+	}
+
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
 	specializeUrl := fmt.Sprintf("http://%v:8888/specialize", podIP)
@@ -488,6 +500,20 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 	if !deleted {
 		log.Printf("Not deleting %v, in use", podName)
 		return nil
+	}
+
+	pod, err := gp.kubernetesClient.Core().Pods(gp.namespace).Get(podName)
+	if err != nil {
+		return err
+	}
+	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
+	req, err := http.NewRequest("DELETE", loggerUrl, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		if err == nil {
+			return errors.New(fmt.Sprintf("Error from daemon logger: %v", resp.Status))
+		}
+		return err
 	}
 
 	// delete pod

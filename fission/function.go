@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -24,11 +26,12 @@ import (
 	"os/exec"
 	"strings"
 	"text/tabwriter"
-
-	"github.com/satori/go.uuid"
-	"github.com/urfave/cli"
+	"time"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/fission/logdb"
+	"github.com/satori/go.uuid"
+	"github.com/urfave/cli"
 )
 
 func fnFetchCode(filePath string) []byte {
@@ -275,4 +278,136 @@ func fnEdit(c *cli.Context) error {
 
 	fmt.Printf("function %v updated, new uuid: %v\n", newfn.Name, newfn.Uid)
 	return nil
+}
+
+func fnLogs(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+
+	dbHost := c.String("dbhost")
+	if len(dbHost) == 0 {
+		fatal("Need host address of log database, use --dbhost")
+	}
+
+	dbType := c.String("dbtype")
+	if len(dbType) == 0 {
+		dbType = logdb.INFLUXDB
+	}
+
+	fnPod := c.String("pod")
+	m := &fission.Metadata{Name: fnName}
+
+	f, err := client.FunctionGet(m)
+	checkErr(err, "get function")
+
+	auth := logdb.DBConfig{
+		DBType:   dbType,
+		Endpoint: dbHost,
+		Username: c.String("username"),
+		Password: c.String("password"),
+	}
+	logDB, err := logdb.GetLogDB(auth)
+	if err != nil {
+		fatal("failed to connect log database")
+	}
+
+	requestChan := make(chan struct{})
+	responseChan := make(chan struct{})
+	ctx := context.Background()
+
+	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
+		t := time.Unix(0, 0*int64(time.Millisecond))
+		for {
+			select {
+			case <-requestChan:
+				logFilter := logdb.LogFilter{
+					Pod:      fnPod,
+					Function: f.Metadata.Name,
+					FuncUid:  f.Metadata.Uid,
+					Since:    t,
+				}
+				logEntries, err := logDB.GetLogs(logFilter)
+				if err != nil {
+					fatal("failed to query logs")
+				}
+				for _, logEntry := range logEntries {
+					if c.Bool("d") {
+						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s---\n",
+							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
+					} else {
+						fmt.Printf("[%s] %s", logEntry.Timestamp, logEntry.Message)
+					}
+					t = logEntry.Timestamp
+				}
+				responseChan <- struct{}{}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}(ctx, requestChan, responseChan)
+	for {
+		select {
+		case <-time.After(1 * time.Second):
+			requestChan <- struct{}{}
+			<-responseChan
+		}
+		if !c.Bool("f") {
+			ctx.Done()
+			return nil
+		}
+	}
+}
+
+func fnPods(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+
+	dbHost := c.String("dbhost")
+	if len(dbHost) == 0 {
+		fatal("Need host address of log database, use --dbhost")
+	}
+
+	dbType := c.String("dbtype")
+	if len(dbType) == 0 {
+		dbType = logdb.INFLUXDB
+	}
+
+	m := &fission.Metadata{Name: fnName}
+
+	f, err := client.FunctionGet(m)
+	checkErr(err, "get function")
+
+	auth := logdb.DBConfig{
+		DBType:   dbType,
+		Endpoint: dbHost,
+		Username: c.String("username"),
+		Password: c.String("password"),
+	}
+	logDB, err := logdb.GetLogDB(auth)
+	if err != nil {
+		fatal("failed to connect log database")
+	}
+
+	logFilter := logdb.LogFilter{
+		Function: f.Metadata.Name,
+		FuncUid:  f.Metadata.Uid,
+	}
+	pods, err := logDB.GetPods(logFilter)
+	if err != nil {
+		fatal("failed to get pods of function")
+		return err
+	}
+	for _, pod := range pods {
+		fmt.Println(pod)
+	}
+
+	return err
 }

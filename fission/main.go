@@ -41,6 +41,13 @@ func main() {
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for source code"}
 	fnPackageFlag := cli.StringFlag{Name: "package", Usage: "local path or URL for binary package"}
 	fnUidFlag := cli.StringFlag{Name: "uid", Usage: "function uid, optional (use latest if unspecified)"}
+	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
+	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
+	fnDetailFlag := cli.BoolFlag{Name: "detail, d", Usage: "display detailed information"}
+	fnLogDBHostFlag := cli.StringFlag{Name: "dbhost", Usage: "log database host to connect to"}
+	fnLogDBTypeFlag := cli.StringFlag{Name: "dbtype", Usage: "log database type, e.g. influxdb (currently only influxdb is supported)"}
+	fnUserNameFlag := cli.StringFlag{Name: "username, u", Usage: "username for connecting log database"}
+	fnPasswordFlag := cli.StringFlag{Name: "password, p", Usage: "password for connecting log database"}
 	fnSubcommands := []cli.Command{
 		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, htUrlFlag, htMethodFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag, fnUidFlag}, Action: fnGet},
@@ -49,6 +56,8 @@ func main() {
 		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag}, Action: fnUpdate},
 		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag, fnUidFlag}, Action: fnDelete},
 		{Name: "list", Usage: "List all functions", Flags: []cli.Flag{}, Action: fnList},
+		{Name: "logs", Usage: "Display funtion logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBHostFlag, fnLogDBTypeFlag, fnUserNameFlag, fnPasswordFlag}, Action: fnLogs},
+		{Name: "pods", Usage: "Display funtion pods", Flags: []cli.Flag{fnNameFlag, fnLogDBHostFlag, fnLogDBTypeFlag, fnUserNameFlag, fnPasswordFlag}, Action: fnPods},
 	}
 
 	// httptriggers

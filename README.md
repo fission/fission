@@ -182,6 +182,45 @@ Finally, you're ready to use Fission!
   Hello, world!
 ```
 
+### Enable persistent function logs (Optional)
+
+Build fluentd docker image
+
+```
+  $ cd $GOPATH/src/github.com/fission/fission/environments/fluentd
+  $ ./build.sh
+```
+
+Build logger docker image
+
+```
+  $ cd $GOPATH/src/github.com/fission/fission/environments/logger
+  $ ./build.sh
+```
+
+Create Kubernetes service
+
+```
+  $ cd $GOPATH/src/github.com/fission/fission/environments/logger
+  $ vim daemonset-logger.yaml # replace information in yaml file
+  $ kubectl apply -f daemonset-logger.yaml
+```
+
+Display function logs
+
+```
+  # Currently only influxDB is supported, use --help to see more options
+  $ fission function logs --name hello --dbhost http://<ip>:8086
+```
+
+Display function logs from specific pod
+
+```
+  # Currently only influxDB is supported, use --help to see more options
+  $ fission function pods --name hello --dbhost http://<ip>:8086
+  $ fission function logs --name hello --dbhost http://<ip>:8086 --pod <pod>
+```
+
 Compiling Fission
 =================
 

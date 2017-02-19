@@ -29,3 +29,7 @@ import:
   - 1.5/pkg/labels
   - 1.5/pkg/util/intstr
   - 1.5/rest
+- package: github.com/influxdata/influxdb
+  version: v1.2.0
+  subpackages:
+  - client/v2

@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: fission
+spec:
+  ports:
+  - name: "8086"
+    port: 8086
+    targetPort: 8086
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: influxdb
+  namespace: fission
+subsets:
+  - addresses:
+    - ip: replace.influxdb.host.here
+    ports:
+    - name: "8086"
+      port: 8086
+      protocol: TCP
+
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  namespace: fission
+  name: fission-logger
+  labels:
+    tier: monitoring
+    app: fission-logger
+    version: v1
+spec:
+  template:
+    metadata:
+      labels:
+        name: fission-logger
+    spec:
+      containers:
+        - image: fission-logger
+          imagePullPolicy: IfNotPresent
+          name: logger
+          command: [ "/logger"]
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: fission-log
+              mountPath: /var/log/fission
+              readOnly: false
+          ports:
+            - containerPort: 1234
+              hostPort: 1234
+              protocol: TCP
+        - image: fission-daemonset-fulentd
+          imagePullPolicy: IfNotPresent
+          name: fluentd
+          env:
+            - name: INFLUXDB_ADDRESS
+              value: influxdb
+            - name: INFLUXDB_PORT
+              value: "8086"
+            - name: INFLUXDB_DBNAME
+              value: "fissionFunctionLog"
+            - name: INFLUXDB_USERNAME
+              value: ""
+            - name: INFLUXDB_PASSWD
+              value: ""
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: fission-log
+              mountPath: /var/log/fission
+              readOnly: false
+      volumes:
+        - name: container-log
+          hostPath:
+              path: /var/log/containers
+        - name: docker-log
+          hostPath:
+              path: /var/lib/docker/containers
+        - name: fission-log
+          hostPath:
+              path: /var/log/fission
