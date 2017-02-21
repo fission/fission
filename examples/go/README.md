@@ -16,7 +16,7 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 ```
 # Build the function as a plugin
-$ go -buildmode=plugin -o hello.so hello.go
+$ go build -buildmode=plugin -o hello.so hello.go
 
 # Upload the function to fission
 $ fission function create --name hello --env go-runtime --code hello.so
