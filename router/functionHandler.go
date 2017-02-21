@@ -86,11 +86,12 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 	}
 	err := fh.poolmgr.TapService(serviceUrl)
 	if err != nil {
-		log.Printf("tap service error: %v", serviceUrl.String())
+		log.Printf("tap service error for %v: %v", serviceUrl.String(), err)
 	}
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+	reqStartTime := time.Now()
 
 	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(&fh.Function)
@@ -149,6 +150,10 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 			maxRetries:    10,
 			initalTimeout: 50 * time.Millisecond,
 		},
+	}
+	delay := time.Now().Sub(reqStartTime)
+	if delay > 100*time.Millisecond {
+		log.Printf("Request delay for %v: %v", serviceUrl, delay)
 	}
 	proxy.ServeHTTP(responseWriter, request)
 }
