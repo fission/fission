@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	CODE_PATH = "/userfunc/user"
+	CODE_PATH = "./func.so"
 )
 
 var userFunc http.HandlerFunc
@@ -23,16 +23,16 @@ func loadPlugin() http.HandlerFunc {
 		panic("Entry point not found")
 	}
 
-	switch h := sym.(type) {
-	case *http.Handler:
-		return (*h).ServeHTTP
-	case *http.HandlerFunc:
-		return *h
-	case func(http.ResponseWriter, *http.Request):
-		return h
-	default:
-		panic("Entry point not found")
-	}
+  switch h := sym.(type) {
+  case *http.Handler:
+    return (*h).ServeHTTP
+  case *http.HandlerFunc:
+    return *h
+  case func(http.ResponseWriter, *http.Request):
+    return h
+  default:
+    panic("Entry point not found")
+  }
 }
 
 func specializeHandler(w http.ResponseWriter, r *http.Request) {
