@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const process = require('process');
 const express = require('express');
 const app = express();
@@ -17,6 +18,16 @@ if (!argv.port) {
     console.log("Port defaulting to 8888");
     argv.port = 8888;
 }
+
+
+// Node resolves module paths according to a file's location. We load
+// the file from argv.codepath, but tell users to put dependencies in
+// the server's package.json; this means the function's dependencies
+// are in /usr/src/app/node_modules.  We could be smarter and have the
+// function deps in the right place in argv.codepath; but for now we
+// just symlink the function's node_modules to the server's
+// node_modules.
+fs.symlinkSync('/usr/src/app/node_modules', `${path.dirname(argv.codepath)}/node_modules`);
 
 // User function.  Starts out undefined.
 let userFunction;
