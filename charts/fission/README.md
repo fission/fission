@@ -29,7 +29,7 @@ $ helm delete my-release
 The following table lists the configurable parameters of the Fission chart and their default values.
 
 | Parameter           | Description                                | Default                  |
-|---------------------+--------------------------------------------+--------------------------|
+| ------------------- | ------------------------------------------ | ------------------------ |
 | `serviceType`       | Type of service to use                     | `LoadBalancer`.          |
 | `image`             | Fission image                              | `fission/fission-bundle` |
 | `imageTag`          | Fission image tag                          | `alpha20170124`          |
