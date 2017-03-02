@@ -8,3 +8,5 @@ environments/php7/vendor/
 *.bak
 *.tmp
 *~
+
+vendor/
