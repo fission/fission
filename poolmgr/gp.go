@@ -18,6 +18,7 @@ package poolmgr
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -37,6 +38,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/logger"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -265,17 +267,30 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
-	logRequest := fmt.Sprintf("{\"namespace\":\"%s\",\"pod\":\"%s\",\"container\":\"%s\",\"funcuid\":\"%s\"}", pod.Namespace, pod.Name, gp.env.Metadata.Name, metadata.Uid)
-	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Spec.NodeName)
-	resp, err = http.Post(loggerUrl, "application/json", bytes.NewReader([]byte(logRequest)))
-	if err != nil && resp.StatusCode != 200 {
-		// Failed
-		resp.Body.Close()
-		if err == nil {
-			return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
-		}
-		return nil
+	logReq := logger.LogRequest{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: gp.env.Metadata.Name,
+		FuncName:  metadata.Name,
+		FuncUid:   metadata.Uid,
 	}
+	reqbody, err := json.Marshal(logReq)
+	if err != nil {
+		return err
+	}
+
+	go func(pod *v1.Pod) {
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Spec.NodeName)
+		resp, err = http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
+		if err != nil {
+			log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
+		} else {
+			if resp.StatusCode != 200 {
+				log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
+			}
+			resp.Body.Close()
+		}
+	}(pod)
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
@@ -506,14 +521,17 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 	if err != nil {
 		return err
 	}
+
 	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
 	req, err := http.NewRequest("DELETE", loggerUrl, nil)
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		if err == nil {
-			return errors.New(fmt.Sprintf("Error from daemon logger: %v", resp.Status))
+	if err != nil {
+		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
+	} else {
+		if resp.StatusCode != 200 {
+			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
 		}
-		return err
+		resp.Body.Close()
 	}
 
 	// delete pod

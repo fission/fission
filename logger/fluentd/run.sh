@@ -1,3 +1,7 @@
+# This file originally came from official Kubernetes GitHub repository.
+# You can reach original file with the following link:
+# https://github.com/kubernetes/kubernetes/tree/42fbf93fb0bb48d0592e2aa08c5ce6d28ab6d4b0/cluster/addons/fluentd-gcp/fluentd-gcp-image
+
 #!/bin/sh
 
 # Copyright 2016 The Kubernetes Authors.

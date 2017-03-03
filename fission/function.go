@@ -28,10 +28,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/fission/fission"
-	"github.com/fission/fission/fission/logdb"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/fission/logdb"
 )
 
 func fnFetchCode(filePath string) []byte {
@@ -336,10 +337,10 @@ func fnLogs(c *cli.Context) error {
 				}
 				for _, logEntry := range logEntries {
 					if c.Bool("d") {
-						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s---\n",
-							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
+						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
+							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
 					} else {
-						fmt.Printf("[%s] %s", logEntry.Timestamp, logEntry.Message)
+						fmt.Printf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
 					}
 					t = logEntry.Timestamp
 				}
@@ -349,16 +350,15 @@ func fnLogs(c *cli.Context) error {
 			}
 		}
 	}(ctx, requestChan, responseChan)
+
 	for {
-		select {
-		case <-time.After(1 * time.Second):
-			requestChan <- struct{}{}
-			<-responseChan
-		}
+		requestChan <- struct{}{}
+		<-responseChan
 		if !c.Bool("f") {
 			ctx.Done()
 			return nil
 		}
+		time.Sleep(1 * time.Second)
 	}
 }
 

@@ -22,6 +22,8 @@ import (
 
 	"fmt"
 
+	"strings"
+
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
 )
 
@@ -94,11 +96,12 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 				logEntries = append(logEntries, LogEntry{
 					Timestamp: t,
 					Container: row[2].(string),
-					FuncUid:   row[3].(string),
-					Message:   row[4].(string),
-					Namespace: row[5].(string),
-					Pod:       row[6].(string),
-					Stream:    row[7].(string),
+					FuncName:  row[3].(string),
+					FuncUid:   row[4].(string),
+					Message:   strings.TrimSuffix(row[5].(string), "\n"),
+					Namespace: row[6].(string),
+					Pod:       row[7].(string),
+					Stream:    row[8].(string),
 				})
 			}
 		}

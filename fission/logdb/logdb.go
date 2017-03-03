@@ -31,16 +31,6 @@ type LogDatabase interface {
 	GetLogs(LogFilter) ([]LogEntry, error)
 }
 
-type dummyDB struct{}
-
-func (d dummyDB) GetPods(l LogFilter) ([]string, error) {
-	return []string{}, nil
-}
-
-func (d dummyDB) GetLogs(l LogFilter) ([]LogEntry, error) {
-	return []LogEntry{}, nil
-}
-
 type LogFilter struct {
 	Pod      string
 	Function string
@@ -54,6 +44,7 @@ type LogEntry struct {
 	Stream    string
 	Container string
 	Namespace string
+	FuncName  string
 	FuncUid   string
 	Pod       string
 }
@@ -73,5 +64,5 @@ func GetLogDB(cnf DBConfig) (LogDatabase, error) {
 	log.WithFields(log.Fields{
 		"FISSION_LOGDB_URL": cnf.Endpoint,
 	}).Fatalf("FISSION_LOGDB_URL is incorrect, now only support %s", INFLUXDB)
-	return dummyDB{}, nil
+	return nil, nil
 }

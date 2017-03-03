@@ -1,3 +1,32 @@
+# Sample Kubernetes Service config for external db service. 
+#
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: influxdb
+#   namespace: fission
+# spec:
+#   ports:
+#   - name: "8086"
+#     port: 8086
+#     targetPort: 8086
+#     protocol: TCP
+
+# ---
+# apiVersion: v1
+# kind: Endpoints
+# metadata:
+#   name: influxdb
+#   namespace: fission
+# subsets:
+#   - addresses:
+#     - ip: replace.influxdb.host.here
+#     ports:
+#     - name: "8086"
+#       port: 8086
+#       protocol: TCP
+
+# You can switch to external db service with sample Kubernetes Service config above.
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,42 +38,64 @@ spec:
     port: 8086
     targetPort: 8086
     protocol: TCP
+  selector:
+    svc: influxdb
 
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: extensions/v1beta1
+kind: Deployment
 metadata:
   name: influxdb
   namespace: fission
-subsets:
-  - addresses:
-    - ip: replace.influxdb.host.here
-    ports:
-    - name: "8086"
-      port: 8086
-      protocol: TCP
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: influxdb
+    spec:
+      containers:
+      - name: influxdb
+        image: tutum/influxdb
+        env:
+          - name: PRE_CREATE_DB
+            value: fissionFunctionLog
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller
+  namespace: fission
+  labels:
+    svc: controller
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8888
+    nodePort: 31313
+  selector:
+    svc: controller
 
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
+  name: logger
   namespace: fission
-  name: fission-logger
-  labels:
-    tier: monitoring
-    app: fission-logger
-    version: v1
 spec:
   template:
     metadata:
       labels:
-        name: fission-logger
+        svc: logger
     spec:
       containers:
-        - image: fission-logger
+        - name: logger
+          image: fission/fission-bundle
           imagePullPolicy: IfNotPresent
-          name: logger
-          command: [ "/logger"]
+          command: ["/fission-bundle"]
+          args: ["--logger"]
           volumeMounts:
             - name: container-log
               mountPath: /var/log/containers
@@ -59,9 +110,9 @@ spec:
             - containerPort: 1234
               hostPort: 1234
               protocol: TCP
-        - image: fission-daemonset-fulentd
+        - name: fluentd
+          image: fission-daemonset-fluentd
           imagePullPolicy: IfNotPresent
-          name: fluentd
           env:
             - name: INFLUXDB_ADDRESS
               value: influxdb

@@ -1,3 +1,10 @@
+# This file originally came from official Kubernetes GitHub repository.
+# You can reach original file with the following link:
+# https://github.com/kubernetes/kubernetes/tree/42fbf93fb0bb48d0592e2aa08c5ce6d28ab6d4b0/cluster/addons/fluentd-gcp/fluentd-gcp-image
+
+# Modification:
+# 1. add plugin "fluent-plugin-influxdb" for influxdb support
+
 # Copyright 2016 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +44,6 @@ RUN apt-get -qq update && \
     td-agent-gem install --no-document fluent-plugin-systemd -v 0.0.5 && \
     td-agent-gem install --no-document fluent-plugin-google-cloud -v 0.5.2 && \
     td-agent-gem install --no-document fluent-plugin-detect-exceptions -v 0.0.4 && \
-    td-agent-gem install --no-document fluent-plugin-out-http && \
     td-agent-gem install --no-document fluent-plugin-influxdb && \
     # Remove build tools
     apt-get remove -y -qq gcc make && \

@@ -187,38 +187,32 @@ Finally, you're ready to use Fission!
 Build fluentd docker image
 
 ```
-  $ cd $GOPATH/src/github.com/fission/fission/environments/fluentd
+  $ cd $GOPATH/src/github.com/fission/fission/logger/fluentd
   $ ./build.sh
 ```
 
-Build logger docker image
+Create Kubernetes service and deployment
 
 ```
-  $ cd $GOPATH/src/github.com/fission/fission/environments/logger
-  $ ./build.sh
-```
-
-Create Kubernetes service
-
-```
-  $ cd $GOPATH/src/github.com/fission/fission/environments/logger
-  $ vim daemonset-logger.yaml # replace information in yaml file
-  $ kubectl apply -f daemonset-logger.yaml
+  $ cd $GOPATH/src/github.com/fission/fission/fission-logger.yaml
+  $ vim fission-logger.yaml # replace information in yaml file
+  $ kubectl apply -f fission-logger.yaml
 ```
 
 Display function logs
 
 ```
   # Currently only influxDB is supported, use --help to see more options
-  $ fission function logs --name hello --dbhost http://<ip>:8086
+  $ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..clusterIP}'):8086
+  $ fission function logs --name hello --dbhost $FISSION_LOGDB
 ```
 
 Display function logs from specific pod
 
 ```
   # Currently only influxDB is supported, use --help to see more options
-  $ fission function pods --name hello --dbhost http://<ip>:8086
-  $ fission function logs --name hello --dbhost http://<ip>:8086 --pod <pod>
+  $ fission function pods --name hello --dbhost $FISSION_LOGDB
+  $ fission function logs --name hello --dbhost $FISSION_LOGDB --pod <pod>
 ```
 
 Compiling Fission
