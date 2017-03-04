@@ -280,7 +280,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 	}
 
 	go func(pod *v1.Pod) {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Spec.NodeName)
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
 		resp, err = http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
 		if err != nil {
 			log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
