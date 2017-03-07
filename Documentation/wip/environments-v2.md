@@ -102,72 +102,226 @@ Roughly in order of priority:
 
 ### User stories
 
-#### Compiled language
+#### Environment Creation
 
-User writes a function in Go.
+V1 Environments were just an image.  V2 Environments will be a yaml
+file with the following properties:
+
+* Run time image (required)
+* Version (required)
+* Builder image (optional)
+* Build invocation command (required if builder image specified)
+* File name extension(s) (optional)
+
+The version will be used to distinguish V2 environments from V1.
 
 ```
-      $ fission function create --code blah.go
+$ cat golang.yaml
+type: Environment
+metadata:
+  name: go
+spec:
+  runtimeImage: fission/go-runtime
+  builderImage: fission/go-builder
+  buildCommand:
+  - "/build.sh"
+  fileExtentions:
+  - go
 
-      <compilation errors>
-
-      <user edits file>
-      $ $EDITOR blah.go 
-      <fixes errors>
-
-      $ fission function update --code blah.go
-      <success>
+$ fission env create -f golang.yaml
 ```
 
-(Or perhaps we could have a `fission function check --env x --code y`
-which just does compilation, without creating a function object?
-Useful for integration into IDEs.  Basically, just an on-demand
-builder. Useful when you don't wanna setup anything on your laptop.)
+#### Function creation for compiled languages
+
+User writes a function in a compiled language, for example Go.
+
+```
+$ fission function create --code blah.go
+
+<compilation errors>
+
+<user edits file>
+$ $EDITOR blah.go
+<fixes errors>
+
+$ fission function update --code blah.go
+<success>
+
+$ fission route ... # routes work as usual
+```
 
 This same user story applies to interpreted languages too, where the
 "compilation" step can be used to check for syntax errors.
 
+#### Compiled language, without using fission builds
 
-#### Collections of files
-
-We should probably have a manifest in YAML/JSON/etc syntax for
-specifying a function.  We could also use that YAML to let users
-specify the function's environment, resource requirements, etc.
+User compiles their function locally, resulting in a set of one or
+more binaries. The user packages these up as a zip file, creating a
+"deployment package".
 
 ```
-        $ fission funcion create -f blah.yaml
+$ fission function create --deployment-package foo.zip
 
-        $ cat blah.yaml
-        type: Function
-        metadata:
-           name: ...
-        environment: ...
-        files:
-        - foo.py
-        - bar.py
-        - baz/*.py              
-```     
+$ fission route ... # routes work as usual
+```
 
-The yaml file could specify a list of files.  The fission client would
-deal with packaging up this set of files and uploading the package.
+In this use case, fission is no longer operating at the source
+level. Builds are left to the user and fission only sees the
+deployment package package.
 
+#### Collections of source files
+
+The user can create a source package -- a set of source files in a
+zip.
+
+```
+$ fission function create --source-package foo.zip
+
+```
+
+This workflow works similarly to providing a single source file.
+
+In addition, fission CLI could support automatic creation of source packages, e.g.
+
+```
+$ fission function create --source-files *.js
+```
+
+This is purely client-side "syntactic sugar" -- the CLI creates the
+source package instead of the user having to do it manually.  It
+doesn't change semantics; the source package is still handled as one
+object.
 
 #### Handling Dependencies
 
-A manifest could point at a function's dependency spec.  The
-Environment's "builder" container could then fetch these deps.
+The source package of a function can contain dependency specs.
 
-So a NodeJS function manifest could contain a reference to
-package.json.  A "builder" container in the NodeJS environment would
-then run npm on that function.
+Fission framework proper does not treat this spec in any special way;
+it's just another file in the source package.  These will be
+interpreted by the environment builder.
 
 ```
-	$ cat func.yaml
-        type: Function
-        metadata: ...
-        environment: ...
-        dependencies: package.json
-
-        $ fission function create -f func.yaml
+$ fission function create --source-files *.js --source-files package.json
 ```
 
+In this case, the CLI will create a source package containing the JS
+files and package.json.  The NodeJS environment builder will create a
+deployment package out of these files.  The runtime environment will
+load and run the deployment package.
+
+#### V1 Compatibility
+
+V1 Environments will continue to be supported.  Existing commands will
+continue to work.  V1 environments won't support newer features like
+builds, source and deployment packages, etc.
+
+### Implementation
+
+#### Environment Type
+
+The environment type has a set of new properties: version, runtime
+image, builder image, build command, file extension(s).
+
+#### Function Type
+
+The function type has new properties: source package, deployment
+package.  The literal code string continues to be supported, but it
+will have a specified size limit, say 512KB.
+
+#### Source and Binary Packages
+
+A package is just a zip file.  It's contents are opaque to fission:
+the meaning of its contents is defined by the environment.  Fission's
+job is to manage the storage and delivery of the package into build
+and runtime environments.
+
+#### Storage Service
+
+The storage service will have an HTTP API to upload and download
+files. It can store the packages on a persistent volume or as objects
+in cloud storage services such as S3.
+
+Storage service has a garbage collection API endpoint.  When invoked,
+it will remove all packages that are not referenced from any function.
+
+#### Fetcher
+
+Fetcher gets some new responsibilities:
+
+1. It must now also handle zip/unzip of packages
+
+2. It must know how to upload to the storage service (so it's not
+exactly "fetcher" any more, but...)
+
+#### Runtime Environment Interface
+
+The V2 runtime environment interface is very similar to V1
+environments.  Environments must support a dynamic loader and have an
+HTTP server that forwards requests to the loaded module.
+
+The differences:
+
+* V2 runtimes must support loading a deployment package.  Fetcher is
+  responsible for unzipping a deployment package, but interpretation
+  of the contents is up to the environment's code.  For example, it
+  may have to include the directory where the deployment package is
+  unzipped in its module load path.
+
+[TODO any other differences?]
+
+#### Buildmgr
+
+A new service that will manage builds.  Its design is similar to
+poolmgr, except it is triggered on creation or update of a function,
+rather than HTTP requests.
+
+Buildmgr creates a builder deployment+service for each environment.
+Pods in this deployment run the environment's build container, and
+fetcher, with a shared volume between the two containers.
+
+When a function is created or updated with a source package, buildmgr
+notices this and triggers a build.  First, it calls fetcher to
+download the source package into a shared volume with the build
+container.  It then invokes the builder by running the build
+invocation command in the build container.  Next, it calls fetcher to
+package up the output of the builder and store the built package into
+the the storage service.
+
+Finally, it updates the function object in the controller API with a
+reference to the built package.
+
+[We can collapse this workflow into one request into the builder
+service, which would make it easier to scale up the builder
+deployment; if we used multiple requests we'd need some sort of
+affinity rule, but k8s services only support IP based affinity.]
+
+#### Poolmgr
+
+Poolmgr remains relatively unchanged.  Instead of contructing URLs for
+function metadata, it uses the deployment package URL in the function
+object.
+
+#### CLI
+
+Client libraries and CLI have to deal with the new properties in
+functions and environments.
+
+The CLI will now talk to both storage service and controller.  When a
+function is created, the user can specify the function in one of 3
+ways:
+
+1. One source file, same as v1.
+
+2. A source package (or a set of source files, which is turned into a
+   source package by the CLI)
+
+3. A deployment package
+
+If the file is specified as a source file, fission CLI will use the
+code literal if it's under the size limit; otherwise it should use the
+storage service.  This will allow users to use fission deployments
+with no storage service, but with a size limit on functions.
+
+For the case of a source or deployment package, the CLI first does an
+upload to the storage service, then creates a function object with a
+reference to the uploaded package.

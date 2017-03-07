@@ -26,8 +26,6 @@ import (
 	"net/http"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
-
 	"github.com/fission/fission"
 )
 
@@ -104,10 +102,6 @@ func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) 
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"name": f.Metadata.Name,
-			"err":  err,
-		}).Error("Failed to create function")
 		return nil, err
 	}
 
@@ -240,10 +234,6 @@ func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (*fission.Metadata, e
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"name": t.Metadata.Name,
-			"err":  err,
-		}).Error("Failed to create http trigger")
 		return nil, err
 	}
 
@@ -351,10 +341,6 @@ func (c *Client) EnvironmentCreate(env *fission.Environment) (*fission.Metadata,
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"name": env.Metadata.Name,
-			"err":  err,
-		}).Error("Failed to create environment")
 		return nil, err
 	}
 

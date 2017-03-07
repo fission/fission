@@ -17,14 +17,14 @@ You can install Kubernetes on your laptop with [minikube](https://github.com/kub
 #### Install and start Kubernetes on OSX:
 ```bash
   $ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/darwin/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin
-  $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.14.0/minikube-darwin-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+  $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.16.0/minikube-darwin-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
   $ minikube start
 ```
 
 #### Or, install and start Kubernetes on Linux:
 ```bash
   $ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin
-  $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.14.0/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+  $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.16.0/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
   $ minikube start
 ```
 
@@ -101,7 +101,7 @@ Finally, you're ready to use Fission!
 ```
   $ fission env create --name nodejs --image fission/node-env
 
-  $ echo 'module.exports = function(context, callback) { callback(200, "Hello, world!\n"); }' > hello.js  
+  $ curl https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js > hello.js
 
   $ fission function create --name hello --env nodejs --code hello.js
   

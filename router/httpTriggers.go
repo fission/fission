@@ -18,6 +18,7 @@ package router
 
 import (
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -52,16 +53,21 @@ func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
 	go ts.watchTriggers()
 }
 
+func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
 
-	// make a name -> latest version map
+	// make a function name -> latest version map
 	latestVersions := make(map[string]string)
 	for _, f := range ts.functions {
 		latestVersions[f.Metadata.Name] = f.Metadata.Uid
 	}
 
 	// HTTP triggers setup by the user
+	homeHandled := false
 	for _, trigger := range ts.triggers {
 		m := trigger.Function
 		if len(m.Uid) == 0 {
@@ -74,6 +80,19 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			poolmgr:  ts.poolmgr,
 		}
 		muxRouter.HandleFunc(trigger.UrlPattern, fh.handler).Methods(trigger.Method)
+		if trigger.UrlPattern == "/" && trigger.Method == "GET" {
+			homeHandled = true
+		}
+	}
+	if !homeHandled {
+		//
+		// This adds a no-op handler that returns 200-OK to make sure that the
+		// "GET /" request succeeds.  This route is used by GKE Ingress (and
+		// perhaps other ingress implementations) as a health check, so we don't
+		// want it to be a 404 even if the user doesn't have a function mapped to
+		// this route.
+		//
+		muxRouter.HandleFunc("/", defaultHomeHandler).Methods("GET")
 	}
 
 	// Internal triggers for (the latest version of) each function

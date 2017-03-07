@@ -40,6 +40,7 @@ import (
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
+const POD_PHASE_RUNNING string = "Running"
 
 type (
 	GenericPool struct {
@@ -166,9 +167,11 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 			return nil, err
 		}
 		readyPods := make([]*v1.Pod, 0, len(podList.Items))
-		for _, pod := range podList.Items {
+		for i := range podList.Items {
+			pod := podList.Items[i]
+
 			// If a pod has no IP it's not ready
-			if len(pod.Status.PodIP) == 0 {
+			if len(pod.Status.PodIP) == 0 || string(pod.Status.Phase) != POD_PHASE_RUNNING {
 				continue
 			}
 

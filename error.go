@@ -23,8 +23,8 @@ import (
 	"strings"
 )
 
-func (e Error) Error() string {
-	return fmt.Sprintf("(Error %v) %v", e.Code, e.Message)
+func (err Error) Error() string {
+	return fmt.Sprintf("%v - %v", err.Description(), err.Message)
 }
 
 func MakeError(code int, msg string) Error {
@@ -89,4 +89,12 @@ func GetHTTPError(err error) (int, string) {
 		msg = err.Error()
 	}
 	return code, msg
+}
+
+func (err Error) Description() string {
+	idx := int(err.Code)
+	if idx < 0 || idx > len(errorDescriptions)-1 {
+		return ""
+	}
+	return errorDescriptions[idx]
 }

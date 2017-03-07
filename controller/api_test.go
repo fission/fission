@@ -43,6 +43,13 @@ func assertNameReuseFails(err error, name string) {
 	assert(fe.Code == fission.ErrorNameExists, "error must be a name exists error")
 }
 
+func assertNotFoundFails(err error, name string) {
+	assert(err != nil, "requesting a non-existent "+name+" must fail")
+	fe, ok := err.(fission.Error)
+	assert(ok, "error must be a fission Error")
+	assert(fe.Code == fission.ErrorNotFound, "error must be a not found error")
+}
+
 func TestFunctionApi(t *testing.T) {
 	log.SetFormatter(&log.TextFormatter{DisableColors: true})
 
@@ -57,6 +64,8 @@ func TestFunctionApi(t *testing.T) {
 		},
 		Code: "code1",
 	}
+	_, err := g.client.FunctionGet(&fission.Metadata{Name: "foo"})
+	assertNotFoundFails(err, "function")
 
 	m, err := g.client.FunctionCreate(testFunc)
 	panicIf(err)
@@ -129,6 +138,9 @@ func TestHTTPTriggerApi(t *testing.T) {
 			Uid:  "",
 		},
 	}
+	_, err := g.client.HTTPTriggerGet(&fission.Metadata{Name: "foo"})
+	assertNotFoundFails(err, "trigger")
+
 	m, err := g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
 	defer g.client.HTTPTriggerDelete(m)
@@ -153,6 +165,10 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	testTrigger.Metadata.Name = "yyy"
 	m, err = g.client.HTTPTriggerCreate(testTrigger)
+	assert(err != nil, "duplicate trigger should not be allowed")
+
+	testTrigger.UrlPattern = "/hi2"
+	m, err = g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
 	defer g.client.HTTPTriggerDelete(m)
 
@@ -169,6 +185,9 @@ func TestEnvironmentApi(t *testing.T) {
 		},
 		RunContainerImageUrl: "gcr.io/xyz",
 	}
+	_, err := g.client.EnvironmentGet(&fission.Metadata{Name: "foo"})
+	assertNotFoundFails(err, "environment")
+
 	m, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
 	defer g.client.EnvironmentDelete(m)
@@ -217,6 +236,9 @@ func TestWatchApi(t *testing.T) {
 		},
 		Target: "",
 	}
+	_, err := g.client.WatchGet(&fission.Metadata{Name: "foo"})
+	assertNotFoundFails(err, "watch")
+
 	m, err := g.client.WatchCreate(testWatch)
 	panicIf(err)
 	defer g.client.WatchDelete(m)

@@ -17,7 +17,7 @@
 
 let https = require('https');
 
-const path = "YOUR RELATIVE PATH HERE", // Something like "/services/XXX/YYY/zZz123"
+const slackWebhookPath = "YOUR RELATIVE PATH HERE"; // Something like "/services/XXX/YYY/zZz123"
 
 function upcaseFirst(s) {
     return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();

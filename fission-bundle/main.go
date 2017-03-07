@@ -14,6 +14,9 @@ import (
 func runController(port int, etcdUrl string, filepath string) {
 	// filePath will be created if it doesn't exist.
 	fileStore := controller.MakeFileStore(filepath)
+	if fileStore == nil {
+		log.Fatalf("Failed to initialize filestore")
+	}
 
 	rs, err := controller.MakeResourceStore(fileStore, []string{etcdUrl})
 	if err != nil {
