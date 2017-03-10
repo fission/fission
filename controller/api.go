@@ -47,6 +47,7 @@ func MakeAPI(rs *ResourceStore) *API {
 }
 
 func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err := w.Write(resp)
 	if err != nil {
 		// this will probably fail too, but try anyway
@@ -62,6 +63,7 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 }
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.1.0\"}\n")
 }
 
