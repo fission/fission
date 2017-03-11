@@ -267,13 +267,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
-	logReq := logger.LogRequest{
-		Namespace: pod.Namespace,
-		Pod:       pod.Name,
-		Container: gp.env.Metadata.Name,
-		FuncName:  metadata.Name,
-		FuncUid:   metadata.Uid,
-	}
+	logReq := gp.setupLogging(pod, metadata)
 	reqbody, err := json.Marshal(logReq)
 	if err != nil {
 		return err
@@ -599,4 +593,14 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
+}
+
+func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) logger.LogRequest {
+	return logger.LogRequest{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: gp.env.Metadata.Name,
+		FuncName:  metadata.Name,
+		FuncUid:   metadata.Uid,
+	}
 }

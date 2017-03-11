@@ -28,7 +28,7 @@ type (
 		ContainerID string `json:"-"`
 	}
 
-	logRequestTacker struct {
+	logRequestTracker struct {
 		sync.RWMutex
 		logMap map[string]LogRequest
 	}

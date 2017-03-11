@@ -33,19 +33,19 @@ import (
 	"k8s.io/client-go/1.5/rest"
 )
 
-func makeLogRequestTacker() logRequestTacker {
-	return logRequestTacker{
+func makelogRequestTracker() logRequestTracker {
+	return logRequestTracker{
 		logMap: make(map[string]LogRequest),
 	}
 }
 
-func (l logRequestTacker) Add(logReq LogRequest) {
+func (l logRequestTracker) Add(logReq LogRequest) {
 	l.Lock()
 	l.logMap[logReq.Pod] = logReq
 	l.Unlock()
 }
 
-func (l logRequestTacker) Get(pod string) LogRequest {
+func (l logRequestTracker) Get(pod string) LogRequest {
 	l.RLock()
 	logReq, ok := l.logMap[pod]
 	l.RUnlock()
@@ -55,7 +55,7 @@ func (l logRequestTacker) Get(pod string) LogRequest {
 	return LogRequest{}
 }
 
-func (l logRequestTacker) Remove(logReq LogRequest) {
+func (l logRequestTracker) Remove(logReq LogRequest) {
 	l.Lock()
 	delete(l.logMap, logReq.Pod)
 	l.Unlock()
@@ -202,10 +202,10 @@ func removeLogSymlink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-var logInfo logRequestTacker
+var logInfo logRequestTracker
 
 func Start() {
-	logInfo = makeLogRequestTacker()
+	logInfo = makelogRequestTracker()
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/log", createLogSymlink).Methods("POST")
 	r.HandleFunc("/v1/log/{pod}", removeLogSymlink).Methods("DELETE")

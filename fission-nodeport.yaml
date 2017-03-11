@@ -30,3 +30,22 @@ spec:
     nodePort: 31313
   selector:
     svc: controller
+
+---
+# If you want to switch to external db service, please checkout 
+# sample Kubernetes Service config in fission-logger.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: fission
+  labels:
+    svc: influxdb
+spec:
+  type: NodePort
+  ports:
+  - port: 8086
+    targetPort: 8086
+    nodePort: 31315
+  selector:
+    svc: influxdb

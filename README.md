@@ -199,20 +199,31 @@ Create Kubernetes service and deployment
   $ kubectl apply -f fission-logger.yaml
 ```
 
-Display function logs
+For minikube or local cluster
+
+```
+$ export FISSION_LOGDB=http://$(minikube ip):31315
+```
+
+For GKE or other cloud
+
+```
+$ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..ip}'):8086
+```
+
+Display function logs with given function name
 
 ```
   # Currently only influxDB is supported, use --help to see more options
-  $ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..clusterIP}'):8086
-  $ fission function logs --name hello --dbhost $FISSION_LOGDB
+  $ fission function logs --name hello
 ```
 
 Display function logs from specific pod
 
 ```
   # Currently only influxDB is supported, use --help to see more options
-  $ fission function pods --name hello --dbhost $FISSION_LOGDB
-  $ fission function logs --name hello --dbhost $FISSION_LOGDB --pod <pod>
+  $ fission function pods --name hello
+  $ fission function logs --name hello --pod <pod>
 ```
 
 Compiling Fission

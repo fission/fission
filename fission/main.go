@@ -44,7 +44,7 @@ func main() {
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
 	fnDetailFlag := cli.BoolFlag{Name: "detail, d", Usage: "display detailed information"}
-	fnLogDBHostFlag := cli.StringFlag{Name: "dbhost", Usage: "log database host to connect to"}
+	fnLogDBHostFlag := cli.StringFlag{Name: "dbhost", Usage: "log database host to connect to", EnvVar: "FISSION_LOGDB"}
 	fnLogDBTypeFlag := cli.StringFlag{Name: "dbtype", Usage: "log database type, e.g. influxdb (currently only influxdb is supported)"}
 	fnUserNameFlag := cli.StringFlag{Name: "username, u", Usage: "username for connecting log database"}
 	fnPasswordFlag := cli.StringFlag{Name: "password, p", Usage: "password for connecting log database"}

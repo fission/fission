@@ -26,22 +26,6 @@
 #       port: 8086
 #       protocol: TCP
 
-# You can switch to external db service with sample Kubernetes Service config above.
-apiVersion: v1
-kind: Service
-metadata:
-  name: influxdb
-  namespace: fission
-spec:
-  ports:
-  - name: "8086"
-    port: 8086
-    targetPort: 8086
-    protocol: TCP
-  selector:
-    svc: influxdb
-
----
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -60,23 +44,12 @@ spec:
         env:
           - name: PRE_CREATE_DB
             value: fissionFunctionLog
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: controller
-  namespace: fission
-  labels:
-    svc: controller
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    targetPort: 8888
-    nodePort: 31313
-  selector:
-    svc: controller
+          # A database user will be created after the db first-time launch
+          # Please change the username/password here
+          - name: ADMIN_USER
+            value: ""
+          - name: INFLUXDB_INIT_PWD
+            value: ""
 
 ---
 apiVersion: extensions/v1beta1
@@ -120,6 +93,8 @@ spec:
               value: "8086"
             - name: INFLUXDB_DBNAME
               value: "fissionFunctionLog"
+            # Username/password for fluentd to push log to influxdb,
+            # should match the influxdb username/passowrd defined above
             - name: INFLUXDB_USERNAME
               value: ""
             - name: INFLUXDB_PASSWD
