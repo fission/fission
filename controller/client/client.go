@@ -84,6 +84,14 @@ func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
 	return body, err
 }
 
+func (c *Client) handleCreateResponse(resp *http.Response) ([]byte, error) {
+	if resp.StatusCode != 201 {
+		return nil, fission.MakeErrorFromHTTP(resp)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	return body, err
+}
+
 func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) {
 	orig := f.Code
 	f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
@@ -100,7 +108,7 @@ func (c *Client) FunctionCreate(f *fission.Function) (*fission.Metadata, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := c.handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +240,7 @@ func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (*fission.Metadata, e
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := c.handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +347,7 @@ func (c *Client) EnvironmentCreate(env *fission.Environment) (*fission.Metadata,
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := c.handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +454,7 @@ func (c *Client) WatchCreate(w *fission.Watch) (*fission.Metadata, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := c.handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
