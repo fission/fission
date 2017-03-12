@@ -108,7 +108,26 @@ func (fs *FunctionStore) Delete(m fission.Metadata) error {
 	if err != nil {
 		return err
 	}
-	return fs.ResourceStore.delete(typeName, m.Name)
+
+	bufs, err := fs.ResourceStore.getAll("file/" + m.Name)
+	if err != nil {
+		return err
+	}
+	if len(bufs) == 0 {
+		return fs.ResourceStore.delete(typeName, m.Name)
+	}
+
+	fnew, err := fs.Get(&fission.Metadata{Name: m.Name})
+	if err != nil {
+		return err
+	}
+
+	latestUid := bufs[len(bufs)-1] // function always tracks the latest version of code
+	if latestUid == fnew.Uid {
+		return nil
+	}
+	fnew.Uid = latestUid
+	return fs.ResourceStore.update(fnew)
 }
 
 func (fs *FunctionStore) List() ([]fission.Function, error) {

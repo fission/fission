@@ -126,6 +126,61 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 }
 
+func TestFunctionVersionApi(t *testing.T) {
+	testFunc := &fission.Function{
+		Metadata: fission.Metadata{
+			Name: "foo",
+			Uid:  "",
+		},
+		Environment: fission.Metadata{
+			Name: "nodejs",
+			Uid:  "xxx",
+		},
+		Code: "code1",
+	}
+
+	testFunc.Code = "code1"
+	m, err := g.client.FunctionCreate(testFunc)
+	panicIf(err)
+	uid1 := m.Uid
+
+	testFunc.Code = "code2"
+	m, err = g.client.FunctionUpdate(testFunc)
+	panicIf(err)
+	uid2 := m.Uid
+
+	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo", Uid: uid1})
+	panicIf(err)
+
+	f, err := g.client.FunctionGet(&fission.Metadata{Name: "foo"})
+	panicIf(err)
+	assert(f.Metadata.Uid == uid2, "deleted version1, but version2 does not exist")
+
+	testFunc.Code = "code3"
+	m, err = g.client.FunctionUpdate(testFunc)
+	panicIf(err)
+	uid3 := m.Uid
+
+	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo", Uid: uid3})
+	panicIf(err)
+
+	f, err = g.client.FunctionGet(&fission.Metadata{Name: "foo"})
+	panicIf(err)
+	assert(f.Metadata.Uid == uid2, "deleted version3, but version2 does not exist")
+
+	testFunc.Code = "code4"
+	m, err = g.client.FunctionUpdate(testFunc)
+	panicIf(err)
+
+	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo"})
+	panicIf(err)
+
+	funcs, err := g.client.FunctionList()
+	panicIf(err)
+	assert(len(funcs) == 0,
+		"created one function with two versions(2 and 4), delete without uid but cannot delete them all")
+}
+
 func TestHTTPTriggerApi(t *testing.T) {
 	testTrigger := &fission.HTTPTrigger{
 		Metadata: fission.Metadata{
