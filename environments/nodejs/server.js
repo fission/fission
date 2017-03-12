@@ -81,7 +81,7 @@ app.all('/', function (req, res) {
         response: res
         // TODO: context should also have: URL template params, query string
     };
-    
+
     function callback(status, body, headers) {
         if (!status)
             return;
@@ -100,8 +100,21 @@ app.all('/', function (req, res) {
     // you can do that here by adding properties to the context.
     //
 
-    // Make sure their function returns a promise
-    let functionProm = Promise.resolve(userFunction(context));
+    let functionProm;
+    if (userFunction.length === 1) { // One argument (context)
+        // Make sure their function returns a promise
+        functionProm = Promise.resolve(userFunction(context));
+    } else { // 2 arguments (context, callback)
+        functionProm = new Promise(function(resolve, reject) {
+            userFunction(context, function(status, body, headers) {
+                return resolve({
+                    status,
+                    body,
+                    headers
+                });
+            });
+        });
+    }
 
     functionProm.then(function(result) {
         callback(result.status, result.body, result.headers);
