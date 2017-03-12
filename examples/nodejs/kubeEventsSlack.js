@@ -23,7 +23,7 @@ function upcaseFirst(s) {
     return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
-function sendSlackMessage(msg, cb) {
+async function sendSlackMessage(msg) {
     let postData = `{"text": "${msg}"}`;
     let options = {
         hostname: "hooks.slack.com",
@@ -33,17 +33,20 @@ function sendSlackMessage(msg, cb) {
             "Content-Type": "application/json"
         }
     };
-    let req = https.request(options, function(res) {
-        console.log(`slack request status = ${res.statusCode}`);
-        cb();
+
+    return new Promise(function(resolve, reject) {
+        let req = https.request(options, function(res) {
+            console.log(`slack request status = ${res.statusCode}`);
+            return resolve();
+        });
+        req.write(postData);
+        req.end();
     });
-    req.write(postData);
-    req.end();
 }
 
-module.exports = function(context, callback) {
+module.exports = async function(context) {
     console.log(context.request.headers);
-    
+
     let obj = context.request.body;
     let version = obj.metadata.resourceVersion;
     let eventType = context.request.get('X-Kubernetes-Event-Type');
@@ -54,10 +57,11 @@ module.exports = function(context, callback) {
 
     if (eventType == 'DELETED' || eventType == 'ADDED') {
         console.log("sending event to slack")
-        sendSlackMessage(msg, function() {
-            callback(200, "");
-        });
-    } else {
-        callback(200, "");
+        await sendSlackMessage(msg);
+    }
+
+    return {
+        status: 200,
+        body: ""
     }
 }

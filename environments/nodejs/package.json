@@ -10,7 +10,7 @@
     ],
     "description": "NodeJS run container for the fission framework",
     "engines": {
-        "node": ">=4.2.2"
+        "node": ">=7.6.0"
     },
     "dependencies": {
         "express": "",

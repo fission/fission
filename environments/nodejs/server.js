@@ -75,11 +75,13 @@ app.all('/', function (req, res) {
         res.status(500).send("Generic container: no requests supported");
         return;
     }
+
     const context = {
         request: req,
         response: res
         // TODO: context should also have: URL template params, query string
     };
+    
     function callback(status, body, headers) {
         if (!status)
             return;
@@ -90,18 +92,24 @@ app.all('/', function (req, res) {
         }
         res.status(status).send(body);
     }
-    try {
-        //
-        // Customizing the request context
-        //
-        // If you want to modify the context to add anything to it,
-        // you can do that here by adding properties to the context.
-        //
-        userFunction(context, callback);
-    } catch(e) {
+
+    //
+    // Customizing the request context
+    //
+    // If you want to modify the context to add anything to it,
+    // you can do that here by adding properties to the context.
+    //
+
+    // Make sure their function returns a promise
+    let functionProm = Promise.resolve(userFunction(context));
+
+    functionProm.then(function(result) {
+        callback(result.status, result.body, result.headers);
+    }).catch(function(err) {
         console.log(`Function error: ${e}`);
         callback(500, "Internal server error")
-    }
+    });
+
 });
 
 app.listen(argv.port);
