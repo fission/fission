@@ -161,7 +161,7 @@ func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
 	if err != nil {
 		return err
 	}
-	var stopped int32 = 0
+	var stopped int32
 	ws := &watchSubscription{
 		Watch:     *w,
 		kubeWatch: wi,
