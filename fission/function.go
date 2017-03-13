@@ -45,7 +45,7 @@ func fnFetchCode(filePath string) []byte {
 
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			err = fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode))
+			err = fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
 			checkErr(err, fmt.Sprintf("download function"))
 		}
 
