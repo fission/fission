@@ -71,6 +71,7 @@ func (api *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusCreated)
 	api.respondWithSuccess(w, resp)
 }
 
