@@ -103,8 +103,8 @@ app.all('/', function (req, res) {
     let functionProm;
     if (userFunction.length === 1) { // One argument (context)
         // Make sure their function returns a promise
-        Promise.resolve(userFunction(context)).then(function(result) {
-            callback(result.status, result.body, result.headers);
+        Promise.resolve(userFunction(context)).then(function({ status, body, headers }) {
+            callback(status, body, headers);
         }).catch(function(err) {
             console.log(`Function error: ${e}`);
             callback(500, "Internal server error");
