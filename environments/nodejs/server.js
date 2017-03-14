@@ -103,25 +103,20 @@ app.all('/', function (req, res) {
     let functionProm;
     if (userFunction.length === 1) { // One argument (context)
         // Make sure their function returns a promise
-        functionProm = Promise.resolve(userFunction(context));
-    } else { // 2 arguments (context, callback)
-        functionProm = new Promise(function(resolve, reject) {
-            userFunction(context, function(status, body, headers) {
-                return resolve({
-                    status,
-                    body,
-                    headers
-                });
-            });
+        Promise.resolve(userFunction(context)).then(function(result) {
+            callback(result.status, result.body, result.headers);
+        }).catch(function(err) {
+            console.log(`Function error: ${e}`);
+            callback(500, "Internal server error");
         });
+    } else { // 2 arguments (context, callback)
+        try {
+            userFunction(context, callback);
+        } catch (err) {
+            console.log(`Function error: ${e}`);
+            callback(500, "Internal server error");
+        }
     }
-
-    functionProm.then(function(result) {
-        callback(result.status, result.body, result.headers);
-    }).catch(function(err) {
-        console.log(`Function error: ${e}`);
-        callback(500, "Internal server error")
-    });
 
 });
 
