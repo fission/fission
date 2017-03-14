@@ -1,27 +1,26 @@
 {
-    "name": "fission-nodejs-runtime",
-    "version": "0.0.0",
-    "author": "Soam Vasani",
-    "contributors": [
-        {
-            "name": "Soam Vasani",
-            "email": "soamvasani@platform9.com"
-        }
-    ],
-    "description": "NodeJS run container for the fission framework",
-    "engines": {
-        "node": ">=4.2.2"
-    },
-    "dependencies": {
-        "express": "",
-        "minimist": "",
-        "body-parser": "",
-        "morgan": "",
-
-        "co": "~4.6.0",
-        "request": "",
-        "request-promise": "^1.0.2",
-        "mz": "~2.1.0",
-        "underscore": ">=1.8.3"
+  "name": "fission-nodejs-runtime",
+  "version": "0.1.0",
+  "author": "Soam Vasani",
+  "contributors": [
+    {
+      "name": "Soam Vasani",
+      "email": "soamvasani@platform9.com"
     }
+  ],
+  "description": "NodeJS run container for the fission framework",
+  "engines": {
+    "node": ">=7.6.0"
+  },
+  "dependencies": {
+    "body-parser": "",
+    "co": "~4.6.0",
+    "express": "",
+    "minimist": "",
+    "morgan": "",
+    "mz": "~2.1.0",
+    "request": "^2.81.0",
+    "request-promise-native": "^1.0.3",
+    "underscore": ">=1.8.3"
+  }
 }
