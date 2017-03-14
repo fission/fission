@@ -1,38 +1,37 @@
 'use strict';
 
-var http = require('http');
+const rp = require('request-promise-native');
 
 module.exports = async function (context) {
-    let body = context.request.body;
-    console.log(`body text: ${body['text']}`);
+    const body = context.request.body;
+    const symbol = body.symbol
 
-    var symbol = body['text'].split(' ')[1];
+    console.log(`Got symbol: ${symbol}`);
 
-    return new Promise(function(resolve, reject) {
-        http.get({
-            host: 'finance.google.com',
-            path: `/finance/info?q=NYSE:${symbol}`
-        }, function(response) {
-            var resp = '';
-            response.on('data', function(d) {
-                resp += d;
-            });
-            response.on('end', function() {
-                try {
-                    var parsed = JSON.parse(resp.slice(3));
-                    var lastTrade = parsed[0]['l_cur'];
-                    return resolve({
-                        status: 200,
-                        body: `{ "text": "${symbol} last traded at ${lastTrade}" }`
-                    });
-                } catch (e) {
-                    return resolve({
-                        status: 200,
-                        body: `{ "text": "Error (invalid NYSE symbol?)" }`
-                    });
-                }
-            });
-        });
-    });
+    if (!symbol) {
+        return {
+            status: 400,
+            body: {
+                text: 'You must provide a stock symbol.'
+            }
+        };
+    }
 
+    try {
+        const response = await rp(`http://finance.google.com/finance/info?q=NYSE:${symbol}`);
+        const parsed = JSON.parse(response.slice(3));
+        const lastTrade = parsed[0]['l_cur'];
+        return {
+            status: 200,
+            body: {
+                text: `${symbol} last traded at ${lastTrade}`
+            }
+        };
+    } catch (e) {
+        console.error(e);
+        return {
+            status: 500,
+            body: e
+        };
+    }
 }
