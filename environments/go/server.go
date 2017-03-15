@@ -6,6 +6,8 @@ import (
 	"os"
 	"plugin"
 
+	"github.com/gorilla/mux"
+
 	"github.com/fission/fission/environments/go/runtime"
 )
 
@@ -35,6 +37,7 @@ func loadPlugin() http.HandlerFunc {
 	case func(runtime.Context, http.ResponseWriter, *http.Request):
 		return func(w http.ResponseWriter, r *http.Request) {
 			c := runtime.NewContext()
+			c["params"] = mux.Vars(r)
 			h(c, w, r)
 		}
   default:
@@ -60,7 +63,7 @@ func specializeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Println("Specializing... ")
+	fmt.Println("Specializing ...")
 	userFunc = loadPlugin()
 	fmt.Println("Done")
 }

@@ -4,9 +4,10 @@ ENV GOPATH /usr
 ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/go
 
 ADD runtime	    ${APP}/runtime
-ADD server.go 	${APP}
+ADD server.go   ${APP}
 
 WORKDIR ${APP}
+RUN go get
 RUN go build -o /server server.go
 
 ENTRYPOINT ["/server"]

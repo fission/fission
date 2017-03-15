@@ -5,5 +5,6 @@ import (
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello, World!"))
+	msg := "Hello, World!"
+	w.Write([]byte(msg))
 }
