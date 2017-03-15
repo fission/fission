@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"os"
 	"plugin"
+
+	"github.com/fission/fission/environments/go/runtime"
 )
 
 const (
-	CODE_PATH = "./func.so"
+	CODE_PATH = "/userfunc/user"
 )
 
 var userFunc http.HandlerFunc
@@ -30,8 +32,13 @@ func loadPlugin() http.HandlerFunc {
     return *h
   case func(http.ResponseWriter, *http.Request):
     return h
+	case func(runtime.Context, http.ResponseWriter, *http.Request):
+		return func(w http.ResponseWriter, r *http.Request) {
+			c := runtime.NewContext()
+			h(c, w, r)
+		}
   default:
-    panic("Entry point not found")
+    panic("Entry point not found: bad type")
   }
 }
 

@@ -1,7 +1,12 @@
-FROM golang:1.8rc3-wheezy
+FROM golang:1.8
 
-ADD server.go /go/src/
-WORKDIR /go/src
+ENV GOPATH /usr
+ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/go
+
+ADD runtime	    ${APP}/runtime
+ADD server.go 	${APP}
+
+WORKDIR ${APP}
 RUN go build -o /server server.go
 
 ENTRYPOINT ["/server"]
