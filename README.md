@@ -197,7 +197,8 @@ The server side is compiled as one binary ("fission-bundle") which
 contains controller, poolmgr and router; it invokes the right one
 based on command-line arguments.
 
-To build fission-bundle: clone this repo, then from the top level
+To build fission-bundle: clone this repo to
+`$GOPATH/src/github.com/fission/fission`, then from the top level
 directory (if you want to build the image with the docker inside
 minikube, you'll need to set the proper environment variables with
 `eval $(minikube docker-env)`):

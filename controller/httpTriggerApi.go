@@ -83,6 +83,7 @@ func (api *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusCreated)
 	api.respondWithSuccess(w, resp)
 }
 

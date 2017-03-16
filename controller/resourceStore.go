@@ -139,7 +139,7 @@ func (rs *ResourceStore) delete(typename, rkey string) error {
 // getAll finds all entries under key.  If none or found or key
 // doesn't exist, returns an empty slice.
 func (rs *ResourceStore) getAll(key string) ([]string, error) {
-	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Recursive: true})
+	resp, err := rs.KeysAPI.Get(context.Background(), key, &client.GetOptions{Recursive: true, Sort: true})
 	if err != nil {
 		if client.IsKeyNotFound(err) {
 			return []string{}, nil
