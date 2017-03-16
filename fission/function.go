@@ -77,7 +77,10 @@ func fnCreate(c *cli.Context) error {
 
 	fileName := c.String("code")
 	if len(fileName) == 0 {
-		fatal("Need --code argument.")
+		fileName = c.String("package")
+		if len(fileName) == 0 {
+			fatal("Need --code or --package argument.")
+		}
 	}
 
 	code := fnFetchCode(fileName)
