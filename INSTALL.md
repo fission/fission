@@ -7,7 +7,8 @@
      * [Get and Run Fission: GKE or other Cloud](#get-and-run-fission-gke-or-other-cloud)
      * [Install the client CLI](#install-the-client-cli)
      * [Run an example](#run-an-example)
-     * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs)
+     * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs-optional)
+     * [Use the web based Fission-ui (Optional)](#use-the-web-based-fission-ui-optional)
 
 ## Running Fission on your Cluster
 
@@ -154,3 +155,19 @@ particular pod:
 
   $ fission function logs --name hello --pod <pod name>
 ```
+
+### Use the web based Fission-ui (Optional)
+
+[Fission-ui](https://github.com/fission/fission-ui) is the ui for fission maintained by the community.
+It allows users to observe and manage fission. It also provides a simple online development environment for serverless functions.
+
+To setup Fission-ui with fission in k8s is simple:
+
+```bash
+  # After Fission deployed
+  $ kubectl create -f https://raw.githubusercontent.com/fission/fission-ui/master/docker/fission-ui.yaml
+```
+
+Then open `http://node-ip:31319` to use Fission-ui.
+
+For more infomation, please check out [Fission-ui Readme](https://github.com/fission/fission-ui/blob/master/README.md).
