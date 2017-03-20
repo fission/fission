@@ -6,9 +6,7 @@ import (
 	"os"
 	"plugin"
 
-	"github.com/gorilla/mux"
-
-	"github.com/fission/fission/environments/go/runtime"
+	"github.com/fission/fission/environments/go/context"
 )
 
 const (
@@ -27,22 +25,21 @@ func loadPlugin() http.HandlerFunc {
 		panic("Entry point not found")
 	}
 
-  switch h := sym.(type) {
-  case *http.Handler:
-    return (*h).ServeHTTP
-  case *http.HandlerFunc:
-    return *h
-  case func(http.ResponseWriter, *http.Request):
-    return h
-	case func(runtime.Context, http.ResponseWriter, *http.Request):
+	switch h := sym.(type) {
+	case *http.Handler:
+		return (*h).ServeHTTP
+	case *http.HandlerFunc:
+		return *h
+	case func(http.ResponseWriter, *http.Request):
+		return h
+	case func(context.Context, http.ResponseWriter, *http.Request):
 		return func(w http.ResponseWriter, r *http.Request) {
-			c := runtime.NewContext()
-			c["params"] = mux.Vars(r)
+			c := context.New()
 			h(c, w, r)
 		}
-  default:
-    panic("Entry point not found: bad type")
-  }
+	default:
+		panic("Entry point not found: bad type")
+	}
 }
 
 func specializeHandler(w http.ResponseWriter, r *http.Request) {

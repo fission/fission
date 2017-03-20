@@ -3,7 +3,7 @@ FROM golang:1.8
 ENV GOPATH /usr
 ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/go
 
-ADD runtime	    ${APP}/runtime
+ADD context	    ${APP}/context
 ADD server.go   ${APP}
 
 WORKDIR ${APP}

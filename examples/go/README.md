@@ -16,10 +16,10 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 ```
 # Build the function as a plugin
-$ go build -buildmode=plugin -o hello.so hello.go
+$ ./build.sh
 
 # Upload the function to fission
-$ fission function create --name hello --env go-runtime --code hello.so
+$ fission function create --name hello --env go-runtime --package hello.so
 
 # Map /hello to the hello function
 $ fission route create --method GET --url /hello --function hello
