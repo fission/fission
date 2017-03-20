@@ -47,6 +47,7 @@ func MakeAPI(rs *ResourceStore) *API {
 }
 
 func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	_, err := w.Write(resp)
 	if err != nil {
 		// this will probably fail too, but try anyway
@@ -55,6 +56,7 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 }
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	debug.PrintStack()
 	code, msg := fission.GetHTTPError(err)
 	log.Errorf("Error: %v: %v", code, msg)
