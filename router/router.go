@@ -71,7 +71,8 @@ func serve(port int, httpTriggerSet *HTTPTriggerSet) {
 }
 
 func Start(port int, controllerUrl string, poolmgrUrl string) {
-	fmap := makeFunctionServiceMap(time.Minute)
+	routerCacheTimeout := 10 * time.Second
+	fmap := makeFunctionServiceMap(routerCacheTimeout)
 	controller := controllerClient.MakeClient(controllerUrl)
 	poolmgr := poolmgrClient.MakeClient(poolmgrUrl)
 

@@ -35,9 +35,10 @@ const (
 
 type (
 	functionServiceCache struct {
-		byFunction *cache.Cache // function -> funcSvc : map[fission.Metadata]*funcSvc
-		byAddress  *cache.Cache // address -> function : map[string]fission.Metadata
-		byPod      *cache.Cache // podname -> function : map[string]fission.Metadata
+		byFunction   *cache.Cache // function -> funcSvc : map[fission.Metadata]*funcSvc
+		byPodAddress *cache.Cache // address -> function : map[string]fission.Metadata
+		bySvcAddress *cache.Cache // address -> function : map[string]fission.Metadata
+		byPod        *cache.Cache // podname -> function : map[string]fission.Metadata
 
 		requestChannel chan *fscRequest
 	}
@@ -58,7 +59,8 @@ type (
 func MakeFunctionServiceCache() *functionServiceCache {
 	fsc := &functionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
-		byAddress:      cache.MakeCache(0, 0),
+		byPodAddress:   cache.MakeCache(0, 0),
+		bySvcAddress:   cache.MakeCache(0, 0),
 		byPod:          cache.MakeCache(0, 0),
 		requestChannel: make(chan *fscRequest),
 	}
@@ -125,7 +127,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	if err != nil {
 		if existing != nil {
 			f := existing.(*funcSvc)
-			err2 := fsc.TouchByAddress(f.address)
+			err2 := fsc.TouchByAddress(f.podAddress)
 			if err2 != nil {
 				return err2, nil
 			}
@@ -138,7 +140,12 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	fsvc.ctime = now
 	fsvc.atime = now
 
-	err, _ = fsc.byAddress.Set(fsvc.address, *fsvc.function)
+	err, _ = fsc.byPodAddress.Set(fsvc.podAddress, *fsvc.function)
+	if err != nil {
+		log.Printf("error caching fsvc: %v", err)
+		return err, nil
+	}
+	err, _ = fsc.bySvcAddress.Set(fsvc.svcAddress, *fsvc.function)
 	if err != nil {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
@@ -163,9 +170,21 @@ func (fsc *functionServiceCache) TouchByAddress(address string) error {
 }
 
 func (fsc *functionServiceCache) _touchByAddress(address string) error {
-	mI, err := fsc.byAddress.Get(address)
+	var mI interface{}
+	var err error
+
+	// Lookup the address as both pod and svc address.
+	mI, err = fsc.byPodAddress.Get(address)
 	if err != nil {
-		return err
+		fe, ok := err.(fission.Error)
+		if ok && fe.Code == fission.ErrorNotFound {
+			mI, err = fsc.bySvcAddress.Get(address)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	m := mI.(fission.Metadata)
 	fsvcI, err := fsc.byFunction.Get(m)
@@ -208,7 +227,8 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	}
 
 	fsc.byFunction.Delete(m)
-	fsc.byAddress.Delete(fsvc.address)
+	fsc.byPodAddress.Delete(fsvc.podAddress)
+	fsc.bySvcAddress.Delete(fsvc.svcAddress)
 	fsc.byPod.Delete(podName)
 	return true, nil
 }

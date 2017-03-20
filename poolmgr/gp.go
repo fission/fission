@@ -54,7 +54,6 @@ type (
 		controllerUrl    string
 		idlePodReapTime  time.Duration         // pods unused for idlePodReapTime are deleted
 		fsCache          *functionServiceCache // cache funcSvc's by function, address and podname
-		useSvc           bool                  // create k8s service for specialized pods
 		poolInstanceId   string                // small random string to uniquify pod names
 		kubernetesClient *kubernetes.Clientset
 		instanceId       string // poolmgr instance id
@@ -97,8 +96,6 @@ func MakeGenericPool(
 		fsCache:          fsCache,
 		poolInstanceId:   uniuri.NewLen(8),
 		instanceId:       instanceId,
-
-		useSvc: false, // defaults off -- svc takes a second or more to become routable, slowing cold start
 	}
 
 	// Labels for generic deployment/RS/pods.
@@ -434,36 +431,28 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	}
 	log.Printf("Specialized pod: %v", pod.ObjectMeta.Name)
 
-	var svcHost string
-	if gp.useSvc {
-		svcName := fmt.Sprintf("svc-%v", m.Name)
-		if len(m.Uid) > 0 {
-			svcName += ("-" + m.Uid)
-		}
-
-		labels := gp.labelsForFunction(m)
-		svc, err := gp.createSvc(svcName, labels)
-		if err != nil {
-			gp.scheduleDeletePod(pod.ObjectMeta.Name)
-			return nil, err
-		}
-		if svc.ObjectMeta.Name != svcName {
-			gp.scheduleDeletePod(pod.ObjectMeta.Name)
-			return nil, errors.New(fmt.Sprintf("sanity check failed for svc %v", svc.ObjectMeta.Name))
-		}
-
-		// the fission router isn't in the same namespace, so return a
-		// namespace-qualified hostname
-		svcHost = fmt.Sprintf("%v.%v", svcName, gp.namespace)
-	} else {
-		log.Printf("Using pod IP for specialized pod")
-		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
+	// Create svc
+	svcName := fmt.Sprintf("%v-%v", m.Name, m.Uid)
+	labels := gp.labelsForFunction(m)
+	svc, err := gp.createSvc(svcName, labels)
+	if err != nil {
+		gp.scheduleDeletePod(pod.ObjectMeta.Name)
+		return nil, err
 	}
+	if svc.ObjectMeta.Name != svcName {
+		panic("sanity check failed")
+	}
+
+	// the fission router isn't in the same namespace, so return a
+	// namespace-qualified hostname
+	svcAddress := fmt.Sprintf("%v.%v", svcName, gp.namespace)
+	podAddress := fmt.Sprintf("%v:8888", pod.Status.PodIP)
 
 	fsvc := &funcSvc{
 		function:    m,
 		environment: gp.env,
-		address:     svcHost,
+		svcAddress:  svcAddress,
+		podAddress:  podAddress,
 		podName:     pod.ObjectMeta.Name,
 		ctime:       time.Now(),
 		atime:       time.Now(),

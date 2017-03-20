@@ -34,16 +34,6 @@ import (
 	controllerclient "github.com/fission/fission/controller/client"
 )
 
-type funcSvc struct {
-	function    *fission.Metadata    // function this pod/service is for
-	environment *fission.Environment // env it was obtained from
-	address     string               // Host:Port or IP:Port that the service can be reached at.
-	podName     string               // pod name (within the function namespace)
-
-	ctime time.Time
-	atime time.Time
-}
-
 type API struct {
 	poolMgr     *GenericPoolManager
 	functionEnv *cache.Cache // map[fission.Metadata]fission.Environment
@@ -132,7 +122,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	fsvc, err := api.fsCache.GetByFunction(m)
 	if err == nil {
 		// Cached, return svc address
-		return fsvc.address, nil
+		return fsvc.getAddress(), nil
 	}
 
 	// None exists, so create a new funcSvc:
@@ -160,7 +150,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return "", err
 	}
 
-	return funcSvc.address, nil
+	return funcSvc.getAddress(), nil
 }
 
 // find funcSvc and update its atime
