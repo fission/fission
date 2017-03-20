@@ -528,3 +528,110 @@ func (c *Client) WatchList() ([]fission.Watch, error) {
 
 	return watches, err
 }
+
+func (c *Client) TimeTriggerCreate(t *fission.TimeTrigger) (*fission.Metadata, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(c.url("triggers/time"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleCreateResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m, nil
+}
+
+func (c *Client) TimeTriggerGet(m *fission.Metadata) (*fission.TimeTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var t fission.TimeTrigger
+	err = json.Unmarshal(body, &t)
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func (c *Client) TimeTriggerUpdate(t *fission.TimeTrigger) (*fission.Metadata, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+	relativeUrl := fmt.Sprintf("triggers/time/%v", t.Metadata.Name)
+
+	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (c *Client) TimeTriggerDelete(m *fission.Metadata) error {
+	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+	err := c.delete(relativeUrl)
+	return err
+}
+
+func (c *Client) TimeTriggerList() ([]fission.TimeTrigger, error) {
+	resp, err := http.Get(c.url("triggers/time"))
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	triggers := make([]fission.TimeTrigger, 0)
+	err = json.Unmarshal(body, &triggers)
+	if err != nil {
+		return nil, err
+	}
+
+	return triggers, nil
+}

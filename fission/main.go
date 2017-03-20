@@ -72,6 +72,21 @@ func main() {
 		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{}, Action: htList},
 	}
 
+	// timetriggers
+	ttNameFlag := cli.StringFlag{Name: "name", Usage: "Time Trigger name"}
+	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec ('0 30 * * *', '@every 5m', '@hourly')"}
+	ttDescFlag := cli.StringFlag{Name: "desc", Usage: "Time Trigger description"}
+	ttStatusFlag := cli.StringFlag{Name: "status", Usage: "Time Trigger status (running/stopped)"}
+	ttFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
+	ttFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
+	ttSubcommands := []cli.Command{
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create Time trigger", Flags: []cli.Flag{ttNameFlag, ttFnNameFlag, ttFnUidFlag, ttCronFlag, ttDescFlag, ttStatusFlag}, Action: ttCreate},
+		{Name: "get", Usage: "Get Time trigger", Flags: []cli.Flag{}, Action: ttGet},
+		{Name: "update", Usage: "Update Time trigger", Flags: []cli.Flag{ttNameFlag, ttDescFlag, ttCronFlag, ttStatusFlag}, Action: ttUpdate},
+		{Name: "delete", Usage: "Delete Time trigger", Flags: []cli.Flag{ttNameFlag}, Action: ttDelete},
+		{Name: "list", Usage: "List Time triggers", Flags: []cli.Flag{}, Action: ttList},
+	}
+
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
@@ -101,6 +116,7 @@ func main() {
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
+		{Name: "timetrigger", Aliases: []string{"tt", "timer"}, Usage: "Manage Time triggers (timers) for functions", Subcommands: ttSubcommands},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 

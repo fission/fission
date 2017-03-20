@@ -14,24 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission
+package timer
 
-func (f Function) Key() string {
-	return f.Metadata.Name
-}
-
-func (e Environment) Key() string {
-	return e.Metadata.Name
-}
-
-func (ht HTTPTrigger) Key() string {
-	return ht.Metadata.Name
-}
-
-func (tt TimeTrigger) Key() string {
-	return tt.Metadata.Name
-}
-
-func (w Watch) Key() string {
-	return w.Metadata.Name
-}
+type (
+	Publisher interface {
+		// Publish an event to a "target".  Target's meaning depends on the
+		// publisher: it's a URL in the case of a webhook publisher, or a queue
+		// name in a queue-based publisher such as NATS.
+		Publish(target string, timerName string)
+	}
+)
