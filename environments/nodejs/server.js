@@ -106,14 +106,14 @@ app.all('/', function (req, res) {
         Promise.resolve(userFunction(context)).then(function({ status, body, headers }) {
             callback(status, body, headers);
         }).catch(function(err) {
-            console.log(`Function error: ${e}`);
+            console.log(`Function error: ${err}`);
             callback(500, "Internal server error");
         });
     } else { // 2 arguments (context, callback)
         try {
             userFunction(context, callback);
         } catch (err) {
-            console.log(`Function error: ${e}`);
+            console.log(`Function error: ${err}`);
             callback(500, "Internal server error");
         }
     }

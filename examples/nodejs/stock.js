@@ -4,7 +4,8 @@ const rp = require('request-promise-native');
 
 module.exports = async function (context) {
     const body = context.request.body;
-    const symbol = body.symbol
+    console.log(`body = ${body}`);
+    const symbol = body['text'].split(' ')[1];
 
     console.log(`Got symbol: ${symbol}`);
 
