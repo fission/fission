@@ -27,6 +27,7 @@ import (
 
 	"github.com/fission/fission"
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
+	"github.com/gorilla/mux"
 )
 
 type functionHandler struct {
@@ -92,6 +93,12 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	reqStartTime := time.Now()
+
+	// retrieve url params and add them to request header
+	vars := mux.Vars(request)
+	for k, v := range vars {
+		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
+	}
 
 	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(&fh.Function)
