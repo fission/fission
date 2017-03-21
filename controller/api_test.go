@@ -120,6 +120,20 @@ func TestFunctionApi(t *testing.T) {
 	assert(len(funcs) == 2,
 		"created two functions, but didn't find them")
 
+	funcs_url := g.client.Url + "/v1/functions"
+	resp, err := http.Get(funcs_url)
+	panicIf(err)
+	defer resp.Body.Close()
+	assert(resp.StatusCode == 200, "http get status code on /v1/functions")
+
+	var found bool = false
+	for _, b := range resp.Header["Content-Type"] {
+		if b == "application/json; charset=utf-8" {
+			found = true
+		}
+	}
+	assert(found, "incorrect response content type")
+
 	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo"})
 	panicIf(err)
 	err = g.client.FunctionDelete(&fission.Metadata{Name: "bar"})
@@ -337,6 +351,15 @@ func TestMain(m *testing.M) {
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)
 	assert(resp.StatusCode == 200, "http get status code on root")
+
+	var found bool = false
+	for _, b := range resp.Header["Content-Type"] {
+		if b == "application/json; charset=utf-8" {
+			found = true
+		}
+	}
+	assert(found, "incorrect response content type")
+
 	_, err = ioutil.ReadAll(resp.Body)
 	panicIf(err)
 
