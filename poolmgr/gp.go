@@ -18,6 +18,7 @@ package poolmgr
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -37,6 +38,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/logger"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -265,6 +267,9 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
+	// Tell logging helper about this function invocation
+	gp.setupLogging(pod, metadata)
+
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
 	specializeUrl := fmt.Sprintf("http://%v:8888/specialize", podIP)
@@ -490,6 +495,23 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 		return nil
 	}
 
+	pod, err := gp.kubernetesClient.Core().Pods(gp.namespace).Get(podName)
+	if err != nil {
+		return err
+	}
+
+	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
+	req, err := http.NewRequest("DELETE", loggerUrl, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
+	} else {
+		if resp.StatusCode != 200 {
+			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
+		}
+		resp.Body.Close()
+	}
+
 	// delete pod
 	err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(podName, nil)
 	if err != nil {
@@ -555,4 +577,33 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
+}
+
+// Calls the logging daemonset pod on the node where the given pod is
+// running.
+func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) {
+	logReq := logger.LogRequest{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: gp.env.Metadata.Name,
+		FuncName:  metadata.Name,
+		FuncUid:   metadata.Uid,
+	}
+	reqbody, err := json.Marshal(logReq)
+	if err != nil {
+		log.Printf("Error creating log request")
+		return
+	}
+	go func() {
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
+		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
+		if err != nil {
+			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
+		} else {
+			if resp.StatusCode != 200 {
+				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
+			}
+			resp.Body.Close()
+		}
+	}()
 }

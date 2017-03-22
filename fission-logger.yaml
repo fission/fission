@@ -1,0 +1,122 @@
+# Sample Kubernetes Service config for external db service. 
+#
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: influxdb
+#   namespace: fission
+# spec:
+#   ports:
+#   - name: "8086"
+#     port: 8086
+#     targetPort: 8086
+#     protocol: TCP
+
+# ---
+# apiVersion: v1
+# kind: Endpoints
+# metadata:
+#   name: influxdb
+#   namespace: fission
+# subsets:
+#   - addresses:
+#     - ip: replace.influxdb.host.here
+#     ports:
+#     - name: "8086"
+#       port: 8086
+#       protocol: TCP
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: influxdb
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: influxdb
+    spec:
+      containers:
+      - name: influxdb
+        image: tutum/influxdb
+        env:
+          - name: PRE_CREATE_DB
+            value: fissionFunctionLog
+          # Create a random username/password for InfluxDB here, and
+          # repeat it in the fluentd spec below.
+          - name: ADMIN_USER
+            value: ""
+          - name: INFLUXDB_INIT_PWD
+            value: ""
+
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: logger
+  namespace: fission
+spec:
+  template:
+    metadata:
+      labels:
+        svc: logger
+    spec:
+      containers:
+        - name: logger
+          image: fission/fission-bundle
+          imagePullPolicy: IfNotPresent
+          command: ["/fission-bundle"]
+          args: ["--logger"]
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: fission-log
+              mountPath: /var/log/fission
+              readOnly: false
+          ports:
+            - containerPort: 1234
+              hostPort: 1234
+              protocol: TCP
+        - name: fluentd
+          image: fission/fluentd
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INFLUXDB_ADDRESS
+              value: influxdb
+            - name: INFLUXDB_PORT
+              value: "8086"
+            - name: INFLUXDB_DBNAME
+              value: "fissionFunctionLog"
+            # Username/password for fluentd to push logs to
+            # influxdb. This should match the influxdb
+            # username/passowrd defined above.
+            - name: INFLUXDB_USERNAME
+              value: ""
+            - name: INFLUXDB_PASSWD
+              value: ""
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: fission-log
+              mountPath: /var/log/fission
+              readOnly: false
+      volumes:
+        - name: container-log
+          hostPath:
+              path: /var/log/containers
+        - name: docker-log
+          hostPath:
+              path: /var/lib/docker/containers
+        - name: fission-log
+          hostPath:
+              path: /var/log/fission

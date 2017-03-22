@@ -182,6 +182,9 @@ Finally, you're ready to use Fission!
   Hello, world!
 ```
 
+You can also set up persistence for logs: [instructions here](INSTALL.md).
+
+
 Compiling Fission
 =================
 

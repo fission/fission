@@ -111,3 +111,21 @@ When poolmgr needs to create a service for a function, it calls
 fetcher to fetch the function.  Fetcher downloads the function into a
 volume shared between fetcher and this environment container.  Poolmgr
 then requests the container to load the function.
+
+Logger
+-----------
+
+Logger helps to forward function logs to centralized db service for log
+persistence. Currently only influxdb is supported to store logs.
+Following is a diagram describe how log service works:
+
+![Logger Diagram](https://cloud.githubusercontent.com/assets/202578/23100399/b0e3ea00-f6ba-11e6-8f2f-6588cfef2e84.png)
+
+1. Pool manager choose a pod from pool to execute user function
+2. Pool manager makes a HTTP POST to logger helper, once helper receives 
+the request it creates a symlink to container log for fluentd.
+3. Fluentd reads log from symlink and pipes to influxdb
+4. `fission function logs ...` retrieve event logs from influxdb with 
+optional log filter
+5. Pool manager removes function pod from pool
+6. Pool manager asks logger helper to stop piping logs, logger removes symlink.
