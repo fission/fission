@@ -182,49 +182,8 @@ Finally, you're ready to use Fission!
   Hello, world!
 ```
 
-### Enable persistent function logs (Optional)
+You can also set up persistence for logs: [instructions here](INSTALL.md).
 
-Build fluentd docker image
-
-```
-  $ cd $GOPATH/src/github.com/fission/fission/logger/fluentd
-  $ ./build.sh
-```
-
-Create Kubernetes service and deployment
-
-```
-  $ cd $GOPATH/src/github.com/fission/fission/fission-logger.yaml
-  $ vim fission-logger.yaml # replace information in yaml file
-  $ kubectl apply -f fission-logger.yaml
-```
-
-For minikube or local cluster
-
-```
-$ export FISSION_LOGDB=http://$(minikube ip):31315
-```
-
-For GKE or other cloud
-
-```
-$ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..ip}'):8086
-```
-
-Display function logs with given function name
-
-```
-  # Currently only influxDB is supported, use --help to see more options
-  $ fission function logs --name hello
-```
-
-Display function logs from specific pod
-
-```
-  # Currently only influxDB is supported, use --help to see more options
-  $ fission function pods --name hello
-  $ fission function logs --name hello --pod <pod>
-```
 
 Compiling Fission
 =================

@@ -7,6 +7,7 @@
      * [Get and Run Fission: GKE or other Cloud](#get-and-run-fission-gke-or-other-cloud)
      * [Install the client CLI](#install-the-client-cli)
      * [Run an example](#run-an-example)
+     * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs)
 
 ## Running Fission on your Cluster
 
@@ -109,4 +110,47 @@ Finally, you're ready to use Fission!
   
   $ curl http://$FISSION_ROUTER/hello
   Hello, world!
+```
+
+
+### Enable Persistent Function Logs (Optional)
+
+Fission uses InfluxDB to store logs and fluentd to forward them from
+function pods into InfluxDB.  To setup both InfluxDB and fluentd:
+
+Edit `fission-logger.yaml` to add a username and password for the
+Influxdb deployment.  Then:
+
+```
+  $ kubectl create -f fission-logger.yaml
+```
+
+On the client side,
+
+If you're using minikube or a local cluster:
+
+```
+$ export FISSION_LOGDB=http://$(minikube ip):31315
+```
+
+If you're using GKE or other cloud:
+
+```
+$ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..ip}'):8086
+```
+
+That's it for setup.  You can now use this to view function logs:
+
+```
+  $ fission function logs --name hello
+```
+
+You can also list the all the pods that have hosted the function
+(including ones that aren't alive any more) and view logs for a
+particular pod:
+
+```
+  $ fission function pods --name hello
+
+  $ fission function logs --name hello --pod <pod name>
 ```
