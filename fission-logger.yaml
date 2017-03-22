@@ -44,8 +44,8 @@ spec:
         env:
           - name: PRE_CREATE_DB
             value: fissionFunctionLog
-          # A database user will be created after the db first-time launch
-          # Please change the username/password here
+          # Create a random username/password for InfluxDB here, and
+          # repeat it in the fluentd spec below.
           - name: ADMIN_USER
             value: ""
           - name: INFLUXDB_INIT_PWD
@@ -84,7 +84,7 @@ spec:
               hostPort: 1234
               protocol: TCP
         - name: fluentd
-          image: fission-daemonset-fluentd
+          image: fission/fluentd
           imagePullPolicy: IfNotPresent
           env:
             - name: INFLUXDB_ADDRESS
@@ -93,8 +93,9 @@ spec:
               value: "8086"
             - name: INFLUXDB_DBNAME
               value: "fissionFunctionLog"
-            # Username/password for fluentd to push log to influxdb,
-            # should match the influxdb username/passowrd defined above
+            # Username/password for fluentd to push logs to
+            # influxdb. This should match the influxdb
+            # username/passowrd defined above.
             - name: INFLUXDB_USERNAME
               value: ""
             - name: INFLUXDB_PASSWD
