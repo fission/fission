@@ -16,5 +16,5 @@ script:
    - ./fission-bundle/build.sh
    - hack/verify-gofmt.sh
    - /tmp/test-etcd/etcd &
-   - go test -v -i $(go list ./... | grep -v '/vendor/')
-   - go test -v $(go list ./... | grep -v '/vendor/')
+   - go test -v -i $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
+   - go test -v $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
