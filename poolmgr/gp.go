@@ -267,24 +267,8 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
-	logReq := gp.setupLogging(pod, metadata)
-	reqbody, err := json.Marshal(logReq)
-	if err != nil {
-		return err
-	}
-
-	go func(pod *v1.Pod) {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
-		resp, err = http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
-		if err != nil {
-			log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-	}(pod)
+	// Tell logging helper about this function invocation
+	gp.setupLogging(pod, metadata)
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
@@ -595,12 +579,31 @@ func (gp *GenericPool) destroy() error {
 	return nil
 }
 
-func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) logger.LogRequest {
-	return logger.LogRequest{
+// Calls the logging daemonset pod on the node where the given pod is
+// running.
+func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) {
+	logReq := logger.LogRequest{
 		Namespace: pod.Namespace,
 		Pod:       pod.Name,
 		Container: gp.env.Metadata.Name,
 		FuncName:  metadata.Name,
 		FuncUid:   metadata.Uid,
 	}
+	reqbody, err := json.Marshal(logReq)
+	if err != nil {
+		log.Printf("Error creating log request")
+		return
+	}
+	go func() {
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
+		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
+		if err != nil {
+			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
+		} else {
+			if resp.StatusCode != 200 {
+				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
+			}
+			resp.Body.Close()
+		}
+	}()
 }
