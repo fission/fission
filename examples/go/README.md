@@ -7,6 +7,9 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 To use this environment, download the [build helper
 script](environments/go/builder/go-function-build).
 
+The script must be run in the same directory as the function you're
+building.
+
 ## Examples
 
 ### hello.go
