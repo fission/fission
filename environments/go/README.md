@@ -2,7 +2,7 @@
 
 This is the Go environment for Fission.
 
-It's a Docker image containing a Go 1.8rc3 runtime, along with a dynamic loader.
+It's a Docker image containing a Go 1.8 runtime, along with a dynamic loader.
 
 ## Build this image
 
@@ -27,3 +27,8 @@ fission env update --name go-runtime --image USER/go-runtime
 
 After this, fission functions that have the env parameter set to the
 same environment name as this command will use this environment.
+
+
+## Creating functions to use this image
+
+See the [examples README](examples/go/README.md).

@@ -4,8 +4,11 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 ## Requirements
 
-- go 1.8
-- A [go-runtime fission environment](environments/go/README.md)
+To use this environment, download the [build helper
+script](environments/go/builder/go-function-build).
+
+The script must be run in the same directory as the function you're
+building.
 
 ## Examples
 
@@ -13,13 +16,12 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 `hello.go` is an very basic HTTP handler returning `"Hello, World!"`.
 
-
 ```
-# Build the function as a plugin
-$ ./build.sh
+# Build the function as a plugin. Outputs result to 'function.so'.
+$ go-function-build hello.go
 
 # Upload the function to fission
-$ fission function create --name hello --env go-runtime --package hello.so
+$ fission function create --name hello --env go-runtime --package function.so
 
 # Map /hello to the hello function
 $ fission route create --method GET --url /hello --function hello

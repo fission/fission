@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [ $# -eq 0 ]
+then
+    echo "No arguments, building current dir"
+    filename='.'
+else
+    filename=$1
+fi
+
+docker run --rm -v $(pwd):/build -w /build fission/go-builder go build -buildmode=plugin -o function.so $filename && echo "Compiled plugin: function.so. Use 'fission function create' to upload to fission."
