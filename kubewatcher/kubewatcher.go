@@ -144,7 +144,7 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, resourceVersion string) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
-	var watchTimeoutSec int64 = 300
+	var watchTimeoutSec int64 = 120
 
 	// TODO populate labelselector and fieldselector
 	listOptions := api.ListOptions{
@@ -264,6 +264,8 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			if ev.Type == watch.Error {
 				e := apierrs.FromObject(ev.Object)
 				log.Println("Watch error, retrying in a second: %v", e)
+				// Start from the beginning to get around "too old resource version"
+				ws.lastResourceVersion = ""
 				time.Sleep(time.Second)
 				break
 			}
@@ -274,6 +276,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				log.Printf("rv=%v", rv)
 				ws.lastResourceVersion = rv
 			}
+
 			ws.publisher.Publish(ev, ws.Watch.Target)
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
