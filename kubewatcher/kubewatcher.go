@@ -225,6 +225,8 @@ func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, p
 func (ws *watchSubscription) restartWatch() error {
 	retries := 60
 	for {
+		log.Printf("(re)starting watch %v (ns:%v type:%v) at rv:%v",
+			ws.Watch.Metadata, ws.Watch.Namespace, ws.Watch.ObjType, ws.lastResourceVersion)
 		wi, err := createKubernetesWatch(ws.kubernetesClient, &ws.Watch, ws.lastResourceVersion)
 		if err != nil {
 			retries--
@@ -240,6 +242,14 @@ func (ws *watchSubscription) restartWatch() error {
 	}
 }
 
+func getResourceVersion(obj runtime.Object) (string, error) {
+	objRef, err := api.GetReference(obj)
+	if err != nil {
+		return "", err
+	}
+	return objRef.ResourceVersion, nil
+}
+
 func (ws *watchSubscription) eventDispatchLoop() {
 	log.Println("Listening to watch ", ws.Watch.Metadata.Name)
 	for {
@@ -250,7 +260,12 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				break
 			}
 			// TODO: update ws.lastResourceVersion
-
+			rv, err := getResourceVersion(ev.Object)
+			if err != nil {
+				log.Printf("Error getting resourceVersion from object: %v", err)
+			} else {
+				ws.lastResourceVersion = rv
+			}
 			ws.publisher.Publish(ev, ws.Watch.Target)
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
