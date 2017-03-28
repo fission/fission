@@ -29,6 +29,8 @@ import (
 
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
+	apierrs "k8s.io/client-go/1.5/pkg/api/errors"
+	"k8s.io/client-go/1.5/pkg/api/meta"
 	"k8s.io/client-go/1.5/pkg/runtime"
 	"k8s.io/client-go/1.5/pkg/watch"
 
@@ -243,11 +245,11 @@ func (ws *watchSubscription) restartWatch() error {
 }
 
 func getResourceVersion(obj runtime.Object) (string, error) {
-	objRef, err := api.GetReference(obj)
+	meta, err := meta.Accessor(obj)
 	if err != nil {
 		return "", err
 	}
-	return objRef.ResourceVersion, nil
+	return meta.GetResourceVersion(), nil
 }
 
 func (ws *watchSubscription) eventDispatchLoop() {
@@ -259,11 +261,17 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				log.Println("Watch stopped", ws.Watch.Metadata.Name)
 				break
 			}
-			// TODO: update ws.lastResourceVersion
+			if ev.Type == watch.Error {
+				e := apierrs.FromObject(ev.Object)
+				log.Println("Watch error, retrying in a second: %v", e)
+				time.Sleep(time.Second)
+				break
+			}
 			rv, err := getResourceVersion(ev.Object)
 			if err != nil {
 				log.Printf("Error getting resourceVersion from object: %v", err)
 			} else {
+				log.Printf("rv=%v", rv)
 				ws.lastResourceVersion = rv
 			}
 			ws.publisher.Publish(ev, ws.Watch.Target)
