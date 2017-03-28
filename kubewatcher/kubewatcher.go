@@ -25,6 +25,7 @@ import (
 	"log"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
@@ -50,10 +51,11 @@ type (
 
 	watchSubscription struct {
 		fission.Watch
-		kubeWatch        watch.Interface
-		stopped          *int32
-		kubernetesClient *kubernetes.Clientset
-		publisher        Publisher
+		kubeWatch           watch.Interface
+		lastResourceVersion string
+		stopped             *int32
+		kubernetesClient    *kubernetes.Clientset
+		publisher           Publisher
 	}
 
 	kubeWatcherRequest struct {
@@ -137,11 +139,16 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch) (watch.Interface, error) {
+func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, resourceVersion string) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
+	var watchTimeoutSec int64 = 300
 
-	listOptions := api.ListOptions{} // TODO populate labelselector and fieldselector
+	// TODO populate labelselector and fieldselector
+	listOptions := api.ListOptions{
+		ResourceVersion: resourceVersion,
+		TimeoutSeconds:  &watchTimeoutSec,
+	}
 
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.ObjType) {
@@ -198,25 +205,27 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
-		Watch:            *w,
-		kubeWatch:        nil,
-		stopped:          &stopped,
-		kubernetesClient: kubeClient,
-		publisher:        publisher,
+		Watch:               *w,
+		kubeWatch:           nil,
+		stopped:             &stopped,
+		kubernetesClient:    kubeClient,
+		publisher:           publisher,
+		lastResourceVersion: "",
 	}
 
 	err := ws.restartWatch()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	go ws.eventDispatchLoop()
+	return ws, nil
 }
 
 func (ws *watchSubscription) restartWatch() error {
 	retries := 60
 	for {
-		wi, err := createKubernetesWatch(kubeClient, w)
+		wi, err := createKubernetesWatch(ws.kubernetesClient, &ws.Watch, ws.lastResourceVersion)
 		if err != nil {
 			retries--
 			if retries > 0 {
@@ -227,7 +236,7 @@ func (ws *watchSubscription) restartWatch() error {
 			}
 		}
 		ws.kubeWatch = wi
-		return
+		return nil
 	}
 }
 
@@ -240,6 +249,8 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				log.Println("Watch stopped", ws.Watch.Metadata.Name)
 				break
 			}
+			// TODO: update ws.lastResourceVersion
+
 			ws.publisher.Publish(ev, ws.Watch.Target)
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
