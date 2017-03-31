@@ -1,0 +1,202 @@
+---
+apiVersion: v1
+kind: ProjectRequest
+metadata:
+  name: fission
+  labels:
+    name: fission
+
+---
+apiVersion: v1
+kind: ProjectRequest
+metadata:
+  name: fission-function
+  labels:
+    name: fission-function
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: poolmgr
+  namespace: fission
+
+---
+apiVersion: v1
+kind: ClusterRole
+metadata:
+  name: fission:poolmgr
+rules:
+- apiGroups:
+  - extensions
+  attributeRestrictions: null
+  resources:
+  - deployments
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  attributeRestrictions: null
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - update
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: controller
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: controller
+    spec:
+      volumes:
+      - name: controller-storage
+        emptyDir: {}
+      containers:
+      - name: controller
+        image: fission/fission-bundle:testing20170124
+        command: ["/fission-bundle"]
+        args: ["--controllerPort", "8888", "--filepath", "/filestore"]
+        volumeMounts:
+          - name: controller-storage
+            mountPath: /filestore
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: router
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: router
+    spec:
+      containers:
+      - name: router
+        image: fission/fission-bundle:testing20170124
+        command: ["/fission-bundle"]
+        args: ["--routerPort", "8888"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: poolmgr
+  namespace: fission
+  labels:
+    svc: poolmgr
+spec:
+  ports:
+  - port: 80
+    targetPort: 8888
+  selector:
+    svc: poolmgr
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: poolmgr
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: poolmgr
+    spec:
+      containers:
+      - name: poolmgr
+        image: fission/fission-bundle:testing20170124
+        command: ["/fission-bundle"]
+        args: ["--poolmgrPort", "8888"]
+      serviceAccount: poolmgr
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kubewatcher
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: kubewatcher
+    spec:
+      containers:
+      - name: kubewatcher
+        image: fission/fission-bundle:testing20170124
+        command: ["/fission-bundle"]
+        args: ["--kubewatcher"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd
+  namespace: fission
+  labels:
+    svc: etcd
+spec:
+  ports:
+  - port: 2379
+    targetPort: 2379
+  selector:
+    svc: etcd
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: etcd
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: etcd
+    spec:
+      containers:
+      - name: etcd
+        image: quay.io/coreos/etcd
+        env:
+        - name: ETCD_LISTEN_CLIENT_URLS
+          value: http://0.0.0.0:2379
+        - name: ETCD_ADVERTISE_CLIENT_URLS
+          value: http://etcd:2379
+        - name: ETCD_DATA_DIR
+          value: /tmp/default.etcd
+
+---
+apiVersion: v1
+groupNames: null
+kind: RoleBinding
+metadata:
+  name: fission:poolmgr
+  namespace: fission-function
+roleRef:
+  name: fission:poolmgr
+subjects:
+- kind: ServiceAccount
+  name: poolmgr
+  namespace: fission
+userNames:
+- system:serviceaccount:fission:poolmgr
