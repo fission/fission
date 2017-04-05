@@ -20,4 +20,4 @@ routerPort: 31314
 
 ## Namespace in which to run fission functions (this is different from
 ## the release namespace)
-fissionFunctionNamespace: fission-function
+functionNamespace: fission-function
