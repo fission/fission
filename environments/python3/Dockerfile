@@ -1,8 +1,9 @@
-FROM ubuntu:16.04
+FROM alpine:3.5
 
-RUN apt-get update -y
-RUN apt-get install -y python3 python3-pip python3-dev build-essential
+RUN apk update
+RUN apk add --no-cache python3 python3-dev build-base
 RUN pip3 install --upgrade pip
+RUN rm -r /root/.cache
 
 COPY . /app
 WORKDIR /app
