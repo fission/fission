@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: fission/fission-bundle:alpha20170124
+        image: fission/fission-bundle:alpha20170328
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--filepath", "/filestore"]
 
@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
       - name: router
-        image: fission/fission-bundle:alpha20170124
+        image: fission/fission-bundle:alpha20170328
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888"]
 
@@ -81,7 +81,7 @@ spec:
     spec:
       containers:
       - name: poolmgr
-        image: fission/fission-bundle:alpha20170124
+        image: fission/fission-bundle:alpha20170328
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888"]
 
@@ -100,7 +100,7 @@ spec:
     spec:
       containers:
       - name: kubewatcher
-        image: fission/fission-bundle:alpha20170124
+        image: fission/fission-bundle:alpha20170328
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
 
@@ -135,6 +135,7 @@ spec:
       containers:
       - name: etcd
         image: quay.io/coreos/etcd
+        imagePullPolicy: IfNotPresent
         env:
         - name: ETCD_LISTEN_CLIENT_URLS
           value: http://0.0.0.0:2379
