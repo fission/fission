@@ -16,7 +16,7 @@ def main():
     items = [("<li>%s</li>" % escape(m.decode('utf-8'))) for m in messages]
     ul = "<ul>%s</ul>" % "\n".join(items)
     return """
-      <html><body>
+      <html><body style="font-family:sans-serif;font-size:2rem;padding:40px">
           <h1>Guestbook</h1>      
           <form action="/guestbook" method="POST">
             <input type="text" name="text">
