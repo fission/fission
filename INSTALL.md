@@ -81,6 +81,18 @@ svc```).  Then:
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
 ```
 
+### Get and Run Fission: OpenShift
+
+If you're using OpenShift, it's possible to run Fission on it! The deployment
+template needs to be deployed as a user with cluster-admin permissions (like `system:admin`), as it needs to create a `ClusterRole` for deploying function containers from the `fission` namespace/project.
+
+Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUTER environment variables. If you're using minishift, use these commands:
+
+```
+  $ export FISSION_URL=http://$(minishift ip):31313¬
+  $ export FISSION_ROUTER=$(minishift ip):31314¬
+```
+
 ### Install the client CLI
 
 Get the CLI binary for Mac:
