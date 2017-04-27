@@ -150,6 +150,37 @@ svc```).  Then:
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
 ```
+### Get and run fission: OpenShift
+
+If you're using OpenShift, it's possible to run Fission on it! The deployment
+template needs to be deployed as a user with cluster-admin permissions (like `system:admin`), as it needs to create a `ClusterRole` for deploying function containers from the `fission` namespace/project.
+
+Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUTER environment variables. If you're using minishift, use these commands:
+
+```
+  $ export FISSION_URL=http://$(minishift ip):31313¬
+  $ export FISSION_ROUTER=$(minishift ip):31314¬
+```
+
+#### Using Minishift or Local Cluster
+
+If you're using minishift or no cloud provider, use these commands to set up services with NodePort. This exposes fission on ports 31313 and 31314.
+
+```
+  $ oc login -u system:admin
+  $ oc create -f http://fission.io/fission-openshift.yaml
+  $ oc create -f http://fission.io/fission-nodeport.yaml
+```
+
+#### Using other clouds
+If you're using any cloud provider that supports the LoadBalancer service type, use these commands:
+
+```
+$ oc login -u system:admin
+$ oc create -f http://fission.io/fission-openshift.yaml
+$ oc create -f http://fission.io/fission-cloud.yaml
+```
+After these steps, you should be able to run fission client as with kubernetes.
 
 ### Install the client CLI
 
