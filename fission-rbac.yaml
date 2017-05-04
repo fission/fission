@@ -4,15 +4,12 @@ kind: ServiceAccount
 metadata:
   name: fission-svc
   namespace: fission
-  labels:
-    kubernetes.io/cluster-service: "true"
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1alpha1
 metadata:
   name: fission-admin
-  labels:
-    kubernetes.io/cluster-service: "true"
+  namespace: fission
 subjects:
   - kind: ServiceAccount
     name: fission-svc
@@ -27,8 +24,6 @@ apiVersion: rbac.authorization.k8s.io/v1alpha1
 metadata:
   name: fission-function-admin
   namespace: fission-function
-  labels:
-    kubernetes.io/cluster-service: "true"
 subjects:
   - kind: ServiceAccount
     name: fission-svc
