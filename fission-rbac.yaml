@@ -1,3 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fission
+  labels:
+    name: fission
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fission-function
+  labels:
+    name: fission-function
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -32,20 +45,6 @@ roleRef:
   kind: ClusterRole
   name: admin
   apiGroup: rbac.authorization.k8s.io
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: fission
-  labels:
-    name: fission
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: fission-function
-  labels:
-    name: fission-function
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
