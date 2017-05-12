@@ -26,6 +26,9 @@ module.exports = async function (context) {
             status: 200,
             body: {
                 text: `${symbol} last traded at ${lastTrade}`
+            },
+            headers: {
+                'Content-Type': 'application/json'
             }
         };
     } catch (e) {
