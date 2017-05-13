@@ -30,7 +30,11 @@ spec:
       - name: controller
         image: fission/fission-bundle:alpha20170328
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888", "--filepath", "/filestore"]
+        # Username/password for controller to connect to
+        # influxdb. This should match the influxdb
+        # username/passowrd defined in fission-logger.yaml.
+        # Default is "" for both username/password.
+        args: ["--controllerPort", "8888", "--filepath", "/filestore", "--logDBUser", "", "--logDBPasswd", ""]
 
 ---
 apiVersion: extensions/v1beta1

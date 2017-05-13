@@ -27,6 +27,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/logdb"
 )
 
 type API struct {
@@ -34,14 +35,16 @@ type API struct {
 	HTTPTriggerStore
 	EnvironmentStore
 	WatchStore
+	logdb.DBConfig
 }
 
-func MakeAPI(rs *ResourceStore) *API {
+func MakeAPI(rs *ResourceStore, logDBCfg *logdb.DBConfig) *API {
 	api := &API{
 		FunctionStore:    FunctionStore{ResourceStore: *rs},
 		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
 		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
 		WatchStore:       WatchStore{ResourceStore: *rs},
+		DBConfig:         *logDBCfg,
 	}
 	return api
 }
@@ -76,6 +79,8 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiGet).Methods("GET")
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
+	r.HandleFunc("/v1/functions/{function}/logs", api.FunctionLogsApiGet).Methods("GET")
+	r.HandleFunc("/v1/functions/{function}/pods", api.FunctionPodsApiGet).Methods("GET")
 
 	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiList).Methods("GET")
 	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
