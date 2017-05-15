@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/rest"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 )
 
@@ -49,11 +50,10 @@ func Start(controllerUrl string, routerUrl string) error {
 	if err != nil {
 		return err
 	}
-	poster := MakeWebhookPublisher(routerUrl)
-	kubeWatch := MakeKubeWatcher(kubeClient, poster)
+	poster := fission.MakeWebhookPublisher()
+	kubeWatch := MakeKubeWatcher(kubeClient, poster, routerUrl)
 
-	client := client.MakeClient(controllerUrl)
-	MakeWatchSync(client, kubeWatch)
+	MakeWatchSync(client.MakeClient(controllerUrl), kubeWatch)
 
 	return nil
 }

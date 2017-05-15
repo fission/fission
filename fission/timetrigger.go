@@ -44,17 +44,12 @@ func ttCreate(c *cli.Context) error {
 		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', '@hourly', use --cron")
 	}
 	desc := c.String("desc")
-	status := c.String("status")
-	if len(status) == 0 {
-		status = "running"
-	}
 
 	tt := &fission.TimeTrigger{
 		Metadata: fission.Metadata{
 			Name: name,
 		},
 		Cron:        cron,
-		Status:      status,
 		Description: desc,
 		Function: fission.Metadata{
 			Name: fnName,
@@ -93,11 +88,6 @@ func ttUpdate(c *cli.Context) error {
 		tt.Description = newDesc
 	}
 
-	newStatus := c.String("status")
-	if len(newStatus) != 0 {
-		tt.Status = newStatus
-	}
-
 	_, err = client.TimeTriggerUpdate(tt)
 	checkErr(err, "update Time trigger")
 
@@ -127,11 +117,11 @@ func ttList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "CRON", "STATUS", "DESC", "FUNCTION_NAME", "FUNCTION_UID")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "CRON", "DESC", "FUNCTION_NAME", "FUNCTION_UID")
 	for _, tt := range tts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-			tt.Metadata.Name, tt.Cron, tt.Status, tt.Description, tt.Function.Name, tt.Function.Uid)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+			tt.Metadata.Name, tt.Cron, tt.Description, tt.Function.Name, tt.Function.Uid)
 	}
 	w.Flush()
 

@@ -35,6 +35,8 @@ import (
 	"k8s.io/client-go/1.5/pkg/watch"
 
 	"github.com/fission/fission"
+	"net/http"
+	"reflect"
 )
 
 type requestType int
@@ -48,7 +50,8 @@ type (
 		watches          map[string]watchSubscription
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *kubeWatcherRequest
-		publisher        Publisher
+		publisher        fission.Publisher
+		routerUrl        string
 	}
 
 	watchSubscription struct {
@@ -57,7 +60,8 @@ type (
 		lastResourceVersion string
 		stopped             *int32
 		kubernetesClient    *kubernetes.Clientset
-		publisher           Publisher
+		publisher           fission.Publisher
+		routerUrl           string
 	}
 
 	kubeWatcherRequest struct {
@@ -70,12 +74,13 @@ type (
 	}
 )
 
-func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher Publisher) *KubeWatcher {
+func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher fission.Publisher, routerUrl string) *KubeWatcher {
 	kw := &KubeWatcher{
 		watches:          make(map[string]watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
 		requestChannel:   make(chan *kubeWatcherRequest),
+		routerUrl:        routerUrl,
 	}
 	go kw.svc()
 	return kw
@@ -168,7 +173,7 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 
 func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
 	log.Printf("Adding watch %v: %v", w.Metadata.Name, w.Function.Name)
-	ws, err := MakeWatchSubscription(w, kw.kubernetesClient, kw.publisher)
+	ws, err := MakeWatchSubscription(w, kw.kubernetesClient, kw.publisher, kw.routerUrl)
 	if err != nil {
 		return err
 	}
@@ -204,7 +209,7 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 // 	return nil
 // }
 
-func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher fission.Publisher, routerUrl string) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
 		Watch:               *w,
@@ -213,6 +218,7 @@ func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, p
 		kubernetesClient:    kubeClient,
 		publisher:           publisher,
 		lastResourceVersion: "",
+		routerUrl:           routerUrl,
 	}
 
 	err := ws.restartWatch()
@@ -277,7 +283,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				ws.lastResourceVersion = rv
 			}
 
-			ws.publisher.Publish(ev, ws.Watch.Target)
+			ws.publisher.Publish(ws.newHttpRequest(ev, ws.Watch.Target))
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
 			err := ws.restartWatch()
@@ -286,4 +292,29 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			}
 		}
 	}
+}
+
+func (ws *watchSubscription) newHttpRequest(ev watch.Event, target string) *http.Request {
+	url := ws.routerUrl + "/" + strings.TrimPrefix(target, "/")
+	// Serialize the object
+	var buf bytes.Buffer
+	err := printKubernetesObject(ev.Object, &buf)
+	if err != nil {
+		log.Printf("Failed to serialize object: %v", err)
+		// TODO send a POST request indicating error
+	}
+
+	// Create request
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		log.Printf("Failed to create request to %v", url)
+		// can't do anything more, drop the event.
+		return nil
+	}
+
+	// Event and object type aren't in the serialized object
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("X-Kubernetes-Event-Type", string(ev.Type))
+	req.Header.Add("X-Kubernetes-Object-Type", reflect.TypeOf(ev.Object).Elem().Name())
+	return req
 }

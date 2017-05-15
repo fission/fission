@@ -72,7 +72,6 @@ type (
 		Metadata `json:"metadata"`
 
 		Cron        string `json:"cron"`
-		Status      string `json:"status"`
 		Description string `json:"description"`
 
 		Function Metadata `json:"function"`

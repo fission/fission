@@ -22,6 +22,8 @@ import (
 	"log"
 
 	"github.com/fission/fission"
+	"net/http"
+	"strings"
 )
 
 type requestType int
@@ -35,7 +37,7 @@ type (
 		triggers       map[string]*timerTriggerWithCron
 		requestChannel chan *timerRequest
 		routerUrl      string
-		publisher      *Publisher
+		publisher      *fission.Publisher
 	}
 
 	timerRequest struct {
@@ -52,7 +54,7 @@ type (
 	}
 )
 
-func MakeTimer(routerUrl string, publisher Publisher) *Timer {
+func MakeTimer(routerUrl string, publisher fission.Publisher) *Timer {
 	timer := &Timer{
 		triggers:       make(map[string]*timerTriggerWithCron),
 		requestChannel: make(chan *timerRequest),
@@ -93,8 +95,8 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 				continue
 			}
 
-			// update cron if the cron spec or status changed
-			if item.trigger.Cron != t.Cron || item.trigger.Status != t.Status {
+			// update cron if the cron spec changed
+			if item.trigger.Cron != t.Cron {
 				// if there is an cron running, stop it
 				if item.cron != nil {
 					item.cron.Stop()
@@ -131,14 +133,24 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 }
 
 func (timer *Timer) newCron(t fission.TimeTrigger) *cron.Cron {
-	var c *cron.Cron = nil
-	if t.Status == "running" {
-		c = cron.New()
-		c.AddFunc(t.Cron, func() {
-			(*timer.publisher).Publish(fission.UrlForFunction(&t.Function), t.Name)
-		})
-		c.Start()
-	}
+	c := cron.New()
+	c.AddFunc(t.Cron, func() {
+		(*timer.publisher).Publish(timer.newHttpRequest(t))
+	})
+	c.Start()
 	log.Printf("Updated new cron for %v", t.Name)
 	return c
+}
+
+func (timer *Timer) newHttpRequest(t fission.TimeTrigger) *http.Request {
+	// Create request
+	url := timer.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(&t.Function), "/")
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Printf("Failed to create request to %v", url)
+		return nil
+	}
+
+	req.Header.Add("X-Fission-Timer-Name", t.Name)
+	return req
 }

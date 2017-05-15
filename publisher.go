@@ -14,13 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package timer
+package fission
+
+import "net/http"
 
 type (
 	Publisher interface {
-		// Publish an event to a "target".  Target's meaning depends on the
+		// Publish an request to a "target".  Target's meaning depends on the
 		// publisher: it's a URL in the case of a webhook publisher, or a queue
 		// name in a queue-based publisher such as NATS.
-		Publish(target string, timerName string)
+		Publish(req *http.Request)
 	}
 )
