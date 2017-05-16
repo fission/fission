@@ -22,6 +22,7 @@ import (
 	"log"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/publisher"
 	"net/http"
 	"strings"
 )
@@ -37,7 +38,7 @@ type (
 		triggers       map[string]*timerTriggerWithCron
 		requestChannel chan *timerRequest
 		routerUrl      string
-		publisher      *fission.Publisher
+		publisher      *publisher.Publisher
 	}
 
 	timerRequest struct {
@@ -54,7 +55,7 @@ type (
 	}
 )
 
-func MakeTimer(routerUrl string, publisher fission.Publisher) *Timer {
+func MakeTimer(routerUrl string, publisher publisher.Publisher) *Timer {
 	timer := &Timer{
 		triggers:       make(map[string]*timerTriggerWithCron),
 		requestChannel: make(chan *timerRequest),

@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/watch"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/publisher"
 	"net/http"
 	"reflect"
 )
@@ -50,7 +51,7 @@ type (
 		watches          map[string]watchSubscription
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *kubeWatcherRequest
-		publisher        fission.Publisher
+		publisher        publisher.Publisher
 		routerUrl        string
 	}
 
@@ -60,7 +61,7 @@ type (
 		lastResourceVersion string
 		stopped             *int32
 		kubernetesClient    *kubernetes.Clientset
-		publisher           fission.Publisher
+		publisher           publisher.Publisher
 		routerUrl           string
 	}
 
@@ -74,7 +75,7 @@ type (
 	}
 )
 
-func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher fission.Publisher, routerUrl string) *KubeWatcher {
+func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher, routerUrl string) *KubeWatcher {
 	kw := &KubeWatcher{
 		watches:          make(map[string]watchSubscription),
 		kubernetesClient: kubernetesClient,
@@ -209,7 +210,7 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 // 	return nil
 // }
 
-func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher fission.Publisher, routerUrl string) (*watchSubscription, error) {
+func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher publisher.Publisher, routerUrl string) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
 		Watch:               *w,
