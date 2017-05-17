@@ -16,13 +16,11 @@ limitations under the License.
 
 package publisher
 
-import "net/http"
-
 type (
 	Publisher interface {
 		// Publish an request to a "target".  Target's meaning depends on the
 		// publisher: it's a URL in the case of a webhook publisher, or a queue
 		// name in a queue-based publisher such as NATS.
-		Publish(req *http.Request)
+		Publish(body string, headers map[string]string, target string)
 	}
 )

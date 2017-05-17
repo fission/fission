@@ -23,8 +23,8 @@ import (
 
 func Start(controllerUrl string, routerUrl string) error {
 	controller := controllerClient.MakeClient(controllerUrl)
-	poster := publisher.MakeWebhookPublisher()
-	MakeWatchSync(controller, MakeTimer(routerUrl, poster))
+	poster := publisher.MakeWebhookPublisher(routerUrl)
+	MakeWatchSync(controller, MakeTimer(poster))
 
 	return nil
 }

@@ -17,9 +17,11 @@ limitations under the License.
 package publisher
 
 import (
+	"bytes"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -34,14 +36,17 @@ type (
 		baseUrl string
 	}
 	publishRequest struct {
-		req        *http.Request
+		body       string
+		headers    map[string]string
+		target     string
 		retries    int
 		retryDelay time.Duration
 	}
 )
 
-func MakeWebhookPublisher() *WebhookPublisher {
+func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 	p := &WebhookPublisher{
+		baseUrl:        baseUrl,
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
 		// TODO make this configurable
 		maxRetries: 10,
@@ -51,9 +56,11 @@ func MakeWebhookPublisher() *WebhookPublisher {
 	return p
 }
 
-func (p *WebhookPublisher) Publish(req *http.Request) {
+func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
 	p.requestChannel <- &publishRequest{
-		req:        req,
+		body:       body,
+		headers:    headers,
+		target:     target,
 		retries:    p.maxRetries,
 		retryDelay: p.retryDelay,
 	}
@@ -67,11 +74,20 @@ func (p *WebhookPublisher) svc() {
 }
 
 func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
-	url := r.req.URL
+	url := p.baseUrl + "/" + strings.TrimPrefix(r.target, "/")
 	log.Printf("Making HTTP request to %v", url)
 
+	var buf bytes.Buffer
+	buf.WriteString(r.body)
+
+	// Create request
+	req, err := http.NewRequest("POST", url, &buf)
+	for k, v := range r.headers {
+		req.Header.Add(k, v)
+	}
+
 	// Make the request
-	resp, err := http.DefaultClient.Do(r.req)
+	resp, err := http.DefaultClient.Do(req)
 
 	// All done if the request succeeded with 200 OK.
 	if err == nil && resp.StatusCode == 200 {

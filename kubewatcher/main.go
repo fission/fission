@@ -50,8 +50,8 @@ func Start(controllerUrl string, routerUrl string) error {
 	if err != nil {
 		return err
 	}
-	poster := publisher.MakeWebhookPublisher()
-	kubeWatch := MakeKubeWatcher(kubeClient, poster, routerUrl)
+	poster := publisher.MakeWebhookPublisher(routerUrl)
+	kubeWatch := MakeKubeWatcher(kubeClient, poster)
 
 	MakeWatchSync(client.MakeClient(controllerUrl), kubeWatch)
 
