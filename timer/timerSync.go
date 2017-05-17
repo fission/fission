@@ -24,14 +24,14 @@ import (
 )
 
 type (
-	WatchSync struct {
+	TimerSync struct {
 		controller *controllerClient.Client
 		timer      *Timer
 	}
 )
 
-func MakeWatchSync(controller *controllerClient.Client, timer *Timer) *WatchSync {
-	ws := &WatchSync{
+func MakeTimerSync(controller *controllerClient.Client, timer *Timer) *TimerSync {
+	ws := &TimerSync{
 		controller: controller,
 		timer:      timer,
 	}
@@ -39,7 +39,7 @@ func MakeWatchSync(controller *controllerClient.Client, timer *Timer) *WatchSync
 	return ws
 }
 
-func (ws *WatchSync) syncSvc() {
+func (ws *TimerSync) syncSvc() {
 	failureCount := 0
 	maxFailures := 6
 	for {

@@ -24,7 +24,7 @@ import (
 func Start(controllerUrl string, routerUrl string) error {
 	controller := controllerClient.MakeClient(controllerUrl)
 	poster := publisher.MakeWebhookPublisher(routerUrl)
-	MakeWatchSync(controller, MakeTimer(poster))
+	MakeTimerSync(controller, MakeTimer(poster))
 
 	return nil
 }
