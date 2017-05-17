@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2017 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,18 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubewatcher
+package publisher
 
 import (
 	"bytes"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
-
-	"k8s.io/client-go/1.5/pkg/watch"
 )
 
 type (
@@ -39,8 +36,9 @@ type (
 		baseUrl string
 	}
 	publishRequest struct {
-		url        string
-		watchEvent watch.Event
+		body       string
+		headers    map[string]string
+		target     string
 		retries    int
 		retryDelay time.Duration
 	}
@@ -58,10 +56,11 @@ func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 	return p
 }
 
-func (p *WebhookPublisher) Publish(watchEvent watch.Event, url string) {
+func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
 	p.requestChannel <- &publishRequest{
-		watchEvent: watchEvent,
-		url:        url,
+		body:       body,
+		headers:    headers,
+		target:     target,
 		retries:    p.maxRetries,
 		retryDelay: p.retryDelay,
 	}
@@ -75,30 +74,17 @@ func (p *WebhookPublisher) svc() {
 }
 
 func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
-
-	url := p.baseUrl + "/" + strings.TrimPrefix(r.url, "/")
+	url := p.baseUrl + "/" + strings.TrimPrefix(r.target, "/")
 	log.Printf("Making HTTP request to %v", url)
 
-	// Serialize the object
 	var buf bytes.Buffer
-	err := printKubernetesObject(r.watchEvent.Object, &buf)
-	if err != nil {
-		log.Printf("Failed to serialize object: %v", err)
-		// TODO send a POST request indicating error
-	}
+	buf.WriteString(r.body)
 
 	// Create request
 	req, err := http.NewRequest("POST", url, &buf)
-	if err != nil {
-		log.Printf("Failed to create request to %v", url)
-		// can't do anything more, drop the event.
-		return
+	for k, v := range r.headers {
+		req.Header.Add(k, v)
 	}
-
-	// Event and object type aren't in the serialized object
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("X-Kubernetes-Event-Type", string(r.watchEvent.Type))
-	req.Header.Add("X-Kubernetes-Object-Type", reflect.TypeOf(r.watchEvent.Object).Elem().Name())
 
 	// Make the request
 	resp, err := http.DefaultClient.Do(req)

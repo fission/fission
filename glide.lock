@@ -1,5 +1,5 @@
-hash: 6b4c050c1cd5a7cbb99141348020c882d088b30a9fe9cf92b78a7f706e59da4c
-updated: 2017-02-22T23:15:19.862789385+08:00
+hash: 51b5eda27974aac228f42002cb0a9f89bf2f79d36a574a3694c142c2f83e4042
+updated: 2017-03-24T11:01:00.667996869+08:00
 imports:
 - name: github.com/blang/semver
   version: 60ec3488bfea7cca02b021d106d9911120d25fe9
@@ -94,10 +94,12 @@ imports:
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
+- name: github.com/robfig/cron
+  version: df38d32658d8788cd446ba74db4bb5375c4b0cb3
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/Sirupsen/logrus
-  version: c078b1e43f58d563c74cebe63c85789e76ddb627
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/spf13/pflag
   version: 08b1a584251b5b62f458943640fc8ebd4d50aaa5
 - name: github.com/ugorji/go

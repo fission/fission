@@ -50,6 +50,13 @@ func assertNotFoundFails(err error, name string) {
 	assert(fe.Code == fission.ErrorNotFound, "error must be a not found error")
 }
 
+func assertCronSpecFails(err error) {
+	assert(err != nil, "using an invalid cron spec must fail")
+	fe, ok := err.(fission.Error)
+	assert(ok, "error must be a fission Error")
+	assert(fe.Code == fission.ErrorInvalidArgument, "error must be a invalid argument error")
+}
+
 func TestFunctionApi(t *testing.T) {
 	log.SetFormatter(&log.TextFormatter{DisableColors: true})
 
@@ -331,6 +338,53 @@ func TestWatchApi(t *testing.T) {
 	assert(len(ws) == 2, "created two envs, but didn't find them")
 }
 
+func TestTimeTriggerApi(t *testing.T) {
+	testTrigger := &fission.TimeTrigger{
+		Metadata: fission.Metadata{
+			Name: "xxx",
+			Uid:  "yyy",
+		},
+		Cron: "0 30 * * * *",
+		Function: fission.Metadata{
+			Name: "foo",
+			Uid:  "",
+		},
+	}
+	_, err := g.client.TimeTriggerGet(&fission.Metadata{Name: "foo"})
+	assertNotFoundFails(err, "trigger")
+
+	m, err := g.client.TimeTriggerCreate(testTrigger)
+	panicIf(err)
+	defer g.client.TimeTriggerDelete(m)
+
+	_, err = g.client.TimeTriggerCreate(testTrigger)
+	assertNameReuseFails(err, "trigger")
+
+	tr, err := g.client.TimeTriggerGet(m)
+	panicIf(err)
+	testTrigger.Metadata.Uid = m.Uid
+	assert(*testTrigger == *tr, "trigger should match after reading")
+
+	testTrigger.Cron = "@hourly"
+	m2, err := g.client.TimeTriggerUpdate(testTrigger)
+	panicIf(err)
+
+	m.Uid = m2.Uid
+	tr, err = g.client.TimeTriggerGet(m)
+	panicIf(err)
+	testTrigger.Metadata.Uid = m.Uid
+	assert(*testTrigger == *tr, "trigger should match after reading")
+
+	testTrigger.Metadata.Name = "yyy"
+	testTrigger.Cron = "Not valid cron spec"
+	m, err = g.client.TimeTriggerCreate(testTrigger)
+	assertCronSpecFails(err)
+
+	ts, err := g.client.TimeTriggerList()
+	panicIf(err)
+	assert(len(ts) == 1, "created one trigger, but didn't find it")
+}
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 
@@ -342,6 +396,7 @@ func TestMain(m *testing.M) {
 
 	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
+	ks.Delete(context.Background(), "TimeTrigger", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "Environment", &etcdClient.DeleteOptions{Recursive: true})
 	ks.Delete(context.Background(), "Watch", &etcdClient.DeleteOptions{Recursive: true})
 

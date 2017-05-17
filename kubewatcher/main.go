@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/1.5/rest"
 
 	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/publisher"
 )
 
 // Get a kubernetes client using the pod's service account.
@@ -49,11 +50,10 @@ func Start(controllerUrl string, routerUrl string) error {
 	if err != nil {
 		return err
 	}
-	poster := MakeWebhookPublisher(routerUrl)
+	poster := publisher.MakeWebhookPublisher(routerUrl)
 	kubeWatch := MakeKubeWatcher(kubeClient, poster)
 
-	client := client.MakeClient(controllerUrl)
-	MakeWatchSync(client, kubeWatch)
+	MakeWatchSync(client.MakeClient(controllerUrl), kubeWatch)
 
 	return nil
 }

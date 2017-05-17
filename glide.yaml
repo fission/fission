@@ -33,3 +33,4 @@ import:
   version: v1.2.0
   subpackages:
   - client/v2
+- package: github.com/robfig/cron

@@ -32,6 +32,7 @@ import (
 type API struct {
 	FunctionStore
 	HTTPTriggerStore
+	TimeTriggerStore
 	EnvironmentStore
 	WatchStore
 }
@@ -40,6 +41,7 @@ func MakeAPI(rs *ResourceStore) *API {
 	api := &API{
 		FunctionStore:    FunctionStore{ResourceStore: *rs},
 		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
+		TimeTriggerStore: TimeTriggerStore{ResourceStore: *rs},
 		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
 		WatchStore:       WatchStore{ResourceStore: *rs},
 	}
@@ -94,6 +96,12 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/watches/{watch}", api.WatchApiGet).Methods("GET")
 	r.HandleFunc("/v1/watches/{watch}", api.WatchApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/watches/{watch}", api.WatchApiDelete).Methods("DELETE")
+
+	r.HandleFunc("/v1/triggers/time", api.TimeTriggerApiList).Methods("GET")
+	r.HandleFunc("/v1/triggers/time", api.TimeTriggerApiCreate).Methods("POST")
+	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiGet).Methods("GET")
+	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
+	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
 
 	address := fmt.Sprintf(":%v", port)
 

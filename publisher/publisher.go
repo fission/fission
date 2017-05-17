@@ -14,17 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubewatcher
-
-import (
-	"k8s.io/client-go/1.5/pkg/watch"
-)
+package publisher
 
 type (
 	Publisher interface {
-		// Publish an event to a "target".  Target's meaning depends on the
+		// Publish an request to a "target".  Target's meaning depends on the
 		// publisher: it's a URL in the case of a webhook publisher, or a queue
 		// name in a queue-based publisher such as NATS.
-		Publish(event watch.Event, target string)
+		Publish(body string, headers map[string]string, target string)
 	}
 )

@@ -105,6 +105,25 @@ spec:
         args: ["--kubewatcher"]
 
 ---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: timer
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: timer
+    spec:
+      containers:
+      - name: timer
+        image: fission/fission-bundle:alpha20170124
+        command: ["/fission-bundle"]
+        args: ["--timer"]
+
+---
 apiVersion: v1
 kind: Service
 metadata:

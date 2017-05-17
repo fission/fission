@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2017 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,24 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission
+package timer
 
-func (f Function) Key() string {
-	return f.Metadata.Name
-}
+import (
+	controllerClient "github.com/fission/fission/controller/client"
+	"github.com/fission/fission/publisher"
+)
 
-func (e Environment) Key() string {
-	return e.Metadata.Name
-}
+func Start(controllerUrl string, routerUrl string) error {
+	controller := controllerClient.MakeClient(controllerUrl)
+	poster := publisher.MakeWebhookPublisher(routerUrl)
+	MakeTimerSync(controller, MakeTimer(poster))
 
-func (ht HTTPTrigger) Key() string {
-	return ht.Metadata.Name
-}
-
-func (tt TimeTrigger) Key() string {
-	return tt.Metadata.Name
-}
-
-func (w Watch) Key() string {
-	return w.Metadata.Name
+	return nil
 }

@@ -35,6 +35,8 @@ import (
 	"k8s.io/client-go/1.5/pkg/watch"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/publisher"
+	"reflect"
 )
 
 type requestType int
@@ -48,7 +50,8 @@ type (
 		watches          map[string]watchSubscription
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *kubeWatcherRequest
-		publisher        Publisher
+		publisher        publisher.Publisher
+		routerUrl        string
 	}
 
 	watchSubscription struct {
@@ -57,7 +60,7 @@ type (
 		lastResourceVersion string
 		stopped             *int32
 		kubernetesClient    *kubernetes.Clientset
-		publisher           Publisher
+		publisher           publisher.Publisher
 	}
 
 	kubeWatcherRequest struct {
@@ -70,7 +73,7 @@ type (
 	}
 )
 
-func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher Publisher) *KubeWatcher {
+func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		watches:          make(map[string]watchSubscription),
 		kubernetesClient: kubernetesClient,
@@ -204,7 +207,7 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 // 	return nil
 // }
 
-func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
 		Watch:               *w,
@@ -277,7 +280,22 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				ws.lastResourceVersion = rv
 			}
 
-			ws.publisher.Publish(ev, ws.Watch.Target)
+			// Serialize the object
+			var buf bytes.Buffer
+			err = printKubernetesObject(ev.Object, &buf)
+			if err != nil {
+				log.Printf("Failed to serialize object: %v", err)
+				// TODO send a POST request indicating error
+			}
+
+			// Event and object type aren't in the serialized object
+			headers := map[string]string{
+				"Content-Type":             "application/json",
+				"X-Kubernetes-Event-Type":  string(ev.Type),
+				"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
+			}
+			// Event and object type aren't in the serialized object
+			ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
 			err := ws.restartWatch()

@@ -67,6 +67,16 @@ type (
 		Target string `json:"target"` // Watch publish target (URL, NATS stream, etc)
 	}
 
+	// TimeTrigger invokes the specific function at a time or
+	// times specified by a cron string.
+	TimeTrigger struct {
+		Metadata `json:"metadata"`
+
+		Cron string `json:"cron"`
+
+		Function Metadata `json:"function"`
+	}
+
 	// Errors returned by the Fission API.
 	Error struct {
 		Code    errorCode `json:"code"`
