@@ -67,12 +67,12 @@ type (
 		Target string `json:"target"` // Watch publish target (URL, NATS stream, etc)
 	}
 
-	// TimeTrigger invokes the specific function at target time like cron
+	// TimeTrigger invokes the specific function at a time or
+	// times specified by a cron string.
 	TimeTrigger struct {
 		Metadata `json:"metadata"`
 
-		Cron        string `json:"cron"`
-		Description string `json:"description"`
+		Cron string `json:"cron"`
 
 		Function Metadata `json:"function"`
 	}

@@ -344,8 +344,7 @@ func TestTimeTriggerApi(t *testing.T) {
 			Name: "xxx",
 			Uid:  "yyy",
 		},
-		Cron:        "0 30 * * * *",
-		Description: "For test",
+		Cron: "0 30 * * * *",
 		Function: fission.Metadata{
 			Name: "foo",
 			Uid:  "",
@@ -367,7 +366,6 @@ func TestTimeTriggerApi(t *testing.T) {
 	assert(*testTrigger == *tr, "trigger should match after reading")
 
 	testTrigger.Cron = "@hourly"
-	testTrigger.Description = "Modify cron spect to @hourly"
 	m2, err := g.client.TimeTriggerUpdate(testTrigger)
 	panicIf(err)
 
