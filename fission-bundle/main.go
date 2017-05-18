@@ -6,6 +6,7 @@ import (
 
 	"github.com/docopt/docopt-go"
 	"github.com/fission/fission/controller"
+	"github.com/fission/fission/controller/logdb"
 	"github.com/fission/fission/kubewatcher"
 	"github.com/fission/fission/logger"
 	"github.com/fission/fission/poolmgr"
@@ -13,7 +14,7 @@ import (
 	"github.com/fission/fission/timer"
 )
 
-func runController(port int, etcdUrl string, filepath string) {
+func runController(port int, etcdUrl string, filepath string, logDBUser string, logDBPassword string) {
 	// filePath will be created if it doesn't exist.
 	fileStore := controller.MakeFileStore(filepath)
 	if fileStore == nil {
@@ -25,7 +26,14 @@ func runController(port int, etcdUrl string, filepath string) {
 		log.Fatalf("Error: %v", err)
 	}
 
-	api := controller.MakeAPI(rs)
+	logDBCfg := logdb.DBConfig{
+		DBType:   logdb.INFLUXDB,
+		Endpoint: logdb.INFLUXDB_ENDPOINT,
+		Username: logDBUser,
+		Password: logDBPassword,
+	}
+
+	api := controller.MakeAPI(rs, &logDBCfg)
 	api.Serve(port)
 	log.Fatalf("Error: Controller exited.")
 }
@@ -90,7 +98,7 @@ Use it to start one or more of the fission servers:
  Router implements HTTP triggers: it routes to running instances, working with the controller and poolmgr.
 
 Usage:
-  fission-bundle --controllerPort=<port> [--etcdUrl=<etcdUrl>] --filepath=<filepath>
+  fission-bundle --controllerPort=<port> [--etcdUrl=<etcdUrl> --logDBUser=<logDBUser> --logDBPasswd=<logDBPasswd>] --filepath=<filepath>
   fission-bundle --routerPort=<port> [--controllerUrl=<url> --poolmgrUrl=<url>]
   fission-bundle --poolmgrPort=<port> [--controllerUrl=<url> --namespace=<namespace>]
   fission-bundle --kubewatcher [--controllerUrl=<url> --routerUrl=<url>]
@@ -121,10 +129,12 @@ Options:
 	etcdUrl := getStringArgWithDefault(arguments["--etcdUrl"], "http://etcd:2379")
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
+	logDBUser := getStringArgWithDefault(arguments["--logDBUser"], "")
+	logDBPasswd := getStringArgWithDefault(arguments["--logDBPasswd"], "")
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
-		runController(port, etcdUrl, arguments["--filepath"].(string))
+		runController(port, etcdUrl, arguments["--filepath"].(string), logDBUser, logDBPasswd)
 	}
 
 	if arguments["--routerPort"] != nil {

@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	INFLUXDB = "influxdb"
+	INFLUXDB          = "influxdb"
+	INFLUXDB_ENDPOINT = "http://influxdb:8086"
 )
 
 type LogDatabase interface {
@@ -62,7 +63,7 @@ func GetLogDB(cnf DBConfig) (LogDatabase, error) {
 		return NewInfluxDB(cnf)
 	}
 	log.WithFields(log.Fields{
-		"FISSION_LOGDB_URL": cnf.Endpoint,
-	}).Fatalf("FISSION_LOGDB_URL is incorrect, now only support %s", INFLUXDB)
+		"LogDatabaseType": cnf.DBType,
+	}).Fatalf("Now only support %s", INFLUXDB)
 	return nil, nil
 }

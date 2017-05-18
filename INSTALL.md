@@ -131,25 +131,11 @@ Finally, you're ready to use Fission!
 Fission uses InfluxDB to store logs and fluentd to forward them from
 function pods into InfluxDB.  To setup both InfluxDB and fluentd:
 
-Edit `fission-logger.yaml` to add a username and password for the
-Influxdb deployment.  Then:
+Edit `fission-logger.yaml` and `fission.yaml` to change the influxdb
+username and password for the Influxdb deployment.  Then:
 
 ```
   $ kubectl create -f fission-logger.yaml
-```
-
-On the client side,
-
-If you're using minikube or a local cluster:
-
-```
-$ export FISSION_LOGDB=http://$(minikube ip):31315
-```
-
-If you're using GKE or other cloud:
-
-```
-$ export FISSION_LOGDB=http://$(kubectl --namespace fission get svc influxdb -o=jsonpath='{..ip}'):8086
 ```
 
 That's it for setup.  You can now use this to view function logs:

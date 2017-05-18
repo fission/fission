@@ -17,13 +17,11 @@ limitations under the License.
 package logdb
 
 import (
-	"log"
+	"fmt"
+	"strings"
 	"time"
 
-	"fmt"
-
-	"strings"
-
+	log "github.com/Sirupsen/logrus"
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
 )
 

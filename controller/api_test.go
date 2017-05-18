@@ -30,6 +30,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/controller/logdb"
 )
 
 var g struct {
@@ -391,7 +392,12 @@ func TestMain(m *testing.M) {
 	fileStore, ks, rs := getTestResourceStore()
 	defer os.RemoveAll(fileStore.root)
 
-	api := MakeAPI(rs)
+	api := MakeAPI(rs, &logdb.DBConfig{
+		DBType:   logdb.INFLUXDB,
+		Endpoint: logdb.INFLUXDB_ENDPOINT,
+		Username: "",
+		Password: "",
+	})
 	g.client = client.MakeClient("http://localhost:8888")
 
 	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})

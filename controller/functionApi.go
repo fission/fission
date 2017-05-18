@@ -17,15 +17,20 @@ limitations under the License.
 package controller
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
+	"time"
 
-	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 
-	"encoding/base64"
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/logdb"
 )
 
 func (api *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
@@ -170,4 +175,111 @@ func (api *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.respondWithSuccess(w, []byte(""))
+}
+
+func (api *API) FunctionLogsApiGet(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fnName := vars["function"]
+
+	var detail, follow bool
+	if val, err := strconv.ParseBool(r.FormValue("detail")); err == nil {
+		detail = val
+	}
+	if val, err := strconv.ParseBool(r.FormValue("follow")); err == nil {
+		follow = val
+	}
+
+	fnPod := r.FormValue("pod")
+
+	logDB, err := logdb.GetLogDB(api.DBConfig)
+	if err != nil {
+		w.Write([]byte("failed to connect log database"))
+		return
+	}
+
+	requestChan := make(chan struct{})
+	responseChan := make(chan struct{})
+	ctx := context.Background()
+
+	fMetadata, err := api.FunctionStore.Get(&fission.Metadata{Name: fnName})
+	if err != nil {
+		api.respondWithError(w, err)
+		return
+	}
+
+	t := time.Unix(0, 0*int64(time.Millisecond))
+
+	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
+		for {
+			select {
+			case <-requestChan:
+				logFilter := logdb.LogFilter{
+					Pod:      fnPod,
+					Function: fMetadata.Name,
+					FuncUid:  fMetadata.Uid,
+					Since:    t,
+				}
+				logEntries, err := logDB.GetLogs(logFilter)
+				if err != nil {
+					// fatal("failed to query logs")
+					api.respondWithError(w, err)
+				}
+				for _, logEntry := range logEntries {
+					var logMsg string
+					if detail {
+						logMsg = fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
+							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
+					} else {
+						logMsg = fmt.Sprintf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
+					}
+					w.Write([]byte(logMsg))
+					// force flush out bytes in buffer
+					w.(http.Flusher).Flush()
+					t = logEntry.Timestamp
+				}
+				responseChan <- struct{}{}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}(ctx, requestChan, responseChan)
+
+	for {
+		requestChan <- struct{}{}
+		<-responseChan
+		if !follow {
+			ctx.Done()
+			return
+		}
+	}
+}
+
+func (api *API) FunctionPodsApiGet(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fnName := vars["function"]
+
+	logDB, err := logdb.GetLogDB(api.DBConfig)
+	if err != nil {
+		api.respondWithError(w, err)
+	}
+
+	fMetadata, err := api.FunctionStore.Get(&fission.Metadata{Name: fnName})
+	if err != nil {
+		api.respondWithError(w, err)
+		return
+	}
+
+	logFilter := logdb.LogFilter{
+		Function: fMetadata.Name,
+		FuncUid:  fMetadata.Uid,
+	}
+	pods, err := logDB.GetPods(logFilter)
+	if err != nil {
+		api.respondWithError(w, err)
+	}
+	for _, pod := range pods {
+		w.Write([]byte(fmt.Sprintf("%s\n", pod)))
+		// force flush out bytes in buffer
+		w.(http.Flusher).Flush()
+	}
 }

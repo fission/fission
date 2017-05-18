@@ -42,7 +42,7 @@ metadata:
   labels:
     svc: influxdb
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
   - port: 8086
     targetPort: 8086

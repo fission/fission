@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -226,6 +227,24 @@ func (c *Client) FunctionList() ([]fission.Function, error) {
 	}
 
 	return funcs, nil
+}
+
+func (c *Client) FunctionLogsGet(fn string, pod string, detail bool, follow bool) (io.ReadCloser, error) {
+	urlPath := fmt.Sprintf("functions/%s/logs?pod=%s&detail=%v&follow=%v", fn, pod, detail, follow)
+	resp, err := http.Get(c.url(urlPath))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+func (c *Client) FunctionPodsGet(fn string) (io.ReadCloser, error) {
+	urlPath := fmt.Sprintf("functions/%s/pods", fn)
+	resp, err := http.Get(c.url(urlPath))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }
 
 func (c *Client) HTTPTriggerCreate(t *fission.HTTPTrigger) (*fission.Metadata, error) {
