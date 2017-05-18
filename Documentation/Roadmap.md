@@ -1,6 +1,6 @@
 # Fission Roadmap
 
-## Function features (area-func)
+## Function features ([area-func](https://github.com/fission/fission/labels/area-func))
 
 - Secrets, configmaps, env vars
 - Volumes
@@ -8,13 +8,13 @@
 - Function exec time deadline
 - Expose a regular K8s Service for a function
 
-## Fission API (area-api)
+## Fission API ([area-api](https://github.com/fission/fission/labels/area-api))
 
 - TPR-based controller
 - API authentication
 - Aggregated API server
 
-## Development Workflows (area-dev)
+## Development Workflows ([area-dev](https://github.com/fission/fission/labels/area-dev))
 
 - Function Versioning
 - Versioning for a group of functions
@@ -24,13 +24,13 @@
   - for functions + other kubernetes deployments
 - Unit testing
 
-## API Gateway / Ingress features (area-ingress)
+## API Gateway / Ingress features ([area-ingress](https://github.com/fission/fission/labels/area-ingress))
 
 - Function authn hooks
 - K8s Ingress flag
 - Bundle an ingress controller?
 
-## Workflows and Function composition (area-composition)
+## Workflows and Function composition ([area-composition](https://github.com/fission/fission/labels/area-composition))
 
 - Simple Composition - Sync
 - Simple Composition - Async
@@ -38,7 +38,7 @@
 - Workflows
 - Testing in the presence of function composition
 
-## Events (area-events)
+## Events ([area-events](https://github.com/fission/fission/labels/area-composition))
 
 - NATS
 - Kafka
@@ -49,9 +49,9 @@
 
 - Bundle an event queue (NATS streaming, most probably)
 
-## Operability (area-ops)
+## Operability ([area-ops](https://github.com/fission/fission/labels/area-ops))
 
-### Fission Install/Upgrade (area-install)
+### Fission Install/Upgrade ([area-install](https://github.com/fission/fission/labels/area-install))
 
 - Helm Installer for Fission
 - Helm installation for fission functions
@@ -59,7 +59,7 @@
 - Upgrade checker/reminder (like minikube does)
 - CLI auto-upgrader
 
-### Function observation (area-observe)
+### Function observation ([area-observe](https://github.com/fission/fission/labels/area-install))
 
 - Function Logging
 - Tracing -- Opentracing
@@ -71,14 +71,15 @@
 ## Function Security
 
 - Function isolation (is authz hook sufficient or do we need something like mutual TLS?)
+- Function service accounts
 
-## UX, especially for beginners (area-ux)
+## UX, especially for beginners ([area-ux](https://github.com/fission/fission/labels/area-ux))
 
 - Fission CLI should include a tutorial
 - Fission CLI should have a way to drop you into the UI
 - Eliminate FISSION_URL, just use kube client to find fission url.  Also useful to grab credentials.
 
-## Documentation (area-doc)
+## Documentation ([area-doc](https://github.com/fission/fission/labels/area-doc))
 
 - Installation guide improvements
 - Troubleshooting guide for common problems
@@ -88,14 +89,14 @@
 
 ## Web UI (tracked separately in the fission-ui repo)
 
-## Performance and Scalability (area-perf)
+## Performance and Scalability ([area-perf](https://github.com/fission/fission/labels/area-perf))
 
 - Autoscaling
 - Cold-start optimization -- optimistically choose from pool, save about ~20msec
 - Cold-start optimization -- preload funcs in fetcher
 - Cold-start optimization -- preload libraries in envs (v2) -- mem vs. speed tradeoff
 
-## Function extensibility (area-ext)
+## Function extensibility ([area-ext](https://github.com/fission/fission/labels/area-ext))
 
 - Env v2: easy addition of dependencies etc.
 - Integration with Service Broker
