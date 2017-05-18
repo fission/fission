@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: fission
+  labels:
+    app: zipkin 
+spec:
+  type: NodePort
+  ports:
+  - name: zipkin
+    port: 9411
+    targetPort: 9411
+  selector:
+    app: zipkin
+

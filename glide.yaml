@@ -34,3 +34,7 @@ import:
   subpackages:
   - client/v2
 - package: github.com/robfig/cron
+- package: github.com/opentracing/opentracing-go
+  version: v1.0.2
+- package: github.com/openzipkin/zipkin-go-opentracing
+  version: v0.2.3

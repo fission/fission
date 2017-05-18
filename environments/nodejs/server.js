@@ -8,6 +8,25 @@ const app = express();
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 
+const {Tracer, BatchRecorder, Annotation} = require('zipkin');
+const {HttpLogger} = require('zipkin-transport-http');
+const CLSContext = require('zipkin-context-cls');
+const zipkinMiddleware = require('zipkin-instrumentation-express').expressMiddleware;
+
+const ctxImpl = new CLSContext(); // if you want to use CLS
+const recorder = new BatchRecorder({
+    logger: new HttpLogger({
+        endpoint: 'http://zipkin.fission:9411/api/v1/spans'
+    })
+});
+const tracer = new Tracer({
+    recorder,
+    ctxImpl // this would typically be a CLSContext or ExplicitContext
+});
+
+const SERVICE_NAME = 'user_func';
+
+
 // Command line opts
 const argv = require('minimist')(process.argv.slice(1));
 if (!argv.codepath) {
@@ -47,9 +66,9 @@ function specialize(req, res) {
 
     // Read and load the code. It's placed there securely by the fission runtime.
     try {
-        var startTime = process.hrtime();
+        const startTime = process.hrtime();
         userFunction = require(argv.codepath);
-        var elapsed = process.hrtime(startTime);
+        const elapsed = process.hrtime(startTime);
         console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]/1000000}ms`);
     } catch(e) {
         console.error(`user code load error: ${e}`);
@@ -59,9 +78,12 @@ function specialize(req, res) {
     res.status(202).send();
 }
 
-
+app.use(zipkinMiddleware({
+    tracer,
+    serviceName: SERVICE_NAME, // name of this application
+}));
 // Request logger
-app.use(morgan('combined'))
+app.use(morgan('combined'));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -78,9 +100,22 @@ app.all('/', function (req, res) {
 
     const context = {
         request: req,
-        response: res
+        response: res,
+        tracer: null,
         // TODO: context should also have: URL template params, query string
     };
+
+    let traceId = null;
+    tracer.scoped(() => {
+        tracer.setId(tracer.createChildId());
+        traceId = tracer.id;
+        tracer.recordServiceName(SERVICE_NAME);
+        tracer.recordAnnotation(new Annotation.ClientSend());
+        tracer.recordRpc("user_func::name");
+        tracer.recordBinary('fission.user_func', 'some function name');
+        tracer.recordBinary('fission.instrumented', 'true');
+        context.tracer = tracer;
+    });
 
     function callback(status, body, headers) {
         if (!status)
@@ -91,6 +126,10 @@ app.all('/', function (req, res) {
             }
         }
         res.status(status).send(body);
+        tracer.scoped(() => {
+            tracer.setId(traceId);
+            tracer.recordAnnotation(new Annotation.ClientRecv());
+        });
     }
 
     //
@@ -100,7 +139,6 @@ app.all('/', function (req, res) {
     // you can do that here by adding properties to the context.
     //
 
-    let functionProm;
     if (userFunction.length === 1) { // One argument (context)
         // Make sure their function returns a promise
         Promise.resolve(userFunction(context)).then(function({ status, body, headers }) {

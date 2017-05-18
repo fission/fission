@@ -23,7 +23,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/fission/fission"
+	"github.com/opentracing/opentracing-go"
+	"io"
 	"io/ioutil"
+	"log"
 	"net/url"
 )
 
@@ -35,14 +38,27 @@ func MakeClient(poolmgrUrl string) *Client {
 	return &Client{poolmgrUrl: strings.TrimSuffix(poolmgrUrl, "/")}
 }
 
-func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, error) {
+func doPostWithTracing(span opentracing.Span, url string, contentType string, reader io.Reader) (*http.Response, error) {
+	req, _ := http.NewRequest("POST", url, reader)
+	req.Header.Add("Content-Type", contentType)
+	err := span.Tracer().Inject(span.Context(),
+		opentracing.TextMap,
+		opentracing.HTTPHeadersCarrier(req.Header))
+	if err != nil {
+		log.Printf("Could not inject span context into header: %v", err)
+	}
+
+	return http.DefaultClient.Do(req)
+}
+
+func (c *Client) GetServiceForFunction(metadata *fission.Metadata, span opentracing.Span) (string, error) {
 	url := c.poolmgrUrl + "/v1/getServiceForFunction"
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := doPostWithTracing(span, url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -60,12 +76,12 @@ func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, erro
 	return string(svcName), nil
 }
 
-func (c *Client) TapService(serviceUrl *url.URL) error {
+func (c *Client) TapService(serviceUrl *url.URL, span opentracing.Span) error {
 	url := c.poolmgrUrl + "/v1/tapService"
 
 	serviceUrlStr := serviceUrl.String()
 
-	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
+	resp, err := doPostWithTracing(span, url, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
 	if err != nil {
 		return err
 	}

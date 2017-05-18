@@ -19,8 +19,13 @@
     "minimist": "",
     "morgan": "",
     "mz": "~2.1.0",
+    "opentracing": "^0.14.1",
     "request": "^2.81.0",
     "request-promise-native": "^1.0.3",
-    "underscore": ">=1.8.3"
+    "underscore": ">=1.8.3",
+    "zipkin": "^0.7.1",
+    "zipkin-context-cls": "^0.6.1",
+    "zipkin-instrumentation-express": "^0.7.1",
+    "zipkin-transport-http": "^0.7.1"
   }
 }
