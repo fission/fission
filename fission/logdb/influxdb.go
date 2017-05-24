@@ -17,47 +17,35 @@ limitations under the License.
 package logdb
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
-	"fmt"
-
-	"strings"
-
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
+
+	"github.com/fission/fission"
 )
 
 const (
 	INFLUXDB_DATABASE = "fissionFunctionLog"
+	INFLUXDB_URL      = "http://influxdb:8086/query"
 )
 
-func NewInfluxDB(cnf DBConfig) (InfluxDB, error) {
-	dbClient, err := influxdbClient.NewHTTPClient(influxdbClient.HTTPConfig{
-		Addr:     cnf.Endpoint,
-		Username: cnf.Username,
-		Password: cnf.Password,
-	})
-	if err != nil {
-		log.Fatal(err)
-		return InfluxDB{}, err
-	}
-
-	return InfluxDB{
-		dbClient: dbClient,
-	}, nil
+func NewInfluxDB(serverURL string) (InfluxDB, error) {
+	return InfluxDB{endpoint: serverURL}, nil
 }
 
 type InfluxDB struct {
-	dbClient influxdbClient.Client
+	endpoint string
 }
 
 func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
 	query := fmt.Sprintf("select * from \"log\" where \"funcuid\" = '%s' group by \"pod\"", filter.FuncUid)
-	q := influxdbClient.Query{
-		Command:  query,
-		Database: INFLUXDB_DATABASE,
-	}
-	response, err := influx.dbClient.Query(q)
+	response, err := influx.query(query, filter)
 	if err != nil /*|| response.Err != ""*/ {
 		return []string{}, err
 	}
@@ -82,7 +70,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	}
 
 	logEntries := []LogEntry{}
-	response, err := influx.query(query)
+	response, err := influx.query(query, filter)
 	if err != nil {
 		return logEntries, nil
 	}
@@ -109,10 +97,42 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	return logEntries, nil
 }
 
-func (influx InfluxDB) query(queryCmd string) (*influxdbClient.Response, error) {
-	q := influxdbClient.Query{
-		Command:  queryCmd,
-		Database: INFLUXDB_DATABASE,
+func (influx InfluxDB) query(query string, filter LogFilter) (*influxdbClient.Response, error) {
+	queryURL, err := url.Parse(influx.endpoint)
+	if err != nil {
+		return nil, err
 	}
-	return influx.dbClient.Query(q)
+	// connect to controller first, then controller will redirect our query command
+	// to influxdb and proxy back the db response.
+	queryURL.Path = fmt.Sprintf("/v1/functions/%s/logs/%s", filter.Function, INFLUXDB)
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// set up http URL query string
+	params := req.URL.Query()
+	params.Set("q", query)
+	params.Set("db", INFLUXDB_DATABASE)
+	req.URL.RawQuery = params.Encode()
+
+	httpClient := http.Client{Timeout: 5 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fission.MakeErrorFromHTTP(resp)
+	}
+
+	// decode influxdb response
+	response := influxdbClient.Response{}
+	decoder := json.NewDecoder(resp.Body)
+	decoder.UseNumber()
+	if decoder.Decode(&response) != nil {
+		return nil, fmt.Errorf("Failed to decode influxdb response: %v", err)
+	}
+	return &response, nil
 }
