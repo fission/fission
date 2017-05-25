@@ -151,18 +151,6 @@ particular pod:
   $ fission function logs --name hello --pod <pod name>
 ```
 
-* (Optional) Edit `fission-logger.yaml` to add Influxdb username and password and following env to controller deployment.  Then apply `fission-logger.yaml` and new controller deployment.
-
-```
-env:
-- name: INFLUXDB_URL
-  value: "http://influxdb:8086"
-- name: INFLUXDB_USERNAME
-  value: "<username>"
-- name: INFLUXDB_PASSWORD
-  value: "<password>"
-```
-
 ### Use the web based Fission-ui (Optional)
 
 [Fission-ui](https://github.com/fission/fission-ui) is the ui for fission maintained by the community.

@@ -23,13 +23,11 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/router"
 )
 
 func (api *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
@@ -200,10 +198,8 @@ func (api *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		// set up http basic auth for database authentication
 		req.SetBasicAuth(dbCnf.username, dbCnf.password)
 	}
-	rrt := router.NewRetryingRoundTripper(10, 50*time.Millisecond)
 	proxy := &httputil.ReverseProxy{
-		Director:  director,
-		Transport: rrt,
+		Director: director,
 	}
 	proxy.ServeHTTP(w, r)
 }

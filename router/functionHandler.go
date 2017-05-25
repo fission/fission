@@ -54,13 +54,6 @@ type RetryingRoundTripper struct {
 	initalTimeout time.Duration
 }
 
-func NewRetryingRoundTripper(maxRetries int, initalTimeout time.Duration) RetryingRoundTripper {
-	return RetryingRoundTripper{
-		maxRetries:    maxRetries,
-		initalTimeout: initalTimeout,
-	}
-}
-
 func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	timeout := rrt.initalTimeout
 	transport := http.DefaultTransport.(*http.Transport)
@@ -149,13 +142,14 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		}
 	}
 
-	rrt := NewRetryingRoundTripper(10, 50*time.Millisecond)
-
 	// Initial requests to new k8s services sometimes seem to
 	// fail, but retries work.  So use a transport that does retries.
 	proxy := &httputil.ReverseProxy{
-		Director:  director,
-		Transport: rrt,
+		Director: director,
+		Transport: RetryingRoundTripper{
+			maxRetries:    10,
+			initalTimeout: 50 * time.Millisecond,
+		},
 	}
 	delay := time.Now().Sub(reqStartTime)
 	if delay > 100*time.Millisecond {

@@ -45,7 +45,7 @@ type InfluxDB struct {
 
 func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
 	query := fmt.Sprintf("select * from \"log\" where \"funcuid\" = '%s' group by \"pod\"", filter.FuncUid)
-	response, err := influx.query(query, filter)
+	response, err := influx.query(query)
 	if err != nil /*|| response.Err != ""*/ {
 		return []string{}, err
 	}
@@ -70,7 +70,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	}
 
 	logEntries := []LogEntry{}
-	response, err := influx.query(query, filter)
+	response, err := influx.query(query)
 	if err != nil {
 		return logEntries, nil
 	}
@@ -97,14 +97,14 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	return logEntries, nil
 }
 
-func (influx InfluxDB) query(query string, filter LogFilter) (*influxdbClient.Response, error) {
+func (influx InfluxDB) query(query string) (*influxdbClient.Response, error) {
 	queryURL, err := url.Parse(influx.endpoint)
 	if err != nil {
 		return nil, err
 	}
 	// connect to controller first, then controller will redirect our query command
 	// to influxdb and proxy back the db response.
-	queryURL.Path = fmt.Sprintf("/v1/functions/%s/logs/%s", filter.Function, INFLUXDB)
+	queryURL.Path = fmt.Sprintf("/proxy/%s", INFLUXDB)
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err

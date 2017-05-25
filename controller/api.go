@@ -105,7 +105,6 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiGet).Methods("GET")
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
-	r.HandleFunc("/v1/functions/{function}/logs/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 
 	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiList).Methods("GET")
 	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
@@ -130,6 +129,8 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiGet).Methods("GET")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
+
+	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 
