@@ -44,7 +44,12 @@ type InfluxDB struct {
 }
 
 func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
-	query := fmt.Sprintf("select * from \"log\" where \"funcuid\" = '%s' group by \"pod\"", filter.FuncUid)
+	parameters := make(map[string]interface{})
+	parameters["funcuid"] = filter.FuncUid
+
+	queryCmd := "select * from \"log\" where \"funcuid\" = $funcuid group by \"pod\""
+	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
+
 	response, err := influx.query(query)
 	if err != nil /*|| response.Err != ""*/ {
 		return []string{}, err
@@ -62,13 +67,22 @@ func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
 
 func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	timestamp := filter.Since.UnixNano()
-	var query string
+	var queryCmd string
+
+	// please check "Example 4: Bind a parameter in the WHERE clause to specific tag value"
+	// at https://docs.influxdata.com/influxdb/v1.2/tools/api/
+	parameters := make(map[string]interface{})
+	parameters["funcuid"] = filter.FuncUid
+	parameters["time"] = timestamp
+
 	if filter.Pod != "" {
-		query = fmt.Sprintf("select * from \"log\" where \"funcuid\" = '%s' AND \"pod\" = '%s' AND \"time\" > %d ORDER BY time ASC", filter.FuncUid, filter.Pod, timestamp)
+		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time ORDER BY time ASC"
+		parameters["pod"] = filter.Pod
 	} else {
-		query = fmt.Sprintf("select * from \"log\" where \"funcuid\" = '%s' AND \"time\" > %d ORDER BY time ASC", filter.FuncUid, timestamp)
+		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"time\" > $time ORDER BY time ASC"
 	}
 
+	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
 	logEntries := []LogEntry{}
 	response, err := influx.query(query)
 	if err != nil {
@@ -97,7 +111,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	return logEntries, nil
 }
 
-func (influx InfluxDB) query(query string) (*influxdbClient.Response, error) {
+func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {
 	queryURL, err := url.Parse(influx.endpoint)
 	if err != nil {
 		return nil, err
@@ -110,10 +124,16 @@ func (influx InfluxDB) query(query string) (*influxdbClient.Response, error) {
 		return nil, err
 	}
 
+	parametersBytes, err := json.Marshal(query.Parameters)
+	if err != nil {
+		return nil, err
+	}
+
 	// set up http URL query string
 	params := req.URL.Query()
-	params.Set("q", query)
-	params.Set("db", INFLUXDB_DATABASE)
+	params.Set("q", query.Command)
+	params.Set("db", query.Database)
+	params.Set("params", string(parametersBytes))
 	req.URL.RawQuery = params.Encode()
 
 	httpClient := http.Client{Timeout: 5 * time.Second}
