@@ -48,7 +48,6 @@ func (api *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		api.respondWithError(w, err)
 	}
-	defer r.Body.Close()
 
 	var env fission.Environment
 	err = json.Unmarshal(body, &env)
