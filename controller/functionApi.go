@@ -48,6 +48,7 @@ func (api *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var f fission.Function
@@ -116,6 +117,7 @@ func (api *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var f fission.Function

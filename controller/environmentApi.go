@@ -47,6 +47,7 @@ func (api *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var env fission.Environment
@@ -103,6 +104,7 @@ func (api *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var env fission.Environment
