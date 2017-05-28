@@ -17,10 +17,10 @@ limitations under the License.
 package cache
 
 import (
-	"time"
-
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/fission/fission"
 )
 

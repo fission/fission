@@ -17,9 +17,9 @@ limitations under the License.
 package timer
 
 import (
-	"github.com/robfig/cron"
-
 	"log"
+
+	"github.com/robfig/cron"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"

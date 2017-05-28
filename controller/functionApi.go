@@ -17,14 +17,14 @@ limitations under the License.
 package controller
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 
-	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 
-	"encoding/base64"
 	"github.com/fission/fission"
 )
 

@@ -16,9 +16,11 @@ limitations under the License.
 
 package cache
 
-import "testing"
-import "log"
-import "time"
+import (
+	"log"
+	"testing"
+	"time"
+)
 
 func checkErr(err error) {
 	if err != nil {
