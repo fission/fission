@@ -28,6 +28,10 @@ func (ht HTTPTrigger) Key() string {
 	return ht.Metadata.Name
 }
 
+func (mqt MessageQueueTrigger) Key() string {
+	return mqt.Metadata.Name
+}
+
 func (tt TimeTrigger) Key() string {
 	return tt.Metadata.Name
 }

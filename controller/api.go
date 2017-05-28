@@ -49,11 +49,12 @@ type (
 
 func MakeAPI(rs *ResourceStore) *API {
 	api := &API{
-		FunctionStore:    FunctionStore{ResourceStore: *rs},
-		HTTPTriggerStore: HTTPTriggerStore{ResourceStore: *rs},
-		TimeTriggerStore: TimeTriggerStore{ResourceStore: *rs},
-		EnvironmentStore: EnvironmentStore{ResourceStore: *rs},
-		WatchStore:       WatchStore{ResourceStore: *rs},
+		FunctionStore:            FunctionStore{ResourceStore: *rs},
+		HTTPTriggerStore:         HTTPTriggerStore{ResourceStore: *rs},
+		TimeTriggerStore:         TimeTriggerStore{ResourceStore: *rs},
+		MessageQueueTriggerStore: MessageQueueTriggerStore{ResourceStore: *rs},
+		EnvironmentStore:         EnvironmentStore{ResourceStore: *rs},
+		WatchStore:               WatchStore{ResourceStore: *rs},
 	}
 	return api
 }
@@ -130,7 +131,15 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
 
+<<<<<<< HEAD
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
+=======
+	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueTriggerApiList).Methods("GET")
+	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueApiCreate).Methods("POST")
+	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiGet).Methods("GET")
+	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiUpdate).Methods("PUT")
+	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiDelete).Methods("DELETE")
+>>>>>>> Add message queue trigger support
 
 	address := fmt.Sprintf(":%v", port)
 

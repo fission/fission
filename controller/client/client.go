@@ -640,3 +640,116 @@ func (c *Client) TimeTriggerList() ([]fission.TimeTrigger, error) {
 
 	return triggers, nil
 }
+
+func (c *Client) MessageQueueTriggerCreate(t *fission.MessageQueueTrigger) (*fission.Metadata, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(c.url("triggers/messagequeue"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleCreateResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m, nil
+}
+
+func (c *Client) MessageQueueTriggerGet(m *fission.Metadata) (*fission.MessageQueueTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var t fission.MessageQueueTrigger
+	err = json.Unmarshal(body, &t)
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func (c *Client) MessageQueueTriggerUpdate(mqTrigger *fission.MessageQueueTrigger) (*fission.Metadata, error) {
+	reqbody, err := json.Marshal(mqTrigger)
+	if err != nil {
+		return nil, err
+	}
+	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", mqTrigger.Metadata.Name)
+
+	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m fission.Metadata
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (c *Client) MessageQueueTriggerDelete(m *fission.Metadata) error {
+	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
+	if len(m.Uid) > 0 {
+		relativeUrl += fmt.Sprintf("?uid=%v", m.Uid)
+	}
+	err := c.delete(relativeUrl)
+	return err
+}
+
+func (c *Client) MessageQueueTriggerList(mqType string) ([]fission.MessageQueueTrigger, error) {
+	relativeUrl := "triggers/messagequeue"
+	if len(mqType) > 0 {
+		relativeUrl += fmt.Sprintf("?mqtype=%v", mqType)
+	}
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	triggers := make([]fission.MessageQueueTrigger, 0)
+	err = json.Unmarshal(body, &triggers)
+	if err != nil {
+		return nil, err
+	}
+
+	return triggers, nil
+}

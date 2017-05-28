@@ -53,6 +53,14 @@ type (
 		Function   Metadata `json:"function"`
 	}
 
+	MessageQueueTrigger struct {
+		Metadata         `json:"metadata"`
+		Function         Metadata `json:"function"`
+		MessageQueueType string   `json:"messageQueueType"`
+		Topic            string   `json:"topic"`
+		ResponseTopic    string   `json:"respTopic,omitempty"`
+	}
+
 	// Watch is a specification of Kubernetes watch along with a URL to post events to.
 	Watch struct {
 		Metadata `json:"metadata"`

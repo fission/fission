@@ -124,6 +124,78 @@ spec:
         args: ["--timer"]
 
 ---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mqtrigger
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger
+    spec:
+      containers:
+      - name: mqtrigger
+        image: fission/fission-bundle:alpha20170124
+        command: ["/fission-bundle"]
+        args: ["--mqt"]
+        env:
+        - name: MESSAGE_QUEUE_TYPE
+          value: nats-streaming
+        - name: MESSAGE_QUEUE_URL
+          value: nats://nats-streaming:4222
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    svc: nats-streaming
+  name: nats-streaming
+  namespace: fission
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: nats-streaming
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        svc: nats-streaming
+    spec:
+      containers:
+      - name: nats-streaming
+        image: nats-streaming
+        args: ["--cluster_id", "fissionMQTrigger"]
+        ports:
+        - containerPort: 4222
+          hostPort: 4222
+          protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-streaming
+  namespace: fission
+  labels:
+    svc: nats-streaming
+spec:
+  ports:
+  - port: 4222
+    targetPort: 4222
+  selector:
+    svc: nats-streaming
+
+---
 apiVersion: v1
 kind: Service
 metadata:
