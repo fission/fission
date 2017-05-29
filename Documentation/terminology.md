@@ -1,3 +1,5 @@
+# Fission Terminology
+
 _Function_: A fission function is something that's mapped to a
 _trigger_ and run on demand.  Though we call it a "function", this is
 a bit imprecise, since it's actually a module with an function as an
