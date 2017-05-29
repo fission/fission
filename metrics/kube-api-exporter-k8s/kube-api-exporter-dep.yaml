@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-api-exporter
+  namespace: fission
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: kube-api-exporter
+    spec:
+      containers:
+      - name: kube-api-exporter
+        image: tomwilkie/kube-api-exporter
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80

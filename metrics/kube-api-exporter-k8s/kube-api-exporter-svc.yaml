@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-api-exporter
+  namespace: fission
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: '/'
+    prometheus.io/scheme: http
+spec:
+  ports:
+    - port: 80
+      name: http
+  selector:
+    name: kube-api-exporter

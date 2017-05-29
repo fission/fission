@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus 
+  namespace: fission
+  labels:
+    app: prometheus
+spec:
+  type: NodePort
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: 9090
+  selector:
+    app: prometheus
+

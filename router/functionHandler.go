@@ -193,6 +193,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	// System Params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
+	metricCold := "false"
+	metricPath := request.URL.Path
+
 	// TODO: As an optimization we may want to cache proxies too -- this might get us
 	// connection reuse and possibly better performance
 	director := func(req *http.Request) {
@@ -211,5 +214,18 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		},
 	}
 
-	proxy.ServeHTTP(responseWriter, request)
+	callStartTime := time.Now()
+	wrapper := NewResponseWriterWrapper(responseWriter)
+
+	// the actual proxy
+	proxy.ServeHTTP(wrapper, request)
+
+	latency := time.Now().Sub(callStartTime)
+	metricStatus := fmt.Sprint(wrapper.Status())
+	increaseHttpCalls(metricCold, fh.function.Name, fh.function.UID,
+		metricPath, metricStatus, request.Method)
+	observeHttpCallLatency(metricCold, fh.function.Name, fh.function.UID,
+		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
+	observeHttpCallResponseSize(metricCold, fh.function.Name, fh.function.UID,
+		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
 }
