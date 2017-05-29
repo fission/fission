@@ -8,9 +8,13 @@ metadata:
 spec:
   type: NodePort
   ports:
-  - port: 80
+  - name: router
+    port: 80
     targetPort: 8888
     nodePort: 31314
+  - name: metric
+    port: 8080
+    targetPort: 8080
   selector:
     svc: router
 
