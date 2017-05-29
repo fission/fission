@@ -12,8 +12,8 @@ This guide is intended to provide a detailed description of this entire installa
 	  - [Hosted Options](#hosted-options)
 - [Setup the Fission Platform](#setup-the-fission-platform)
   - [Local Cluster](#local-cluster)
-  - [GKE and other Cloud Providers](#gke-and-other-cloud-providers)
   - [OpenShift](#openshift)
+  - [GKE and other Cloud Providers](#gke-and-other-cloud-providers)
 - [Install the Fission Client CLI](#install-the-fission-client-cli)
 - [Verify the Setup](#verify-the-setup)
 - [Optional Components](#optional-components)
@@ -87,6 +87,19 @@ If you're using minikube, use these commands:
   $ export FISSION_ROUTER=$(minikube ip):31314
 ```
 
+### OpenShift
+
+If you're using OpenShift, it's possible to run Fission on it! 
+The deployment template needs to be deployed as a user with cluster-admin permissions (like `system:admin`), as it needs to create a `ClusterRole` for deploying function containers from the `fission` namespace/project.
+
+Identically as with Kubernetes, you need to set the `FISSION_URL` and `FISSION_ROUTER` environment variables. 
+If you're using minishift, use these commands:
+
+```bash
+  $ export FISSION_URL=http://$(minishift ip):31313
+  $ export FISSION_ROUTER=$(minishift ip):31314
+```
+
 ### GKE and other Cloud Providers
 
 If you're using Google Kubernetes Environment (GKE) or any other cloud provider that supports the LoadBalancer service type, use these commands:
@@ -103,19 +116,6 @@ Then run:
 ```bash
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
-```
-
-### OpenShift
-
-If you're using OpenShift, it's possible to run Fission on it! 
-The deployment template needs to be deployed as a user with cluster-admin permissions (like `system:admin`), as it needs to create a `ClusterRole` for deploying function containers from the `fission` namespace/project.
-
-Identically as with Kubernetes, you need to set the `FISSION_URL` and `FISSION_ROUTER` environment variables. 
-If you're using minishift, use these commands:
-
-```bash
-  $ export FISSION_URL=http://$(minishift ip):31313
-  $ export FISSION_ROUTER=$(minishift ip):31314
 ```
 
 ### Install the Fission Client CLI
