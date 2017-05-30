@@ -17,9 +17,9 @@ limitations under the License.
 package timer
 
 import (
-	"github.com/robfig/cron"
-
 	"log"
+
+	"github.com/robfig/cron"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
@@ -121,6 +121,7 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 		if !found {
 			if v.cron != nil {
 				v.cron.Stop()
+				log.Printf("Cron for time trigger %s stopped", v.trigger.Name)
 			}
 			delete(timer.triggers, k)
 		}
@@ -138,6 +139,6 @@ func (timer *Timer) newCron(t fission.TimeTrigger) *cron.Cron {
 		(*timer.publisher).Publish("", headers, fission.UrlForFunction(&t.Function))
 	})
 	c.Start()
-	log.Printf("Updated new cron for %v", t.Name)
+	log.Printf("Add new cron for time trigger %v", t.Name)
 	return c
 }
