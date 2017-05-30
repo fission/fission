@@ -21,21 +21,31 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/fission/logdb"
 )
 
-type API struct {
-	FunctionStore
-	HTTPTriggerStore
-	TimeTriggerStore
-	EnvironmentStore
-	WatchStore
-}
+type (
+	API struct {
+		FunctionStore
+		HTTPTriggerStore
+		TimeTriggerStore
+		EnvironmentStore
+		WatchStore
+	}
+
+	logDBConfig struct {
+		httpURL  string
+		username string
+		password string
+	}
+)
 
 func MakeAPI(rs *ResourceStore) *API {
 	api := &API{
@@ -62,6 +72,23 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	code, msg := fission.GetHTTPError(err)
 	log.Errorf("Error: %v: %v", code, msg)
 	http.Error(w, msg, code)
+}
+
+func (api *API) getLogDBConfig(dbType string) logDBConfig {
+	dbType = strings.ToUpper(dbType)
+	// retrieve db auth config from the env
+	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
+	if url == "" {
+		// set up default database url
+		url = logdb.INFLUXDB_URL
+	}
+	username := os.Getenv(fmt.Sprintf("%s_USERNAME", dbType))
+	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", dbType))
+	return logDBConfig{
+		httpURL:  url,
+		username: username,
+		password: password,
+	}
 }
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +129,8 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiGet).Methods("GET")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
+
+	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 
