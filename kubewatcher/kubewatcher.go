@@ -161,6 +161,10 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 		wi, err = kubeClient.Core().Pods(w.Namespace).Watch(listOptions)
 	case "SERVICE":
 		wi, err = kubeClient.Core().Services(w.Namespace).Watch(listOptions)
+	case "REPLICATIONCONTROLLER":
+		wi, err = kubeClient.Core().ReplicationControllers(w.Namespace).Watch(listOptions)
+	case "JOB":
+		wi, err = kubeClient.Batch().Jobs(w.Namespace).Watch(listOptions)
 	default:
 		msg := fmt.Sprintf("Error: unknown obj type '%v'", w.ObjType)
 		log.Println(msg)
