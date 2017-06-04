@@ -147,8 +147,8 @@ get IP addresses (check this with ```kubectl --namespace fission get
 svc```).  Then:
 
 ```
-  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
-  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..clusterIP}')
+  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..clusterIP}')
 ```
 ### Get and run fission: OpenShift
 
