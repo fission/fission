@@ -4,8 +4,10 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 ## Requirements
 
+First, [set up your fission deployment with the go environment](https://github.com/fission/fission/blob/master/environments/go/README.md).
+
 To use this environment, download the [build helper
-script](environments/go/builder/go-function-build).
+script](https://raw.githubusercontent.com/fission/fission/master/environments/go/builder/go-function-build).
 
 The script must be run in the same directory as the function you're
 building.
