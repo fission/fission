@@ -1,7 +1,7 @@
 package: github.com/fission/fission
 import:
-- package: github.com/Sirupsen/logrus
-  version: ^0.11.0
+- package: github.com/sirupsen/logrus
+  version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
 - package: github.com/coreos/etcd
   subpackages:
   - client

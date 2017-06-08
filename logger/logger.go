@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/fission/fission"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"

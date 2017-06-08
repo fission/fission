@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
 	"golang.org/x/net/context"
