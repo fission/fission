@@ -17,6 +17,7 @@ limitations under the License.
 package timer
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/robfig/cron"
@@ -136,7 +137,10 @@ func (timer *Timer) newCron(t fission.TimeTrigger) *cron.Cron {
 		headers := map[string]string{
 			"X-Fission-Timer-Name": t.Name,
 		}
-		(*timer.publisher).Publish("", headers, fission.UrlForFunction(&t.Function))
+		respChan := make(chan string)
+		(*timer.publisher).Publish("", headers, fission.UrlForFunction(&t.Function), respChan)
+		fmt.Printf("Trigger %s get response from function: %s\n", t.Metadata.Name, <-respChan)
+		close(respChan)
 	})
 	c.Start()
 	log.Printf("Add new cron for time trigger %v", t.Name)

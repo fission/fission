@@ -41,6 +41,7 @@ type (
 		target     string
 		retries    int
 		retryDelay time.Duration
+		respChan   chan string
 	}
 )
 
@@ -56,13 +57,14 @@ func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 	return p
 }
 
-func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
+func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string, respChan chan string) {
 	p.requestChannel <- &publishRequest{
 		body:       body,
 		headers:    headers,
 		target:     target,
 		retries:    p.maxRetries,
 		retryDelay: p.retryDelay,
+		respChan:   respChan,
 	}
 }
 
@@ -91,17 +93,24 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 
 	// All done if the request succeeded with 200 OK.
 	if err == nil && resp.StatusCode == 200 {
-		resp.Body.Close()
-		return
+		defer resp.Body.Close()
+		if r.respChan == nil {
+			return
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err == nil {
+			r.respChan <- string(body)
+			return
+		}
 	}
 
 	// Log errors
 	if err != nil {
 		log.Printf("Request failed: %v", r)
 	} else if resp.StatusCode != 200 {
+		defer resp.Body.Close()
 		log.Printf("Request returned failure: %v", resp.StatusCode)
 		body, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err == nil {
 			log.Printf("request error: %v", string(body))
 		}
@@ -116,6 +125,9 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 		})
 	} else {
 		log.Printf("Final retry failed, giving up on %v", url)
+		if r.respChan != nil {
+			r.respChan <- StatusFunctionFailure
+		}
 		// Event dropped
 	}
 }

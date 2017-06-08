@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
-	"reflect"
 )
 
 type requestType int
@@ -299,7 +299,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
 			}
 			// Event and object type aren't in the serialized object
-			ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
+			ws.publisher.Publish(buf.String(), headers, ws.Watch.Target, nil)
 		}
 		if atomic.LoadInt32(ws.stopped) == 0 {
 			err := ws.restartWatch()
