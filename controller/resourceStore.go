@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 
 	"github.com/fission/fission"
