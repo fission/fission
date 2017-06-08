@@ -23,9 +23,9 @@ import (
 	"runtime/debug"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"
