@@ -4,22 +4,28 @@ The `go` runtime uses the [`plugin` package](https://golang.org/pkg/plugin/) to 
 
 ## Requirements
 
-First, [set up your fission deployment with the go environment](https://github.com/fission/fission/blob/master/environments/go/README.md).
+First, set up your fission deployment with the go environment.
 
-To use this environment, download the [build helper
-script](https://raw.githubusercontent.com/fission/fission/master/environments/go/builder/go-function-build).
+```
+fission env create --name go-env --image fission/go-env:1.8.1
+```
 
-The script must be run in the same directory as the function you're
-building.
+To ensure that you build functions using the same version as the
+runtime, fission provides a docker image and helper script for
+building functions.
 
-## Examples
+## Example Usage
 
 ### hello.go
 
 `hello.go` is an very basic HTTP handler returning `"Hello, World!"`.
 
-```
-# Build the function as a plugin. Outputs result to 'function.so'.
+```bash
+# Download the build helper script
+$ curl https://raw.githubusercontent.com/fission/fission/master/environments/go/builder/go-function-build > go-function-build
+$ chmod +x go-function-build
+
+# Build the function as a plugin. Outputs result to 'function.so'
 $ go-function-build hello.go
 
 # Upload the function to fission
