@@ -10,6 +10,13 @@ It's a Docker image containing a Go 1.8 runtime, along with a dynamic loader.
 docker build -t USER/go-runtime . && docker push USER/go-runtime
 ```
 
+Note that if you build the runtime, you must also build the go-builder
+image, to ensure that it's at the same version of go:
+
+```
+cd builder && docker build -t USER/go-builder . && docker push USER/go-builder
+```
+
 ## Using the image in fission
 
 You can add this customized image to fission with "fission env
@@ -27,7 +34,6 @@ fission env update --name go-runtime --image USER/go-runtime
 
 After this, fission functions that have the env parameter set to the
 same environment name as this command will use this environment.
-
 
 ## Creating functions to use this image
 

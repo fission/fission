@@ -8,4 +8,4 @@ else
     filename=$1
 fi
 
-docker run --rm -v $(pwd):/build -w /build fission/go-builder go build -buildmode=plugin -o function.so $filename && echo "Compiled plugin: function.so. Use 'fission function create' to upload to fission."
+docker run --rm -v $(pwd):/build -w /build fission/go-builder:1.8.1 go build -buildmode=plugin -o function.so $filename && echo "Compiled plugin: function.so. Use 'fission function create' to upload to fission."
