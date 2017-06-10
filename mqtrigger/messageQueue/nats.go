@@ -24,9 +24,9 @@ import (
 	"net/http"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	ns "github.com/nats-io/go-nats-streaming"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"

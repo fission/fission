@@ -36,6 +36,7 @@ type (
 		FunctionStore
 		HTTPTriggerStore
 		TimeTriggerStore
+		MessageQueueTriggerStore
 		EnvironmentStore
 		WatchStore
 	}
@@ -131,15 +132,13 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
 
-<<<<<<< HEAD
-	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
-=======
 	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueTriggerApiList).Methods("GET")
 	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueApiCreate).Methods("POST")
 	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiGet).Methods("GET")
 	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiUpdate).Methods("PUT")
 	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiDelete).Methods("DELETE")
->>>>>>> Add message queue trigger support
+
+	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 
