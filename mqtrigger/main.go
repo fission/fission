@@ -21,12 +21,10 @@ import (
 
 	controllerClient "github.com/fission/fission/controller/client"
 	"github.com/fission/fission/mqtrigger/messageQueue"
-	"github.com/fission/fission/publisher"
 )
 
 func Start(controllerUrl string, routerUrl string) error {
 	controller := controllerClient.MakeClient(controllerUrl)
-	poster := publisher.MakeWebhookPublisher(routerUrl)
 	// nats,pubsub...etc
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
@@ -34,6 +32,6 @@ func Start(controllerUrl string, routerUrl string) error {
 		MQType: mqType,
 		Url:    mqUrl,
 	}
-	messageQueue.MakeMessageQueueManager(controller, poster, mqCfg)
+	messageQueue.MakeMessageQueueManager(controller, routerUrl, mqCfg)
 	return nil
 }

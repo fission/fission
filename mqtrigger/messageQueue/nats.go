@@ -17,27 +17,33 @@ limitations under the License.
 package messageQueue
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	ns "github.com/nats-io/go-nats-streaming"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/publisher"
 )
 
 const (
 	natsClusterID  = "fissionMQTrigger"
-	natsClientID   = "fission"
 	natsProtocol   = "nats://"
+	natsClientID   = "fission"
 	natsQueueGroup = "fission-messageQueueNatsTrigger"
 )
 
 type (
 	Nats struct {
 		MessageQueueTriggerManager
-		nsConn ns.Conn
+		nsConn      *ns.Conn
+		nsPublisher *publisher.NatsPublisher
 	}
 )
 
@@ -46,9 +52,11 @@ func makeNatsTriggerManager(mqTriggerMgr MessageQueueTriggerManager) (MessageQue
 	if err != nil {
 		return nil, err
 	}
+	nsPublisher := publisher.MakeNatsPublisher(&conn)
 	nats := Nats{
 		MessageQueueTriggerManager: mqTriggerMgr,
-		nsConn: conn,
+		nsConn:      &conn,
+		nsPublisher: nsPublisher,
 	}
 	go nats.sync()
 	return &nats, nil
@@ -62,17 +70,47 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 	}
 
 	handler := func(msg *ns.Msg) {
-		headers := map[string]string{
-			"X-Fission-Timer-Name": trigger.Function.Name,
+		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(&trigger.Function), "/")
+		log.Printf("Making HTTP request to %v", url)
+
+		// Create request
+		resp, err := http.Post(url, "application/json", bytes.NewReader(msg.Data))
+		if err != nil {
+			log.Warningf("Request failed: %v", url)
+			return
 		}
-		// TODO: should we pass message body to function?
-		nats.publisher.Publish("", headers, fission.UrlForFunction(&trigger.Function))
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Warningf("Request body error: %v", string(body))
+			return
+		}
+		if resp.StatusCode != 200 {
+			log.Printf("Request returned failure: %v", resp.StatusCode)
+			return
+		}
+		// trigger acks message only if a request done successfully
+		err = msg.Ack()
+		if err != nil {
+			log.Warningf("Failed to ack message: %v", err)
+		}
+		if len(trigger.ResponseTopic) > 0 {
+			nats.nsPublisher.Publish(string(body), nil, trigger.ResponseTopic)
+		}
 	}
 
-	// create a durable subscription to nats, so that triggers could retrieve last unack message.
-	// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
-	opt := ns.DurableName(trigger.Uid)
-	sub, err := nats.nsConn.Subscribe(subj, handler, opt)
+	opts := []ns.SubscriptionOption{
+		// Create a durable subscription to nats, so that triggers could retrieve last unack message.
+		// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
+		ns.DurableName(trigger.Uid),
+
+		// Nats-streaming server is auto-ack mode by default. Since we want nats-streaming server to
+		// resend a message if the trigger does not ack it, we need to enable the manual ack mode, so that
+		// trigger could choose to ack message or simply drop it depend on the response of function pod.
+		ns.SetManualAckMode(),
+	}
+	sub, err := (*nats.nsConn).Subscribe(subj, handler, opts...)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,6 @@ import (
 
 	"github.com/fission/fission"
 	controllerClient "github.com/fission/fission/controller/client"
-	"github.com/fission/fission/publisher"
 )
 
 type MessageQueueConfig struct {
@@ -48,7 +47,7 @@ type (
 		mqCfg       MessageQueueConfig
 		triggerMap  map[string]*triggerSubscrption
 		requestChan chan []fission.MessageQueueTrigger
-		publisher   publisher.Publisher
+		routerUrl   string
 		controller  *controllerClient.Client
 	}
 
@@ -60,7 +59,7 @@ type (
 )
 
 func MakeMessageQueueManager(ctrlClient *controllerClient.Client,
-	publisher publisher.Publisher, mqConfig MessageQueueConfig) MessageQueueTriggerManagerInterface {
+	routerUrl string, mqConfig MessageQueueConfig) MessageQueueTriggerManagerInterface {
 
 	var messageQueueMgr MessageQueueTriggerManagerInterface
 	var err error
@@ -69,7 +68,7 @@ func MakeMessageQueueManager(ctrlClient *controllerClient.Client,
 		mqCfg:       mqConfig,
 		triggerMap:  make(map[string]*triggerSubscrption),
 		controller:  ctrlClient,
-		publisher:   publisher,
+		routerUrl:   routerUrl,
 		requestChan: make(chan []fission.MessageQueueTrigger),
 	}
 	switch mqConfig.MQType {
