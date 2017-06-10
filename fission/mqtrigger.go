@@ -47,7 +47,7 @@ func mqtCreate(c *cli.Context) error {
 	case messageQueue.NATS:
 		mqType = messageQueue.NATS
 	default:
-		fatal("Unknown message queue type, currently only \"nats\" is supported")
+		fatal("Unknown message queue type, currently only \"nats-streaming\" is supported")
 	}
 
 	// TODO: check topic availability
@@ -55,7 +55,11 @@ func mqtCreate(c *cli.Context) error {
 	if len(topic) == 0 {
 		fatal("Listen topic cannot be empty")
 	}
-	respTopic := c.String("respTopic")
+	respTopic := c.String("resptopic")
+
+	if topic == respTopic {
+		fatal("Listen topic should not equal to response topic")
+	}
 
 	checkMQTopicAvailability(mqType, topic, respTopic)
 

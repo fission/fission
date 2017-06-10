@@ -86,8 +86,8 @@ func main() {
 	mqtNameFlag := cli.StringFlag{Name: "name", Usage: "MessageQueue Trigger name"}
 	mqtFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	mqtFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
-	mqtMQTypeFlag := cli.StringFlag{Name: "mqtype", Usage: "MessageQueue type, e.g. nats  (optional; uses \"nats\" if unspecified)"}
-	mqtTopicFlag := cli.StringFlag{Name: "topic", Usage: "MessageQueue Topic the trigger listens on  (optional; uses \"nats\" if unspecified)"}
+	mqtMQTypeFlag := cli.StringFlag{Name: "mqtype", Usage: "MessageQueue type, e.g. nats-streaming  (optional; uses \"nats-streaming\" if unspecified)"}
+	mqtTopicFlag := cli.StringFlag{Name: "topic", Usage: "MessageQueue Topic the trigger listens on"}
 	mqtRespTopicFlag := cli.StringFlag{Name: "resptopic", Usage: "MessageQueue Topic the trigger responses to  (optional; no response if unspecified)"}
 	mqtSubcommands := []cli.Command{
 		{Name: "create", Aliases: []string{"add"}, Usage: "Create MessageQueue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, mqtFnUidFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag}, Action: mqtCreate},
