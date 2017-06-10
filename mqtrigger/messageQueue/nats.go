@@ -174,5 +174,5 @@ func (nats *Nats) sync() {
 
 func isTopicValidForNats(topic string) bool {
 	// nats-streaming does not support wildcard channl.
-	return nsUtil.IsSubjectValid(topic, false)
+	return nsUtil.IsSubjectValid(topic)
 }
