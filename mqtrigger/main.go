@@ -32,6 +32,6 @@ func Start(controllerUrl string, routerUrl string) error {
 		MQType: mqType,
 		Url:    mqUrl,
 	}
-	messageQueue.MakeMessageQueueManager(controller, routerUrl, mqCfg)
+	messageQueue.MakeMessageQueueTriggerManager(controller, routerUrl, mqCfg)
 	return nil
 }

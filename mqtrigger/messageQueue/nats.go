@@ -47,6 +47,10 @@ type (
 	}
 )
 
+// To enable nats authentication, please follow the instruction described in
+// http://nats.io/documentation/server/gnatsd-authentication/.
+// And dont forget to change the MESSAGE_QUEUE_URL in mqtrigger deployment.
+
 func makeNatsTriggerManager(mqTriggerMgr MessageQueueTriggerManager) (MessageQueueTriggerManagerInterface, error) {
 	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqTriggerMgr.mqCfg.Url))
 	if err != nil {
@@ -74,7 +78,7 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 		log.Printf("Making HTTP request to %v", url)
 
 		// Create request
-		resp, err := http.Post(url, "application/json", bytes.NewReader(msg.Data))
+		resp, err := http.Post(url, "", bytes.NewReader(msg.Data))
 		if err != nil {
 			log.Warningf("Request failed: %v", url)
 			return

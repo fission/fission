@@ -58,7 +58,7 @@ type (
 	}
 )
 
-func MakeMessageQueueManager(ctrlClient *controllerClient.Client,
+func MakeMessageQueueTriggerManager(ctrlClient *controllerClient.Client,
 	routerUrl string, mqConfig MessageQueueConfig) MessageQueueTriggerManagerInterface {
 
 	var messageQueueMgr MessageQueueTriggerManagerInterface

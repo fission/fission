@@ -66,7 +66,7 @@ func (api *API) MessageQueueApiCreate(w http.ResponseWriter, r *http.Request) {
 	for _, trigger := range triggers {
 		if trigger.Name == mqTrigger.Name {
 			err = fission.MakeError(fission.ErrorNameExists,
-				"TimeTrigger with same name already exists")
+				"MessageQueueTrigger with same name already exists")
 			api.respondWithError(w, err)
 			return
 		}
