@@ -18,21 +18,33 @@ package router
 
 import (
 	"fmt"
+	"github.com/fission/fission"
+	poolmgrClient "github.com/fission/fission/poolmgr/client"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"time"
-
-	"github.com/fission/fission"
-	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
 
 type functionHandler struct {
 	fmap     *functionServiceMap
 	poolmgr  *poolmgrClient.Client
 	Function fission.Metadata
+}
+
+var funcTransport http.Transport = http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
 }
 
 func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
@@ -52,11 +64,12 @@ func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
 type RetryingRoundTripper struct {
 	maxRetries    int
 	initalTimeout time.Duration
+	transport     http.Transport
 }
 
 func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	timeout := rrt.initalTimeout
-	transport := http.DefaultTransport.(*http.Transport)
+	transport := &rrt.transport
 
 	// Do max-1 retries; the last one uses default transport timeouts
 	for i := rrt.maxRetries - 1; i > 0; i-- {
@@ -77,6 +90,7 @@ func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	}
 
 	// finally, one more retry with the default timeout
+	// TODO seems the default timeout is not restored
 	return http.DefaultTransport.RoundTrip(req)
 }
 
@@ -149,6 +163,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		Transport: RetryingRoundTripper{
 			maxRetries:    10,
 			initalTimeout: 50 * time.Millisecond,
+			transport:     funcTransport,
 		},
 	}
 	delay := time.Now().Sub(reqStartTime)

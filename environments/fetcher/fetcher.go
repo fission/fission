@@ -164,17 +164,18 @@ func main() {
 	fetcher := MakeFetcher(dir)
 
 	// if we have a request via an env var, run that first
-	envRequest := os.Getenv("FETCH_REQUEST")
+	envRequest := os.Getenv("FETCHER_REQUEST")
+	fmt.Println("req x", envRequest)
 	if len(envRequest) > 0 {
 		var req FetchRequest
 		err := json.Unmarshal([]byte(envRequest), &req)
 		if err != nil {
-			log.Fatalf("Error parsing FETCH_REQUEST env var: %v", err)
+			log.Fatalf("Error parsing FETCHER_REQUEST env var: %v", err)
 		}
 
 		err = fetcher.handleFetchRequest(&req)
 		if err != nil {
-			log.Fatalf("Error handling fetch request: %v", err)
+			log.Fatalf("Error handling fetcher request: %v", err)
 		}
 
 		// this pod is being started up without the help of
