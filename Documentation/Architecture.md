@@ -95,6 +95,16 @@ While a few simple retries are done, there isn't yet a reliable
 message bus between Kubewatcher and the function.  Work for this is
 tracked in issue #64.
 
+MessageQueueTrigger
+-----------
+
+MessageQueueTrigger subscribe to remote message queue server and invokes
+function when a event is published to the user-defined topic. And reply 
+the function pods response back to original event publisher. Following is
+a diagram describe how message queue trigger works
+
+![MessageQueueTrigger Diagram](https://user-images.githubusercontent.com/202578/27012344-9457cb24-4f00-11e7-8d6b-926ff01637b3.jpg)
+
 Environment Container
 ---------------------
 
