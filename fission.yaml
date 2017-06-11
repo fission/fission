@@ -184,21 +184,6 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: nats-streaming
-  namespace: fission
-  labels:
-    svc: nats-streaming
-spec:
-  ports:
-  - port: 4222
-    targetPort: 4222
-  selector:
-    svc: nats-streaming
-
----
-apiVersion: v1
-kind: Service
-metadata:
   name: etcd
   namespace: fission
   labels:
