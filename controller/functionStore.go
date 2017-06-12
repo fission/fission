@@ -83,6 +83,8 @@ func (fs *FunctionStore) Update(f *fission.Function) (string, error) {
 
 	fnew.Metadata.Uid = uid
 	fnew.Environment = f.Environment
+	fnew.CpuTarget = f.CpuTarget
+	fnew.MaxInstance = f.MaxInstance
 
 	err = fs.ResourceStore.update(fnew)
 	if err != nil {

@@ -18,12 +18,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
 
 	"github.com/fission/fission"
-	"os"
+	"github.com/fission/fission/poolmgr"
 )
 
 func envCreate(c *cli.Context) error {
@@ -39,11 +40,32 @@ func envCreate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
+	envCpuLimit := c.String("cpulimit")
+	if len(envCpuLimit) == 0 {
+		envCpuLimit = poolmgr.DEFAULT_CPU_LIMIT.String()
+	}
+	envMemLimit := c.String("memlimit")
+	if len(envMemLimit) == 0 {
+		envMemLimit = poolmgr.DEFAULT_MEM_LIMIT.String()
+	}
+	envCpuRequest := c.String("cpurequest")
+	if len(envCpuRequest) == 0 {
+		envCpuRequest = poolmgr.DEFAULT_CPU_REQUEST.String()
+	}
+	envMemRequest := c.String("memrequest")
+	if len(envMemRequest) == 0 {
+		envMemRequest = poolmgr.DEFAULT_MEM_REQUEST.String()
+	}
+
 	env := &fission.Environment{
 		Metadata: fission.Metadata{
 			Name: envName,
 		},
 		RunContainerImageUrl: envImg,
+		CpuLimit:             envCpuLimit,
+		MemLimit:             envMemLimit,
+		CpuRequest:           envCpuRequest,
+		MemRequest:           envMemRequest,
 	}
 
 	_, err := client.EnvironmentCreate(env)
@@ -66,9 +88,10 @@ func envGet(c *cli.Context) error {
 	checkErr(err, "get environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
-	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl)
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "CPU_LIMIT", "CPU_REQUEST", "MEM_LIMIT", "MEM_REQUEST")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl,
+		env.CpuLimit, env.CpuRequest, env.MemLimit, env.MemRequest)
 	w.Flush()
 	return nil
 }
@@ -86,11 +109,32 @@ func envUpdate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
+	envCpuLimit := c.String("cpulimit")
+	if len(envCpuLimit) == 0 {
+		envCpuLimit = poolmgr.DEFAULT_CPU_LIMIT.String()
+	}
+	envMemLimit := c.String("memlimit")
+	if len(envMemLimit) == 0 {
+		envMemLimit = poolmgr.DEFAULT_MEM_LIMIT.String()
+	}
+	envCpuRequest := c.String("cpurequest")
+	if len(envCpuRequest) == 0 {
+		envCpuRequest = poolmgr.DEFAULT_CPU_REQUEST.String()
+	}
+	envMemRequest := c.String("memrequest")
+	if len(envMemRequest) == 0 {
+		envMemRequest = poolmgr.DEFAULT_MEM_REQUEST.String()
+	}
+
 	env := &fission.Environment{
 		Metadata: fission.Metadata{
 			Name: envName,
 		},
 		RunContainerImageUrl: envImg,
+		CpuLimit:             envCpuLimit,
+		MemLimit:             envMemLimit,
+		CpuRequest:           envCpuRequest,
+		MemRequest:           envMemRequest,
 	}
 
 	_, err := client.EnvironmentUpdate(env)
@@ -123,10 +167,11 @@ func envList(c *cli.Context) error {
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "CPU_LIMIT", "CPU_REQUEST", "MEM_LIMIT", "MEM_REQUEST")
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl,
+			env.CpuLimit, env.CpuRequest, env.MemLimit, env.MemRequest)
 	}
 	w.Flush()
 

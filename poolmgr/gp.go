@@ -18,7 +18,6 @@ package poolmgr
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -33,14 +32,12 @@ import (
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 	"k8s.io/client-go/1.5/pkg/api/v1"
+	autoscalingv1 "k8s.io/client-go/1.5/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/logger"
-	"k8s.io/client-go/1.5/pkg/api/resource"
-	autoscalingv1 "k8s.io/client-go/1.5/pkg/apis/autoscaling/v1"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -247,20 +244,16 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 // deployment (in other words, the deployment is created after the
 // pod).  This deployment allows us to scale the number of function
 // instances up and down easily.
-func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, funcLabels map[string]string, pod *v1.Pod) error {
+// The function pod needs to be labeled with the same template-hash as
+// the newly created replica set in order to be adopted
+func (gp *GenericPool) createFunctionDeployment(
+	metadata *fission.Metadata, env *fission.Environment, funcLabels map[string]string, pod *v1.Pod) error {
 	name := fmt.Sprintf("func-%v-%v", metadata.Name, metadata.Uid)
 	fetcherRequest := gp.makeFetcherRequest(metadata)
 	var initialReplicas int32 = 1
 	sharedMountPath := "/userfunc"
 
-	memoryLimit, _ := resource.ParseQuantity("256Mi")
-	cpuLimit, _ := resource.ParseQuantity("100m")
-	memoryRequest, _ := resource.ParseQuantity("64Mi")
-	cpuRequest, _ := resource.ParseQuantity("10m")
-	memoryFetcherLimit, _ := resource.ParseQuantity("64Mi")
-	cpuFetcherLimit, _ := resource.ParseQuantity("10m")
-	memoryFetcherRequest, _ := resource.ParseQuantity("32Mi")
-	cpuFetcherRequest, _ := resource.ParseQuantity("5m")
+	envResources := GetResourceQuantity(env)
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
@@ -299,12 +292,12 @@ func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, func
 							},
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									"memory": memoryLimit,
-									"cpu":    cpuLimit,
+									"memory": envResources.memLimit,
+									"cpu":    envResources.cpuLimit,
 								},
 								Requests: v1.ResourceList{
-									"memory": memoryRequest,
-									"cpu":    cpuRequest,
+									"memory": envResources.memRequest,
+									"cpu":    envResources.cpuRequest,
 								},
 							},
 						},
@@ -339,12 +332,12 @@ func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, func
 							},
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									"memory": memoryFetcherLimit,
-									"cpu":    cpuFetcherLimit,
+									"memory": FETCHER_MEM_LIMIT,
+									"cpu":    FETCHER_CPU_LIMIT,
 								},
 								Requests: v1.ResourceList{
-									"memory": memoryFetcherRequest,
-									"cpu":    cpuFetcherRequest,
+									"memory": FETCHER_MEM_REQUEST,
+									"cpu":    FETCHER_CPU_REQUEST,
 								},
 							},
 						},
@@ -429,9 +422,6 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
 
-	// Tell logging helper about this function invocation
-	gp.setupLogging(pod, metadata)
-
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
 	specializeUrl := fmt.Sprintf("http://%v:8888/specialize", podIP)
@@ -476,14 +466,7 @@ func (gp *GenericPool) createPool() error {
 		gp.env.Metadata.Name, gp.env.Metadata.Uid, strings.ToLower(gp.poolInstanceId))
 
 	sharedMountPath := "/userfunc"
-	memoryLimit, _ := resource.ParseQuantity("256Mi")
-	cpuLimit, _ := resource.ParseQuantity("100m")
-	memoryRequest, _ := resource.ParseQuantity("64Mi")
-	cpuRequest, _ := resource.ParseQuantity("10m")
-	memoryFetcherLimit, _ := resource.ParseQuantity("64Mi")
-	cpuFetcherLimit, _ := resource.ParseQuantity("10m")
-	memoryFetcherRequest, _ := resource.ParseQuantity("32Mi")
-	cpuFetcherRequest, _ := resource.ParseQuantity("5m")
+	envResources := GetResourceQuantity(gp.env)
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
@@ -522,12 +505,12 @@ func (gp *GenericPool) createPool() error {
 							},
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									"memory": memoryLimit,
-									"cpu":    cpuLimit,
+									"memory": envResources.memLimit,
+									"cpu":    envResources.cpuLimit,
 								},
 								Requests: v1.ResourceList{
-									"memory": memoryRequest,
-									"cpu":    cpuRequest,
+									"memory": envResources.memRequest,
+									"cpu":    envResources.cpuRequest,
 								},
 							},
 						},
@@ -545,12 +528,12 @@ func (gp *GenericPool) createPool() error {
 							Command: []string{"/fetcher", sharedMountPath},
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									"memory": memoryFetcherLimit,
-									"cpu":    cpuFetcherLimit,
+									"memory": FETCHER_MEM_LIMIT,
+									"cpu":    FETCHER_CPU_LIMIT,
 								},
 								Requests: v1.ResourceList{
-									"memory": memoryFetcherRequest,
-									"cpu":    cpuFetcherRequest,
+									"memory": FETCHER_MEM_REQUEST,
+									"cpu":    FETCHER_CPU_REQUEST,
 								},
 							},
 						},
@@ -640,12 +623,11 @@ func (gp *GenericPool) deleteFunctionDeployment(name string, funcLabels map[stri
 		LabelSelector: labels.Set(funcLabels).AsSelector(),
 	})
 	if len(podList.Items) >= 0 {
-		for i, pod := range podList.Items {
+		for _, pod := range podList.Items {
 			err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil)
 			if err != nil {
 				log.Printf("Error deleting pod, ignoring: %v", err)
 			}
-			gp.unsetLogging(&podList.Items[i])
 		}
 	}
 	return nil
@@ -655,7 +637,7 @@ func (gp *GenericPool) deleteHorizontalPodAutoscaler(name string) error {
 	return gp.kubernetesClient.Autoscaling().HorizontalPodAutoscalers(gp.namespace).Delete(name, nil)
 }
 
-func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
+func (gp *GenericPool) GetFuncSvc(m *fission.Metadata, f *fission.Function, env *fission.Environment) (*funcSvc, error) {
 	// Pick a pod from the pool
 	log.Printf("[%v] Choosing pod from pool", m)
 	newLabels := gp.labelsForFunction(m)
@@ -684,10 +666,9 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	// Create a deployment that we can use to scale the function
 	// instances
 
-	// TODO set up a pre-deploy and pre-destroy hooks for containers
 	// managed by the function deployment
 	// for logs and other services
-	err = gp.createFunctionDeployment(m, labels, pod)
+	err = gp.createFunctionDeployment(m, env, labels, pod)
 	if err != nil {
 		log.Printf("Error creating function deployment: %v", err)
 	}
@@ -695,10 +676,17 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	// Create Autoscalers
 	// Horizontal Pod Autoscalers for k8s to watch cpu usage
 	// currently only cpu is supported by hpa
-	// TODO make the cpu target adjustable
 	// TODO add more custom metrics
-	// TODO to make the scaling by ourselves
-	err = gp.createHorizontalPodAutoscaler(m, 30, 1, 3)
+	cpuTarget := f.CpuTarget
+	if cpuTarget < 1 || cpuTarget > 100 {
+		cpuTarget = 60
+	}
+	maxInstance := f.MaxInstance
+	if maxInstance < 1 {
+		maxInstance = 3
+	}
+
+	err = gp.createHorizontalPodAutoscaler(m, int32(cpuTarget), 1, int32(maxInstance))
 	if err != nil {
 		log.Printf("Error creating horizontal pod autoscaler: %v", err)
 	}
@@ -825,47 +813,4 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
-}
-
-// Calls the logging daemonset pod on the node where the given pod is
-// running.
-func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) {
-	logReq := logger.LogRequest{
-		Namespace: pod.Namespace,
-		Pod:       pod.Name,
-		Container: gp.env.Metadata.Name,
-		FuncName:  metadata.Name,
-		FuncUid:   metadata.Uid,
-	}
-	reqbody, err := json.Marshal(logReq)
-	if err != nil {
-		log.Printf("Error creating log request")
-		return
-	}
-	go func() {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
-		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
-		if err != nil {
-			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-	}()
-}
-
-func (gp *GenericPool) unsetLogging(pod *v1.Pod) {
-	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
-	req, err := http.NewRequest("DELETE", loggerUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-	} else {
-		if resp.StatusCode != 200 {
-			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
-		}
-		resp.Body.Close()
-	}
 }

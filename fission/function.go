@@ -83,12 +83,24 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 
+	cpuTarget := c.Int("cputarget")
+	if cpuTarget < 1 || cpuTarget > 100 {
+		cpuTarget = 60
+	}
+
+	maxInstance := c.Int("maxinstance")
+	if maxInstance < 1 {
+		maxInstance = 3
+	}
+
 	code := fnFetchCode(fileName)
 
 	function := &fission.Function{
 		Metadata:    fission.Metadata{Name: fnName},
 		Environment: fission.Metadata{Name: envName},
 		Code:        string(code),
+		CpuTarget:   cpuTarget,
+		MaxInstance: maxInstance,
 	}
 
 	_, err := client.FunctionCreate(function)
@@ -155,9 +167,9 @@ func fnGetMeta(c *cli.Context) error {
 	checkErr(err, "get function")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
-	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		f.Metadata.Name, f.Metadata.Uid, f.Environment.Name)
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "CPU_TARGET", "MAX_INSTANCE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+		f.Metadata.Name, f.Metadata.Uid, f.Environment.Name, f.CpuTarget, f.MaxInstance)
 	w.Flush()
 	return err
 }
@@ -183,6 +195,16 @@ func fnUpdate(c *cli.Context) error {
 		code := fnFetchCode(fileName)
 
 		function.Code = string(code)
+	}
+
+	cpuTarget := c.Int("cputarget")
+	if cpuTarget > 0 && cpuTarget <= 100 {
+		function.CpuTarget = cpuTarget
+	}
+
+	maxInstance := c.Int("maxinstance")
+	if maxInstance > 0 {
+		function.MaxInstance = maxInstance
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -218,10 +240,10 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "CPU_TARGET", "MAX_INSTANCE")
 	for _, f := range fns {
-		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.Uid, f.Environment.Name)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+			f.Metadata.Name, f.Metadata.Uid, f.Environment.Name, f.CpuTarget, f.MaxInstance)
 	}
 	w.Flush()
 
