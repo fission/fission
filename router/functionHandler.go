@@ -25,9 +25,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/fission/fission"
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
-	"github.com/gorilla/mux"
 )
 
 type functionHandler struct {
