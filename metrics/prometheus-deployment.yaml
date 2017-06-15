@@ -3,7 +3,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    app: prometheus
+    name: prometheus-deployment
   name: prometheus
   namespace: fission
 spec:
@@ -14,7 +14,7 @@ spec:
         app: prometheus
     spec:
       containers:
-      - image: quay.io/prometheus/prometheus:v1.0.1
+      - image: quay.io/prometheus/prometheus:v1.7.1
         name: prometheus
         command:
         - "/bin/prometheus"
@@ -30,19 +30,14 @@ spec:
           name: data
         - mountPath: "/etc/prometheus"
           name: config-volume
-        resources:
-          requests:
-            cpu: 100m
-            memory: 100Mi
-          limits:
-            cpu: 500m
-            memory: 2500Mi
       volumes:
       - emptyDir: {}
         name: data
       - configMap:
           name: prometheus-config
         name: config-volume
+      serviceAccountName: prometheus
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -55,40 +50,38 @@ data:
       scrape_interval: 30s
       scrape_timeout: 30s
     scrape_configs:
-    - job_name: 'prometheus'
-      static_configs:
-        - targets: ['localhost:9090']
-    - job_name: 'kubernetes-cluster'
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
       scheme: https
       tls_config:
         ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
       bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      kubernetes_sd_configs:
-      - api_servers:
-        - 'https://kubernetes.default.svc'
-        in_cluster: true
-        role: apiserver
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
     - job_name: 'kubernetes-nodes'
       scheme: https
       tls_config:
         ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        insecure_skip_verify: true
       bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
       kubernetes_sd_configs:
-      - api_servers:
-        - 'https://kubernetes.default.svc'
-        in_cluster: true
-        role: node
+      - role: node
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
     - job_name: 'kubernetes-service-endpoints'
-      scheme: https
       kubernetes_sd_configs:
-      - api_servers:
-        - 'https://kubernetes.default.svc'
-        in_cluster: true
-        role: endpoint
+      - role: endpoints
       relabel_configs:
       - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
         action: keep
@@ -104,26 +97,23 @@ data:
       - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
         action: replace
         target_label: __address__
-        regex: (.+)(?::\d+);(\d+)
+        regex: ([^:]+)(?::\d+)?;(\d+)
         replacement: $1:$2
       - action: labelmap
         regex: __meta_kubernetes_service_label_(.+)
-      - source_labels: [__meta_kubernetes_service_namespace]
+      - source_labels: [__meta_kubernetes_namespace]
         action: replace
         target_label: kubernetes_namespace
       - source_labels: [__meta_kubernetes_service_name]
         action: replace
         target_label: kubernetes_name
+
     - job_name: 'kubernetes-services'
-      scheme: https
       metrics_path: /probe
       params:
         module: [http_2xx]
       kubernetes_sd_configs:
-      - api_servers:
-        - 'https://kubernetes.default.svc'
-        in_cluster: true
-        role: service
+      - role: service
       relabel_configs:
       - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
         action: keep
@@ -136,17 +126,14 @@ data:
         target_label: instance
       - action: labelmap
         regex: __meta_kubernetes_service_label_(.+)
-      - source_labels: [__meta_kubernetes_service_namespace]
+      - source_labels: [__meta_kubernetes_namespace]
         target_label: kubernetes_namespace
       - source_labels: [__meta_kubernetes_service_name]
         target_label: kubernetes_name
+
     - job_name: 'kubernetes-pods'
-      scheme: https
       kubernetes_sd_configs:
-      - api_servers:
-        - 'https://kubernetes.default.svc'
-        in_cluster: true
-        role: pod
+      - role: pod
       relabel_configs:
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
         action: keep
@@ -157,17 +144,18 @@ data:
         regex: (.+)
       - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
         action: replace
-        regex: (.+):(?:\d+);(\d+)
-        replacement: ${1}:${2}
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
         target_label: __address__
       - action: labelmap
         regex: __meta_kubernetes_pod_label_(.+)
-      - source_labels: [__meta_kubernetes_pod_namespace]
+      - source_labels: [__meta_kubernetes_namespace]
         action: replace
         target_label: kubernetes_namespace
       - source_labels: [__meta_kubernetes_pod_name]
         action: replace
         target_label: kubernetes_pod_name
+
     - job_name: 'fission-router'
       scrape_interval: 10s
       static_configs:
