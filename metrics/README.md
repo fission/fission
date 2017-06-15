@@ -53,7 +53,7 @@ and router service port 8080 exposed for metrics scraping.
 Create the prometheus deployment and service (optional for Grafana).
 
 ```bash
-$ kubectl create -f prometheus-deployment.yaml -f prometheus-svc.yaml
+$ kubectl create -f prometheus-rbas.yaml -f prometheus-deployment.yaml -f prometheus-svc.yaml
 ```
 
 Create a deployment and service to export pod labels and extra info to prometheus.
