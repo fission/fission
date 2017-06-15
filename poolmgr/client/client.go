@@ -29,33 +29,19 @@ import (
 	"github.com/fission/fission"
 )
 
-const (
-	TOUCH int = iota
-	SYNC
-)
-
 type Client struct {
 	poolmgrUrl  string
 	tappedByUrl map[string]bool
-	requestChan chan clientRequest
-	tapUrlChan  chan string
-}
-
-type clientRequest struct {
-	requestType int
-	serviceUrl  string
+	requestChan chan string
 }
 
 func MakeClient(poolmgrUrl string) *Client {
 	c := &Client{
 		poolmgrUrl:  strings.TrimSuffix(poolmgrUrl, "/"),
 		tappedByUrl: make(map[string]bool),
-		requestChan: make(chan clientRequest, 100),
-		tapUrlChan:  make(chan string, 100),
+		requestChan: make(chan string),
 	}
-	go c.tapWorker()
-	go c.timer()
-	go c.tapService()
+	go c.service()
 	return c
 }
 
@@ -84,43 +70,32 @@ func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, erro
 	return string(svcName), nil
 }
 
-func (c *Client) tapService() {
+func (c *Client) service() {
+	ticker := time.NewTicker(time.Second * 5)
 	for {
-		req := <-c.requestChan
-		switch req.requestType {
-		case TOUCH:
-			c.tappedByUrl[req.serviceUrl] = true
-		case SYNC:
-			for u := range c.tappedByUrl {
-				c.tapUrlChan <- u
-			}
-			if len(c.tappedByUrl) > 0 {
-				log.Printf("Tapped %v services in batch", len(c.tappedByUrl))
-			}
+		select {
+		case serviceUrl := <-c.requestChan:
+			c.tappedByUrl[serviceUrl] = true
+		case <-ticker.C:
+			urls := c.tappedByUrl
 			c.tappedByUrl = make(map[string]bool)
+			if len(urls) > 0 {
+				go func() {
+					for u := range c.tappedByUrl {
+						c._tapService(u)
+					}
+					if len(urls) > 0 {
+						log.Printf("Tapped %v services in batch", len(urls))
+					}
+				}()
+				log.Printf("Tapped %v services in batch", len(urls))
+			}
 		}
 	}
 }
 
-func (c *Client) tapWorker() {
-	for {
-		u := <-c.tapUrlChan
-		c._tapService(u)
-	}
-}
-
-func (c *Client) timer() {
-	for {
-		c.requestChan <- clientRequest{requestType: SYNC}
-		time.Sleep(5 * time.Second)
-	}
-}
-
 func (c *Client) TapService(serviceUrl *url.URL) {
-	c.requestChan <- clientRequest{
-		requestType: TOUCH,
-		serviceUrl:  serviceUrl.String(),
-	}
+	c.requestChan <- serviceUrl.String()
 }
 
 func (c *Client) _tapService(serviceUrlStr string) error {
