@@ -45,10 +45,11 @@ type funcSvc struct {
 }
 
 type API struct {
-	poolMgr     *GenericPoolManager
-	functionEnv *cache.Cache // map[fission.Metadata]fission.Environment
-	fsCache     *functionServiceCache
-	controller  *controllerclient.Client
+	poolMgr      *GenericPoolManager
+	functionEnv  *cache.Cache // map[fission.Metadata]fission.Environment
+	fsCache      *functionServiceCache
+	controller   *controllerclient.Client
+	fsCreateChan map[fission.Metadata]chan struct{}
 
 	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
 	//urlFuncSvc      *cache.Cache // map[string]*funcSvc
@@ -56,10 +57,11 @@ type API struct {
 
 func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCache *functionServiceCache) *API {
 	return &API{
-		poolMgr:     gpm,
-		functionEnv: cache.MakeCache(time.Minute, 0),
-		fsCache:     fsCache,
-		controller:  controller,
+		poolMgr:      gpm,
+		functionEnv:  cache.MakeCache(time.Minute, 0),
+		fsCache:      fsCache,
+		controller:   controller,
+		fsCreateChan: make(map[fission.Metadata]chan struct{}),
 	}
 }
 
@@ -135,6 +137,30 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return fsvc.address, nil
 	}
 
+	// Cache miss -- is this first one to request the func?
+	createCh, found := api.fsCreateChan[*m]
+	if !found {
+		// create a chan for others to wait on
+		createCh = make(chan struct{})
+		api.fsCreateChan[*m] = createCh
+		defer func() {
+			go awakeListeners(createCh)
+			delete(api.fsCreateChan, *m)
+		}()
+		return api.createServiceForFunction(m)
+	}
+	// wait for the func service created
+	createCh <- struct{}{}
+
+	// get the func service created from cache again
+	fsvc, err = api.fsCache.GetByFunction(m)
+	if err != nil {
+		return "", err
+	}
+	return fsvc.address, nil
+}
+
+func (api *API) createServiceForFunction(m *fission.Metadata) (string, error) {
 	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
@@ -155,12 +181,11 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	log.Printf("[%v] getting function service from pool", m.Name)
-	funcSvc, err := pool.GetFuncSvc(m)
+	fsvc, err := pool.GetFuncSvc(m)
 	if err != nil {
 		return "", err
 	}
-
-	return funcSvc.address, nil
+	return fsvc.address, nil
 }
 
 // find funcSvc and update its atime
@@ -190,4 +215,15 @@ func (api *API) Serve(port int) {
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+}
+
+func awakeListeners(ch chan struct{}) {
+	for {
+		select {
+		case <-ch:
+		case <-time.After(time.Second * 5):
+			close(ch)
+			return
+		}
+	}
 }

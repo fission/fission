@@ -45,9 +45,12 @@ func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
 }
 
 func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
-	err, _ := fmap.cache.Set(*f, serviceUrl)
+	err, old := fmap.cache.Set(*f, serviceUrl)
 	if err != nil {
-		log.Printf("error caching service url for function: %v", err)
+		if *serviceUrl == *(old.(*url.URL)) {
+			return
+		}
+		log.Printf("error caching service url for function with a different value: %v", err)
 		// ignore error
 	}
 }

@@ -438,7 +438,7 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	if gp.useSvc {
 		svcName := fmt.Sprintf("svc-%v", m.Name)
 		if len(m.Uid) > 0 {
-			svcName += ("-" + m.Uid)
+			svcName += "-" + m.Uid
 		}
 
 		labels := gp.labelsForFunction(m)
@@ -472,8 +472,7 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	err, existingFsvc := gp.fsCache.Add(*fsvc)
 	if err != nil {
 		// Some other thread beat us to it -- return the other thread's fsvc and clean up
-		// our own.  TODO: this is grossly inefficient, improve it with some sort of state
-		// machine
+		// our own.
 		log.Printf("func svc already exists: %v", existingFsvc.podName)
 		go func() {
 			gp.kubernetesClient.Core().Pods(gp.namespace).Delete(fsvc.podName, nil)
