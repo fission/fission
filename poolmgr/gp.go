@@ -352,15 +352,26 @@ func (gp *GenericPool) createFunctionDeployment(
 		return err
 	}
 
-	rs, err := gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).List(api.ListOptions{
-		LabelSelector: labels.Set(funcLabels).AsSelector(),
-	})
-	if err != nil || len(rs.Items) == 0 {
-		fmt.Println("replicasets is nil or empty")
+	// try to fetch the corresponding replica set for 5 times
+	var rs *v1beta1.ReplicaSet = nil
+	for range [5]struct{}{} {
+		rsList, err := gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).List(api.ListOptions{
+			LabelSelector: labels.Set(funcLabels).AsSelector(),
+		})
+		if err != nil || len(rsList.Items) == 0 {
+			fmt.Println("replicasets is nil or empty, retry later")
+			time.Sleep(500 * time.Microsecond)
+			continue
+		}
+		rs = &rsList.Items[0]
+		break
+	}
+	if rs == nil {
+		fmt.Printf("replicaset not found, label template-hash to pod [%v] failed", pod.ObjectMeta.Name)
 		return nil
 	}
 
-	pod.Labels["pod-template-hash"] = rs.Items[0].Labels["pod-template-hash"]
+	pod.Labels["pod-template-hash"] = rs.Labels["pod-template-hash"]
 	_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(pod)
 	if err != nil {
 		log.Printf("failed to add template hash to pod [%v]: %v", pod.ObjectMeta.Name, err)
@@ -369,6 +380,13 @@ func (gp *GenericPool) createFunctionDeployment(
 }
 
 func (gp *GenericPool) createHorizontalPodAutoscaler(metadata *fission.Metadata, cpuPercent, min, max int32) error {
+	if cpuPercent < 1 || cpuPercent > 100 {
+		cpuPercent = 60
+	}
+	if max < 1 {
+		max = 3
+	}
+
 	hpaName := fmt.Sprintf("hpa-%v-%v", metadata.Name, metadata.Uid)
 	deplName := fmt.Sprintf("func-%v-%v", metadata.Name, metadata.Uid)
 
@@ -571,7 +589,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 	}
 }
 
-func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Service, error) {
+func (gp *GenericPool) createSvc(name string, svcLabels map[string]string) (*v1.Service, error) {
 	service := v1.Service{
 		ObjectMeta: v1.ObjectMeta{
 			Name: name,
@@ -585,7 +603,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 					TargetPort: intstr.FromInt(8888),
 				},
 			},
-			Selector: labels,
+			Selector: svcLabels,
 		},
 	}
 	svc, err := gp.kubernetesClient.Core().Services(gp.namespace).Create(&service)
@@ -656,40 +674,31 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata, f *fission.Function, env 
 
 	// Create a K8s service
 	svcName := fmt.Sprintf("%v-%v", m.Name, m.Uid)
-	labels := gp.labelsForFunction(m)
-	_, err = gp.createSvc(svcName, labels)
+	_, err = gp.createSvc(svcName, newLabels)
 	if err != nil {
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
 
-	// Create a deployment that we can use to scale the function
+	// Create a deployment async that we can use to scale the function
 	// instances
+	go func() {
+		// managed by the function deployment
+		// for logs and other services
+		err = gp.createFunctionDeployment(m, env, newLabels, pod)
+		if err != nil {
+			log.Printf("Error creating function deployment: %v", err)
+		}
 
-	// managed by the function deployment
-	// for logs and other services
-	err = gp.createFunctionDeployment(m, env, labels, pod)
-	if err != nil {
-		log.Printf("Error creating function deployment: %v", err)
-	}
-
-	// Create Autoscalers
-	// Horizontal Pod Autoscalers for k8s to watch cpu usage
-	// currently only cpu is supported by hpa
-	// TODO add more custom metrics
-	cpuTarget := f.CpuTarget
-	if cpuTarget < 1 || cpuTarget > 100 {
-		cpuTarget = 60
-	}
-	maxInstance := f.MaxInstance
-	if maxInstance < 1 {
-		maxInstance = 3
-	}
-
-	err = gp.createHorizontalPodAutoscaler(m, int32(cpuTarget), 1, int32(maxInstance))
-	if err != nil {
-		log.Printf("Error creating horizontal pod autoscaler: %v", err)
-	}
+		// Create Autoscalers
+		// Horizontal Pod Autoscalers for k8s to watch cpu usage
+		// currently only cpu is supported by hpa
+		// TODO add more custom metrics
+		err = gp.createHorizontalPodAutoscaler(m, int32(f.CpuTarget), 1, int32(f.MaxInstance))
+		if err != nil {
+			log.Printf("Error creating horizontal pod autoscaler: %v", err)
+		}
+	}()
 
 	// The fission router isn't in the same namespace, so return a
 	// namespace-qualified hostname
