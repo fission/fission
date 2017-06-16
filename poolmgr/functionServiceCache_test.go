@@ -29,10 +29,11 @@ func TestFunctionServiceCache(t *testing.T) {
 			},
 			RunContainerImageUrl: "fission/foo-env",
 		},
-		address: "xxx",
-		podName: "yyy",
-		ctime:   now,
-		atime:   now,
+		podAddress: "xxx",
+		svcAddress: "zzz",
+		podName:    "yyy",
+		ctime:      now,
+		atime:      now,
 	}
 	err, _ := fsc.Add(*fsvc)
 	if err != nil {
@@ -52,7 +53,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Incorrect fsvc \n(expected: %#v)\n (found: %#v)", fsvc, f)
 	}
 
-	err = fsc.TouchByAddress(fsvc.address)
+	err = fsc.TouchByAddress(fsvc.svcAddress)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to touch fsvc: %v", err)

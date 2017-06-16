@@ -31,6 +31,7 @@ const (
 	LISTOLD
 	LOG
 	DELETE_BY_POD
+	DELETE_BY_FUNCNAME
 )
 
 type (
@@ -46,12 +47,13 @@ type (
 		requestType     fscRequestType
 		address         string
 		podName         string
+		funcMeta        fission.Metadata
 		age             time.Duration
 		responseChannel chan *fscResponse
 	}
 	fscResponse struct {
-		podNames []string
-		deleted  bool
+		items   []fission.Metadata
+		deleted bool
 		error
 	}
 )
@@ -78,22 +80,16 @@ func (fsc *functionServiceCache) service() {
 			resp.error = fsc._touchByAddress(req.address)
 		case LISTOLD:
 			// get svcs idle for > req.age
-			byPodCopy := fsc.byPod.Copy()
-			pods := make([]string, 0)
-			for podNameI, mI := range byPodCopy {
+			byFunctionCopy := fsc.byFunction.Copy()
+			items := make([]fission.Metadata, 0)
+			for mI, fsvcI := range byFunctionCopy {
 				m := mI.(fission.Metadata)
-				fsvcI, err := fsc.byFunction.Get(m)
-				if err != nil {
-					resp.error = err
-				} else {
-					fsvc := fsvcI.(*funcSvc)
-					if time.Now().Sub(fsvc.atime) > req.age {
-						podName := podNameI.(string)
-						pods = append(pods, podName)
-					}
+				fsvc := fsvcI.(*funcSvc)
+				if time.Now().Sub(fsvc.atime) > req.age {
+					items = append(items, m)
 				}
 			}
-			resp.podNames = pods
+			resp.items = items
 		case LOG:
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
@@ -104,6 +100,8 @@ func (fsc *functionServiceCache) service() {
 			}
 		case DELETE_BY_POD:
 			resp.deleted, resp.error = fsc._deleteByPod(req.podName, req.age)
+		case DELETE_BY_FUNCNAME:
+			resp.deleted, resp.error = fsc._deleteByFuncMeta(req.funcMeta, req.age)
 		}
 		req.responseChannel <- resp
 	}
@@ -208,6 +206,18 @@ func (fsc *functionServiceCache) DeleteByPod(podName string, minAge time.Duratio
 	return resp.deleted, resp.error
 }
 
+func (fsc *functionServiceCache) DeleteByFuncMeta(funcMeta fission.Metadata, minAge time.Duration) (bool, error) {
+	responseChannel := make(chan *fscResponse)
+	fsc.requestChannel <- &fscRequest{
+		requestType:     DELETE_BY_FUNCNAME,
+		funcMeta:        funcMeta,
+		age:             minAge,
+		responseChannel: responseChannel,
+	}
+	resp := <-responseChannel
+	return resp.deleted, resp.error
+}
+
 // _deleteByPod deletes the entry keyed by podName, but only if it is
 // at least minAge old.
 func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Duration) (bool, error) {
@@ -216,6 +226,11 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 		return false, err
 	}
 	m := mI.(fission.Metadata)
+
+	return fsc._deleteByFuncMeta(m, minAge)
+}
+
+func (fsc *functionServiceCache) _deleteByFuncMeta(m fission.Metadata, minAge time.Duration) (bool, error) {
 	fsvcI, err := fsc.byFunction.Get(m)
 	if err != nil {
 		return false, err
@@ -229,11 +244,11 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	fsc.byFunction.Delete(m)
 	fsc.byPodAddress.Delete(fsvc.podAddress)
 	fsc.bySvcAddress.Delete(fsvc.svcAddress)
-	fsc.byPod.Delete(podName)
+	fsc.byPod.Delete(fsvc.podName)
 	return true, nil
 }
 
-func (fsc *functionServiceCache) ListOld(age time.Duration) ([]string, error) {
+func (fsc *functionServiceCache) ListOld(age time.Duration) ([]fission.Metadata, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
@@ -241,7 +256,7 @@ func (fsc *functionServiceCache) ListOld(age time.Duration) ([]string, error) {
 		responseChannel: responseChannel,
 	}
 	resp := <-responseChannel
-	return resp.podNames, resp.error
+	return resp.items, resp.error
 }
 
 func (fsc *functionServiceCache) Log() {

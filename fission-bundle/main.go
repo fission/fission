@@ -48,8 +48,8 @@ func runKubeWatcher(controllerUrl, routerUrl string) {
 	}
 }
 
-func runLogger() {
-	logger.Start()
+func runLogger(namespace string) {
+	logger.Start(namespace)
 	log.Fatalf("Error: Logger exited.")
 }
 
@@ -132,7 +132,7 @@ Options:
 	}
 
 	if arguments["--logger"] == true {
-		runLogger()
+		runLogger(namespace)
 	}
 
 	select {}

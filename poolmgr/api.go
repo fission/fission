@@ -37,6 +37,7 @@ import (
 type API struct {
 	poolMgr     *GenericPoolManager
 	functionEnv *cache.Cache // map[fission.Metadata]fission.Environment
+	function    *cache.Cache // map[fission.Metadata]fission.Function
 	fsCache     *functionServiceCache
 	controller  *controllerclient.Client
 
@@ -48,6 +49,7 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCac
 	return &API{
 		poolMgr:     gpm,
 		functionEnv: cache.MakeCache(time.Minute, 0),
+		function:    cache.MakeCache(time.Minute, 0),
 		fsCache:     fsCache,
 		controller:  controller,
 	}
@@ -78,34 +80,33 @@ func (api *API) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(serviceName))
 }
 
-func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error) {
-	var env *fission.Environment
-
+func (api *API) getFunctionInfo(m *fission.Metadata) (*fission.Environment, *fission.Function, error) {
 	// Cached ?
-	result, err := api.functionEnv.Get(*m)
+	e, err := api.functionEnv.Get(*m)
+	f, err := api.function.Get(*m)
 	if err == nil {
-		env = result.(*fission.Environment)
-		return env, nil
+		return e.(*fission.Environment), f.(*fission.Function), nil
 	}
 
 	// Cache miss -- get func from controller
 	log.Printf("[%v] getting function from controller", m)
-	f, err := api.controller.FunctionGet(m)
+	fnc, err := api.controller.FunctionGet(m)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Get env from metadata
 	log.Printf("[%v] getting env from controller", m)
-	env, err = api.controller.EnvironmentGet(&f.Environment)
+	env, err := api.controller.EnvironmentGet(&fnc.Environment)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// cache for future
 	api.functionEnv.Set(*m, env)
+	api.function.Set(*m, fnc)
 
-	return env, nil
+	return env, fnc, nil
 }
 
 func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
@@ -130,7 +131,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 
 	// from Func -> get Env
 	log.Printf("[%v] getting environment for function", m.Name)
-	env, err := api.getFunctionEnv(m)
+	env, fnc, err := api.getFunctionInfo(m)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +146,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	log.Printf("[%v] getting function service from pool", m.Name)
-	funcSvc, err := pool.GetFuncSvc(m)
+	funcSvc, err := pool.GetFuncSvc(m, fnc, env)
 	if err != nil {
 		return "", err
 	}

@@ -17,19 +17,18 @@ limitations under the License.
 package logger
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/fission/fission"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"k8s.io/client-go/1.5/kubernetes"
+	"k8s.io/client-go/1.5/pkg/api"
+	"k8s.io/client-go/1.5/pkg/api/unversioned"
+	"k8s.io/client-go/1.5/pkg/api/v1"
+	"k8s.io/client-go/1.5/pkg/watch"
 	"k8s.io/client-go/1.5/rest"
 )
 
@@ -103,7 +102,7 @@ func parseContainerString(containerID string) (string, error) {
 func getcontainerID(kubeClient *kubernetes.Clientset, namespace, pod, container string) (string, error) {
 	podInfo, err := kubeClient.Core().Pods(namespace).Get(pod)
 	if err != nil {
-		log.Printf("Failed to get pod info: %v", err)
+		log.Printf("Failed to get pod info: %v, %v", err, pod)
 		return "", err
 	}
 	var containerID string
@@ -111,7 +110,7 @@ func getcontainerID(kubeClient *kubernetes.Clientset, namespace, pod, container 
 		if c.Name == container {
 			containerID, err = parseContainerString(c.ContainerID)
 			if err != nil {
-				log.Printf("Failed to get container id: %v", err)
+				log.Printf("Failed to get container id: %v, %v", err, pod)
 				return "", err
 			}
 			return containerID, nil
@@ -137,29 +136,25 @@ func getFissionLogSymlinkPath(logReq LogRequest) (string, bool) {
 	return logSymLink, true
 }
 
-func createLogSymlink(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request", 500)
+func createLogSymlink(pod *v1.Pod, kubernetesClient *kubernetes.Clientset) {
+	if !isPodReady(pod) {
 		return
 	}
-	logReq := LogRequest{}
-	if err = json.Unmarshal(body, &logReq); err != nil {
-		w.Write([]byte(fmt.Sprintf("%v", err)))
+	logReq := logInfo.Get(pod.Name)
+	if logReq.Pod != "" {
 		return
 	}
-
-	kubernetesClient, err := getKubernetesClient()
-	if err != nil {
-		log.Warningf("Failed to get kubernetes client: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	logReq = LogRequest{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: pod.Spec.Containers[0].Name,
+		FuncName:  pod.Labels["functionName"],
+		FuncUid:   pod.Labels["functionUid"],
 	}
 
+	log.Infof("Log symlink start: %v", pod.Name)
 	containerID, err := getcontainerID(kubernetesClient, logReq.Namespace, logReq.Pod, logReq.Container)
 	if err != nil || containerID == "" {
-		log.Warningf("Failed to get container id: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -167,49 +162,117 @@ func createLogSymlink(w http.ResponseWriter, r *http.Request) {
 	containerLogFilePath, isValidLogPath := getContainerLogPath(logReq)
 	fissionLogSymlinkPath, isValidSymlinkPath := getFissionLogSymlinkPath(logReq)
 	if !isValidLogPath || !isValidSymlinkPath {
-		w.WriteHeader(http.StatusBadRequest)
+		log.Errorf("Log or symlink path is not valid")
 		return
 	}
 
 	err = os.Symlink(containerLogFilePath, fissionLogSymlinkPath)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Errorf("Log or symlink path is not valid", err)
 		return
 	}
 	logInfo.Add(logReq)
-	w.WriteHeader(http.StatusOK)
+	log.Infof("Log symlink created: %v", pod.Name)
 }
 
-func removeLogSymlink(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	pod := vars["pod"]
+func removeLogSymlink(pod string) {
 	logReq := logInfo.Get(pod)
 	if logReq.Pod == "" {
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	fissionLogSymlinkPath, isValidSymlinkPath := getFissionLogSymlinkPath(logReq)
 	if !isValidSymlinkPath {
-		w.WriteHeader(http.StatusBadRequest)
+		log.Errorf("The pod symlink path is not valid: %v", pod)
 		return
 	}
 	err := os.Remove(fissionLogSymlinkPath)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Errorf("Failed to remove the pod symlink: %v", err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	log.Infof("Log symlink removed: %v", pod)
+}
+
+func isPodReady(pod *v1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == v1.PodReady {
+			return true
+		}
+	}
+	return false
 }
 
 var logInfo logRequestTracker
 
-func Start() {
+func Start(namespace string) {
 	logInfo = makelogRequestTracker()
-	r := mux.NewRouter()
-	r.HandleFunc("/v1/log", createLogSymlink).Methods("POST")
-	r.HandleFunc("/v1/log/{pod}", removeLogSymlink).Methods("DELETE")
-	address := fmt.Sprintf(":%v", 1234)
-	log.Printf("starting poolmgr at port %s", address)
-	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+
+	kubernetesClient, err := getKubernetesClient()
+	if err != nil {
+		log.Errorf("Failed to get kubernetes client: %v", err)
+		return
+	}
+
+	// TODO find a better way to get the node name for this pod
+	hostname := os.Getenv("HOSTNAME")
+	self, err := kubernetesClient.Core().Pods("fission").Get(hostname)
+	if err != nil {
+		log.Errorf("Failed to get pod self reference: %v", err)
+		return
+	}
+
+	listOptions := api.ListOptions{}
+	wi, err := kubernetesClient.Core().Pods(namespace).Watch(listOptions)
+	if err != nil {
+		log.Errorf("Failed to watch pods: %v", err)
+		return
+	}
+
+	for {
+		ev, more := <-wi.ResultChan()
+		if !more {
+			log.Errorf("Watch stopped")
+			break
+		}
+		switch evType := ev.Object.(type) {
+		case *v1.Pod:
+			pod := ev.Object.(*v1.Pod)
+			if self.Spec.NodeName != pod.Spec.NodeName {
+				break
+			}
+			if _, fond := pod.Labels["functionName"]; !fond {
+				break
+			}
+
+			switch ev.Type {
+			case watch.Added:
+				break
+			case watch.Deleted:
+				removeLogSymlink(pod.Name)
+				break
+			case watch.Modified:
+				// TODO filter out the pod which is created and then deleted instantly
+				// which is caused by a deployment with 1 replica
+				// and then a generic pod relabeled by fission is adopted
+				createLogSymlink(pod, kubernetesClient)
+				break
+			case watch.Error:
+				break
+			}
+			break
+		case *unversioned.Status:
+			log.Warnf("received unversioned status", ev.Object.(*unversioned.Status))
+			break
+		default:
+			log.Warnf("unknown type,", evType)
+			wi.Stop()
+			wi, err = kubernetesClient.Core().Pods(namespace).Watch(listOptions)
+			if err != nil {
+				log.Errorf("Failed to watch pods: %v", err)
+				return
+			}
+			break
+		}
+	}
 }

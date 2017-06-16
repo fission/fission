@@ -18,7 +18,6 @@ package poolmgr
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -33,12 +32,12 @@ import (
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 	"k8s.io/client-go/1.5/pkg/api/v1"
+	autoscalingv1 "k8s.io/client-go/1.5/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/logger"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -212,7 +211,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		chosenPod.ObjectMeta.OwnerReferences = nil
 
 		log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
-		_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
+		chosenPod, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
 		if err != nil {
 			log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
 			continue
@@ -245,25 +244,30 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 // deployment (in other words, the deployment is created after the
 // pod).  This deployment allows us to scale the number of function
 // instances up and down easily.
-func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, labels map[string]string) error {
+// The function pod needs to be labeled with the same template-hash as
+// the newly created replica set in order to be adopted
+func (gp *GenericPool) createFunctionDeployment(
+	metadata *fission.Metadata, env *fission.Environment, funcLabels map[string]string, pod *v1.Pod) error {
 	name := fmt.Sprintf("func-%v-%v", metadata.Name, metadata.Uid)
 	fetcherRequest := gp.makeFetcherRequest(metadata)
 	var initialReplicas int32 = 1
 	sharedMountPath := "/userfunc"
 
+	envResources := GetResourceQuantity(env)
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
 			Name:   name,
-			Labels: labels,
+			Labels: funcLabels,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &initialReplicas,
 			Selector: &v1beta1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: funcLabels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: v1.ObjectMeta{
-					Labels: labels,
+					Labels: funcLabels,
 				},
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
@@ -286,10 +290,20 @@ func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, labe
 									MountPath: sharedMountPath,
 								},
 							},
+							Resources: v1.ResourceRequirements{
+								Limits: v1.ResourceList{
+									"memory": envResources.memLimit,
+									"cpu":    envResources.cpuLimit,
+								},
+								Requests: v1.ResourceList{
+									"memory": envResources.memRequest,
+									"cpu":    envResources.cpuRequest,
+								},
+							},
 						},
 						{
 							Name:                   "fetcher",
-							Image:                  "fission/fetcher",
+							Image:                  "yqf3139/fetcher",
 							ImagePullPolicy:        v1.PullIfNotPresent,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
@@ -316,6 +330,16 @@ func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, labe
 								PeriodSeconds:       1,
 								FailureThreshold:    10,
 							},
+							Resources: v1.ResourceRequirements{
+								Limits: v1.ResourceList{
+									"memory": FETCHER_MEM_LIMIT,
+									"cpu":    FETCHER_CPU_LIMIT,
+								},
+								Requests: v1.ResourceList{
+									"memory": FETCHER_MEM_REQUEST,
+									"cpu":    FETCHER_CPU_REQUEST,
+								},
+							},
 						},
 					},
 				},
@@ -327,7 +351,62 @@ func (gp *GenericPool) createFunctionDeployment(metadata *fission.Metadata, labe
 	if err != nil {
 		return err
 	}
+
+	// try to fetch the corresponding replica set for 5 times
+	var rs *v1beta1.ReplicaSet = nil
+	for range [5]struct{}{} {
+		rsList, err := gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).List(api.ListOptions{
+			LabelSelector: labels.Set(funcLabels).AsSelector(),
+		})
+		if err != nil || len(rsList.Items) == 0 {
+			fmt.Println("replicasets is nil or empty, retry later")
+			time.Sleep(500 * time.Microsecond)
+			continue
+		}
+		rs = &rsList.Items[0]
+		break
+	}
+	if rs == nil {
+		fmt.Printf("replicaset not found, label template-hash to pod [%v] failed", pod.ObjectMeta.Name)
+		return nil
+	}
+
+	pod.Labels["pod-template-hash"] = rs.Labels["pod-template-hash"]
+	_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(pod)
+	if err != nil {
+		log.Printf("failed to add template hash to pod [%v]: %v", pod.ObjectMeta.Name, err)
+	}
 	return nil
+}
+
+func (gp *GenericPool) createHorizontalPodAutoscaler(metadata *fission.Metadata, cpuPercent, min, max int32) error {
+	if cpuPercent < 1 || cpuPercent > 100 {
+		cpuPercent = 60
+	}
+	if max < 1 {
+		max = 3
+	}
+
+	hpaName := fmt.Sprintf("hpa-%v-%v", metadata.Name, metadata.Uid)
+	deplName := fmt.Sprintf("func-%v-%v", metadata.Name, metadata.Uid)
+
+	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: v1.ObjectMeta{
+			Name: hpaName,
+		},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+				Kind: "Deployment",
+				Name: deplName,
+			},
+			MinReplicas:                    &min,
+			MaxReplicas:                    max,
+			TargetCPUUtilizationPercentage: &cpuPercent,
+		},
+	}
+
+	_, err := gp.kubernetesClient.Autoscaling().HorizontalPodAutoscalers(gp.namespace).Create(hpa)
+	return err
 }
 
 func (gp *GenericPool) makeFetcherRequest(m *fission.Metadata) string {
@@ -360,9 +439,6 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 	if resp.StatusCode != 200 {
 		return errors.New(fmt.Sprintf("Error from fetcher: %v", resp.Status))
 	}
-
-	// Tell logging helper about this function invocation
-	gp.setupLogging(pod, metadata)
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata)
@@ -408,6 +484,8 @@ func (gp *GenericPool) createPool() error {
 		gp.env.Metadata.Name, gp.env.Metadata.Uid, strings.ToLower(gp.poolInstanceId))
 
 	sharedMountPath := "/userfunc"
+	envResources := GetResourceQuantity(gp.env)
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
 			Name:   poolDeploymentName,
@@ -443,6 +521,16 @@ func (gp *GenericPool) createPool() error {
 									MountPath: sharedMountPath,
 								},
 							},
+							Resources: v1.ResourceRequirements{
+								Limits: v1.ResourceList{
+									"memory": envResources.memLimit,
+									"cpu":    envResources.cpuLimit,
+								},
+								Requests: v1.ResourceList{
+									"memory": envResources.memRequest,
+									"cpu":    envResources.cpuRequest,
+								},
+							},
 						},
 						{
 							Name:                   "fetcher",
@@ -456,6 +544,16 @@ func (gp *GenericPool) createPool() error {
 								},
 							},
 							Command: []string{"/fetcher", sharedMountPath},
+							Resources: v1.ResourceRequirements{
+								Limits: v1.ResourceList{
+									"memory": FETCHER_MEM_LIMIT,
+									"cpu":    FETCHER_CPU_LIMIT,
+								},
+								Requests: v1.ResourceList{
+									"memory": FETCHER_MEM_REQUEST,
+									"cpu":    FETCHER_CPU_REQUEST,
+								},
+							},
 						},
 					},
 				},
@@ -491,7 +589,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 	}
 }
 
-func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Service, error) {
+func (gp *GenericPool) createSvc(name string, svcLabels map[string]string) (*v1.Service, error) {
 	service := v1.Service{
 		ObjectMeta: v1.ObjectMeta{
 			Name: name,
@@ -505,14 +603,59 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Ser
 					TargetPort: intstr.FromInt(8888),
 				},
 			},
-			Selector: labels,
+			Selector: svcLabels,
 		},
 	}
 	svc, err := gp.kubernetesClient.Core().Services(gp.namespace).Create(&service)
 	return svc, err
 }
 
-func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
+func (gp *GenericPool) deleteSvc(name string) error {
+	return gp.kubernetesClient.Core().Services(gp.namespace).Delete(name, nil)
+}
+
+func (gp *GenericPool) deleteFunctionDeployment(name string, funcLabels map[string]string) error {
+	err := gp.kubernetesClient.Extensions().Deployments(gp.namespace).Delete(name, nil)
+	if err != nil {
+		log.Printf("Error destroying deployment: %v", err)
+		return err
+	}
+
+	// Destroy ReplicaSet.  Pre-1.6 K8s versions don't do this
+	// automatically but post-1.6 K8s will, and may beat us to it,
+	// so don't error out if we fail.
+	rsList, err := gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).List(api.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector(),
+	})
+	if len(rsList.Items) >= 0 {
+		for _, rs := range rsList.Items {
+			err = gp.kubernetesClient.Extensions().ReplicaSets(gp.namespace).Delete(rs.ObjectMeta.Name, nil)
+			if err != nil {
+				log.Printf("Error deleting replicaset, ignoring: %v", err)
+			}
+		}
+	}
+
+	// Destroy Pods.  See note above.
+	podList, err := gp.kubernetesClient.Core().Pods(gp.namespace).List(api.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector(),
+	})
+	if len(podList.Items) >= 0 {
+		for _, pod := range podList.Items {
+			err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil)
+			if err != nil {
+				log.Printf("Error deleting pod, ignoring: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (gp *GenericPool) deleteHorizontalPodAutoscaler(name string) error {
+	return gp.kubernetesClient.Autoscaling().HorizontalPodAutoscalers(gp.namespace).Delete(name, nil)
+}
+
+func (gp *GenericPool) GetFuncSvc(m *fission.Metadata, f *fission.Function, env *fission.Environment) (*funcSvc, error) {
 	// Pick a pod from the pool
 	log.Printf("[%v] Choosing pod from pool", m)
 	newLabels := gp.labelsForFunction(m)
@@ -531,19 +674,31 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 
 	// Create a K8s service
 	svcName := fmt.Sprintf("%v-%v", m.Name, m.Uid)
-	labels := gp.labelsForFunction(m)
-	_, err = gp.createSvc(svcName, labels)
+	_, err = gp.createSvc(svcName, newLabels)
 	if err != nil {
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
 
-	// Create a deployment that we can use to scale the function
+	// Create a deployment async that we can use to scale the function
 	// instances
-	err = gp.createFunctionDeployment(m, labels)
-	if err != nil {
-		log.Printf("Error creating function deployment: %v", err)
-	}
+	go func() {
+		// managed by the function deployment
+		// for logs and other services
+		err = gp.createFunctionDeployment(m, env, newLabels, pod)
+		if err != nil {
+			log.Printf("Error creating function deployment: %v", err)
+		}
+
+		// Create Autoscalers
+		// Horizontal Pod Autoscalers for k8s to watch cpu usage
+		// currently only cpu is supported by hpa
+		// TODO add more custom metrics
+		err = gp.createHorizontalPodAutoscaler(m, int32(f.CpuTarget), 1, int32(f.MaxInstance))
+		if err != nil {
+			log.Printf("Error creating horizontal pod autoscaler: %v", err)
+		}
+	}()
 
 	// The fission router isn't in the same namespace, so return a
 	// namespace-qualified hostname
@@ -574,46 +729,38 @@ func (gp *GenericPool) GetFuncSvc(m *fission.Metadata) (*funcSvc, error) {
 	return fsvc, nil
 }
 
-func (gp *GenericPool) CleanupFunctionService(podName string) error {
+func (gp *GenericPool) CleanupFunctionService(m fission.Metadata) error {
 	// remove ourselves from fsCache (only if we're still old)
-	deleted, err := gp.fsCache.DeleteByPod(podName, gp.idlePodReapTime)
+	deleted, err := gp.fsCache.DeleteByFuncMeta(m, gp.idlePodReapTime)
 	if err != nil {
 		return err
 	}
 
 	if !deleted {
-		log.Printf("Not deleting %v, in use", podName)
+		log.Printf("Not deleting function %v, in use", m.Name)
 		return nil
 	}
 
-	// cleanup log collector
-	pod, err := gp.kubernetesClient.Core().Pods(gp.namespace).Get(podName)
-	if err != nil {
-		return err
-	}
-
-	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
-	req, err := http.NewRequest("DELETE", loggerUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-	} else {
-		if resp.StatusCode != 200 {
-			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
-		}
-		resp.Body.Close()
-	}
-
 	// delete service
+	svcName := fmt.Sprintf("%v-%v", m.Name, m.Uid)
+	err = gp.deleteSvc(svcName)
+	if err != nil {
+		log.Printf("Error deleting service for function: %v", err)
+	}
 
-	// delete deployment
+	// delete deployment with replica set and all pods
+	deplName := fmt.Sprintf("func-%v-%v", m.Name, m.Uid)
+	err = gp.deleteFunctionDeployment(deplName, gp.labelsForFunction(&m))
+	if err != nil {
+		log.Printf("Error deleting deployment for function: %v", err)
+	}
 
 	// delete autoscaler
-
-	// delete pod
-	err = gp.kubernetesClient.Core().Pods(gp.namespace).Delete(podName, nil)
+	// delete k8s Horizontal Pod Autoscalers
+	hpaName := fmt.Sprintf("hpa-%v-%v", m.Name, m.Uid)
+	err = gp.deleteHorizontalPodAutoscaler(hpaName)
 	if err != nil {
-		return err
+		log.Printf("Error deleting horizontal pod autoscaler for function: %v", err)
 	}
 
 	return nil
@@ -622,16 +769,16 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 func (gp *GenericPool) idlePodReaper() {
 	for {
 		time.Sleep(time.Minute)
-		podNames, err := gp.fsCache.ListOld(gp.idlePodReapTime)
+		funcMetas, err := gp.fsCache.ListOld(gp.idlePodReapTime)
 		if err != nil {
 			log.Printf("Error reaping idle pods: %v", err)
 			continue
 		}
-		for _, podName := range podNames {
-			log.Printf("Reaping idle pod '%v'", podName)
-			err := gp.CleanupFunctionService(podName)
+		for _, m := range funcMetas {
+			log.Printf("Reaping idle function '%v'", m.Name)
+			err := gp.CleanupFunctionService(m)
 			if err != nil {
-				log.Printf("Error deleting idle pod '%v': %v", podName, err)
+				log.Printf("Error deleting idle function '%v': %v", m.Name, err)
 			}
 		}
 	}
@@ -675,33 +822,4 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
-}
-
-// Calls the logging daemonset pod on the node where the given pod is
-// running.
-func (gp *GenericPool) setupLogging(pod *v1.Pod, metadata *fission.Metadata) {
-	logReq := logger.LogRequest{
-		Namespace: pod.Namespace,
-		Pod:       pod.Name,
-		Container: gp.env.Metadata.Name,
-		FuncName:  metadata.Name,
-		FuncUid:   metadata.Uid,
-	}
-	reqbody, err := json.Marshal(logReq)
-	if err != nil {
-		log.Printf("Error creating log request")
-		return
-	}
-	go func() {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
-		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
-		if err != nil {
-			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-	}()
 }
