@@ -193,7 +193,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	// System Params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
-	metricCold := "false"
+	metricCached := "true"
 	metricPath := request.URL.Path
 
 	// TODO: As an optimization we may want to cache proxies too -- this might get us
@@ -226,6 +226,6 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		metricPath, metricStatus, request.Method)
 	observeHttpCallLatency(metricCold, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
-	observeHttpCallResponseSize(metricCold, fh.function.Name, fh.function.UID,
+	observeHttpCallResponseSize(metricCached, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
 }
