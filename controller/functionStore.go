@@ -17,7 +17,7 @@ limitations under the License.
 package controller
 
 import (
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
 )

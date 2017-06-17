@@ -38,7 +38,7 @@
 - Workflows
 - Testing in the presence of function composition
 
-## Events ([area-events](https://github.com/fission/fission/labels/area-composition))
+## Events ([area-events](https://github.com/fission/fission/labels/area-events))
 
 - NATS
 - Kafka
@@ -59,7 +59,7 @@
 - Upgrade checker/reminder (like minikube does)
 - CLI auto-upgrader
 
-### Function observation ([area-observe](https://github.com/fission/fission/labels/area-install))
+### Function observation ([area-observe](https://github.com/fission/fission/labels/area-observe))
 
 - Function Logging
 - Tracing -- Opentracing

@@ -19,7 +19,7 @@ package logdb
 import (
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -49,20 +49,11 @@ type LogEntry struct {
 	Pod       string
 }
 
-type DBConfig struct {
-	DBType   string
-	Endpoint string
-	Username string
-	Password string
-}
-
-func GetLogDB(cnf DBConfig) (LogDatabase, error) {
-	switch cnf.DBType {
+func GetLogDB(dbType string, serverURL string) (LogDatabase, error) {
+	switch dbType {
 	case INFLUXDB:
-		return NewInfluxDB(cnf)
+		return NewInfluxDB(serverURL)
 	}
-	log.WithFields(log.Fields{
-		"FISSION_LOGDB_URL": cnf.Endpoint,
-	}).Fatalf("FISSION_LOGDB_URL is incorrect, now only support %s", INFLUXDB)
+	log.Fatalf("Log database type is incorrect, now only support %s", INFLUXDB)
 	return nil, nil
 }
