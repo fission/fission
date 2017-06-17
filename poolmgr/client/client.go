@@ -17,14 +17,14 @@ limitations under the License.
 package client
 
 import (
-	"net/http"
-	"strings"
-
 	"bytes"
 	"encoding/json"
-	"github.com/fission/fission"
 	"io/ioutil"
+	"net/http"
 	"net/url"
+	"strings"
+
+	"github.com/fission/fission"
 )
 
 type Client struct {
