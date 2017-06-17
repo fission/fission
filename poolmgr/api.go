@@ -160,6 +160,7 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return "", err
 	}
 
+	increaseColdStarts(m.Name, m.Uid)
 	return funcSvc.address, nil
 }
 

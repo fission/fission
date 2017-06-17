@@ -1,41 +1,5 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "panel",
-      "id": "singlestat",
-      "name": "Singlestat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "3.1.1"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    }
-  ],
-  "id": null,
+  "id": 1,
   "title": "Fission Metrics",
   "tags": [],
   "style": "dark",
@@ -58,7 +22,7 @@
             "rgba(237, 129, 40, 0.89)",
             "rgba(50, 172, 45, 0.97)"
           ],
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "decimals": 2,
           "editable": true,
           "error": false,
@@ -113,7 +77,7 @@
               "intervalFactor": 2,
               "legendFormat": "",
               "refId": "A",
-              "step": 60
+              "step": 40
             }
           ],
           "thresholds": "",
@@ -138,7 +102,7 @@
             "rgba(237, 129, 40, 0.89)",
             "rgba(50, 172, 45, 0.97)"
           ],
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "decimals": 2,
           "editable": true,
           "error": false,
@@ -189,11 +153,91 @@
           },
           "targets": [
             {
-              "expr": "sum (fission_http_calls_total{cold='true'}) / sum (fission_http_calls_total)",
+              "expr": "sum (fission_http_calls_total{cached='true'}) / sum (fission_http_calls_total)",
               "intervalFactor": 2,
               "legendFormat": "",
               "refId": "A",
-              "step": 60
+              "step": 40
+            }
+          ],
+          "thresholds": "",
+          "title": "Cached Func Address Ratio By Router",
+          "type": "singlestat",
+          "valueFontSize": "80%",
+          "valueMaps": [
+            {
+              "op": "=",
+              "text": "N/A",
+              "value": "null"
+            }
+          ],
+          "valueName": "current"
+        },
+        {
+          "cacheTimeout": null,
+          "colorBackground": false,
+          "colorValue": false,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "datasource": "1",
+          "decimals": 2,
+          "editable": true,
+          "error": false,
+          "format": "percentunit",
+          "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+          },
+          "id": 17,
+          "interval": null,
+          "isNew": true,
+          "links": [],
+          "mappingType": 1,
+          "mappingTypes": [
+            {
+              "name": "value to text",
+              "value": 1
+            },
+            {
+              "name": "range to text",
+              "value": 2
+            }
+          ],
+          "maxDataPoints": 100,
+          "minSpan": null,
+          "nullPointMode": "connected",
+          "nullText": null,
+          "postfix": "",
+          "postfixFontSize": "50%",
+          "prefix": "",
+          "prefixFontSize": "50%",
+          "rangeMaps": [
+            {
+              "from": "null",
+              "text": "N/A",
+              "to": "null"
+            }
+          ],
+          "span": 2,
+          "sparkline": {
+            "fillColor": "rgba(175, 31, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(172, 31, 193)",
+            "show": true
+          },
+          "targets": [
+            {
+              "expr": "sum (fission_cold_starts_total) / sum (fission_http_calls_total)",
+              "intervalFactor": 2,
+              "legendFormat": "",
+              "refId": "A",
+              "step": 40
             }
           ],
           "thresholds": "",
@@ -213,6 +257,170 @@
       "title": "New row"
     },
     {
+      "title": "New row",
+      "height": "250px",
+      "editable": true,
+      "collapse": false,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "1",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 20,
+          "isNew": true,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "null as zero",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (functionName) ( k8s_pod_labels{functionName != ''})",
+              "intervalFactor": 2,
+              "legendFormat": "",
+              "refId": "A",
+              "step": 4
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Instance Count By Function Name",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "cumulative"
+          },
+          "transparent": false,
+          "type": "graph",
+          "xaxis": {
+            "show": true
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "1",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 21,
+          "isNew": true,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "null as zero",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (funcname) (fission_func_is_alive)",
+              "intervalFactor": 2,
+              "legendFormat": "",
+              "refId": "A",
+              "step": 4
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Instance Alive By Function Name",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "cumulative"
+          },
+          "transparent": false,
+          "type": "graph",
+          "xaxis": {
+            "show": true
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "collapse": false,
       "editable": true,
       "height": "250px",
@@ -220,7 +428,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -259,7 +467,7 @@
               "intervalFactor": 2,
               "legendFormat": "",
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
@@ -298,7 +506,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -333,15 +541,15 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (functionName) ( k8s_pod_labels{functionName != ''} * on (pod_name) group_left sum by (pod_name) ( rate(container_cpu_usage_seconds_total{namespace='fission-function'}[1m]) ) )",
+              "expr": "sum by (functionName) ( k8s_pod_labels{functionName != ''} * on (pod_name) group_left sum by (pod_name) ( rate(container_cpu_usage_seconds_total{namespace='fission-function'}[15s]) ) )",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "CPU Usage By Function Name Every 1m",
+          "title": "CPU Usage By Function Name Every 15s",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -382,7 +590,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -420,7 +628,7 @@
               "expr": "sum by (container_name) (container_memory_usage_bytes{namespace='fission-function'})",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
@@ -458,7 +666,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -493,15 +701,15 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (container_name) ( rate(container_cpu_usage_seconds_total{namespace='fission-function'}[1m]) )",
+              "expr": "sum by (container_name) ( rate(container_cpu_usage_seconds_total{namespace='fission-function'}[15s]) )",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "CPU Usage By Environment Every 1m",
+          "title": "CPU Usage By Environment Every 15s",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -542,7 +750,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -577,15 +785,15 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (funcname) (rate(fission_http_calls_total[30s]))",
+              "expr": "sum by (funcname) (rate(fission_http_calls_total[15s]))",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Function Call Rate Every 30s",
+          "title": "Function Call Rate Evry 15s",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -618,7 +826,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -653,15 +861,15 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (path) (rate(fission_http_calls_total[30s]))",
+              "expr": "sum by (path) (rate(fission_http_calls_total[15s]))",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Path Call Rate Every 30s",
+          "title": "Path Call Rate Every 15s",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -702,7 +910,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -779,7 +987,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -856,7 +1064,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -933,7 +1141,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -1018,7 +1226,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -1053,15 +1261,15 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg by (cold, quantile) (fission_http_call_latency_seconds_summary )",
+              "expr": "avg by (cached, quantile) (fission_http_call_latency_seconds_summary )",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Func Call Delay Quantile By Cold",
+          "title": "Func Call Delay Quantile By Cached",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -1094,7 +1302,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -1132,7 +1340,7 @@
               "expr": "avg by (funcname, quantile) (fission_http_call_latency_seconds_summary{quantile=\"0.99\"} )",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
@@ -1178,7 +1386,7 @@
         {
           "aliasColors": {},
           "bars": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "1",
           "editable": true,
           "error": false,
           "fill": 1,
@@ -1216,7 +1424,7 @@
               "expr": "avg by (funcname, quantile) (fission_http_call_response_size_bytes_summary{quantile=\"0.99\"} )",
               "intervalFactor": 2,
               "refId": "A",
-              "step": 10
+              "step": 4
             }
           ],
           "timeFrom": null,
@@ -1253,10 +1461,170 @@
         }
       ],
       "title": "New row"
+    },
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "1",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 18,
+          "isNew": true,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "null as zero",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": " avg by (funcname) (fission_func_alive_seconds_summary_sum / fission_func_alive_seconds_summary_count)",
+              "intervalFactor": 2,
+              "refId": "A",
+              "step": 4
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Func Avg Alive Time",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "xaxis": {
+            "show": true
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "1",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 19,
+          "isNew": true,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "null as zero",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": " avg by (funcname) (fission_func_running_seconds_summary_sum / fission_func_running_seconds_summary_count)",
+              "intervalFactor": 2,
+              "refId": "A",
+              "step": 4
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Func Avg Running Time",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "xaxis": {
+            "show": true
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        }
+      ],
+      "title": "New row"
     }
   ],
   "time": {
-    "from": "now-1h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -1290,9 +1658,9 @@
   "annotations": {
     "list": []
   },
-  "refresh": "1m",
+  "refresh": "10s",
   "schemaVersion": 12,
-  "version": 50,
+  "version": 4,
   "links": [],
   "gnetId": null
 }

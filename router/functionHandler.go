@@ -93,14 +93,14 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	reqStartTime := time.Now()
 
-	metricCold := "false"
+	metricCached := "true"
 	metricPath := request.URL.Path
 	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(&fh.Function)
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
 		log.Printf("Not cached, getting new service for %v", fh.Function)
-		metricCold = "true"
+		metricCached = "false"
 
 		var poolErr error
 		serviceUrl, poolErr = fh.getServiceForFunction()
@@ -168,12 +168,12 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	metricStatus := fmt.Sprint(wrapper.Status())
 
-	increaseHttpCalls(metricCold, fh.Function.Name, fh.Function.Uid,
+	increaseHttpCalls(metricCached, fh.Function.Name, fh.Function.Uid,
 		metricPath, metricStatus, request.Method)
-	observeHttpCallDelay(metricCold, fh.Function.Name, fh.Function.Uid,
+	observeHttpCallDelay(metricCached, fh.Function.Name, fh.Function.Uid,
 		metricPath, metricStatus, request.Method, float64(delay.Nanoseconds())/10e9)
-	observeHttpCallLatency(metricCold, fh.Function.Name, fh.Function.Uid,
+	observeHttpCallLatency(metricCached, fh.Function.Name, fh.Function.Uid,
 		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
-	observeHttpCallResponseSize(metricCold, fh.Function.Name, fh.Function.Uid,
+	observeHttpCallResponseSize(metricCached, fh.Function.Name, fh.Function.Uid,
 		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
 }

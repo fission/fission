@@ -155,8 +155,3 @@ data:
       - source_labels: [__meta_kubernetes_pod_name]
         action: replace
         target_label: kubernetes_pod_name
-
-    - job_name: 'fission-router'
-      scrape_interval: 10s
-      static_configs:
-      - targets: ['router.fission:8080']
