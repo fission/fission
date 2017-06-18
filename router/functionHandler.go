@@ -84,10 +84,7 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 	if fh.poolmgr == nil {
 		return
 	}
-	err := fh.poolmgr.TapService(serviceUrl)
-	if err != nil {
-		log.Printf("tap service error for %v: %v", serviceUrl.String(), err)
-	}
+	fh.poolmgr.TapService(serviceUrl)
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {

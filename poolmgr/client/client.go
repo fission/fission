@@ -20,29 +20,39 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/fission/fission"
 )
 
 type Client struct {
-	poolmgrUrl string
+	poolmgrUrl  string
+	tappedByUrl map[string]bool
+	requestChan chan string
 }
 
 func MakeClient(poolmgrUrl string) *Client {
-	return &Client{poolmgrUrl: strings.TrimSuffix(poolmgrUrl, "/")}
+	c := &Client{
+		poolmgrUrl:  strings.TrimSuffix(poolmgrUrl, "/"),
+		tappedByUrl: make(map[string]bool),
+		requestChan: make(chan string),
+	}
+	go c.service()
+	return c
 }
 
 func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, error) {
-	url := c.poolmgrUrl + "/v1/getServiceForFunction"
+	poolmgrUrl := c.poolmgrUrl + "/v1/getServiceForFunction"
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(poolmgrUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -60,12 +70,36 @@ func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, erro
 	return string(svcName), nil
 }
 
-func (c *Client) TapService(serviceUrl *url.URL) error {
-	url := c.poolmgrUrl + "/v1/tapService"
+func (c *Client) service() {
+	ticker := time.NewTicker(time.Second * 5)
+	for {
+		select {
+		case serviceUrl := <-c.requestChan:
+			c.tappedByUrl[serviceUrl] = true
+		case <-ticker.C:
+			urls := c.tappedByUrl
+			c.tappedByUrl = make(map[string]bool)
+			if len(urls) > 0 {
+				go func() {
+					for u := range c.tappedByUrl {
+						c._tapService(u)
+					}
+					log.Printf("Tapped %v services in batch", len(urls))
+				}()
+				log.Printf("Tapped %v services in batch", len(urls))
+			}
+		}
+	}
+}
 
-	serviceUrlStr := serviceUrl.String()
+func (c *Client) TapService(serviceUrl *url.URL) {
+	c.requestChan <- serviceUrl.String()
+}
 
-	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
+func (c *Client) _tapService(serviceUrlStr string) error {
+	poolmgrUrl := c.poolmgrUrl + "/v1/tapService"
+
+	resp, err := http.Post(poolmgrUrl, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
 	if err != nil {
 		return err
 	}
