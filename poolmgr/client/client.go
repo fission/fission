@@ -84,9 +84,7 @@ func (c *Client) service() {
 					for u := range c.tappedByUrl {
 						c._tapService(u)
 					}
-					if len(urls) > 0 {
-						log.Printf("Tapped %v services in batch", len(urls))
-					}
+					log.Printf("Tapped %v services in batch", len(urls))
 				}()
 				log.Printf("Tapped %v services in batch", len(urls))
 			}
