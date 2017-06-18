@@ -200,3 +200,19 @@ To setup Fission-ui with fission in k8s is simple:
 Then open `http://node-ip:31319` to use Fission-ui.
 
 For more infomation, please check out [Fission-ui Readme](https://github.com/fission/fission-ui/blob/master/README.md).
+
+### Enable Message Queue Trigger (Optional)
+
+Message queue trigger allows users to create a trigger that listens to remote message queue server, and invokes function when a message is published to the trigger topic.
+
+```
+  $ kubectl create -f fission-nats.yaml
+```
+
+You can now use following command to test with message queue trigger:
+
+```
+  $ fission mqtrigger create --name h1 --function hello1 --topic "foo.bar" --resptopic "foo.foo"
+  $ go run test/mqtrigger/stan-pub.go -s nats://<nats-streaming-svc-ip>:4222 -c fissionMQTrigger -id clientPub "foo.bar" ""
+  $ go run test/mqtrigger/stan-sub.go --last -s nats://<nats-streaming-svc-ip>:4222  -c fissionMQTrigger -id clientSub "foo.foo"
+```
