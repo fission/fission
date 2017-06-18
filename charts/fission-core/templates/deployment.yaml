@@ -1,3 +1,77 @@
+{{ if eq .Values.openshiftRBAC "true" }}
+
+# For openshift
+
+---
+apiVersion: v1
+kind: ProjectRequest
+metadata:
+  name: fission
+  labels:
+    name: fission
+
+---
+apiVersion: v1
+kind: ProjectRequest
+metadata:
+  name: fission-function
+  labels:
+    name: fission-function
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-admin
+  namespace: fission
+
+---
+apiVersion: v1
+kind: ClusterRole
+metadata:
+  name: fission:fission-admin
+rules:
+- apiGroups:
+  - extensions
+  attributeRestrictions: null
+  resources:
+  - deployments
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  attributeRestrictions: null
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - update
+
+---
+apiVersion: v1
+groupNames: null
+kind: RoleBinding
+metadata:
+  name: fission:fission-admin
+  namespace: fission-function
+roleRef:
+  name: fission:fission-admin
+subjects:
+- kind: ServiceAccount
+  name: fission-admin
+  namespace: fission
+userNames:
+- system:serviceaccount:fission:fission-admin
+
+{{ else }}
+
+# For minikube, GKE
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -6,6 +80,45 @@ metadata:
   labels:
     name: fission-function
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-admin
+  namespace: fission
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-admin
+  namespace: fission
+subjects:
+  - kind: ServiceAccount
+    name: fission-admin
+    namespace: fission
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-function-admin
+  namespace: fission-function
+subjects:
+  - kind: ServiceAccount
+    name: fission-admin
+    namespace: fission
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+
+{{ end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -56,6 +169,7 @@ metadata:
     svc: poolmgr
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 8888
@@ -81,6 +195,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
+      serviceAccount: fission-admin
 
 ---
 apiVersion: extensions/v1beta1
@@ -111,6 +226,7 @@ metadata:
     svc: etcd
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
+  type: ClusterIP
   ports:
   - port: 2379
     targetPort: 2379

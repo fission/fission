@@ -21,3 +21,13 @@ routerPort: 31314
 ## Namespace in which to run fission functions (this is different from
 ## the release namespace)
 functionNamespace: fission-function
+
+## Set up openshift RBAC rule
+openshiftRBAC: false
+
+## Logger config
+loggerInfluxdbAdmin: admin
+loggerFluentdImage: fission/fluentd
+
+## Fission ui config
+fissionUiImage: fission/fission-ui:0.1.0

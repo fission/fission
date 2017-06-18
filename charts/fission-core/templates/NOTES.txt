@@ -1,0 +1,37 @@
+1. Install the client CLI.
+
+Mac:
+  $ curl http://fission.io/mac/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+
+Linux:
+  $ curl http://fission.io/linux/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+
+2. Set the FISSION_URL and FISSION_ROUTER environment variables.
+FISSION_URL is used by the fission CLI to find the server.
+FISSION_URL should be prefixed with a http://. (FISSION_ROUTER is only needed for the examples below to work.)
+
+{{- if contains "NodePort" .Values.serviceType }}
+  $ export FISSION_URL=http://$(minikube ip):{{ .Values.controllerPort }}
+  $ export FISSION_ROUTER=$(minikube ip):{{ .Values.routerPort }}
+
+{{- else if contains "LoadBalancer" .Values.serviceType }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status of by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fission get svc -w router'
+
+  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
+  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+
+{{- end }}
+
+3. Finally, you're ready to use Fission!
+
+  $ fission env create --name nodejs --image fission/node-env
+
+  $ curl https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js > hello.js
+
+  $ fission function create --name hello --env nodejs --code hello.js
+
+  $ fission route create --method GET --url /hello --function hello
+
+  $ curl http://$FISSION_ROUTER/hello
+  Hello, world!
