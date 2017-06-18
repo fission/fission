@@ -22,7 +22,7 @@ mv fission $FISSIONDIR"/test/mqtrigger"
 cd $FISSIONDIR"/test/mqtrigger"
 
 ./fission env create --name nodejs --image fission/node-env
-./fission fn create --name hello1 --env nodejs --code ~/Desktop/main.js --method GET
+./fission fn create --name hello1 --env nodejs --code main.js --method GET
 ./fission route create --method GET --url /h1 --function hello1
 ./fission mqtrigger create --name h1 --function hello1 --mqtype "nats-streaming" --topic "foo.bar" --resptopic "foo.foo"
 

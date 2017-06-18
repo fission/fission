@@ -118,7 +118,7 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 	if err != nil {
 		return err
 	}
-	triggerSub := triggerSubscrption{
+	triggerSub := triggerSubscription{
 		Metadata: fission.Metadata{
 			Name: trigger.Name,
 			Uid:  trigger.Uid,
@@ -177,6 +177,6 @@ func (nats *Nats) sync() {
 }
 
 func isTopicValidForNats(topic string) bool {
-	// nats-streaming does not support wildcard channl.
+	// nats-streaming does not support wildcard channel.
 	return nsUtil.IsSubjectValid(topic)
 }

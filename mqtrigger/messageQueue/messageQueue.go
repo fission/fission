@@ -45,13 +45,13 @@ type (
 	MessageQueueTriggerManager struct {
 		sync.RWMutex
 		mqCfg       MessageQueueConfig
-		triggerMap  map[string]*triggerSubscrption
+		triggerMap  map[string]*triggerSubscription
 		requestChan chan []fission.MessageQueueTrigger
 		routerUrl   string
 		controller  *controllerClient.Client
 	}
 
-	triggerSubscrption struct {
+	triggerSubscription struct {
 		fission.Metadata
 		funcMeta     fission.Metadata
 		subscription interface{}
@@ -66,7 +66,7 @@ func MakeMessageQueueTriggerManager(ctrlClient *controllerClient.Client,
 
 	mqTriggerMgr := MessageQueueTriggerManager{
 		mqCfg:       mqConfig,
-		triggerMap:  make(map[string]*triggerSubscrption),
+		triggerMap:  make(map[string]*triggerSubscription),
 		controller:  ctrlClient,
 		routerUrl:   routerUrl,
 		requestChan: make(chan []fission.MessageQueueTrigger),
@@ -84,7 +84,7 @@ func MakeMessageQueueTriggerManager(ctrlClient *controllerClient.Client,
 	return messageQueueMgr
 }
 
-func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscrption) error {
+func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscription) error {
 	triggerUid := triggerSub.Uid
 	if _, ok := mqt.getTrigger(triggerUid); ok {
 		return errors.New("Trigger already exists")
@@ -95,7 +95,7 @@ func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscrption
 	return nil
 }
 
-func (mqt *MessageQueueTriggerManager) getTrigger(triggerUid string) (*triggerSubscrption, bool) {
+func (mqt *MessageQueueTriggerManager) getTrigger(triggerUid string) (*triggerSubscription, bool) {
 	mqt.RLock()
 	defer mqt.RUnlock()
 	trigger, ok := mqt.triggerMap[triggerUid]
@@ -105,10 +105,10 @@ func (mqt *MessageQueueTriggerManager) getTrigger(triggerUid string) (*triggerSu
 	return trigger, true
 }
 
-func (mqt *MessageQueueTriggerManager) getAllTriggers() map[string]*triggerSubscrption {
+func (mqt *MessageQueueTriggerManager) getAllTriggers() map[string]*triggerSubscription {
 	mqt.RLock()
 	defer mqt.RUnlock()
-	copyTriggers := make(map[string]*triggerSubscrption)
+	copyTriggers := make(map[string]*triggerSubscription)
 	for key, val := range mqt.triggerMap {
 		copyTriggers[key] = val
 	}
