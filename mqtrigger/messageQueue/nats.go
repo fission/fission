@@ -29,7 +29,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/publisher"
 )
 
 const (
@@ -42,25 +41,18 @@ const (
 type (
 	Nats struct {
 		MessageQueueTriggerManager
-		nsConn      *ns.Conn
-		nsPublisher *publisher.NatsPublisher
+		nsConn ns.Conn
 	}
 )
-
-// To enable nats authentication, please follow the instruction described in
-// http://nats.io/documentation/server/gnatsd-authentication/.
-// And dont forget to change the MESSAGE_QUEUE_URL in mqtrigger deployment.
 
 func makeNatsTriggerManager(mqTriggerMgr MessageQueueTriggerManager) (MessageQueueTriggerManagerInterface, error) {
 	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqTriggerMgr.mqCfg.Url))
 	if err != nil {
 		return nil, err
 	}
-	nsPublisher := publisher.MakeNatsPublisher(&conn)
 	nats := Nats{
 		MessageQueueTriggerManager: mqTriggerMgr,
-		nsConn:      &conn,
-		nsPublisher: nsPublisher,
+		nsConn: conn,
 	}
 	go nats.sync()
 	return &nats, nil
@@ -73,37 +65,6 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 		return errors.New(fmt.Sprintf("Not a valid topic: %s", trigger.Topic))
 	}
 
-	handler := func(msg *ns.Msg) {
-		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(&trigger.Function), "/")
-		log.Printf("Making HTTP request to %v", url)
-
-		// Create request
-		resp, err := http.Post(url, "", bytes.NewReader(msg.Data))
-		if err != nil {
-			log.Warningf("Request failed: %v", url)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Warningf("Request body error: %v", string(body))
-			return
-		}
-		if resp.StatusCode != 200 {
-			log.Printf("Request returned failure: %v", resp.StatusCode)
-			return
-		}
-		// trigger acks message only if a request done successfully
-		err = msg.Ack()
-		if err != nil {
-			log.Warningf("Failed to ack message: %v", err)
-		}
-		if len(trigger.ResponseTopic) > 0 {
-			nats.nsPublisher.Publish(string(body), nil, trigger.ResponseTopic)
-		}
-	}
-
 	opts := []ns.SubscriptionOption{
 		// Create a durable subscription to nats, so that triggers could retrieve last unack message.
 		// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
@@ -114,7 +75,7 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 		// trigger could choose to ack message or simply drop it depend on the response of function pod.
 		ns.SetManualAckMode(),
 	}
-	sub, err := (*nats.nsConn).Subscribe(subj, handler, opts...)
+	sub, err := nats.nsConn.Subscribe(subj, msgHandler(nats, trigger), opts...)
 	if err != nil {
 		return err
 	}
@@ -179,4 +140,49 @@ func (nats *Nats) sync() {
 func isTopicValidForNats(topic string) bool {
 	// nats-streaming does not support wildcard channel.
 	return nsUtil.IsSubjectValid(topic)
+}
+
+func msgHandler(nats *Nats, trigger fission.MessageQueueTrigger) func(*ns.Msg) {
+	return func(msg *ns.Msg) {
+		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(&trigger.Function), "/")
+		log.Printf("Making HTTP request to %v", url)
+
+		headers := map[string]string{
+			"X-Fission-MQTrigger-Topic":     trigger.Topic,
+			"X-Fission-MQTrigger-RespTopic": trigger.ResponseTopic,
+		}
+
+		// Create request
+		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
+		for k, v := range headers {
+			req.Header.Add(k, v)
+		}
+
+		// Make the request
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Warningf("Request failed: %v", url)
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Warningf("Request body error: %v", string(body))
+			return
+		}
+		if resp.StatusCode != 200 {
+			log.Printf("Request returned failure: %v", resp.StatusCode)
+			return
+		}
+		// trigger acks message only if a request done successfully
+		err = msg.Ack()
+		if err != nil {
+			log.Warningf("Failed to ack message: %v", err)
+		}
+		err = nats.nsConn.Publish(trigger.ResponseTopic, body)
+		if err != nil {
+			log.Warningf("Failed to publish message to topic %s: %v", trigger.ResponseTopic, err)
+		}
+	}
 }
