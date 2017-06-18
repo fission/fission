@@ -44,24 +44,79 @@ type funcSvc struct {
 	atime time.Time
 }
 
+type createFuncServiceRequest struct {
+	funcMeta *fission.Metadata
+	respChan chan *createFuncServiceResponse
+}
+type createFuncServiceResponse struct {
+	address string
+	err     error
+}
+
 type API struct {
-	poolMgr      *GenericPoolManager
-	functionEnv  *cache.Cache // map[fission.Metadata]fission.Environment
-	fsCache      *functionServiceCache
-	controller   *controllerclient.Client
-	fsCreateChan map[fission.Metadata]chan struct{}
+	poolMgr          *GenericPoolManager
+	functionEnv      *cache.Cache // map[fission.Metadata]fission.Environment
+	fsCache          *functionServiceCache
+	controller       *controllerclient.Client
+	fsCreateChannels map[fission.Metadata]chan struct{}
+	requestChan      chan *createFuncServiceRequest
 
 	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
 	//urlFuncSvc      *cache.Cache // map[string]*funcSvc
 }
 
 func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCache *functionServiceCache) *API {
-	return &API{
-		poolMgr:      gpm,
-		functionEnv:  cache.MakeCache(time.Minute, 0),
-		fsCache:      fsCache,
-		controller:   controller,
-		fsCreateChan: make(map[fission.Metadata]chan struct{}),
+	api := API{
+		poolMgr:          gpm,
+		functionEnv:      cache.MakeCache(time.Minute, 0),
+		fsCache:          fsCache,
+		controller:       controller,
+		fsCreateChannels: make(map[fission.Metadata]chan struct{}),
+		requestChan:      make(chan *createFuncServiceRequest),
+	}
+	go api.serveCreateFuncServices()
+	return &api
+}
+func (api *API) serveCreateFuncServices() {
+	for {
+		req := <-api.requestChan
+		m := req.funcMeta
+
+		// Cache miss -- is this first one to request the func?
+		createCh, found := api.fsCreateChannels[*m]
+		if !found {
+			// create a chan for others to wait on
+			createCh = make(chan struct{})
+			api.fsCreateChannels[*m] = createCh
+
+			// launch a goroutine for each request
+			// making specialization of different functions to be parallelled
+			go func() {
+				address, err := api.createServiceForFunction(m)
+				req.respChan <- &createFuncServiceResponse{
+					address: address,
+					err:     err,
+				}
+				delete(api.fsCreateChannels, *m)
+				awakeListeners(createCh)
+			}()
+		} else {
+			// wait for the func service created
+			go func() {
+				createCh <- struct{}{}
+
+				// get the func service created from cache again
+				fsvc, err := api.fsCache.GetByFunction(m)
+				address := ""
+				if err == nil {
+					address = fsvc.address
+				}
+				req.respChan <- &createFuncServiceResponse{
+					address: address,
+					err:     err,
+				}
+			}()
+		}
 	}
 }
 
@@ -137,27 +192,13 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return fsvc.address, nil
 	}
 
-	// Cache miss -- is this first one to request the func?
-	createCh, found := api.fsCreateChan[*m]
-	if !found {
-		// create a chan for others to wait on
-		createCh = make(chan struct{})
-		api.fsCreateChan[*m] = createCh
-		defer func() {
-			go awakeListeners(createCh)
-			delete(api.fsCreateChan, *m)
-		}()
-		return api.createServiceForFunction(m)
+	respChan := make(chan *createFuncServiceResponse)
+	api.requestChan <- &createFuncServiceRequest{
+		funcMeta: m,
+		respChan: respChan,
 	}
-	// wait for the func service created
-	createCh <- struct{}{}
-
-	// get the func service created from cache again
-	fsvc, err = api.fsCache.GetByFunction(m)
-	if err != nil {
-		return "", err
-	}
-	return fsvc.address, nil
+	resp := <-respChan
+	return resp.address, resp.err
 }
 
 func (api *API) createServiceForFunction(m *fission.Metadata) (string, error) {
