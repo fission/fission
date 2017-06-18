@@ -34,3 +34,5 @@ import:
   subpackages:
   - client/v2
 - package: github.com/robfig/cron
+- package: github.com/prometheus/client_golang
+  version: v0.8.0

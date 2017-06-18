@@ -18,9 +18,11 @@ package poolmgr
 
 import (
 	"log"
+	"net/http"
 	"strings"
 
 	"github.com/dchest/uniuri"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/rest"
 
@@ -47,6 +49,12 @@ func getKubernetesClient() (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
+func serveMetric() {
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(metricAddr, nil))
+}
+
 func StartPoolmgr(controllerUrl string, namespace string, port int) error {
 	controllerUrl = strings.TrimSuffix(controllerUrl, "/")
 	controllerClient := controllerclient.MakeClient(controllerUrl)
@@ -65,6 +73,7 @@ func StartPoolmgr(controllerUrl string, namespace string, port int) error {
 
 	api := MakeAPI(gpm, controllerClient, fsCache)
 	go api.Serve(port)
+	go serveMetric()
 
 	return nil
 }
