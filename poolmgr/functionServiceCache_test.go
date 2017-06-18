@@ -3,9 +3,9 @@ package poolmgr
 import (
 	"log"
 	"testing"
+	"time"
 
 	"github.com/fission/fission"
-	"time"
 )
 
 func TestFunctionServiceCache(t *testing.T) {

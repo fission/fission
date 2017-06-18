@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
-	"reflect"
 )
 
 type requestType int

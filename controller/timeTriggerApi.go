@@ -48,6 +48,7 @@ func (api *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var t fission.TimeTrigger
@@ -124,6 +125,7 @@ func (api *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		api.respondWithError(w, err)
+		return
 	}
 
 	var t fission.TimeTrigger

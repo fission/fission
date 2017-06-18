@@ -213,6 +213,7 @@ func (c *Client) FunctionList() ([]fission.Function, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
@@ -320,6 +321,7 @@ func (c *Client) HTTPTriggerList() ([]fission.HTTPTrigger, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
@@ -427,6 +429,7 @@ func (c *Client) EnvironmentList() ([]fission.Environment, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
@@ -514,6 +517,7 @@ func (c *Client) WatchList() ([]fission.Watch, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {
@@ -621,6 +625,7 @@ func (c *Client) TimeTriggerList() ([]fission.TimeTrigger, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := c.handleResponse(resp)
 	if err != nil {

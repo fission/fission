@@ -18,12 +18,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
 
 	"github.com/fission/fission"
-	"os"
 )
 
 func envCreate(c *cli.Context) error {
