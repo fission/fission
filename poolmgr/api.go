@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -58,7 +59,7 @@ type API struct {
 	functionEnv      *cache.Cache // map[fission.Metadata]fission.Environment
 	fsCache          *functionServiceCache
 	controller       *controllerclient.Client
-	fsCreateChannels map[fission.Metadata]chan struct{}
+	fsCreateChannels map[fission.Metadata]*sync.WaitGroup
 	requestChan      chan *createFuncServiceRequest
 
 	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
@@ -71,7 +72,7 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCac
 		functionEnv:      cache.MakeCache(time.Minute, 0),
 		fsCache:          fsCache,
 		controller:       controller,
-		fsCreateChannels: make(map[fission.Metadata]chan struct{}),
+		fsCreateChannels: make(map[fission.Metadata]*sync.WaitGroup),
 		requestChan:      make(chan *createFuncServiceRequest),
 	}
 	go api.serveCreateFuncServices()
@@ -83,11 +84,12 @@ func (api *API) serveCreateFuncServices() {
 		m := req.funcMeta
 
 		// Cache miss -- is this first one to request the func?
-		createCh, found := api.fsCreateChannels[*m]
+		wg, found := api.fsCreateChannels[*m]
 		if !found {
 			// create a chan for others to wait on
-			createCh = make(chan struct{})
-			api.fsCreateChannels[*m] = createCh
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			api.fsCreateChannels[*m] = wg
 
 			// launch a goroutine for each request
 			// making specialization of different functions to be parallelled
@@ -98,12 +100,12 @@ func (api *API) serveCreateFuncServices() {
 					err:     err,
 				}
 				delete(api.fsCreateChannels, *m)
-				awakeListeners(createCh)
+				wg.Done()
 			}()
 		} else {
 			// wait for the func service created
 			go func() {
-				createCh <- struct{}{}
+				wg.Wait()
 
 				// get the func service created from cache again
 				fsvc, err := api.fsCache.GetByFunction(m)
@@ -256,15 +258,4 @@ func (api *API) Serve(port int) {
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
-}
-
-func awakeListeners(ch chan struct{}) {
-	for {
-		select {
-		case <-ch:
-		case <-time.After(time.Second * 5):
-			close(ch)
-			return
-		}
-	}
 }
