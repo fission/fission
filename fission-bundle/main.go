@@ -118,7 +118,7 @@ Options:
   --kubewatcher            Start Kubernetes events watcher.
   --logger                 Start logger.
   --timer 		           Start Timer.
-  --mqt 		           Start MessageQueueTrigger.
+  --mqt 		           Start message queue trigger.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {

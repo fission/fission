@@ -156,9 +156,9 @@ func (nats *Nats) sync() {
 				continue
 			}
 			if err := nats.add(trigger); err != nil {
-				log.Warnf("MessageQueue trigger %s created failed: %v", trigger.Name, err)
+				log.Warnf("Message queue trigger %s created failed: %v", trigger.Name, err)
 			} else {
-				log.Infof("MessageQueue trigger %s created", trigger.Name)
+				log.Infof("Message queue trigger %s created", trigger.Name)
 			}
 		}
 
@@ -168,9 +168,9 @@ func (nats *Nats) sync() {
 				continue
 			}
 			if err := nats.delete(trigger.Uid); err != nil {
-				log.Warnf("MessageQueue trigger %s deleted failed: %v", trigger.Name, err)
+				log.Warnf("Message queue trigger %s deleted failed: %v", trigger.Name, err)
 			} else {
-				log.Infof("MessageQueue trigger %s deleted", trigger.Name)
+				log.Infof("Message queue trigger %s deleted", trigger.Name)
 			}
 		}
 	}

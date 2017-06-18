@@ -79,7 +79,7 @@ func mqtCreate(c *cli.Context) error {
 	}
 
 	_, err := client.MessageQueueTriggerCreate(&mqt)
-	checkErr(err, "create MessageQueue trigger")
+	checkErr(err, "create message queue trigger")
 
 	fmt.Printf("trigger '%s' created\n", mqtName)
 	return err
@@ -131,12 +131,12 @@ func mqtList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	mqts, err := client.MessageQueueTriggerList(c.String("mqtype"))
-	checkErr(err, "list MessageQueue triggers")
+	checkErr(err, "list message queue triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "FUNCTION_UID", "MESSAGEQUEUE TYPE", "TOPIC", "RESPONSE TOPIC")
+		"NAME", "FUNCTION_NAME", "FUNCTION_UID", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC")
 	for _, mqt := range mqts {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
 			mqt.Metadata.Name, mqt.Function.Name, mqt.Function.Uid, mqt.MessageQueueType, mqt.Topic, mqt.ResponseTopic)

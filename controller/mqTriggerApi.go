@@ -66,7 +66,7 @@ func (api *API) MessageQueueApiCreate(w http.ResponseWriter, r *http.Request) {
 	for _, trigger := range triggers {
 		if trigger.Name == mqTrigger.Name {
 			err = fission.MakeError(fission.ErrorNameExists,
-				"MessageQueueTrigger with same name already exists")
+				"Message queue trigger with same name already exists")
 			api.respondWithError(w, err)
 			return
 		}
@@ -126,7 +126,7 @@ func (api *API) MessageQueueApiUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if mqtName != mqTrigger.Metadata.Name {
-		err = fission.MakeError(fission.ErrorInvalidArgument, "MessageQueueTrigger name doesn't match URL")
+		err = fission.MakeError(fission.ErrorInvalidArgument, "Message queue trigger name doesn't match URL")
 		api.respondWithError(w, err)
 		return
 	}
