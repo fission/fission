@@ -78,6 +78,13 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCac
 	go api.serveCreateFuncServices()
 	return &api
 }
+
+// All non-cached function service requests go through this goroutine
+// serially. It parallelizes requests for different functions, and
+// ensures that for a given function, only one request causes a pod to
+// get specialized. In other words, it ensures that when there's an
+// ongoing request for a certain function, all other requests wait for
+// that request to complete.
 func (api *API) serveCreateFuncServices() {
 	for {
 		req := <-api.requestChan
@@ -86,13 +93,14 @@ func (api *API) serveCreateFuncServices() {
 		// Cache miss -- is this first one to request the func?
 		wg, found := api.fsCreateChannels[*m]
 		if !found {
-			// create a chan for others to wait on
+			// create a waitgroup for other requests for
+			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
 			api.fsCreateChannels[*m] = wg
 
-			// launch a goroutine for each request
-			// making specialization of different functions to be parallelled
+			// launch a goroutine for each request, to parallelize
+			// the specialization of different functions
 			go func() {
 				address, err := api.createServiceForFunction(m)
 				req.respChan <- &createFuncServiceResponse{
@@ -103,11 +111,12 @@ func (api *API) serveCreateFuncServices() {
 				wg.Done()
 			}()
 		} else {
-			// wait for the func service created
+			// There's an existing request for this function, wait for it to finish
 			go func() {
+				log.Printf("Waiting for concurrent request for the same function: %v", m)
 				wg.Wait()
 
-				// get the func service created from cache again
+				// get the function service from the cache
 				fsvc, err := api.fsCache.GetByFunction(m)
 				address := ""
 				if err == nil {
