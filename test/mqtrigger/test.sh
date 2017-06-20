@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 clusterID="fissionMQTrigger"
 topic="foo.bar"
 resptopic="foo.foo"
