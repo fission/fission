@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -44,22 +45,89 @@ type funcSvc struct {
 	atime time.Time
 }
 
+type createFuncServiceRequest struct {
+	funcMeta *fission.Metadata
+	respChan chan *createFuncServiceResponse
+}
+type createFuncServiceResponse struct {
+	address string
+	err     error
+}
+
 type API struct {
-	poolMgr     *GenericPoolManager
-	functionEnv *cache.Cache // map[fission.Metadata]fission.Environment
-	fsCache     *functionServiceCache
-	controller  *controllerclient.Client
+	poolMgr          *GenericPoolManager
+	functionEnv      *cache.Cache // map[fission.Metadata]fission.Environment
+	fsCache          *functionServiceCache
+	controller       *controllerclient.Client
+	fsCreateChannels map[fission.Metadata]*sync.WaitGroup
+	requestChan      chan *createFuncServiceRequest
 
 	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
 	//urlFuncSvc      *cache.Cache // map[string]*funcSvc
 }
 
 func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCache *functionServiceCache) *API {
-	return &API{
-		poolMgr:     gpm,
-		functionEnv: cache.MakeCache(time.Minute, 0),
-		fsCache:     fsCache,
-		controller:  controller,
+	api := API{
+		poolMgr:          gpm,
+		functionEnv:      cache.MakeCache(time.Minute, 0),
+		fsCache:          fsCache,
+		controller:       controller,
+		fsCreateChannels: make(map[fission.Metadata]*sync.WaitGroup),
+		requestChan:      make(chan *createFuncServiceRequest),
+	}
+	go api.serveCreateFuncServices()
+	return &api
+}
+
+// All non-cached function service requests go through this goroutine
+// serially. It parallelizes requests for different functions, and
+// ensures that for a given function, only one request causes a pod to
+// get specialized. In other words, it ensures that when there's an
+// ongoing request for a certain function, all other requests wait for
+// that request to complete.
+func (api *API) serveCreateFuncServices() {
+	for {
+		req := <-api.requestChan
+		m := req.funcMeta
+
+		// Cache miss -- is this first one to request the func?
+		wg, found := api.fsCreateChannels[*m]
+		if !found {
+			// create a waitgroup for other requests for
+			// the same function to wait on
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			api.fsCreateChannels[*m] = wg
+
+			// launch a goroutine for each request, to parallelize
+			// the specialization of different functions
+			go func() {
+				address, err := api.createServiceForFunction(m)
+				req.respChan <- &createFuncServiceResponse{
+					address: address,
+					err:     err,
+				}
+				delete(api.fsCreateChannels, *m)
+				wg.Done()
+			}()
+		} else {
+			// There's an existing request for this function, wait for it to finish
+			go func() {
+				log.Printf("Waiting for concurrent request for the same function: %v", m)
+				wg.Wait()
+
+				// get the function service from the cache
+				fsvc, err := api.fsCache.GetByFunction(m)
+				address := ""
+				if err == nil {
+					address = fsvc.address
+				}
+				req.respChan <- &createFuncServiceResponse{
+					address: address,
+					err:     err,
+				}
+			}()
+		}
 	}
 }
 
@@ -135,6 +203,16 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 		return fsvc.address, nil
 	}
 
+	respChan := make(chan *createFuncServiceResponse)
+	api.requestChan <- &createFuncServiceRequest{
+		funcMeta: m,
+		respChan: respChan,
+	}
+	resp := <-respChan
+	return resp.address, resp.err
+}
+
+func (api *API) createServiceForFunction(m *fission.Metadata) (string, error) {
 	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
@@ -155,12 +233,11 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	log.Printf("[%v] getting function service from pool", m.Name)
-	funcSvc, err := pool.GetFuncSvc(m)
+	fsvc, err := pool.GetFuncSvc(m)
 	if err != nil {
 		return "", err
 	}
-
-	return funcSvc.address, nil
+	return fsvc.address, nil
 }
 
 // find funcSvc and update its atime
