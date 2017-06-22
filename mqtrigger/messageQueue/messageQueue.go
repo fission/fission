@@ -18,9 +18,10 @@ package messageQueue
 
 import (
 	"errors"
-	"log"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
 	controllerClient "github.com/fission/fission/controller/client"
@@ -36,19 +37,17 @@ const (
 )
 
 type (
-	MessageQueueTriggerManagerInterface interface {
-		add(trigger fission.MessageQueueTrigger) error
-		delete(string) error
-		syncTriggers()
+	MessageQueue interface {
+		subscribe(trigger fission.MessageQueueTrigger) (*triggerSubscription, error)
+		unsubscribe(triggerSub *triggerSubscription) error
 	}
 
 	MessageQueueTriggerManager struct {
 		sync.RWMutex
-		mqCfg       MessageQueueConfig
-		triggerMap  map[string]*triggerSubscription
-		requestChan chan []fission.MessageQueueTrigger
-		routerUrl   string
-		controller  *controllerClient.Client
+		mqCfg        MessageQueueConfig
+		triggerMap   map[string]*triggerSubscription
+		controller   *controllerClient.Client
+		messageQueue MessageQueue
 	}
 
 	triggerSubscription struct {
@@ -59,29 +58,27 @@ type (
 )
 
 func MakeMessageQueueTriggerManager(ctrlClient *controllerClient.Client,
-	routerUrl string, mqConfig MessageQueueConfig) MessageQueueTriggerManagerInterface {
+	routerUrl string, mqConfig MessageQueueConfig) *MessageQueueTriggerManager {
 
-	var messageQueueMgr MessageQueueTriggerManagerInterface
+	var messageQueue MessageQueue
 	var err error
 
 	mqTriggerMgr := MessageQueueTriggerManager{
-		mqCfg:       mqConfig,
-		triggerMap:  make(map[string]*triggerSubscription),
-		controller:  ctrlClient,
-		routerUrl:   routerUrl,
-		requestChan: make(chan []fission.MessageQueueTrigger),
+		triggerMap: make(map[string]*triggerSubscription),
+		controller: ctrlClient,
 	}
 	switch mqConfig.MQType {
 	case NATS:
 		fallthrough
 	default:
-		messageQueueMgr, err = makeNatsTriggerManager(mqTriggerMgr)
+		messageQueue, err = makeNatsMessageQueue(routerUrl, mqConfig)
 	}
 	if err != nil {
 		log.Fatalf("Failed to connect to remote message queue server: %v", err)
 	}
-	go messageQueueMgr.syncTriggers()
-	return messageQueueMgr
+	mqTriggerMgr.messageQueue = messageQueue
+	go mqTriggerMgr.syncTriggers()
+	return &mqTriggerMgr
 }
 
 func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscription) error {
@@ -126,10 +123,45 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		// TODO: handle error
 		newTriggers, err := mqt.controller.MessageQueueTriggerList(mqt.mqCfg.MQType)
 		if err != nil {
-			log.Println(err)
+			log.Warnf("Failed to sync message queue trigger from controller: %v", err)
 		}
 		// sync trigger from controller
-		mqt.requestChan <- newTriggers
+		newTriggerMap := map[string]fission.MessageQueueTrigger{}
+		for _, trigger := range newTriggers {
+			newTriggerMap[trigger.Uid] = trigger
+		}
+		currentTriggerMap := mqt.getAllTriggers()
+
+		// register new triggers
+		for key, trigger := range newTriggerMap {
+			if _, ok := currentTriggerMap[key]; ok {
+				continue
+			}
+			triggerSub, err := mqt.messageQueue.subscribe(trigger)
+			if err != nil {
+				log.Warnf("Message queue trigger %s created failed: %v", trigger.Name, err)
+				continue
+			}
+			err = mqt.addTrigger(triggerSub)
+			if err != nil {
+				log.Warnf("Message queue trigger %s created failed: %v", trigger.Name, err)
+				continue
+			}
+			log.Infof("Message queue trigger %s created", trigger.Name)
+		}
+
+		// remove old triggers
+		for _, trigger := range currentTriggerMap {
+			if _, ok := newTriggerMap[trigger.Uid]; ok {
+				continue
+			}
+			if err := mqt.messageQueue.unsubscribe(trigger); err != nil {
+				log.Warnf("Message queue trigger %s deleted failed: %v", trigger.Name, err)
+			} else {
+				mqt.delTrigger(trigger.Uid)
+				log.Infof("Message queue trigger %s deleted", trigger.Name)
+			}
+		}
 		time.Sleep(3 * time.Second)
 	}
 }

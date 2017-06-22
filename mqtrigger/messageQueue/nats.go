@@ -40,29 +40,28 @@ const (
 
 type (
 	Nats struct {
-		MessageQueueTriggerManager
-		nsConn ns.Conn
+		nsConn    ns.Conn
+		routerUrl string
 	}
 )
 
-func makeNatsTriggerManager(mqTriggerMgr MessageQueueTriggerManager) (MessageQueueTriggerManagerInterface, error) {
-	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqTriggerMgr.mqCfg.Url))
+func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
+	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url))
 	if err != nil {
 		return nil, err
 	}
 	nats := Nats{
-		MessageQueueTriggerManager: mqTriggerMgr,
-		nsConn: conn,
+		nsConn:    conn,
+		routerUrl: routerUrl,
 	}
-	go nats.sync()
-	return &nats, nil
+	return nats, nil
 }
 
-func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
+func (nats Nats) subscribe(trigger fission.MessageQueueTrigger) (*triggerSubscription, error) {
 	subj := trigger.Topic
 
 	if !isTopicValidForNats(subj) {
-		return errors.New(fmt.Sprintf("Not a valid topic: %s", trigger.Topic))
+		return nil, errors.New(fmt.Sprintf("Not a valid topic: %s", trigger.Topic))
 	}
 
 	opts := []ns.SubscriptionOption{
@@ -75,9 +74,9 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 		// trigger could choose to ack message or simply drop it depend on the response of function pod.
 		ns.SetManualAckMode(),
 	}
-	sub, err := nats.nsConn.Subscribe(subj, msgHandler(nats, trigger), opts...)
+	sub, err := nats.nsConn.Subscribe(subj, msgHandler(&nats, trigger), opts...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	triggerSub := triggerSubscription{
 		Metadata: fission.Metadata{
@@ -87,54 +86,13 @@ func (nats *Nats) add(trigger fission.MessageQueueTrigger) error {
 		funcMeta:     trigger.Function,
 		subscription: sub,
 	}
-	return nats.addTrigger(&triggerSub)
+	return &triggerSub, nil
 }
 
-func (nats *Nats) delete(triggerUid string) error {
-	triggerSub, ok := nats.getTrigger(triggerUid)
-	if !ok {
-		return errors.New("Trigger not exists")
-	}
-	defer nats.delTrigger(triggerUid)
+func (nats Nats) unsubscribe(triggerSub *triggerSubscription) error {
 	nsSub := triggerSub.subscription.(ns.Subscription)
 	err := nsSub.Close()
 	return err
-}
-
-func (nats *Nats) sync() {
-	for {
-		newTriggers := <-nats.requestChan
-		newTriggerMap := map[string]fission.MessageQueueTrigger{}
-		for _, trigger := range newTriggers {
-			newTriggerMap[trigger.Uid] = trigger
-		}
-
-		currentTriggerMap := nats.getAllTriggers()
-
-		// register new triggers
-		for key, trigger := range newTriggerMap {
-			if _, ok := currentTriggerMap[key]; ok {
-				continue
-			}
-			if err := nats.add(trigger); err != nil {
-				log.Warnf("Message queue trigger %s created failed: %v", trigger.Name, err)
-			} else {
-				log.Infof("Message queue trigger %s created", trigger.Name)
-			}
-		}
-
-		// remove old triggers
-		for _, trigger := range currentTriggerMap {
-			if _, ok := newTriggerMap[trigger.Uid]; ok {
-				continue
-			}
-			if err := nats.delete(trigger.Uid); err != nil {
-				log.Warnf("Message queue trigger %s deleted failed: %v", trigger.Name, err)
-			} else {
-				log.Infof("Message queue trigger %s deleted", trigger.Name)
-			}
-		}
-	}
 }
 
 func isTopicValidForNats(topic string) bool {
