@@ -32,7 +32,7 @@ func fatal(msg string) {
 func getClient(serverUrl string) *client.Client {
 
 	if len(serverUrl) == 0 {
-		fatal("Need --server or FISSION_URL set to your fission server.")
+		fatal("Need --server or FISSION_URL set to your fission server. Or try source <(fission get-env-variables)")
 	}
 
 	isHTTPS := strings.Index(serverUrl, "https://") == 0
