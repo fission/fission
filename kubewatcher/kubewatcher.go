@@ -266,7 +266,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 		// new kubewatch is created in the restartWatch() while the old kubewatch
 		// is being used in watchSubscription.stop().
 		if ws.isStopped() {
-			ws.kubeWatch.Stop()
+			ws.stop()
 			break
 		}
 		ev, more := <-ws.kubeWatch.ResultChan()
@@ -276,8 +276,8 @@ func (ws *watchSubscription) eventDispatchLoop() {
 				log.Println("Watch stopped", ws.Watch.Metadata.Name)
 				return
 			} else {
-				// watch closed due to unknown issues, restart it.
-				log.Println("Watch stopped unexpectedly", ws.Watch.Metadata.Name)
+				// watch closed due to timeout, restart it.
+				log.Printf("Watch %v timed out, restarting", ws.Watch.Metadata.Name)
 				err := ws.restartWatch()
 				if err != nil {
 					log.Panicf("Failed to restart watch: %v", err)
@@ -292,6 +292,10 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""
 			time.Sleep(time.Second)
+			err := ws.restartWatch()
+			if err != nil {
+				log.Panicf("Failed to restart watch: %v", err)
+			}
 			continue
 		}
 		rv, err := getResourceVersion(ev.Object)
@@ -316,7 +320,6 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			"X-Kubernetes-Event-Type":  string(ev.Type),
 			"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
 		}
-		// Event and object type aren't in the serialized object
 		ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
 	}
 }
