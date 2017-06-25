@@ -179,9 +179,16 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	fileName := c.String("code")
+	if len(fileName) == 0 {
+		fileName = c.String("package")
+	}
+
+	if len(envName) == 0 && len(fileName) == 0 {
+		fatal("Need --env or --code or --package argument.")
+	}
+
 	if len(fileName) > 0 {
 		code := fnFetchCode(fileName)
-
 		function.Code = string(code)
 	}
 
