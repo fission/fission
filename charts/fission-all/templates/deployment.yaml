@@ -1,4 +1,4 @@
-{{ if eq .Values.openshiftRBAC "true" }}
+{{ if .Values.openshiftRBAC }}
 
 # For openshift
 
