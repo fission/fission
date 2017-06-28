@@ -1,14 +1,18 @@
-  * [Running Fission on your Cluster](#running-fission-on-your-cluster)
-     * [Setup Kubernetes](#setup-kubernetes)
-        * [Mac](#install-and-start-kubernetes-on-osx)
-        * [Linux](#or-install-and-start-kubernetes-on-linux)
-     * [Verify access to the cluster](#verify-access-to-the-cluster)
-     * [Get and Run Fission: Minikube or Local cluster](#get-and-run-fission-minikube-or-local-cluster)
-     * [Get and Run Fission: GKE or other Cloud](#get-and-run-fission-gke-or-other-cloud)
-     * [Install the client CLI](#install-the-client-cli)
-     * [Run an example](#run-an-example)
-     * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs-optional)
-     * [Use the web based Fission-ui (Optional)](#use-the-web-based-fission-ui-optional)
+
+- [Running Fission on your Cluster](#running-fission-on-your-cluster)
+  * [Setup Kubernetes](#setup-kubernetes)
+    + [Install and start Kubernetes on OSX:](#install-and-start-kubernetes-on-osx)
+    + [Or, install and start Kubernetes on Linux:](#or-install-and-start-kubernetes-on-linux)
+  * [Verify access to the cluster](#verify-access-to-the-cluster)
+  * [Get and Run Fission: Minikube or Local cluster](#get-and-run-fission-minikube-or-local-cluster)
+  * [Get and Run Fission: GKE or other Cloud](#get-and-run-fission-gke-or-other-cloud)
+  * [Get and Run Fission: OpenShift](#get-and-run-fission-openshift)
+    + [Using Minishift or Local Cluster](#using-minishift-or-local-cluster)
+    + [Using other clouds](#using-other-clouds)
+  * [Install the client CLI](#install-the-client-cli)
+  * [Run an example](#run-an-example)
+  * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs-optional)
+  * [Use the web based Fission-ui (Optional)](#use-the-web-based-fission-ui-optional)⏎                                                                                         
 
 ## Running Fission on your Cluster
 
@@ -45,8 +49,8 @@ set up services with NodePort.  This exposes fission on ports 31313
 and 31314.
 
 ```
-  $ kubectl create -f http://fission.io/fission.yaml
-  $ kubectl create -f http://fission.io/fission-nodeport.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-rbac.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-nodeport.yaml
 ```
 
 Set the FISSION_URL and FISSION_ROUTER environment variables.
@@ -68,8 +72,8 @@ If you're using GKE or any other cloud provider that supports the
 LoadBalancer service type, use these commands:
 
 ```
-  $ kubectl create -f http://fission.io/fission.yaml
-  $ kubectl create -f http://fission.io/fission-cloud.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-rbac.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-cloud.yaml
 ```
 
 Save the external IP addresses of controller and router services in
@@ -84,8 +88,11 @@ svc```).  Then:
 
 ### Get and Run Fission: OpenShift
 
-If you're using OpenShift, it's possible to run Fission on it! The deployment
-template needs to be deployed as a user with cluster-admin permissions (like `system:admin`), as it needs to create a `ClusterRole` for deploying function containers from the `fission` namespace/project.
+If you're using OpenShift, it's possible to run Fission on it! The
+deployment template needs to be deployed as a user with cluster-admin
+permissions (like `system:admin`), as it needs to create a
+`ClusterRole` for deploying function containers from the `fission`
+namespace/project.
 
 Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUTER environment variables. If you're using minishift, use these commands:
 
@@ -93,20 +100,43 @@ Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUT
   $ export FISSION_URL=http://$(minishift ip):31313¬
   $ export FISSION_ROUTER=$(minishift ip):31314¬
 ```
+#### Using Minishift or Local Cluster
+
+If you're using minishift or no cloud provider, use these commands to set up services with NodePort. This exposes fission on ports 31313 and 31314.
+
+```
+  $ oc login -u system:admin
+  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-openshift.yaml
+  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-nodeport.yaml
+```
+
+#### Using other clouds
+
+If you're using any cloud provider that supports the LoadBalancer service type, use these commands:
+
+```
+$ oc login -u system:admin
+$ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-openshift.yaml
+$ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-cloud.yaml
+```
+After these steps, you should be able to run fission client as with kubernetes.
 
 ### Install the client CLI
 
 Get the CLI binary for Mac:
 
 ```
-  $ curl http://fission.io/mac/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-osx > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 Or Linux:
 
 ```
-  $ curl http://fission.io/linux/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-linux > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
+
+For Windows, you can use the linux binary on WSL. Or you can download
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-windows.exe)
 
 ### Run an example
 
@@ -159,7 +189,7 @@ It allows users to observe and manage fission. It also provides a simple online 
 To setup Fission-ui with fission in k8s is simple:
 
 ```bash
-  # After Fission deployed
+  # Run this after fission is deployed
   $ kubectl create -f https://raw.githubusercontent.com/fission/fission-ui/master/docker/fission-ui.yaml
 ```
 
