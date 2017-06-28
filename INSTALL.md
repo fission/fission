@@ -12,7 +12,7 @@
   * [Install the client CLI](#install-the-client-cli)
   * [Run an example](#run-an-example)
   * [Enable Persistent Function Logs (Optional)](#enable-persistent-function-logs-optional)
-  * [Use the web based Fission-ui (Optional)](#use-the-web-based-fission-ui-optional)⏎                                                                                         
+  * [Use the web based Fission-ui (Optional)](#use-the-web-based-fission-ui-optional)
 
 ## Running Fission on your Cluster
 
@@ -123,17 +123,21 @@ After these steps, you should be able to run fission client as with kubernetes.
 
 ### Install the client CLI
 
+#### Mac OS
+
 Get the CLI binary for Mac:
 
 ```
   $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-osx > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
-Or Linux:
+#### Linux
 
 ```
   $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-linux > fission && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
+
+#### Windows
 
 For Windows, you can use the linux binary on WSL. Or you can download
 this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-windows.exe)
