@@ -17,104 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/skratchdot/open-golang/open"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/v1"
-	"k8s.io/client-go/1.5/tools/clientcmd"
 )
-
-// source from k8s client-go out-of-cluster-client-configuration example
-func homeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-	return os.Getenv("USERPROFILE") // windows
-}
-
-func getKubernetesClient() (*kubernetes.Clientset, error) {
-	var kubeconfig string
-	if home := homeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	} else {
-		return nil, errors.New("Kube config is not found in home folder")
-	}
-
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-
-	// create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return clientset, nil
-}
-
-func isArgExist(strings []string, key string) bool {
-	for _, s := range strings {
-		if s == key {
-			return true
-		}
-	}
-	return false
-}
-
-func getNodeIP(client *kubernetes.Clientset) (string, error) {
-	nodes, err := client.Nodes().List(api.ListOptions{})
-	if err != nil {
-		return "", err
-	}
-	if len(nodes.Items) < 1 {
-		return "", errors.New("No available nodes are found.")
-	}
-	for _, address := range nodes.Items[0].Status.Addresses {
-		if address.Type == v1.NodeExternalIP {
-			return address.Address, nil
-		}
-	}
-	return "", errors.New("No available external ip found")
-}
-
-func getFissionEnvVariable(svcName string) string {
-	k8sClientset, err := getKubernetesClient()
-	if err != nil {
-		fmt.Printf("#Error occured getting k8s client: %v\n", err)
-		return ""
-	}
-
-	controller, err2 := k8sClientset.Core().Services("fission").Get(svcName)
-	if err2 != nil {
-		fmt.Printf("#Error occured getting fission: %v\n", svcName)
-		return ""
-	}
-
-	switch controller.Spec.Type {
-	case v1.ServiceTypeNodePort:
-		// TODO: find the port via name
-		ip, err3 := getNodeIP(k8sClientset)
-		if err3 != nil {
-			panic(err3)
-		}
-		return fmt.Sprintf("http://%v:%v",
-			ip, controller.Spec.Ports[0].NodePort)
-	case v1.ServiceTypeLoadBalancer:
-		return fmt.Sprintf("http://%v:%v",
-			controller.Status.LoadBalancer.Ingress[0].IP, controller.Spec.Ports[0].Port)
-	default:
-
-	}
-	return ""
-}
 
 func main() {
 	app := cli.NewApp()
@@ -219,29 +127,16 @@ func main() {
 			},
 		},
 		{
-			Name:  "get-env-variables",
-			Usage: "Get FISSION_URL from k8s client.  Use it as 'source <(fission get-env-variables)'",
-			Action: func(c *cli.Context) error {
-				// find fission server url via k8s client if FISSION_URL or server is not set
-				vars := getFissionEnvVariable("controller")
-				if vars != "" {
-					fmt.Printf("export %v=%v", "FISSION_URL", vars)
-					return nil
-				}
-				return errors.New("Failed to get FISSION_URL")
-			},
-		},
-		{
 			Name:  "ui",
 			Usage: "Open ui in browser, show installation guide if ui not installed.",
 			Action: func(c *cli.Context) error {
 				// find fission ui url via k8s client and open it in browser
 				ui := getFissionEnvVariable("fission-ui")
 				if ui == "" {
-					fmt.Println("UI not installed, please follow the guide to install it")
-					open.Run("https://github.com/fission/fission/blob/master/INSTALL.md#use-the-web-based-fission-ui-optional")
+					fmt.Println("UI not installed, please follow the guide in browser")
+					open.Run(UI_INSTALL_URL)
 				} else {
-					fmt.Printf("Opening ui: %v\n", ui)
+					fmt.Printf("Opening ui in default browser: %v\n", ui)
 					open.Run(ui)
 				}
 				return nil
