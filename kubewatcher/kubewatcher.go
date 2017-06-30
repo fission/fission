@@ -28,12 +28,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	apierrs "k8s.io/client-go/1.5/pkg/api/errors"
-	"k8s.io/client-go/1.5/pkg/api/meta"
-	"k8s.io/client-go/1.5/pkg/runtime"
-	"k8s.io/client-go/1.5/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api/v1"
+	apierrs "k8s.io/client-go/pkg/api/errors"
+	"k8s.io/client-go/pkg/api/meta"
+	"k8s.io/client-go/pkg/runtime"
+	"k8s.io/client-go/pkg/watch"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
@@ -150,7 +150,7 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 	var watchTimeoutSec int64 = 120
 
 	// TODO populate labelselector and fieldselector
-	listOptions := api.ListOptions{
+	listOptions := v1.ListOptions{
 		ResourceVersion: resourceVersion,
 		TimeoutSeconds:  &watchTimeoutSec,
 	}
