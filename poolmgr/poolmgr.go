@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	"github.com/dchest/uniuri"
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/rest"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	controllerclient "github.com/fission/fission/controller/client"
 )
