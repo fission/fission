@@ -31,6 +31,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func makelogRequestTracker() logRequestTracker {
@@ -101,7 +102,7 @@ func parseContainerString(containerID string) (string, error) {
 }
 
 func getcontainerID(kubeClient *kubernetes.Clientset, namespace, pod, container string) (string, error) {
-	podInfo, err := kubeClient.Core().Pods(namespace).Get(pod)
+	podInfo, err := kubeClient.CoreV1().Pods(namespace).Get(pod, v1.GetOptions{})
 	if err != nil {
 		log.Printf("Failed to get pod info: %v", err)
 		return "", err
