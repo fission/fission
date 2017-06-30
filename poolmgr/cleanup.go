@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // cleanupOldPoolmgrResources looks for resources created by an old
@@ -74,7 +74,7 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 }
 
 func cleanupDeployments(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	deploymentList, err := client.ExtensionsV1beta1().Deployments(namespace).List(v1.ListOptions{})
+	deploymentList, err := client.ExtensionsV1beta1().Deployments(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 }
 
 func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	rsList, err := client.ExtensionsV1beta1().ReplicaSets(namespace).List(v1.ListOptions{})
+	rsList, err := client.ExtensionsV1beta1().ReplicaSets(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instance
 }
 
 func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	podList, err := client.CoreV1().Pods(namespace).List(v1.ListOptions{})
+	podList, err := client.CoreV1().Pods(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 }
 
 func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	svcList, err := client.CoreV1().Services(namespace).List(v1.ListOptions{})
+	svcList, err := client.CoreV1().Services(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}

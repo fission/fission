@@ -33,12 +33,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/labels"
-	"k8s.io/client-go/pkg/util/intstr"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/logger"
-	"k8s.io/client-go/pkg/api/unversioned"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -161,7 +161,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 
 		// Get pods; filter the ones that are ready
 		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(
-			v1.ListOptions{
+			meta_v1.ListOptions{
 				LabelSelector: labels.Set(
 					gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
 			})
@@ -315,17 +315,17 @@ func (gp *GenericPool) createPool() error {
 
 	sharedMountPath := "/userfunc"
 	deployment := &v1beta1.Deployment{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: meta_v1.ObjectMeta{
 			Name:   poolDeploymentName,
 			Labels: gp.labelsForPool,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &gp.replicas,
-			Selector: &unversioned.LabelSelector{
+			Selector: &meta_v1.LabelSelector{
 				MatchLabels: gp.labelsForPool,
 			},
 			Template: v1.PodTemplateSpec{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: meta_v1.ObjectMeta{
 					Labels: gp.labelsForPool,
 				},
 				Spec: v1.PodSpec{
@@ -380,7 +380,8 @@ func (gp *GenericPool) waitForReadyPod() error {
 	startTime := time.Now()
 	for {
 		// TODO: for now we just poll; use a watch instead
-		depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Get(gp.deployment.ObjectMeta.Name)
+		depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Get(
+			gp.deployment.ObjectMeta.Name, meta_v1.GetOptions{})
 		if err != nil {
 			log.Printf("err: %v", err)
 			return err
@@ -399,7 +400,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 
 func (gp *GenericPool) createSvc(name string, labels map[string]string) (*v1.Service, error) {
 	service := v1.Service{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: meta_v1.ObjectMeta{
 			Name: name,
 		},
 		Spec: v1.ServiceSpec{
@@ -494,7 +495,7 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 		return nil
 	}
 
-	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(podName)
+	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(podName, meta_v1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -550,7 +551,7 @@ func (gp *GenericPool) destroy() error {
 	// Destroy ReplicaSet.  Pre-1.6 K8s versions don't do this
 	// automatically but post-1.6 K8s will, and may beat us to it,
 	// so don't error out if we fail.
-	rsList, err := gp.kubernetesClient.ExtensionsV1beta1().ReplicaSets(gp.namespace).List(v1.ListOptions{
+	rsList, err := gp.kubernetesClient.ExtensionsV1beta1().ReplicaSets(gp.namespace).List(meta_v1.ListOptions{
 		LabelSelector: labels.Set(gp.labelsForPool).AsSelector().String(),
 	})
 	if len(rsList.Items) >= 0 {
@@ -563,7 +564,7 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	// Destroy Pods.  See note above.
-	podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(v1.ListOptions{
+	podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(meta_v1.ListOptions{
 		LabelSelector: labels.Set(gp.labelsForPool).AsSelector().String(),
 	})
 	if len(podList.Items) >= 0 {
