@@ -20,8 +20,8 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // cleanupOldPoolmgrResources looks for resources created by an old
