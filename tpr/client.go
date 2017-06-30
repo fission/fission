@@ -21,13 +21,15 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/unversioned"
-	"k8s.io/client-go/1.5/pkg/runtime"
-	"k8s.io/client-go/1.5/pkg/runtime/serializer"
-	"k8s.io/client-go/1.5/rest"
-	"k8s.io/client-go/1.5/tools/clientcmd"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type (
@@ -85,7 +87,7 @@ func GetTprClient(config *rest.Config) (*rest.RESTClient, error) {
 // also puts the fission TPR types under a "group version" which we
 // create for our TPRs types.
 func configureClient(config *rest.Config) {
-	groupversion := unversioned.GroupVersion{
+	groupversion := schema.GroupVersion{
 		Group:   "fission.io",
 		Version: "v1",
 	}
@@ -100,61 +102,61 @@ func configureClient(config *rest.Config) {
 				groupversion,
 				&Function{},
 				&FunctionList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Environment{},
 				&EnvironmentList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Httptrigger{},
 				&HttptriggerList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Kuberneteswatchtrigger{},
 				&KuberneteswatchtriggerList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Timetrigger{},
 				&TimetriggerList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Messagequeuetrigger{},
 				&MessagequeuetriggerList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			scheme.AddKnownTypes(
 				groupversion,
 				&Package{},
 				&PackageList{},
-				&api.ListOptions{},
-				&api.DeleteOptions{},
+				&metav1.ListOptions{},
+				&metav1.DeleteOptions{},
 			)
 			return nil
 		})
-	schemeBuilder.AddToScheme(api.Scheme)
+	schemeBuilder.AddToScheme(scheme.Scheme)
 }
 
 func waitForTPRs(tprClient *rest.RESTClient) error {
 	start := time.Now()
 	for {
-		fi := MakeFunctionInterface(tprClient, api.NamespaceDefault)
-		_, err := fi.List(api.ListOptions{})
+		fi := MakeFunctionInterface(tprClient, metav1.NamespaceDefault)
+		_, err := fi.List(metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -21,12 +21,12 @@ func TestFunctionServiceCache(t *testing.T) {
 	now := time.Now()
 
 	fsvc = &funcSvc{
-		function: &api.ObjectMeta{
+		function: &metav1.ObjectMeta{
 			Name: "foo",
 			UID:  "1212",
 		},
 		environment: &tpr.Environment{
-			Metadata: api.ObjectMeta{
+			Metadata: metav1.ObjectMeta{
 				Name: "foo-env",
 				UID:  "2323",
 			},

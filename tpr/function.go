@@ -17,9 +17,10 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +28,9 @@ type (
 		Create(*Function) (*Function, error)
 		Get(name string) (*Function, error)
 		Update(*Function) (*Function, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*FunctionList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*FunctionList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	functionClient struct {
@@ -85,7 +86,7 @@ func (fc *functionClient) Update(f *Function) (*Function, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Delete(name string, opts *api.DeleteOptions) error {
+func (fc *functionClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return fc.client.Delete().
 		Namespace(fc.namespace).
 		Resource("functions").
@@ -95,7 +96,7 @@ func (fc *functionClient) Delete(name string, opts *api.DeleteOptions) error {
 		Error()
 }
 
-func (fc *functionClient) List(opts api.ListOptions) (*FunctionList, error) {
+func (fc *functionClient) List(opts metav1.ListOptions) (*FunctionList, error) {
 	var result FunctionList
 	err := fc.client.Get().
 		Namespace(fc.namespace).
@@ -109,7 +110,7 @@ func (fc *functionClient) List(opts api.ListOptions) (*FunctionList, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (fc *functionClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return fc.client.Get().
 		Prefix("watch").
 		Namespace(fc.namespace).

@@ -17,9 +17,9 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +27,9 @@ type (
 		Create(*Httptrigger) (*Httptrigger, error)
 		Get(name string) (*Httptrigger, error)
 		Update(*Httptrigger) (*Httptrigger, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*HttptriggerList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*HttptriggerList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	httpTriggerClient struct {
@@ -85,7 +85,7 @@ func (c *httpTriggerClient) Update(obj *Httptrigger) (*Httptrigger, error) {
 	return &result, nil
 }
 
-func (c *httpTriggerClient) Delete(name string, opts *api.DeleteOptions) error {
+func (c *httpTriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.namespace).
 		Resource("httptriggers").
@@ -95,12 +95,12 @@ func (c *httpTriggerClient) Delete(name string, opts *api.DeleteOptions) error {
 		Error()
 }
 
-func (c *httpTriggerClient) List(opts api.ListOptions) (*HttptriggerList, error) {
+func (c *httpTriggerClient) List(opts metav1.ListOptions) (*HttptriggerList, error) {
 	var result HttptriggerList
 	err := c.client.Get().
 		Namespace(c.namespace).
 		Resource("httptriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -109,11 +109,11 @@ func (c *httpTriggerClient) List(opts api.ListOptions) (*HttptriggerList, error)
 	return &result, nil
 }
 
-func (c *httpTriggerClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (c *httpTriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return c.client.Get().
 		Prefix("watch").
 		Namespace(c.namespace).
 		Resource("httptriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Watch()
 }

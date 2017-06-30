@@ -23,14 +23,14 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
 func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := a.fissionClient.Timetriggers(api.NamespaceAll).List(api.ListOptions{})
+	triggers, err := a.fissionClient.Timetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -94,7 +94,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	name := vars["timeTrigger"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
 	t, err := a.fissionClient.Timetriggers(ns).Get(name)
@@ -161,10 +161,10 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	name := vars["timeTrigger"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Timetriggers(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Timetriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

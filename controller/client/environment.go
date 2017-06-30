@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) EnvironmentCreate(env *tpr.Environment) (*api.ObjectMeta, error) {
+func (c *Client) EnvironmentCreate(env *tpr.Environment) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(env)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (c *Client) EnvironmentCreate(env *tpr.Environment) (*api.ObjectMeta, error
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) EnvironmentCreate(env *tpr.Environment) (*api.ObjectMeta, error
 	return &m, nil
 }
 
-func (c *Client) EnvironmentGet(m *api.ObjectMeta) (*tpr.Environment, error) {
+func (c *Client) EnvironmentGet(m *metav1.ObjectMeta) (*tpr.Environment, error) {
 	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -77,7 +77,7 @@ func (c *Client) EnvironmentGet(m *api.ObjectMeta) (*tpr.Environment, error) {
 	return &env, nil
 }
 
-func (c *Client) EnvironmentUpdate(env *tpr.Environment) (*api.ObjectMeta, error) {
+func (c *Client) EnvironmentUpdate(env *tpr.Environment) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(env)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (c *Client) EnvironmentUpdate(env *tpr.Environment) (*api.ObjectMeta, error
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (c *Client) EnvironmentUpdate(env *tpr.Environment) (*api.ObjectMeta, error
 	return &m, nil
 }
 
-func (c *Client) EnvironmentDelete(m *api.ObjectMeta) error {
+func (c *Client) EnvironmentDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 

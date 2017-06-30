@@ -25,14 +25,14 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
 func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := a.fissionClient.Functions(api.NamespaceAll).List(api.ListOptions{})
+	funcs, err := a.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -88,7 +88,7 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 	name := vars["function"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
 	f, err := a.fissionClient.Functions(ns).Get(name)
@@ -147,10 +147,10 @@ func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 	name := vars["function"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Functions(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Functions(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -21,7 +21,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	//"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -146,7 +146,7 @@ func (mqt *MessageQueueTriggerManager) getAllTriggers() *map[string]*triggerSubs
 	return r.triggers
 }
 
-func (mqt *MessageQueueTriggerManager) delTrigger(m *api.ObjectMeta) {
+func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 	mqt.reqChan <- request{
 		requestType: DELETE_TRIGGER,
 		triggerSub: &triggerSubscription{
@@ -160,7 +160,7 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *api.ObjectMeta) {
 func (mqt *MessageQueueTriggerManager) syncTriggers() {
 	for {
 		// get new set of triggers
-		newTriggers, err := mqt.fissionClient.Messagequeuetriggers(api.NamespaceAll).List(api.ListOptions{})
+		newTriggers, err := mqt.fissionClient.Messagequeuetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed to read message queue trigger list: %v", err)
 		}

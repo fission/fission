@@ -17,9 +17,10 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +28,9 @@ type (
 		Create(*Environment) (*Environment, error)
 		Get(name string) (*Environment, error)
 		Update(*Environment) (*Environment, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*EnvironmentList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*EnvironmentList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	environmentClient struct {
@@ -85,7 +86,7 @@ func (ec *environmentClient) Update(e *Environment) (*Environment, error) {
 	return &result, nil
 }
 
-func (ec *environmentClient) Delete(name string, opts *api.DeleteOptions) error {
+func (ec *environmentClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return ec.client.Delete().
 		Namespace(ec.namespace).
 		Resource("environments").
@@ -95,7 +96,7 @@ func (ec *environmentClient) Delete(name string, opts *api.DeleteOptions) error 
 		Error()
 }
 
-func (ec *environmentClient) List(opts api.ListOptions) (*EnvironmentList, error) {
+func (ec *environmentClient) List(opts metav1.ListOptions) (*EnvironmentList, error) {
 	var result EnvironmentList
 	err := ec.client.Get().
 		Namespace(ec.namespace).
@@ -109,7 +110,7 @@ func (ec *environmentClient) List(opts api.ListOptions) (*EnvironmentList, error
 	return &result, nil
 }
 
-func (ec *environmentClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (ec *environmentClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return ec.client.Get().
 		Prefix("watch").
 		Namespace(ec.namespace).

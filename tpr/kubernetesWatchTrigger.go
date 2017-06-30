@@ -17,9 +17,9 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +27,9 @@ type (
 		Create(*Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error)
 		Get(name string) (*Kuberneteswatchtrigger, error)
 		Update(*Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*KuberneteswatchtriggerList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*KuberneteswatchtriggerList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	kubernetesWatchTriggerClient struct {
@@ -85,7 +85,7 @@ func (c *kubernetesWatchTriggerClient) Update(obj *Kuberneteswatchtrigger) (*Kub
 	return &result, nil
 }
 
-func (c *kubernetesWatchTriggerClient) Delete(name string, opts *api.DeleteOptions) error {
+func (c *kubernetesWatchTriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.namespace).
 		Resource("kuberneteswatchtriggers").
@@ -95,12 +95,12 @@ func (c *kubernetesWatchTriggerClient) Delete(name string, opts *api.DeleteOptio
 		Error()
 }
 
-func (c *kubernetesWatchTriggerClient) List(opts api.ListOptions) (*KuberneteswatchtriggerList, error) {
+func (c *kubernetesWatchTriggerClient) List(opts metav1.ListOptions) (*KuberneteswatchtriggerList, error) {
 	var result KuberneteswatchtriggerList
 	err := c.client.Get().
 		Namespace(c.namespace).
 		Resource("kuberneteswatchtriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -109,11 +109,11 @@ func (c *kubernetesWatchTriggerClient) List(opts api.ListOptions) (*Kuberneteswa
 	return &result, nil
 }
 
-func (c *kubernetesWatchTriggerClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (c *kubernetesWatchTriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return c.client.Get().
 		Prefix("watch").
 		Namespace(c.namespace).
 		Resource("kuberneteswatchtriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Watch()
 }

@@ -17,9 +17,9 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +27,9 @@ type (
 		Create(*Package) (*Package, error)
 		Get(name string) (*Package, error)
 		Update(*Package) (*Package, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*PackageList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*PackageList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	packageClient struct {
@@ -85,7 +85,7 @@ func (c *packageClient) Update(f *Package) (*Package, error) {
 	return &result, nil
 }
 
-func (c *packageClient) Delete(name string, opts *api.DeleteOptions) error {
+func (c *packageClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.namespace).
 		Resource("packages").
@@ -95,12 +95,12 @@ func (c *packageClient) Delete(name string, opts *api.DeleteOptions) error {
 		Error()
 }
 
-func (c *packageClient) List(opts api.ListOptions) (*PackageList, error) {
+func (c *packageClient) List(opts metav1.ListOptions) (*PackageList, error) {
 	var result PackageList
 	err := c.client.Get().
 		Namespace(c.namespace).
 		Resource("packages").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -109,11 +109,11 @@ func (c *packageClient) List(opts api.ListOptions) (*PackageList, error) {
 	return &result, nil
 }
 
-func (c *packageClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (c *packageClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return c.client.Get().
 		Prefix("watch").
 		Namespace(c.namespace).
 		Resource("packages").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Watch()
 }

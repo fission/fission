@@ -17,9 +17,9 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 )
 
 type (
@@ -27,9 +27,9 @@ type (
 		Create(*Messagequeuetrigger) (*Messagequeuetrigger, error)
 		Get(name string) (*Messagequeuetrigger, error)
 		Update(*Messagequeuetrigger) (*Messagequeuetrigger, error)
-		Delete(name string, options *api.DeleteOptions) error
-		List(opts api.ListOptions) (*MessagequeuetriggerList, error)
-		Watch(opts api.ListOptions) (watch.Interface, error)
+		Delete(name string, options *metav1.DeleteOptions) error
+		List(opts metav1.ListOptions) (*MessagequeuetriggerList, error)
+		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
 	messagequeuetriggerClient struct {
@@ -85,7 +85,7 @@ func (fc *messagequeuetriggerClient) Update(f *Messagequeuetrigger) (*Messageque
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Delete(name string, opts *api.DeleteOptions) error {
+func (fc *messagequeuetriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return fc.client.Delete().
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
@@ -95,12 +95,12 @@ func (fc *messagequeuetriggerClient) Delete(name string, opts *api.DeleteOptions
 		Error()
 }
 
-func (fc *messagequeuetriggerClient) List(opts api.ListOptions) (*MessagequeuetriggerList, error) {
+func (fc *messagequeuetriggerClient) List(opts metav1.ListOptions) (*MessagequeuetriggerList, error) {
 	var result MessagequeuetriggerList
 	err := fc.client.Get().
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -109,11 +109,11 @@ func (fc *messagequeuetriggerClient) List(opts api.ListOptions) (*Messagequeuetr
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Watch(opts api.ListOptions) (watch.Interface, error) {
+func (fc *messagequeuetriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return fc.client.Get().
 		Prefix("watch").
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		Watch()
 }

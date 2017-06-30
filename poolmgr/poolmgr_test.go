@@ -24,6 +24,7 @@ package poolmgr
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -31,21 +32,20 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/v1"
-	"k8s.io/client-go/1.5/pkg/labels"
-	"k8s.io/client-go/1.5/pkg/util/intstr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/poolmgr/client"
 	"github.com/fission/fission/tpr"
-	"io/ioutil"
 )
 
 // return the number of pods in the given namespace matching the given labels
 func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]string) int {
-	pods, err := kubeClient.Pods(ns).List(api.ListOptions{
+	pods, err := kubeClient.Pods(ns).List(metav1.ListOptions{
 		LabelSelector: labels.Set(labelz).AsSelector(),
 	})
 	if err != nil {
@@ -55,8 +55,8 @@ func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]st
 }
 
 func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
-	_, err := kubeClient.Namespaces().Create(&v1.Namespace{
-		ObjectMeta: v1.ObjectMeta{
+	_, err := kubeClient.Namespaces().Create(&apiv1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
 	})
@@ -67,16 +67,16 @@ func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
 }
 
 // create a nodeport service
-func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *v1.Service {
-	svc, err := kubeClient.Services(ns).Create(&v1.Service{
-		ObjectMeta: v1.ObjectMeta{
+func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *apiv1.Service {
+	svc, err := kubeClient.Services(ns).Create(&apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: v1.ServiceSpec{
-			Type: v1.ServiceTypeNodePort,
-			Ports: []v1.ServicePort{
+		Spec: apiv1.ServiceSpec{
+			Type: apiv1.ServiceTypeNodePort,
+			Ports: []apiv1.ServicePort{
 				{
-					Protocol:   v1.ProtocolTCP,
+					Protocol:   apiv1.ProtocolTCP,
 					Port:       80,
 					TargetPort: intstr.FromInt(targetPort),
 					NodePort:   nodePort,
@@ -142,7 +142,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create an env on the cluster
 	env, err := fissionClient.Environments(fissionNs).Create(&tpr.Environment{
-		Metadata: api.ObjectMeta{
+		Metadata: metametav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
 		},
@@ -175,7 +175,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create a package
 	p := &tpr.Package{
-		Metadata: api.ObjectMeta{
+		Metadata: metametav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
@@ -191,7 +191,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create a function
 	f := &tpr.Function{
-		Metadata: api.ObjectMeta{
+		Metadata: metametav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},

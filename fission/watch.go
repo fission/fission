@@ -23,7 +23,7 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -62,9 +62,9 @@ func wCreate(c *cli.Context) error {
 	watchName := uuid.NewV4().String()
 
 	w := &tpr.Kuberneteswatchtrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      watchName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.KubernetesWatchTriggerSpec{
 			Namespace: namespace,
@@ -104,9 +104,9 @@ func wDelete(c *cli.Context) error {
 		fatal("Need name of watch to delete, use --name")
 	}
 
-	err := client.WatchDelete(&api.ObjectMeta{
+	err := client.WatchDelete(&metav1.ObjectMeta{
 		Name:      wName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "delete watch")
 

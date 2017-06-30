@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
@@ -76,9 +76,9 @@ func TestFunctionApi(t *testing.T) {
 	name2 := "bar"
 
 	testFunc := &tpr.Function{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      name1,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.FunctionSpec{
 			Environment: fission.EnvironmentReference{
@@ -89,9 +89,9 @@ func TestFunctionApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.FunctionGet(&api.ObjectMeta{
+	_, err := g.client.FunctionGet(&metav1.ObjectMeta{
 		Name:      testFunc.Metadata.Name,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "function")
 
@@ -128,17 +128,17 @@ func TestFunctionApi(t *testing.T) {
 	}
 	assert(found, "incorrect response content type")
 
-	err = g.client.FunctionDelete(&api.ObjectMeta{Name: name1, Namespace: api.NamespaceDefault})
+	err = g.client.FunctionDelete(&metav1.ObjectMeta{Name: name1, Namespace: metav1.NamespaceDefault})
 	panicIf(err)
-	err = g.client.FunctionDelete(&api.ObjectMeta{Name: name2, Namespace: api.NamespaceDefault})
+	err = g.client.FunctionDelete(&metav1.ObjectMeta{Name: name2, Namespace: metav1.NamespaceDefault})
 	panicIf(err)
 }
 
 func TestHTTPTriggerApi(t *testing.T) {
 	testTrigger := &tpr.Httptrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: "/hello",
@@ -148,9 +148,9 @@ func TestHTTPTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.HTTPTriggerGet(&api.ObjectMeta{
+	_, err := g.client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      testTrigger.Metadata.Name,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "httptrigger")
 
@@ -185,9 +185,9 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 func TestEnvironmentApi(t *testing.T) {
 	testEnv := &tpr.Environment{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.EnvironmentSpec{
 			Runtime: fission.Runtime{
@@ -195,9 +195,9 @@ func TestEnvironmentApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.EnvironmentGet(&api.ObjectMeta{
+	_, err := g.client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      testEnv.Metadata.Name,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "environment")
 
@@ -228,9 +228,9 @@ func TestEnvironmentApi(t *testing.T) {
 
 func TestWatchApi(t *testing.T) {
 	testWatch := &tpr.Kuberneteswatchtrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.KubernetesWatchTriggerSpec{
 			Namespace: "default",
@@ -241,9 +241,9 @@ func TestWatchApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.WatchGet(&api.ObjectMeta{
+	_, err := g.client.WatchGet(&metav1.ObjectMeta{
 		Name:      testWatch.Metadata.Name,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "watch")
 
@@ -272,9 +272,9 @@ func TestWatchApi(t *testing.T) {
 
 func TestTimeTriggerApi(t *testing.T) {
 	testTrigger := &tpr.Timetrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.TimeTriggerSpec{
 			Cron: "0 30 * * * *",
@@ -284,7 +284,7 @@ func TestTimeTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.TimeTriggerGet(&api.ObjectMeta{Name: testTrigger.Metadata.Name})
+	_, err := g.client.TimeTriggerGet(&metav1.ObjectMeta{Name: testTrigger.Metadata.Name})
 	assertNotFoundFailure(err, "trigger")
 
 	m, err := g.client.TimeTriggerCreate(testTrigger)

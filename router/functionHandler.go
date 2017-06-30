@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
@@ -34,7 +34,7 @@ import (
 type functionHandler struct {
 	fmap     *functionServiceMap
 	poolmgr  *poolmgrClient.Client
-	function *api.ObjectMeta
+	function *metav1.ObjectMeta
 }
 
 func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
