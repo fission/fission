@@ -57,7 +57,7 @@ func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQu
 	return nats, nil
 }
 
-func (nats Nats) subscribe(trigger fission.MessageQueueTrigger) (*triggerSubscription, error) {
+func (nats Nats) subscribe(trigger fission.MessageQueueTrigger) (interface{}, error) {
 	subj := trigger.Topic
 
 	if !isTopicValidForNats(subj) {
@@ -78,21 +78,11 @@ func (nats Nats) subscribe(trigger fission.MessageQueueTrigger) (*triggerSubscri
 	if err != nil {
 		return nil, err
 	}
-	triggerSub := triggerSubscription{
-		Metadata: fission.Metadata{
-			Name: trigger.Name,
-			Uid:  trigger.Uid,
-		},
-		funcMeta:     trigger.Function,
-		subscription: sub,
-	}
-	return &triggerSub, nil
+	return sub, nil
 }
 
-func (nats Nats) unsubscribe(triggerSub *triggerSubscription) error {
-	nsSub := triggerSub.subscription.(ns.Subscription)
-	err := nsSub.Close()
-	return err
+func (nats Nats) unsubscribe(subscription interface{}) error {
+	return subscription.(ns.Subscription).Close()
 }
 
 func isTopicValidForNats(topic string) bool {
