@@ -1,5 +1,5 @@
-hash: 51b5eda27974aac228f42002cb0a9f89bf2f79d36a574a3694c142c2f83e4042
-updated: 2017-03-24T11:01:00.667996869+08:00
+hash: d5542f2a5a19d408a81f80ccef9da08e676dc933ee4824c2ed84362d1defe582
+updated: 2017-07-02T21:34:44.68133313+08:00
 imports:
 - name: github.com/blang/semver
   version: 60ec3488bfea7cca02b021d106d9911120d25fe9
@@ -55,7 +55,9 @@ imports:
 - name: github.com/gogo/protobuf
   version: 8d70fb3182befc465c4a1eac8ad4d38ff49778e2
   subpackages:
+  - gogoproto
   - proto
+  - protoc-gen-gogo/descriptor
   - sortkeys
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
@@ -69,9 +71,9 @@ imports:
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/handlers
-  version: 3a5767ca75ece5f7f1440b1d16975247f8d8b221
+  version: a4043c62cc2329bacda331d33fc908ab11ef0ec3
 - name: github.com/gorilla/mux
-  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
+  version: bcd8bc72b08df0f70df986b97f95590779502d31
 - name: github.com/influxdata/influxdb
   version: b7bb7e8359642b6e071735b50ae41f5eb343fd42
   subpackages:
@@ -88,6 +90,17 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/nats-io/go-nats
+  version: 6949c8e06a246e4177961aab22940b5c411e48f0
+  subpackages:
+  - encoders/builtin
+  - util
+- name: github.com/nats-io/go-nats-streaming
+  version: 6e620057a207bd61e992c1c5b6a2de7b6a4cb010
+  subpackages:
+  - pb
+- name: github.com/nats-io/nuid
+  version: 289cccf02c178dc782430d534e3c1f5b72af807f
 - name: github.com/pborman/uuid
   version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
 - name: github.com/PuerkitoBio/purell
@@ -99,7 +112,7 @@ imports:
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sirupsen/logrus
-  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+  version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
 - name: github.com/spf13/pflag
   version: 08b1a584251b5b62f458943640fc8ebd4d50aaa5
 - name: github.com/ugorji/go
@@ -123,7 +136,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: b699b7032584f0953262cb2788a0ca19bb494703
+  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
   - unix
 - name: golang.org/x/text
