@@ -28,6 +28,9 @@ cd $FISSIONDIR"/test/mqtrigger"
 ./fission route create --method GET --url /h1 --function hello1
 ./fission mqtrigger create --name h1 --function hello1 --mqtype "nats-streaming" --topic "foo.bar" --resptopic "foo.foo"
 
+# wait until nats trigger is created
+sleep 5
+
 go run ./stan-pub.go -s $NATS_STREAMING_URL -c $clusterID -id clientPub $topic "" || exit 1
 
 response=$(go run ./stan-sub.go --last -s $NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
