@@ -128,13 +128,13 @@ After these steps, you should be able to run fission client as with kubernetes.
 Get the CLI binary for Mac:
 
 ```
-  $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-osx > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
 ```
-  $ curl https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-linux > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Windows
