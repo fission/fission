@@ -37,6 +37,8 @@ const (
 )
 
 type (
+	messageQueueSubscription interface{}
+
 	requestType int
 
 	MessageQueueConfig struct {
@@ -45,8 +47,8 @@ type (
 	}
 
 	MessageQueue interface {
-		subscribe(trigger fission.MessageQueueTrigger) (interface{}, error)
-		unsubscribe(triggerSub interface{}) error
+		subscribe(trigger fission.MessageQueueTrigger) (messageQueueSubscription, error)
+		unsubscribe(triggerSub messageQueueSubscription) error
 	}
 
 	MessageQueueTriggerManager struct {
@@ -60,7 +62,7 @@ type (
 	triggerSubscription struct {
 		fission.Metadata
 		funcMeta     fission.Metadata
-		subscription interface{}
+		subscription messageQueueSubscription
 	}
 
 	request struct {
@@ -70,7 +72,7 @@ type (
 	}
 	response struct {
 		err      error
-		triggers *map[string]interface{}
+		triggers *map[string]messageQueueSubscription
 	}
 )
 
@@ -114,7 +116,7 @@ func (mqt *MessageQueueTriggerManager) service() {
 			}
 			req.respChan <- response{err: err}
 		case GET_ALL_TRIGGERS:
-			copyTriggers := make(map[string]interface{})
+			copyTriggers := make(map[string]messageQueueSubscription)
 			for key, val := range mqt.triggers {
 				copyTriggers[key] = val
 			}
@@ -137,7 +139,7 @@ func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscriptio
 	return r.err
 }
 
-func (mqt *MessageQueueTriggerManager) getAllTriggers() *map[string]interface{} {
+func (mqt *MessageQueueTriggerManager) getAllTriggers() *map[string]messageQueueSubscription {
 	respChan := make(chan response)
 	mqt.reqChan <- request{
 		requestType: GET_ALL_TRIGGERS,
@@ -174,7 +176,7 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 
 		// register new triggers
 		for key, trigger := range newTriggerMap {
-			if _, ok := currentTriggerSubMap[key]; ok {
+			if _, ok := (*currentTriggerSubMap)[key]; ok {
 				continue
 			}
 			sub, err := mqt.messageQueue.subscribe(trigger)
@@ -199,7 +201,7 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		}
 
 		// remove old triggers
-		for _, ts := range currentTriggerSubMap {
+		for _, ts := range *currentTriggerSubMap {
 			triggerSub := ts.(*triggerSubscription)
 			if _, ok := newTriggerMap[triggerSub.Uid]; ok {
 				continue
