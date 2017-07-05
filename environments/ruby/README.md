@@ -2,9 +2,19 @@
 
 This is the Ruby environment for Fission.
 
-It's a Docker image containing a Ruby 2.4.1 runtime, along with a
-dynamic loader.  A few common dependencies are included in the
-Gemfile.
+It's a Docker image containing a Ruby 2.4.1 runtime. The image uses
+Rack with WEBrick to host the internal web server.
+
+The environment works via convention where you create a Ruby method
+called `handler` with a single optional argument, a `Fission::Context`
+object.
+
+The `Fission::Context` object gives access to the Rack env, and a
+request object. Please see `fission/context.rb` for the public api.
+
+The `Fission::Request` object is a subclass of `Rack::Request` and
+provides access to parameters and headers. See `fission/request.rb`
+for the public api.
 
 ## Customizing this image
 
@@ -39,3 +49,7 @@ Or, if you already have an environment, you can update its image:
 
 After this, fission functions that have the env parameter set to the
 same environment name as this command will use this environment.
+
+## Creating functions to use this image
+
+See the [examples README](examples/ruby/README.md).
