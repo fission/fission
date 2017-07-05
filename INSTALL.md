@@ -201,18 +201,21 @@ Then open `http://node-ip:31319` to use Fission-ui.
 
 For more infomation, please check out [Fission-ui Readme](https://github.com/fission/fission-ui/blob/master/README.md).
 
-### Enable Message Queue Trigger (Optional)
+### Install NATS for message-queue based triggers (Optional)
 
-Message queue trigger allows users to create a trigger that listens to remote message queue server, and invokes function when a message is published to the trigger topic.
+Fission supports message queue triggers that allow you to invoke
+functions based on events in a queue.  For now, NATS-Streaming is the
+only supported message queue.
+
+You can install NATS Streaming on your Kubernetes cluster with:
 
 ```
   $ kubectl create -f fission-nats.yaml
 ```
 
-You can now use following command to test with message queue trigger:
+You can subscribe to a NATS Streaming queue with a command like this:
+(See `fission mqtrigger --help` for details)
 
 ```
-  $ fission mqtrigger create --name h1 --function hello1 --topic "foo.bar" --resptopic "foo.foo"
-  $ go run test/mqtrigger/stan-pub.go -s nats://<nats-streaming-svc-ip>:4222 -c fissionMQTrigger -id clientPub "foo.bar" ""
-  $ go run test/mqtrigger/stan-sub.go --last -s nats://<nats-streaming-svc-ip>:4222  -c fissionMQTrigger -id clientSub "foo.foo"
+  $ fission mqtrigger create --name myQueueTrigger --function processEvent --topic "myQueue.request" 
 ```
