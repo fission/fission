@@ -1,5 +1,5 @@
-hash: 51b5eda27974aac228f42002cb0a9f89bf2f79d36a574a3694c142c2f83e4042
-updated: 2017-03-24T11:01:00.667996869+08:00
+hash: 380e425817f4b783e4224c1e414c3ad1500933736a9dec94b38789315c8465af
+updated: 2017-06-25T16:04:30.563000808+08:00
 imports:
 - name: github.com/blang/semver
   version: 60ec3488bfea7cca02b021d106d9911120d25fe9
@@ -69,9 +69,13 @@ imports:
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/handlers
-  version: 3a5767ca75ece5f7f1440b1d16975247f8d8b221
+  version: a4043c62cc2329bacda331d33fc908ab11ef0ec3
 - name: github.com/gorilla/mux
-  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
+  version: bcd8bc72b08df0f70df986b97f95590779502d31
+- name: github.com/howeyc/gopass
+  version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
+- name: github.com/imdario/mergo
+  version: e3000cb3d28c72b837601cac94debd91032d19fe
 - name: github.com/influxdata/influxdb
   version: b7bb7e8359642b6e071735b50ae41f5eb343fd42
   subpackages:
@@ -99,7 +103,11 @@ imports:
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sirupsen/logrus
-  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+  version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
+- name: github.com/skratchdot/open-golang
+  version: 75fb7ed4208cf72d323d7d02fd1a5964a7a9073c
+  subpackages:
+  - open
 - name: github.com/spf13/pflag
   version: 08b1a584251b5b62f458943640fc8ebd4d50aaa5
 - name: github.com/ugorji/go
@@ -108,6 +116,12 @@ imports:
   - codec
 - name: github.com/urfave/cli
   version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
+- name: golang.org/x/crypto
+  version: 1351f936d976c60a0a48d728281922cf63eafb8d
+  subpackages:
+  - bcrypt
+  - blowfish
+  - ssh/terminal
 - name: golang.org/x/net
   version: 6acef71eb69611914f7a30939ea9f6e194c78172
   subpackages:
@@ -244,6 +258,7 @@ imports:
   - 1.5/pkg/util/errors
   - 1.5/pkg/util/flowcontrol
   - 1.5/pkg/util/framer
+  - 1.5/pkg/util/homedir
   - 1.5/pkg/util/integer
   - 1.5/pkg/util/intstr
   - 1.5/pkg/util/json
@@ -265,7 +280,11 @@ imports:
   - 1.5/plugin/pkg/client/auth/gcp
   - 1.5/plugin/pkg/client/auth/oidc
   - 1.5/rest
+  - 1.5/tools/auth
+  - 1.5/tools/clientcmd
   - 1.5/tools/clientcmd/api
+  - 1.5/tools/clientcmd/api/latest
+  - 1.5/tools/clientcmd/api/v1
   - 1.5/tools/metrics
   - 1.5/transport
 testImports: []

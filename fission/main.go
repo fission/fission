@@ -17,8 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/skratchdot/open-golang/open"
 	"github.com/urfave/cli"
 )
 
@@ -121,6 +123,22 @@ func main() {
 			Usage: "Get deployment yaml.  Use it as 'fission get-deployment-yaml | kubectl create -f -'",
 			Action: func(c *cli.Context) error {
 				getDeploymentYaml()
+				return nil
+			},
+		},
+		{
+			Name:  "ui",
+			Usage: "Open ui in browser, show installation guide if ui not installed.",
+			Action: func(c *cli.Context) error {
+				// find fission ui url via k8s client and open it in browser
+				ui := getFissionEnvVariable("fission-ui")
+				if ui == "" {
+					fmt.Println("UI not installed, please follow the guide in browser")
+					open.Run(UI_INSTALL_URL)
+				} else {
+					fmt.Printf("Opening ui in default browser: %v\n", ui)
+					open.Run(ui)
+				}
 				return nil
 			},
 		},

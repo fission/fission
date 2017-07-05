@@ -34,3 +34,6 @@ import:
   subpackages:
   - client/v2
 - package: github.com/robfig/cron
+- package: github.com/skratchdot/open-golang
+  subpackages:
+  - open
