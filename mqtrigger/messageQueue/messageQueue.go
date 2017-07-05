@@ -27,10 +27,13 @@ import (
 )
 
 const (
-	NATS        string      = "nats-streaming"
+	NATS string = "nats-streaming"
+)
+
+const (
 	ADD_TRIGGER requestType = iota
-	DEL_TRIGGER
-	GET_ALL_TRIGGER
+	DELETE_TRIGGER
+	GET_ALL_TRIGGERS
 )
 
 type (
@@ -47,11 +50,11 @@ type (
 	}
 
 	MessageQueueTriggerManager struct {
-		reqChan       chan request
-		mqCfg         MessageQueueConfig
-		triggerSubMap map[string]*triggerSubscription
-		controller    *controllerClient.Client
-		messageQueue  MessageQueue
+		reqChan      chan request
+		mqCfg        MessageQueueConfig
+		triggers     map[string]*triggerSubscription
+		controller   *controllerClient.Client
+		messageQueue MessageQueue
 	}
 
 	triggerSubscription struct {
@@ -63,7 +66,11 @@ type (
 	request struct {
 		requestType
 		triggerSub *triggerSubscription
-		respChan   chan interface{}
+		respChan   chan response
+	}
+	response struct {
+		err      error
+		triggers *map[string]interface{}
 	}
 )
 
@@ -74,9 +81,9 @@ func MakeMessageQueueTriggerManager(ctrlClient *controllerClient.Client,
 	var err error
 
 	mqTriggerMgr := MessageQueueTriggerManager{
-		reqChan:       make(chan request),
-		triggerSubMap: make(map[string]*triggerSubscription),
-		controller:    ctrlClient,
+		reqChan:    make(chan request),
+		triggers:   make(map[string]*triggerSubscription),
+		controller: ctrlClient,
 	}
 	switch mqConfig.MQType {
 	case NATS:
@@ -100,52 +107,49 @@ func (mqt *MessageQueueTriggerManager) service() {
 		case ADD_TRIGGER:
 			var err error
 			triggerUid := req.triggerSub.Uid
-			if _, ok := mqt.triggerSubMap[triggerUid]; ok {
+			if _, ok := mqt.triggers[triggerUid]; ok {
 				err = errors.New("Trigger already exists")
 			} else {
-				mqt.triggerSubMap[triggerUid] = req.triggerSub
+				mqt.triggers[triggerUid] = req.triggerSub
 			}
-			req.respChan <- err
-		case GET_ALL_TRIGGER:
+			req.respChan <- response{err: err}
+		case GET_ALL_TRIGGERS:
 			copyTriggers := make(map[string]interface{})
-			for key, val := range mqt.triggerSubMap {
+			for key, val := range mqt.triggers {
 				copyTriggers[key] = val
 			}
-			req.respChan <- copyTriggers
-		case DEL_TRIGGER:
+			req.respChan <- response{triggers: &copyTriggers}
+		case DELETE_TRIGGER:
 			triggerUid := req.triggerSub.Uid
-			delete(mqt.triggerSubMap, triggerUid)
+			delete(mqt.triggers, triggerUid)
 		}
 	}
 }
 
 func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscription) error {
-	respChan := make(chan interface{})
+	respChan := make(chan response)
 	mqt.reqChan <- request{
 		requestType: ADD_TRIGGER,
 		triggerSub:  triggerSub,
 		respChan:    respChan,
 	}
-	err := <-respChan
-	if err == nil {
-		return nil
-	}
-	return err.(error)
+	r := <-respChan
+	return r.err
 }
 
-func (mqt *MessageQueueTriggerManager) getAllTriggers() map[string]interface{} {
-	respChan := make(chan interface{})
+func (mqt *MessageQueueTriggerManager) getAllTriggers() *map[string]interface{} {
+	respChan := make(chan response)
 	mqt.reqChan <- request{
-		requestType: GET_ALL_TRIGGER,
+		requestType: GET_ALL_TRIGGERS,
 		respChan:    respChan,
 	}
-	copyTriggers := <-respChan
-	return copyTriggers.(map[string]interface{})
+	r := <-respChan
+	return r.triggers
 }
 
 func (mqt *MessageQueueTriggerManager) delTrigger(triggerUid string) {
 	mqt.reqChan <- request{
-		requestType: DEL_TRIGGER,
+		requestType: DELETE_TRIGGER,
 		triggerSub: &triggerSubscription{
 			Metadata: fission.Metadata{
 				Uid: triggerUid,

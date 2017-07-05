@@ -25,7 +25,8 @@ import (
 
 func Start(controllerUrl string, routerUrl string) error {
 	controller := controllerClient.MakeClient(controllerUrl)
-	// nats,pubsub...etc
+
+	// Message queue type: nats is the only supported one for now
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 	mqCfg := messageQueue.MessageQueueConfig{
