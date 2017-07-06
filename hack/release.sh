@@ -93,6 +93,7 @@ build_yaml() {
     cat fission-logger.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-logger.yaml
     cat fission-openshift.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-openshift.yaml
     cat fission-rbac.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-rbac.yaml
+    cat fission-nats.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-nats.yaml
 
     cp fission-nodeport.yaml $outdir
     cp fission-cloud.yaml    $outdir
@@ -138,7 +139,6 @@ make_github_release() {
 	   --tag $gittag \
 	   --name "Nightly release for $(date +%Y-%b-%d)" \
 	   --description "Nightly release for $(date +%Y-%b-%d)" \
-	   --pre-release	   
 
     # attach files
 
@@ -165,7 +165,7 @@ make_github_release() {
 	   --file $BUILDDIR/cli/windows/fission.exe
 
     # yamls
-    yaml_files="fission.yaml fission-logger.yaml fission-rbac.yaml fission-openshift.yaml fission-nodeport.yaml fission-cloud.yaml"
+    yaml_files="fission.yaml fission-logger.yaml fission-rbac.yaml fission-openshift.yaml fission-nodeport.yaml fission-cloud.yaml fission-nats.yaml"
     for f in $yaml_files
     do
 	gothub upload \
