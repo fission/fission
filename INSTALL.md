@@ -49,8 +49,8 @@ set up services with NodePort.  This exposes fission on ports 31313
 and 31314.
 
 ```
-  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-rbac.yaml
-  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-nodeport.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-rbac.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-nodeport.yaml
 ```
 
 Set the FISSION_URL and FISSION_ROUTER environment variables.
@@ -72,8 +72,8 @@ If you're using GKE or any other cloud provider that supports the
 LoadBalancer service type, use these commands:
 
 ```
-  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-rbac.yaml
-  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-cloud.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-rbac.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-cloud.yaml
 ```
 
 Save the external IP addresses of controller and router services in
@@ -106,8 +106,8 @@ If you're using minishift or no cloud provider, use these commands to set up ser
 
 ```
   $ oc login -u system:admin
-  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-openshift.yaml
-  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-nodeport.yaml
+  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-openshift.yaml
+  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-nodeport.yaml
 ```
 
 #### Using other clouds
@@ -116,8 +116,8 @@ If you're using any cloud provider that supports the LoadBalancer service type, 
 
 ```
 $ oc login -u system:admin
-$ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-openshift.yaml
-$ oc create -f https://github.com/fission/fission/releases/download/nightly20170621/fission-cloud.yaml
+$ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-openshift.yaml
+$ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-cloud.yaml
 ```
 After these steps, you should be able to run fission client as with kubernetes.
 
@@ -128,19 +128,19 @@ After these steps, you should be able to run fission client as with kubernetes.
 Get the CLI binary for Mac:
 
 ```
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
 ```
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Windows
 
 For Windows, you can use the linux binary on WSL. Or you can download
-this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/nightly20170621/fission-cli-windows.exe)
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-windows.exe)
 
 ### Run an example
 
@@ -210,7 +210,7 @@ only supported message queue.
 You can install NATS Streaming on your Kubernetes cluster with:
 
 ```
-  $ kubectl create -f fission-nats.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-nats.yaml
 ```
 
 You can subscribe to a NATS Streaming queue with a command like this:
