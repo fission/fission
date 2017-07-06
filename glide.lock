@@ -88,6 +88,21 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/nats-io/go-nats
+  version: 6949c8e06a246e4177961aab22940b5c411e48f0
+  subpackages:
+  - encoders/builtin
+  - util
+- name: github.com/nats-io/go-nats-streaming
+  version: 6e620057a207bd61e992c1c5b6a2de7b6a4cb010
+  subpackages:
+  - pb
+- name: github.com/nats-io/nats-streaming-server
+  version: 7a922646104d066c98527959455993231fadd168
+  subpackages:
+  - util
+- name: github.com/nats-io/nuid
+  version: 289cccf02c178dc782430d534e3c1f5b72af807f
 - name: github.com/pborman/uuid
   version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
 - name: github.com/PuerkitoBio/purell

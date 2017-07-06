@@ -82,6 +82,21 @@ func main() {
 		{Name: "list", Usage: "List Time triggers", Flags: []cli.Flag{}, Action: ttList},
 	}
 
+	// Message queue trigger
+	mqtNameFlag := cli.StringFlag{Name: "name", Usage: "Message queue Trigger name"}
+	mqtFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
+	mqtFnUidFlag := cli.StringFlag{Name: "uid", Usage: "Function UID (optional; uses latest if unspecified)"}
+	mqtMQTypeFlag := cli.StringFlag{Name: "mqtype", Usage: "Message queue type, e.g. nats-streaming  (optional; uses \"nats-streaming\" if unspecified)"}
+	mqtTopicFlag := cli.StringFlag{Name: "topic", Usage: "Message queue Topic the trigger listens on"}
+	mqtRespTopicFlag := cli.StringFlag{Name: "resptopic", Usage: "Topic that the function response is sent on (optional; response discarded if unspecified)"}
+	mqtSubcommands := []cli.Command{
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create Message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, mqtFnUidFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag}, Action: mqtCreate},
+		{Name: "get", Usage: "Get message queue trigger", Flags: []cli.Flag{}, Action: mqtGet},
+		{Name: "update", Usage: "Update message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtTopicFlag, mqtRespTopicFlag}, Action: mqtUpdate},
+		{Name: "delete", Usage: "Delete message queue trigger", Flags: []cli.Flag{mqtNameFlag}, Action: mqtDelete},
+		{Name: "list", Usage: "List message queue triggers", Flags: []cli.Flag{mqtMQTypeFlag}, Action: mqtList},
+	}
+
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
@@ -112,6 +127,7 @@ func main() {
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
 		{Name: "timetrigger", Aliases: []string{"tt", "timer"}, Usage: "Manage Time triggers (timers) for functions", Subcommands: ttSubcommands},
+		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 

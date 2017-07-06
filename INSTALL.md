@@ -200,3 +200,22 @@ To setup Fission-ui with fission in k8s is simple:
 Then open `http://node-ip:31319` to use Fission-ui.
 
 For more infomation, please check out [Fission-ui Readme](https://github.com/fission/fission-ui/blob/master/README.md).
+
+### Install NATS for message-queue based triggers (Optional)
+
+Fission supports message queue triggers that allow you to invoke
+functions based on events in a queue.  For now, NATS-Streaming is the
+only supported message queue.
+
+You can install NATS Streaming on your Kubernetes cluster with:
+
+```
+  $ kubectl create -f fission-nats.yaml
+```
+
+You can subscribe to a NATS Streaming queue with a command like this:
+(See `fission mqtrigger --help` for details)
+
+```
+  $ fission mqtrigger create --name myQueueTrigger --function processEvent --topic "myQueue.request" 
+```

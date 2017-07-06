@@ -49,3 +49,21 @@ spec:
     nodePort: 31315
   selector:
     svc: influxdb
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-streaming
+  namespace: fission
+  labels:
+    svc: nats-streaming
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 4222
+    targetPort: 4222
+    nodePort: 31316
+  selector:
+    svc: nats-streaming

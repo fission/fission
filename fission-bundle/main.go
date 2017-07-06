@@ -8,6 +8,7 @@ import (
 	"github.com/fission/fission/controller"
 	"github.com/fission/fission/kubewatcher"
 	"github.com/fission/fission/logger"
+	"github.com/fission/fission/mqtrigger"
 	"github.com/fission/fission/poolmgr"
 	"github.com/fission/fission/router"
 	"github.com/fission/fission/timer"
@@ -61,6 +62,13 @@ func runTimer(controllerUrl, routerUrl string) {
 	}
 }
 
+func runMessageQueueMgr(controllerUrl, routerUrl string) {
+	err := messagequeue.Start(controllerUrl, routerUrl)
+	if err != nil {
+		log.Fatalf("Error starting timer: %v", err)
+	}
+}
+
 func getPort(portArg interface{}) int {
 	portArgStr := portArg.(string)
 	port, err := strconv.Atoi(portArgStr)
@@ -96,6 +104,7 @@ Usage:
   fission-bundle --kubewatcher [--controllerUrl=<url> --routerUrl=<url>]
   fission-bundle --logger
   fission-bundle --timer [--controllerUrl=<url> --routerUrl=<url>]
+  fission-bundle --mqt   [--controllerUrl=<url> --routerUrl=<url>]
 Options:
   --controllerPort=<port>  Port that the controller should listen on.
   --routerPort=<port>      Port that the router should listen on.
@@ -109,6 +118,7 @@ Options:
   --kubewatcher            Start Kubernetes events watcher.
   --logger                 Start logger.
   --timer 		           Start Timer.
+  --mqt 		           Start message queue trigger.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {
@@ -147,6 +157,10 @@ Options:
 
 	if arguments["--timer"] == true {
 		runTimer(controllerUrl, routerUrl)
+	}
+
+	if arguments["--mqt"] == true {
+		runMessageQueueMgr(controllerUrl, routerUrl)
 	}
 
 	select {}

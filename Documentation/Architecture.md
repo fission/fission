@@ -95,6 +95,19 @@ While a few simple retries are done, there isn't yet a reliable
 message bus between Kubewatcher and the function.  Work for this is
 tracked in issue #64.
 
+Message Queue Trigger
+---------------------
+
+A message queue trigger binds a message queue topic to a function:
+events from that topic cause the function to be invoked with the
+message as the body of the request. The trigger may also contain a
+response topic: if specified, the function's output is sent to this
+response.
+
+Here's a diagram of the components:
+
+![Message queue trigger Diagram](https://user-images.githubusercontent.com/202578/27012344-9457cb24-4f00-11e7-8d6b-926ff01637b3.jpg)
+
 Environment Container
 ---------------------
 
@@ -113,7 +126,7 @@ volume shared between fetcher and this environment container.  Poolmgr
 then requests the container to load the function.
 
 Logger
------------
+------
 
 Logger helps to forward function logs to centralized db service for log
 persistence. Currently only influxdb is supported to store logs.
