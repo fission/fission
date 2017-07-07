@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require 'benchmark'
 
 module Fission
   CODE_PATH = '/userfunc/user'
@@ -7,7 +8,9 @@ module Fission
     def self.call(env)
       request = Request.new(env)
 
-      load CODE_PATH
+      request.logger.info("Codepath defaulting to #{CODE_PATH}")
+      time = Benchmark.measure { load CODE_PATH }
+      request.logger.info("User code loaded in #{(time.real * 1000).round(3)}ms")
 
       Rack::Response.new([], 201).finish
 
