@@ -6,27 +6,36 @@ import (
 	"os"
 	"os/exec"
 	"io/ioutil"
+	"flag"
+	"path/filepath"
+	"strings"
+	"io"
 )
 
 const (
-	CODE_PATH          = "/userfunc/user"
-	INTERNAL_CODE_PATH = "/bin/userfunc"
+	DEFAULT_CODE_PATH          = "/userfunc/user"
+	DEFAULT_INTERNAL_CODE_PATH = "/bin/userfunc"
 )
 
 var specialized bool
 
-func specializeHandler(w http.ResponseWriter, r *http.Request) {
+type BinaryServer struct {
+	fetchedCodePath  string
+	internalCodePath string
+}
+
+func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
 	if specialized {
 		w.WriteHeader(400)
 		w.Write([]byte("Not a generic container"))
 		return
 	}
 
-	_, err := os.Stat(CODE_PATH)
+	_, err := os.Stat(bs.fetchedCodePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(CODE_PATH + ": not found"))
+			w.Write([]byte(bs.fetchedCodePath + ": not found"))
 			return
 		} else {
 			panic(err)
@@ -36,13 +45,13 @@ func specializeHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO Check if executable is correct architecture/executable.
 
 	// Copy the executable to ensure that file is executable and immutable.
-	userFunc, err := ioutil.ReadFile(CODE_PATH);
+	userFunc, err := ioutil.ReadFile(bs.fetchedCodePath);
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to read executable."))
 		return
 	}
-	err = ioutil.WriteFile(INTERNAL_CODE_PATH, userFunc, 0554)
+	err = ioutil.WriteFile(bs.internalCodePath, userFunc, 0555)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to write executable to target location."))
@@ -54,18 +63,45 @@ func specializeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Done")
 }
 
-func invocationHandler(w http.ResponseWriter, r *http.Request) {
+func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request) {
 	if !specialized {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Generic container: no requests supported"))
 		return
 	}
 
-	cmd := exec.Command(INTERNAL_CODE_PATH)
+	// CGI-like passing of environment variables
+	execEnv := NewEnv(nil)
+	execEnv.SetEnv(&EnvVar{"REQUEST_METHOD", r.Method})
+	execEnv.SetEnv(&EnvVar{"REQUEST_URI", r.RequestURI})
+	execEnv.SetEnv(&EnvVar{"CONTENT_LENGTH", fmt.Sprintf("%d", r.ContentLength)})
+
+	for header, val := range r.Header {
+		// TODO convert array to string
+		execEnv.SetEnv(&EnvVar{fmt.Sprintf("HTTP_%s", strings.ToUpper(header)), val[0]})
+	}
+
+	cmd := exec.Command(bs.internalCodePath)
+	cmd.Env = execEnv.ToStringEnv()
+
+	if r.ContentLength != 0 {
+		fmt.Println(r.ContentLength)
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			panic(err)
+		}
+		_, err = io.Copy(stdin, r.Body)
+		if err != nil {
+			panic(err)
+		}
+		stdin.Close()
+	}
+
 	out, err := cmd.Output()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Function error: %s", err)))
+		panic(err)
 		return
 	}
 
@@ -74,11 +110,22 @@ func invocationHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", invocationHandler)
-	http.HandleFunc("/specialize", specializeHandler)
+	codePath := flag.String("c", DEFAULT_CODE_PATH, "Path to expected fetched executable.")
+	internalCodePath := flag.String("i", DEFAULT_INTERNAL_CODE_PATH, "Path to specialized executable.")
+	flag.Parse()
+	absInternalCodePath, err := filepath.Abs(*internalCodePath);
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Using fetched code path: %s\n", *codePath)
+	fmt.Printf("Using internal code path: %s\n", absInternalCodePath)
+
+	server := &BinaryServer{*codePath, absInternalCodePath}
+	http.HandleFunc("/", server.InvocationHandler)
+	http.HandleFunc("/specialize", server.SpecializeHandler)
 
 	fmt.Println("Listening on 8888 ...")
-	err := http.ListenAndServe(":8888", nil)
+	err = http.ListenAndServe(":8888", nil)
 	if err != nil {
 		panic(err)
 	}
