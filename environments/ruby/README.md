@@ -9,8 +9,9 @@ The environment works via convention where you create a Ruby method
 called `handler` with a single optional argument, a `Fission::Context`
 object.
 
-The `Fission::Context` object gives access to the Rack env, and a
-request object. Please see `fission/context.rb` for the public api.
+The `Fission::Context` object gives access to the Rack env, a
+request object, and a logger. Please see `fission/context.rb` for the
+public api.
 
 The `Fission::Request` object is a subclass of `Rack::Request` and
 provides access to parameters and headers. See `fission/request.rb`

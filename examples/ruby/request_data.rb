@@ -1,18 +1,19 @@
 # frozen_string_literal: true
 def handler(context)
-  request = context.request
+  context.logger.info("Received request")
+
   msg = <<~MSG
     ---ENV---
-    #{request.env.map { |h| h.join('=') }.join("\n") }
+    #{context.request.env.map { |h| h.join('=') }.join("\n") }
 
     ---HEADERS---
-    #{request.headers.map { |h| h.join(': ') }.join("\n") }
+    #{context.request.headers.map { |h| h.join(': ') }.join("\n") }
 
     ---PARAMS---
-    #{request.params.map { |h| h.join('=') }.join("\n") }
+    #{context.request.params.map { |h| h.join('=') }.join("\n") }
 
     --BODY--
-    #{request.body.read}
+    #{context.request.body.read}
   MSG
 
   Rack::Response.new([msg]).finish

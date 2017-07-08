@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
 require 'rack'
+require 'logger'
 
 require_relative 'fission/specializer'
 require_relative 'fission/handler'
 
 app = Rack::Builder.new do
-  use Rack::CommonLogger, $stderr
+  use Rack::Logger, Logger::DEBUG
 
   map "/specialize" do
     run Fission::Specializer
