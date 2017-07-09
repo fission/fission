@@ -23,7 +23,7 @@ routerPort: 31314
 functionNamespace: fission-function
 
 ## Set up openshift RBAC rule
-openshiftRBAC: false
+openshift: false
 
 ## Logger config
 logger:
