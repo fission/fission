@@ -10,7 +10,7 @@ serviceType: LoadBalancer
 image: fission/fission-bundle
 
 ## Fission image version
-imageTag: alpha20170124
+imageTag: nightly20170705
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -26,8 +26,15 @@ functionNamespace: fission-function
 openshiftRBAC: false
 
 ## Logger config
-loggerInfluxdbAdmin: admin
-loggerFluentdImage: fission/fluentd
+logger:
+  influxdbAdmin: "admin"
+  fluentdImage: fission/fluentd
 
 ## Fission ui config
 fissionUiImage: fission/fission-ui:0.1.0
+
+## Message queue trigger config
+### NATS Streaming
+nats:
+  authToken: "defaultFissionAuthToken"
+  clusterID: "fissionMQTrigger"

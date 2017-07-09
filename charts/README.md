@@ -52,9 +52,12 @@ The following table lists the configurable parameters of the Fission chart and t
 
 | Parameter              | Description                 | Default                    |
 | ---------------------- | --------------------------- | -------------------------- |
-| `loggerInfluxdbAdmin`  | Log database admin username | `admin`.                   |
-| `loggerFluentdImage`   | Logger fluentd image        | `fission/fluentd`          |
+| `logger.influxdbAdmin` | Log database admin username | `admin`.                   |
+| `logger.fluentdImage`  | Logger fluentd image        | `fission/fluentd`          |
 | `fissionUiImage`       | Fission ui image            | `fission/fission-ui:0.1.0` |
+| `nats.authToken`       | Nats streaming auth token   | `defaultFissionAuthToken`  |
+| `nats.clusterID`       | Nats streaming clusterID    | `fissionMQTrigger`         |
+
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
