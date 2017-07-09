@@ -266,7 +266,6 @@ func (ws *watchSubscription) eventDispatchLoop() {
 		// new kubewatch is created in the restartWatch() while the old kubewatch
 		// is being used in watchSubscription.stop().
 		if ws.isStopped() {
-			ws.stop()
 			break
 		}
 		ev, more := <-ws.kubeWatch.ResultChan()
@@ -302,7 +301,6 @@ func (ws *watchSubscription) eventDispatchLoop() {
 		if err != nil {
 			log.Printf("Error getting resourceVersion from object: %v", err)
 		} else {
-			log.Printf("rv=%v", rv)
 			ws.lastResourceVersion = rv
 		}
 
