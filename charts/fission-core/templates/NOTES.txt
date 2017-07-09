@@ -1,10 +1,13 @@
 1. Install the client CLI.
 
 Mac:
-  $ curl http://fission.io/mac/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 
 Linux:
-  $ curl http://fission.io/linux/fission > fission && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+
+Windows:
+  For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-windows.exe
 
 2. Set the FISSION_URL and FISSION_ROUTER environment variables.
 FISSION_URL is used by the fission CLI to find the server.

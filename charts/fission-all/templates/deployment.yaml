@@ -70,7 +70,7 @@ userNames:
 
 {{ else }}
 
-# For minikube, GKE
+# For all environments except openshift
 
 ---
 apiVersion: v1

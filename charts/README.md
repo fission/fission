@@ -5,17 +5,17 @@
 
 ## Prerequisites
 
-- Kubernetes 1.6+ with Beta APIs and RBAC enabled
+- Kubernetes 1.6+ with Beta APIs enabled
 
 
 ## Helm charts
 
 The following table lists two helm charts for Fission.
 
-| Parameter      | Description                            |
-| ---------------| ---------------------------------------|
-| `fission-core` | Try with essential features of Fission |
-| `fission-all`  | Enjoy all cool features of Fission     |
+| Parameter      | Description                                                                            |
+| ---------------| ---------------------------------------------------------------------------------------|
+| `fission-core` | FaaS essentials, and triggers for HTTP, Timers and Kubernetes Watches                  |
+| `fission-all`  | Log aggregation with fluentd and InfluxDB; NATS for message queue triggers; Fission-UI |
 
 ## Installing the chart
 
