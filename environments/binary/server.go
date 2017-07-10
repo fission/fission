@@ -1,15 +1,15 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
-	"io/ioutil"
-	"flag"
 	"path/filepath"
 	"strings"
-	"io"
 )
 
 const (
@@ -42,10 +42,10 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// TODO Check if executable is correct architecture/executable.
+	// Future: Check if executable is correct architecture/executable.
 
 	// Copy the executable to ensure that file is executable and immutable.
-	userFunc, err := ioutil.ReadFile(bs.fetchedCodePath);
+	userFunc, err := ioutil.ReadFile(bs.fetchedCodePath)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to read executable."))
@@ -77,10 +77,10 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 	execEnv.SetEnv(&EnvVar{"CONTENT_LENGTH", fmt.Sprintf("%d", r.ContentLength)})
 
 	for header, val := range r.Header {
-		// TODO convert array to string
 		execEnv.SetEnv(&EnvVar{fmt.Sprintf("HTTP_%s", strings.ToUpper(header)), val[0]})
 	}
 
+	// Future: could be improved by keeping subprocess open while environment is specialized
 	cmd := exec.Command(bs.internalCodePath)
 	cmd.Env = execEnv.ToStringEnv()
 
@@ -88,11 +88,14 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 		fmt.Println(r.ContentLength)
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Failed to get STDIN pipe: %s", err)))
 			panic(err)
 		}
 		_, err = io.Copy(stdin, r.Body)
 		if err != nil {
-			panic(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Failed to pipe input: %s", err)))
 		}
 		stdin.Close()
 	}
@@ -101,7 +104,6 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Function error: %s", err)))
-		panic(err)
 		return
 	}
 
@@ -113,7 +115,7 @@ func main() {
 	codePath := flag.String("c", DEFAULT_CODE_PATH, "Path to expected fetched executable.")
 	internalCodePath := flag.String("i", DEFAULT_INTERNAL_CODE_PATH, "Path to specialized executable.")
 	flag.Parse()
-	absInternalCodePath, err := filepath.Abs(*internalCodePath);
+	absInternalCodePath, err := filepath.Abs(*internalCodePath)
 	if err != nil {
 		panic(err)
 	}

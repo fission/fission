@@ -1,8 +1,8 @@
 package main
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 )
 
 // Utility functions for working with environment variables
@@ -17,7 +17,7 @@ type EnvVar struct {
 
 func FromString(rawEnvVar string) *EnvVar {
 	parts := strings.SplitN(rawEnvVar, "=", 2)
-	return &EnvVar{parts[0],parts[1]}
+	return &EnvVar{parts[0], parts[1]}
 }
 
 func (ev *EnvVar) ToString() string {
@@ -29,7 +29,7 @@ func (e *Env) SetEnv(envVar *EnvVar) {
 }
 
 func (e *Env) ToStringEnv() []string {
-	var result []string;
+	var result []string
 	for _, envVar := range e.Vars {
 		result = append(result, envVar.ToString())
 	}
@@ -45,4 +45,3 @@ func NewEnv(stringEnv []string) *Env {
 	}
 	return env
 }
-
