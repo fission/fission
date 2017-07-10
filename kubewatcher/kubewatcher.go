@@ -191,8 +191,7 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 			fmt.Sprintf("watch doesn't exist: %v", w.Metadata))
 	}
 	delete(kw.watches, w.Metadata.Uid)
-	atomic.StoreInt32(ws.stopped, 1)
-	ws.kubeWatch.Stop()
+	ws.stop()
 	return nil
 }
 
@@ -262,50 +261,72 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 func (ws *watchSubscription) eventDispatchLoop() {
 	log.Println("Listening to watch ", ws.Watch.Metadata.Name)
 	for {
-		for {
-			ev, more := <-ws.kubeWatch.ResultChan()
-			if !more {
-				log.Println("Watch stopped", ws.Watch.Metadata.Name)
-				break
-			}
-			if ev.Type == watch.Error {
-				e := apierrs.FromObject(ev.Object)
-				log.Println("Watch error, retrying in a second: %v", e)
-				// Start from the beginning to get around "too old resource version"
-				ws.lastResourceVersion = ""
-				time.Sleep(time.Second)
-				break
-			}
-			rv, err := getResourceVersion(ev.Object)
-			if err != nil {
-				log.Printf("Error getting resourceVersion from object: %v", err)
-			} else {
-				log.Printf("rv=%v", rv)
-				ws.lastResourceVersion = rv
-			}
-
-			// Serialize the object
-			var buf bytes.Buffer
-			err = printKubernetesObject(ev.Object, &buf)
-			if err != nil {
-				log.Printf("Failed to serialize object: %v", err)
-				// TODO send a POST request indicating error
-			}
-
-			// Event and object type aren't in the serialized object
-			headers := map[string]string{
-				"Content-Type":             "application/json",
-				"X-Kubernetes-Event-Type":  string(ev.Type),
-				"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
-			}
-			// Event and object type aren't in the serialized object
-			ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
+		// check watchSubscription is stopped or not before waiting for event
+		// comes from the kubeWatch.ResultChan(). This fix the edge case that
+		// new kubewatch is created in the restartWatch() while the old kubewatch
+		// is being used in watchSubscription.stop().
+		if ws.isStopped() {
+			break
 		}
-		if atomic.LoadInt32(ws.stopped) == 0 {
+		ev, more := <-ws.kubeWatch.ResultChan()
+		if !more {
+			if ws.isStopped() {
+				// watch is removed by user.
+				log.Println("Watch stopped", ws.Watch.Metadata.Name)
+				return
+			} else {
+				// watch closed due to timeout, restart it.
+				log.Printf("Watch %v timed out, restarting", ws.Watch.Metadata.Name)
+				err := ws.restartWatch()
+				if err != nil {
+					log.Panicf("Failed to restart watch: %v", err)
+				}
+				continue
+			}
+		}
+
+		if ev.Type == watch.Error {
+			e := apierrs.FromObject(ev.Object)
+			log.Println("Watch error, retrying in a second: %v", e)
+			// Start from the beginning to get around "too old resource version"
+			ws.lastResourceVersion = ""
+			time.Sleep(time.Second)
 			err := ws.restartWatch()
 			if err != nil {
 				log.Panicf("Failed to restart watch: %v", err)
 			}
+			continue
 		}
+		rv, err := getResourceVersion(ev.Object)
+		if err != nil {
+			log.Printf("Error getting resourceVersion from object: %v", err)
+		} else {
+			ws.lastResourceVersion = rv
+		}
+
+		// Serialize the object
+		var buf bytes.Buffer
+		err = printKubernetesObject(ev.Object, &buf)
+		if err != nil {
+			log.Printf("Failed to serialize object: %v", err)
+			// TODO send a POST request indicating error
+		}
+
+		// Event and object type aren't in the serialized object
+		headers := map[string]string{
+			"Content-Type":             "application/json",
+			"X-Kubernetes-Event-Type":  string(ev.Type),
+			"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
+		}
+		ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
 	}
+}
+
+func (ws *watchSubscription) stop() {
+	atomic.StoreInt32(ws.stopped, 1)
+	ws.kubeWatch.Stop()
+}
+
+func (ws *watchSubscription) isStopped() bool {
+	return atomic.LoadInt32(ws.stopped) == 1
 }
