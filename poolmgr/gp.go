@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -309,13 +310,13 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *fission.Metadata) er
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
-	poolDeploymentName := fmt.Sprintf("env-%v", gp.env.Metadata.Name)
+	poolDeploymentName := fmt.Sprintf("env-%v-", strings.ToLower(gp.env.Metadata.Name))
 
 	sharedMountPath := "/userfunc"
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
-			Name:   poolDeploymentName,
-			Labels: gp.labelsForPool,
+			GenerateName: poolDeploymentName,
+			Labels:       gp.labelsForPool,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &gp.replicas,
