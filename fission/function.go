@@ -432,3 +432,55 @@ func fnPods(c *cli.Context) error {
 
 	return err
 }
+
+func fnInvoke(c *cli.Context) error {
+	// Temporary, switch once internal function routes are extracted to separate internal router.
+	routerUrl := os.Getenv("FISSION_ROUTER")
+	if len(routerUrl) == 0 {
+		fatal("Need FISSION_ROUTER set to your fission router.")
+	}
+
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need name of function, use --name")
+	}
+
+	httpMethod := c.String("method")
+	if httpMethod != http.MethodGet &&
+		httpMethod != http.MethodDelete &&
+		httpMethod != http.MethodPost &&
+		httpMethod != http.MethodPut {
+		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", httpMethod))
+	}
+
+	input := c.String("body")
+	headers := c.StringSlice("header")
+	url := fmt.Sprintf("http://%s/fission-function/%s", routerUrl, fnName)
+
+	req, err := http.NewRequest(httpMethod, url, strings.NewReader(input))
+	if err != nil {
+		panic(err)
+		fatal("Failed to create request.")
+	}
+
+	for _, header := range headers {
+		headerKeyValue := strings.SplitN(header, ":", 2)
+		if len(headerKeyValue) != 2 {
+			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue));
+			continue
+		}
+		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fatal("Request failed.")
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Print(string(body))
+
+	return nil
+}
