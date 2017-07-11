@@ -19,6 +19,12 @@ if (!argv.port) {
     argv.port = 8888;
 }
 
+// To catch unhandled exceptions thrown by user code async callbacks,
+// these exceptions cannot be catched by try-catch in user function invocation code below
+process.on('uncaughtException', (err) => {
+    console.error(`Caught exception: ${err}\n`);
+    console.log('Container resume running')
+});
 
 // Node resolves module paths according to a file's location. We load
 // the file from argv.codepath, but tell users to put dependencies in
@@ -27,7 +33,10 @@ if (!argv.port) {
 // function deps in the right place in argv.codepath; but for now we
 // just symlink the function's node_modules to the server's
 // node_modules.
-fs.symlinkSync('/usr/src/app/node_modules', `${path.dirname(argv.codepath)}/node_modules`);
+// try to symlink because the link exists if the container restarts
+if (!fs.existsSync(`${path.dirname(argv.codepath)}/node_modules`)) {
+    fs.symlinkSync('/usr/src/app/node_modules', `${path.dirname(argv.codepath)}/node_modules`);
+}
 
 // User function.  Starts out undefined.
 let userFunction;
@@ -47,10 +56,7 @@ function specialize(req, res) {
 
     // Read and load the code. It's placed there securely by the fission runtime.
     try {
-        var startTime = process.hrtime();
-        userFunction = require(argv.codepath);
-        var elapsed = process.hrtime(startTime);
-        console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]/1000000}ms`);
+        loadUserFunction();
     } catch(e) {
         console.error(`user code load error: ${e}`);
         res.status(500).send(JSON.stringify(e));
@@ -59,9 +65,16 @@ function specialize(req, res) {
     res.status(202).send();
 }
 
+function loadUserFunction() {
+    const startTime = process.hrtime();
+    userFunction = require(argv.codepath);
+    const elapsed = process.hrtime(startTime);
+    console.log(`user code loaded in ${elapsed[0]}sec ${elapsed[1]/1000000}ms`);
+}
+
 
 // Request logger
-app.use(morgan('combined'))
+app.use(morgan('combined'));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -72,8 +85,18 @@ app.post('/specialize', specialize);
 // Generic route -- all http requests go to the user function.
 app.all('/', function (req, res) {
     if (!userFunction) {
-        res.status(500).send("Generic container: no requests supported");
-        return;
+        if (fs.existsSync(argv.codepath)) {
+            try {
+                loadUserFunction();
+            } catch(e) {
+                console.error(`user code load error: ${e}`);
+                res.status(500).send(JSON.stringify(e));
+                return;
+            }
+        } else {
+            res.status(500).send("Generic container: no requests supported");
+            return;
+        }
     }
 
     const context = {
