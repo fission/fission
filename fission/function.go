@@ -405,7 +405,7 @@ func fnInvoke(c *cli.Context) error {
 	// Temporary, switch once internal function routes are extracted to separate internal router.
 	routerUrl := os.Getenv("FISSION_ROUTER")
 	if len(routerUrl) == 0 {
-		fatal("Need FISSION_ROUTER set to your fission router.")
+		fatal("Need FISSION_ROUTER set to your Fission router.")
 	}
 
 	fnName := c.String("name")
@@ -421,9 +421,13 @@ func fnInvoke(c *cli.Context) error {
 		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", httpMethod))
 	}
 
+	url := fmt.Sprintf("%s/fission-function/%s", routerUrl, fnName)
+	if !strings.HasPrefix(url, "http") {
+		url = fmt.Sprintf("http://%s", url)
+	}
+
 	input := c.String("body")
 	headers := c.StringSlice("header")
-	url := fmt.Sprintf("http://%s/fission-function/%s", routerUrl, fnName)
 
 	req, err := http.NewRequest(httpMethod, url, strings.NewReader(input))
 	if err != nil {
@@ -434,7 +438,7 @@ func fnInvoke(c *cli.Context) error {
 	for _, header := range headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)
 		if len(headerKeyValue) != 2 {
-			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue));
+			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue))
 			continue
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
