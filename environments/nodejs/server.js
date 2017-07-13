@@ -33,7 +33,7 @@ process.on('uncaughtException', (err) => {
 // function deps in the right place in argv.codepath; but for now we
 // just symlink the function's node_modules to the server's
 // node_modules.
-// try to symlink because the link exists if the container restarts
+// Check for symlink, because the link exists if the container restarts
 if (!fs.existsSync(`${path.dirname(argv.codepath)}/node_modules`)) {
     fs.symlinkSync('/usr/src/app/node_modules', `${path.dirname(argv.codepath)}/node_modules`);
 }
@@ -85,16 +85,15 @@ app.post('/specialize', specialize);
 // Generic route -- all http requests go to the user function.
 app.all('/', function (req, res) {
     if (!userFunction) {
-        if (fs.existsSync(argv.codepath)) {
-            try {
-                loadUserFunction();
-            } catch(e) {
-                console.error(`user code load error: ${e}`);
-                res.status(500).send(JSON.stringify(e));
-                return;
-            }
-        } else {
+        if (!fs.existsSync(argv.codepath)) {
             res.status(500).send("Generic container: no requests supported");
+            return;
+        }
+        try {
+            loadUserFunction();
+        } catch (e) {
+            console.error(`User code load error: ${e}`);
+            res.status(500).send(JSON.stringify(e));
             return;
         }
     }
