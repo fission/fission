@@ -210,6 +210,6 @@ func Start() {
 	r.HandleFunc("/v1/log", createLogSymlink).Methods("POST")
 	r.HandleFunc("/v1/log/{pod}", removeLogSymlink).Methods("DELETE")
 	address := fmt.Sprintf(":%v", 1234)
-	log.Printf("starting poolmgr at port %s", address)
+	log.Printf("starting logger at port %s", address)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }
