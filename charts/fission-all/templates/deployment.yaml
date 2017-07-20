@@ -195,7 +195,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
-      serviceAccountName: fission-admin
+      serviceAccount: fission-admin
 
 ---
 apiVersion: extensions/v1beta1
@@ -216,6 +216,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
+      serviceAccount: fission-admin
 
 ---
 apiVersion: v1
@@ -366,6 +367,7 @@ spec:
             - name: fission-log
               mountPath: /var/log/fission
               readOnly: false
+      serviceAccount: fission-admin
       volumes:
         - name: container-log
           hostPath:
@@ -417,6 +419,7 @@ spec:
       - name: kubectl-proxy
         image: lachlanevenson/k8s-kubectl
         args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
+      serviceAccount: fission-admin
 
 ---
 apiVersion: extensions/v1beta1

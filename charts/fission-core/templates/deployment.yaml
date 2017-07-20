@@ -216,6 +216,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
+      serviceAccount: fission-admin
 
 ---
 apiVersion: v1
