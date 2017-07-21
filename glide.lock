@@ -1,5 +1,5 @@
-hash: b28eb2d2c531870a84e3a77394dfdb847464618ace33295ce440f0af5232000e
-updated: 2017-07-21T21:50:44.670997806+08:00
+hash: 20074e3013ddf8bd53aa5a1d7ed044f7355a5636e417294569f25e7be5538ba3
+updated: 2017-07-21T21:54:40.29171796+08:00
 imports:
 - name: github.com/coreos/etcd
   version: 36c655f29b9fef15c4094093c7407967c5c5bb96
@@ -135,7 +135,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 - name: k8s.io/apimachinery
-  version: 75b8dd260ef0469d96d578705a87cffd0e09dab8
+  version: 85ace5365f33b16fc735c866a12e3c765b9700f2
   subpackages:
   - pkg/api/errors
   - pkg/api/meta
@@ -176,7 +176,7 @@ imports:
   - pkg/watch
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
-  version: 3627aeb7d4f6ade38f995d2c923e459146493c7e
+  version: 21300e3e11c918b8e6a70fb7293b310683d6c046
   subpackages:
   - discovery
   - kubernetes

@@ -20,7 +20,7 @@ import:
   subpackages:
   - context
 - package: k8s.io/client-go
-  version: v3.0.0-beta.0
+  version: v3.0.0
   subpackages:
   - kubernetes
   - pkg/api

@@ -27,14 +27,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fission/fission"
-	"github.com/fission/fission/publisher"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/publisher"
 )
 
 type requestType int
