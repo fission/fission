@@ -25,8 +25,10 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 // returns one of http.Method*
@@ -62,7 +64,6 @@ func htCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
-	fnUid := c.String("uid")
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
 		fatal("Need a trigger URL, use --url")
@@ -75,15 +76,18 @@ func htCreate(c *cli.Context) error {
 	// just name triggers by uuid.
 	triggerName := uuid.NewV4().String()
 
-	ht := &fission.HTTPTrigger{
-		Metadata: fission.Metadata{
-			Name: triggerName,
+	ht := &tpr.Httptrigger{
+		Metadata: api.ObjectMeta{
+			Name:      triggerName,
+			Namespace: api.NamespaceDefault,
 		},
-		UrlPattern: triggerUrl,
-		Method:     getMethod(method),
-		Function: fission.Metadata{
-			Name: fnName,
-			Uid:  fnUid,
+		Spec: fission.HTTPTriggerSpec{
+			RelativeURL: triggerUrl,
+			Method:      getMethod(method),
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: fnName,
+			},
 		},
 	}
 
@@ -105,11 +109,21 @@ func htUpdate(c *cli.Context) error {
 		fatal("Need name of trigger, use --name")
 	}
 
-	ht, err := client.HTTPTriggerGet(&fission.Metadata{Name: htName})
+	// update function ref
+	newFn := c.String("function")
+	if len(newFn) == 0 {
+		fatal("Nothing to update. Use --function to specify a new function.")
+	}
+
+	ht, err := client.HTTPTriggerGet(&api.ObjectMeta{
+		Name:      htName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "get HTTP trigger")
 
-	newUid := c.String("uid")
-	ht.Function.Uid = newUid
+	if len(newFn) > 0 {
+		ht.Spec.FunctionReference.Name = newFn
+	}
 
 	_, err = client.HTTPTriggerUpdate(ht)
 	checkErr(err, "update HTTP trigger")
@@ -125,7 +139,10 @@ func htDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.HTTPTriggerDelete(&fission.Metadata{Name: htName})
+	err := client.HTTPTriggerDelete(&api.ObjectMeta{
+		Name:      htName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", htName)
@@ -140,10 +157,10 @@ func htList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION_NAME", "FUNCTION_UID")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION_NAME")
 	for _, ht := range hts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			ht.Metadata.Name, ht.Method, ht.UrlPattern, ht.Function.Name, ht.Function.Uid)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
+			ht.Metadata.Name, ht.Spec.Method, ht.Spec.RelativeURL, ht.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

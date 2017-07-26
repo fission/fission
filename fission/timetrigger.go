@@ -23,8 +23,10 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 func ttCreate(c *cli.Context) error {
@@ -38,20 +40,22 @@ func ttCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
-	fnUid := c.String("uid")
 	cron := c.String("cron")
 	if len(cron) == 0 {
-		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', '@hourly', use --cron")
+		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	tt := &fission.TimeTrigger{
-		Metadata: fission.Metadata{
-			Name: name,
+	tt := &tpr.Timetrigger{
+		Metadata: api.ObjectMeta{
+			Name:      name,
+			Namespace: api.NamespaceDefault,
 		},
-		Cron: cron,
-		Function: fission.Metadata{
-			Name: fnName,
-			Uid:  fnUid,
+		Spec: fission.TimeTriggerSpec{
+			Cron: cron,
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: fnName,
+			},
 		},
 	}
 
@@ -73,12 +77,26 @@ func ttUpdate(c *cli.Context) error {
 		fatal("Need name of trigger, use --name")
 	}
 
-	tt, err := client.TimeTriggerGet(&fission.Metadata{Name: ttName})
-	checkErr(err, "get Time trigger")
+	tt, err := client.TimeTriggerGet(&api.ObjectMeta{
+		Name:      ttName,
+		Namespace: api.NamespaceDefault,
+	})
+	checkErr(err, "get time trigger")
 
+	updated := false
 	newCron := c.String("cron")
 	if len(newCron) != 0 {
-		tt.Cron = newCron
+		tt.Spec.Cron = newCron
+		updated = true
+	}
+	fnName := c.String("function")
+	if len(fnName) > 0 {
+		tt.Spec.FunctionReference.Name = fnName
+		updated = true
+	}
+
+	if !updated {
+		fatal("Nothing to update. Use --cron or --function.")
 	}
 
 	_, err = client.TimeTriggerUpdate(tt)
@@ -95,7 +113,10 @@ func ttDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.TimeTriggerDelete(&fission.Metadata{Name: ttName})
+	err := client.TimeTriggerDelete(&api.ObjectMeta{
+		Name:      ttName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", ttName)
@@ -110,11 +131,10 @@ func ttList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-		"NAME", "CRON", "FUNCTION_NAME", "FUNCTION_UID")
+	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
 	for _, tt := range tts {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-			tt.Metadata.Name, tt.Cron, tt.Function.Name, tt.Function.Uid)
+			tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

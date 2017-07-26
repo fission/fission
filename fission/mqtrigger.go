@@ -23,9 +23,11 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/mqtrigger/messageQueue"
+	"github.com/fission/fission/tpr"
 )
 
 func mqtCreate(c *cli.Context) error {
@@ -39,7 +41,7 @@ func mqtCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
-	fnUid := c.String("uid")
+
 	mqType := c.String("mqtype")
 	switch mqType {
 	case "":
@@ -58,24 +60,27 @@ func mqtCreate(c *cli.Context) error {
 	respTopic := c.String("resptopic")
 
 	if topic == respTopic {
+		// TODO maybe this should just be a warning, perhaps
+		// allow it behind a --force flag
 		fatal("Listen topic should not equal to response topic")
 	}
 
 	checkMQTopicAvailability(mqType, topic, respTopic)
 
-	fnMeta := fission.Metadata{
-		Name: fnName,
-		Uid:  fnUid,
-	}
-
-	mqt := fission.MessageQueueTrigger{
-		Metadata: fission.Metadata{
-			Name: mqtName,
+	mqt := tpr.Messagequeuetrigger{
+		Metadata: api.ObjectMeta{
+			Name:      mqtName,
+			Namespace: api.NamespaceDefault,
 		},
-		Function:         fnMeta,
-		MessageQueueType: mqType,
-		Topic:            topic,
-		ResponseTopic:    respTopic,
+		Spec: fission.MessageQueueTriggerSpec{
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: fnName,
+			},
+			MessageQueueType: mqType,
+			Topic:            topic,
+			ResponseTopic:    respTopic,
+		},
 	}
 
 	_, err := client.MessageQueueTriggerCreate(&mqt)
@@ -97,14 +102,33 @@ func mqtUpdate(c *cli.Context) error {
 	}
 	topic := c.String("topic")
 	respTopic := c.String("resptopic")
+	fnName := c.String("function")
 
-	mqt, err := client.MessageQueueTriggerGet(&fission.Metadata{Name: mqtName})
+	mqt, err := client.MessageQueueTriggerGet(&api.ObjectMeta{
+		Name:      mqtName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "get Time trigger")
 
-	checkMQTopicAvailability(mqt.MessageQueueType, topic, respTopic)
+	checkMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
 
-	mqt.Topic = topic
-	mqt.ResponseTopic = respTopic
+	updated := false
+	if len(topic) > 0 {
+		mqt.Spec.Topic = topic
+		updated = true
+	}
+	if len(respTopic) > 0 {
+		mqt.Spec.ResponseTopic = respTopic
+		updated = true
+	}
+	if len(fnName) > 0 {
+		mqt.Spec.FunctionReference.Name = fnName
+		updated = true
+	}
+
+	if !updated {
+		fatal("Nothing to update. Use --topic, --resptopic, or --function.")
+	}
 
 	_, err = client.MessageQueueTriggerUpdate(mqt)
 	checkErr(err, "update Time trigger")
@@ -120,7 +144,10 @@ func mqtDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.MessageQueueTriggerDelete(&fission.Metadata{Name: mqtName})
+	err := client.MessageQueueTriggerDelete(&api.ObjectMeta{
+		Name:      mqtName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", mqtName)
@@ -135,11 +162,11 @@ func mqtList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "FUNCTION_UID", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC")
 	for _, mqt := range mqts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-			mqt.Metadata.Name, mqt.Function.Name, mqt.Function.Uid, mqt.MessageQueueType, mqt.Topic, mqt.ResponseTopic)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+			mqt.Metadata.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic)
 	}
 	w.Flush()
 
