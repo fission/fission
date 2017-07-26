@@ -20,9 +20,11 @@ import (
 	"log"
 
 	"github.com/robfig/cron"
+	//	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
+	"github.com/fission/fission/tpr"
 )
 
 type requestType int
@@ -40,14 +42,14 @@ type (
 
 	timerRequest struct {
 		requestType
-		triggers        []fission.TimeTrigger
+		triggers        []tpr.Timetrigger
 		responseChannel chan *timerResponse
 	}
 	timerResponse struct {
 		error
 	}
 	timerTriggerWithCron struct {
-		trigger fission.TimeTrigger
+		trigger tpr.Timetrigger
 		cron    *cron.Cron
 	}
 )
@@ -62,7 +64,7 @@ func MakeTimer(publisher publisher.Publisher) *Timer {
 	return timer
 }
 
-func (timer *Timer) Sync(triggers []fission.TimeTrigger) error {
+func (timer *Timer) Sync(triggers []tpr.Timetrigger) error {
 	req := &timerRequest{
 		requestType:     SYNC,
 		triggers:        triggers,
@@ -84,16 +86,21 @@ func (timer *Timer) svc() {
 	}
 }
 
-func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
+func (timer *Timer) syncCron(triggers []tpr.Timetrigger) error {
+	// add new triggers or update existing ones
 	for _, t := range triggers {
-		if item, ok := timer.triggers[t.Name]; ok {
+		if item, ok := timer.triggers[t.Metadata.Name]; ok {
 			// the item exists, update the item if needed
-			if item.trigger.Uid == t.Uid {
+
+			// if both UID and ResourceVersion match, the
+			// two triggers are identical
+			if item.trigger.Metadata.UID == t.Metadata.UID &&
+				item.trigger.Metadata.ResourceVersion == t.Metadata.ResourceVersion {
 				continue
 			}
 
 			// update cron if the cron spec changed
-			if item.trigger.Cron != t.Cron {
+			if item.trigger.Spec.Cron != t.Spec.Cron {
 				// if there is an cron running, stop it
 				if item.cron != nil {
 					item.cron.Stop()
@@ -103,17 +110,18 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 
 			item.trigger = t
 		} else {
-			timer.triggers[t.Name] = &timerTriggerWithCron{
+			timer.triggers[t.Metadata.Name] = &timerTriggerWithCron{
 				trigger: t,
 				cron:    timer.newCron(t),
 			}
 		}
 	}
 
+	// process removed triggers
 	for k, v := range timer.triggers {
 		found := false
 		for _, t := range triggers {
-			if t.Name == k {
+			if t.Metadata.Name == k {
 				found = true
 				break
 			}
@@ -121,7 +129,7 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 		if !found {
 			if v.cron != nil {
 				v.cron.Stop()
-				log.Printf("Cron for time trigger %s stopped", v.trigger.Name)
+				log.Printf("Cron for time trigger %s stopped", v.trigger.Metadata.Name)
 			}
 			delete(timer.triggers, k)
 		}
@@ -130,15 +138,15 @@ func (timer *Timer) syncCron(triggers []fission.TimeTrigger) error {
 	return nil
 }
 
-func (timer *Timer) newCron(t fission.TimeTrigger) *cron.Cron {
+func (timer *Timer) newCron(t tpr.Timetrigger) *cron.Cron {
 	c := cron.New()
-	c.AddFunc(t.Cron, func() {
+	c.AddFunc(t.Spec.Cron, func() {
 		headers := map[string]string{
-			"X-Fission-Timer-Name": t.Name,
+			"X-Fission-Timer-Name": t.Metadata.Name,
 		}
-		(*timer.publisher).Publish("", headers, fission.UrlForFunction(&t.Function))
+		(*timer.publisher).Publish("", headers, fission.UrlForFunction(t.Spec.FunctionReference.Name))
 	})
 	c.Start()
-	log.Printf("Add new cron for time trigger %v", t.Name)
+	log.Printf("Add new cron for time trigger %v", t.Metadata.Name)
 	return c
 }

@@ -17,43 +17,18 @@ limitations under the License.
 package kubewatcher
 
 import (
-	"log"
-
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/rest"
-
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/publisher"
+	"github.com/fission/fission/tpr"
 )
 
-// Get a kubernetes client using the pod's service account.
-func getKubernetesClient() (*kubernetes.Clientset, error) {
-	// creates the in-cluster config
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Printf("Error getting kubernetes client config: %v", err)
-		return nil, err
-	}
-
-	// creates the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Printf("Error getting kubernetes client: %v", err)
-		return nil, err
-	}
-
-	return clientset, nil
-}
-
-func Start(controllerUrl string, routerUrl string) error {
-	kubeClient, err := getKubernetesClient()
+func Start(routerUrl string) error {
+	fissionClient, kubeClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		return err
 	}
 	poster := publisher.MakeWebhookPublisher(routerUrl)
 	kubeWatch := MakeKubeWatcher(kubeClient, poster)
-
-	MakeWatchSync(client.MakeClient(controllerUrl), kubeWatch)
+	MakeWatchSync(fissionClient, kubeWatch)
 
 	return nil
 }
