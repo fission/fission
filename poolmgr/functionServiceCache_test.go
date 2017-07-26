@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/client-go/1.5/pkg/api"
+
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 func TestFunctionServiceCache(t *testing.T) {
@@ -18,16 +21,22 @@ func TestFunctionServiceCache(t *testing.T) {
 	now := time.Now()
 
 	fsvc = &funcSvc{
-		function: &fission.Metadata{
+		function: &api.ObjectMeta{
 			Name: "foo",
-			Uid:  "1212",
+			UID:  "1212",
 		},
-		environment: &fission.Environment{
-			Metadata: fission.Metadata{
+		environment: &tpr.Environment{
+			Metadata: api.ObjectMeta{
 				Name: "foo-env",
-				Uid:  "2323",
+				UID:  "2323",
 			},
-			RunContainerImageUrl: "fission/foo-env",
+			Spec: fission.EnvironmentSpec{
+				Version: 1,
+				Runtime: fission.Runtime{
+					Image: "fission/foo-env",
+				},
+				Builder: fission.Builder{},
+			},
 		},
 		address: "xxx",
 		podName: "yyy",

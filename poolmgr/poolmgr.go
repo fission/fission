@@ -18,52 +18,29 @@ package poolmgr
 
 import (
 	"log"
-	"strings"
 
 	"github.com/dchest/uniuri"
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/rest"
 
-	controllerclient "github.com/fission/fission/controller/client"
+	"github.com/fission/fission/tpr"
 )
 
-// Get a kubernetes client using the pod's service account.  This only
-// works when we're running inside a kubernetes cluster.
-func getKubernetesClient() (*kubernetes.Clientset, error) {
-	// creates the in-cluster config
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Printf("Error getting kubernetes client config: %v", err)
-		return nil, err
-	}
-
-	// creates the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Printf("Error getting kubernetes client: %v", err)
-		return nil, err
-	}
-
-	return clientset, nil
-}
-
-func StartPoolmgr(controllerUrl string, namespace string, port int) error {
-	controllerUrl = strings.TrimSuffix(controllerUrl, "/")
-	controllerClient := controllerclient.MakeClient(controllerUrl)
-
-	kubernetesClient, err := getKubernetesClient()
+// Start the poolmgr service.
+func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
+	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
 
 	instanceId := uniuri.NewLen(8)
-	cleanupOldPoolmgrResources(kubernetesClient, namespace, instanceId)
+	cleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceId)
 
 	fsCache := MakeFunctionServiceCache()
-	gpm := MakeGenericPoolManager(controllerUrl, kubernetesClient, namespace, fsCache, instanceId)
+	gpm := MakeGenericPoolManager(
+		fissionClient, kubernetesClient, fissionNamespace,
+		functionNamespace, fsCache, instanceId)
 
-	api := MakeAPI(gpm, controllerClient, fsCache)
+	api := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
 	go api.Serve(port)
 
 	return nil
