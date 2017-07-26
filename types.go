@@ -21,13 +21,17 @@ type (
 	// Functions and packages
 	//
 
+	// ChecksumType specifies the checksum algorithm, such as
+	// sha256, used for a checksum.
+	ChecksumType string
+
 	// Checksum of package contents when the contents are stored
 	// outside the Package struct. Type is the checksum algorithm;
 	// "sha256" is the only currently supported one. Sum is hex
 	// encoded.
 	Checksum struct {
-		Type string `json:"type"`
-		Sum  string `json:"sum"`
+		Type ChecksumType `json:"type"`
+		Sum  string       `json:"sum"`
 	}
 
 	// PackageType is either literal or URL, indicating whether
@@ -193,6 +197,10 @@ type (
 		// to "/".
 		URL string `json:"url"`
 	}
+)
+
+const (
+	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
 
 const (

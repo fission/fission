@@ -77,7 +77,7 @@ func downloadUrl(url string, localPath string) error {
 }
 
 func verifyChecksum(path string, checksum *fission.Checksum) error {
-	if checksum.Type != "sha256" {
+	if checksum.Type != fission.ChecksumTypeSHA256 {
 		return fission.MakeError(fission.ErrorInvalidArgument, "Unsupported checksum type")
 	}
 
