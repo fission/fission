@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/fission/fission"
+	"k8s.io/client-go/1.5/pkg/api"
 )
 
 func createBackendService(testResponseString string) *url.URL {
@@ -49,11 +49,12 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &fission.Metadata{Name: "foo", Uid: "xxx"}
+	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
+
 	fmap := makeFunctionServiceMap(0)
 	fmap.assign(fn, backendURL)
 
-	fh := &functionHandler{fmap: fmap, Function: *fn}
+	fh := &functionHandler{fmap: fmap, function: fn}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
 

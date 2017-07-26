@@ -20,12 +20,12 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/fission/fission"
+	"k8s.io/client-go/1.5/pkg/api"
 )
 
 func TestFunctionServiceMap(t *testing.T) {
 	m := makeFunctionServiceMap(0)
-	fn := &fission.Metadata{Name: "foo", Uid: "012"}
+	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
 	u, err := url.Parse("/foo012")
 	if err != nil {
 		t.Errorf("can't parse url")

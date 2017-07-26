@@ -21,26 +21,64 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/client-go/1.5/pkg/api"
+
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 func TestRouter(t *testing.T) {
-	fmap := makeFunctionServiceMap(0)
-	fn := &fission.Metadata{Name: "foo", Uid: "xxx"}
+	// metadata for a fake function
+	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
 
+	// and a reference to it
+	fr := fission.FunctionReference{
+		Type: fission.FunctionReferenceTypeFunctionName,
+		Name: fn.Name,
+	}
+
+	// start a fake service
 	testResponseString := "hi"
 	testServiceUrl := createBackendService(testResponseString)
 
+	// set up the cache with this fake service
+	fmap := makeFunctionServiceMap(0)
 	fmap.assign(fn, testServiceUrl)
 
-	triggers := makeHTTPTriggerSet(fmap, nil, nil)
-	triggerUrl := "/foo"
-	triggers.triggers = append(triggers.triggers, fission.HTTPTrigger{UrlPattern: triggerUrl, Function: *fn, Method: "GET"})
+	// set up the resolver's cache for this function
+	frr := makeFunctionReferenceResolver(nil)
+	nfr := namespacedFunctionReference{
+		namespace:         api.NamespaceDefault,
+		functionReference: fr,
+	}
+	rr := resolveResult{
+		resolveResultType: resolveResultSingleFunction,
+		functionMetadata:  fn,
+	}
+	frr.refCache.Set(nfr, rr)
 
+	// HTTP trigger set with a trigger for this function
+	triggers := makeHTTPTriggerSet(fmap, nil, nil, frr)
+	triggerUrl := "/foo"
+	triggers.triggers = append(triggers.triggers,
+		tpr.Httptrigger{
+			Metadata: api.ObjectMeta{
+				Name:      "xxx",
+				Namespace: api.NamespaceDefault,
+			},
+			Spec: fission.HTTPTriggerSpec{
+				RelativeURL:       triggerUrl,
+				FunctionReference: fr,
+				Method:            "GET",
+			},
+		})
+
+	// run the router
 	port := 4242
 	go serve(port, triggers)
 	time.Sleep(100 * time.Millisecond)
 
+	// hit the router
 	testUrl := fmt.Sprintf("http://localhost:%v%v", port, triggerUrl)
 	testRequest(testUrl, testResponseString)
 }

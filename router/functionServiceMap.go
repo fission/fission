@@ -21,13 +21,24 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/fission/fission"
+	"k8s.io/client-go/1.5/pkg/api"
+
 	"github.com/fission/fission/cache"
 )
 
-type functionServiceMap struct {
-	cache *cache.Cache // map[fission.Metadata]*url.URL
-}
+type (
+	functionServiceMap struct {
+		cache *cache.Cache // map[metadataKey]*url.URL
+	}
+
+	// api.ObjectMeta is not hashable, so we make a hashable copy
+	// of the subset of its fields that are identifiable.
+	metadataKey struct {
+		Name            string
+		Namespace       string
+		ResourceVersion string
+	}
+)
 
 func makeFunctionServiceMap(expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
@@ -35,8 +46,17 @@ func makeFunctionServiceMap(expiry time.Duration) *functionServiceMap {
 	}
 }
 
-func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
-	item, err := fmap.cache.Get(*f)
+func keyFromMetadata(m *api.ObjectMeta) *metadataKey {
+	return &metadataKey{
+		Name:            m.Name,
+		Namespace:       m.Namespace,
+		ResourceVersion: m.ResourceVersion,
+	}
+}
+
+func (fmap *functionServiceMap) lookup(f *api.ObjectMeta) (*url.URL, error) {
+	mk := keyFromMetadata(f)
+	item, err := fmap.cache.Get(*mk)
 	if err != nil {
 		return nil, err
 	}
@@ -44,8 +64,9 @@ func (fmap *functionServiceMap) lookup(f *fission.Metadata) (*url.URL, error) {
 	return u, nil
 }
 
-func (fmap *functionServiceMap) assign(f *fission.Metadata, serviceUrl *url.URL) {
-	err, old := fmap.cache.Set(*f, serviceUrl)
+func (fmap *functionServiceMap) assign(f *api.ObjectMeta, serviceUrl *url.URL) {
+	mk := keyFromMetadata(f)
+	err, old := fmap.cache.Set(*mk, serviceUrl)
 	if err != nil {
 		if *serviceUrl == *(old.(*url.URL)) {
 			return
