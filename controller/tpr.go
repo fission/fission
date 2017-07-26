@@ -17,16 +17,13 @@ limitations under the License.
 package controller
 
 import (
-	"encoding/json"
+	"github.com/fission/fission/tpr"
 )
 
-type JsonSerializer struct {
-}
-
-func (j JsonSerializer) serialize(r resource) ([]byte, error) {
-	return json.Marshal(r)
-}
-
-func (j JsonSerializer) deserialize(buf []byte, r resource) error {
-	return json.Unmarshal(buf, r)
+func makeTPRBackedAPI() (*API, error) {
+	fissionClient, _, err := tpr.MakeFissionClient()
+	if err != nil {
+		return nil, err
+	}
+	return &API{fissionClient: fissionClient}, nil
 }

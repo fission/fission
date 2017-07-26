@@ -16,13 +16,28 @@ limitations under the License.
 
 package controller
 
-type (
-	resource interface {
-		Key() string
+import (
+	"log"
+
+	"github.com/fission/fission/tpr"
+)
+
+func Start(port int) {
+	fc, kc, err := tpr.MakeFissionClient()
+	if err != nil {
+		log.Fatalf("Failed to connect to K8s API: %v", err)
 	}
 
-	serializer interface {
-		serialize(r resource) ([]byte, error)
-		deserialize(buf []byte, r resource) error
+	err = tpr.EnsureFissionTPRs(kc)
+	if err != nil {
+		log.Fatalf("Failed to create fission TPRs: %v", err)
 	}
-)
+
+	fc.WaitForTPRs()
+
+	api, err := MakeAPI()
+	if err != nil {
+		log.Fatalf("Failed to start controller: %v", err)
+	}
+	api.Serve(port)
+}

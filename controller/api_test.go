@@ -19,35 +19,50 @@ package controller
 import (
 	"flag"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
-	etcdClient "github.com/coreos/etcd/client"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
+	"k8s.io/client-go/1.5/pkg/api"
 
+	"bytes"
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/tpr"
 )
 
 var g struct {
 	client *client.Client
 }
 
-func assertNameReuseFails(err error, name string) {
+func panicIf(err error) {
+	if err != nil {
+		log.Panicf("err: %v", err)
+	}
+}
+
+func assert(c bool, msg string) {
+	if !c {
+		log.Fatalf("assert failed: %v", msg)
+	}
+}
+
+func assertNameReuseFailure(err error, name string) {
 	assert(err != nil, "recreating "+name+" with same name must fail")
 	fe, ok := err.(fission.Error)
 	assert(ok, "error must be a fission Error")
 	assert(fe.Code == fission.ErrorNameExists, "error must be a name exists error")
 }
 
-func assertNotFoundFails(err error, name string) {
+func assertNotFoundFailure(err error, name string) {
 	assert(err != nil, "requesting a non-existent "+name+" must fail")
 	fe, ok := err.(fission.Error)
 	assert(ok, "error must be a fission Error")
-	assert(fe.Code == fission.ErrorNotFound, "error must be a not found error")
+	if fe.Code != fission.ErrorNotFound {
+		log.Fatalf("error must be a not found error: %v", fe)
+	}
 }
 
 func assertCronSpecFails(err error) {
@@ -58,67 +73,42 @@ func assertCronSpecFails(err error) {
 }
 
 func TestFunctionApi(t *testing.T) {
-	log.SetFormatter(&log.TextFormatter{DisableColors: true})
+	name1 := "foo"
+	name2 := "bar"
 
-	testFunc := &fission.Function{
-		Metadata: fission.Metadata{
-			Name: "foo",
-			Uid:  "",
+	testFunc := &tpr.Function{
+		Metadata: api.ObjectMeta{
+			Name:      name1,
+			Namespace: api.NamespaceDefault,
 		},
-		Environment: fission.Metadata{
-			Name: "nodejs",
-			Uid:  "xxx",
+		Spec: fission.FunctionSpec{
+			EnvironmentName: "nodejs",
+			Deployment: fission.Package{
+				Literal: []byte("code1"),
+			},
 		},
-		Code: "code1",
 	}
-	_, err := g.client.FunctionGet(&fission.Metadata{Name: "foo"})
-	assertNotFoundFails(err, "function")
+	_, err := g.client.FunctionGet(&api.ObjectMeta{
+		Name:      testFunc.Metadata.Name,
+		Namespace: api.NamespaceDefault,
+	})
+	assertNotFoundFailure(err, "function")
 
 	m, err := g.client.FunctionCreate(testFunc)
 	panicIf(err)
-	uid1 := m.Uid
-	//log.Printf("Created function %v: %v", m.Name, m.Uid)
 
 	_, err = g.client.FunctionCreate(testFunc)
-	assertNameReuseFails(err, "function")
+	assertNameReuseFailure(err, "function")
 
-	code, err := g.client.FunctionGetRaw(m)
+	code, err := g.client.FunctionGetRawDeployment(m)
 	panicIf(err)
-	assert(string(code) == testFunc.Code, "code from FunctionGetRaw must match created function")
+	assert(bytes.Compare(code, testFunc.Spec.Deployment.Literal) == 0, "code from FunctionGetRawDeployment must match created function")
 
-	testFunc.Code = "code2"
-	m, err = g.client.FunctionUpdate(testFunc)
-	panicIf(err)
-	uid2 := m.Uid
-	//log.Printf("Updated function %v: %v", m.Name, m.Uid)
-
-	m.Uid = uid1
-	testFunc.Code = "code1"
-	f, err := g.client.FunctionGet(m)
+	testFunc.Spec.Deployment.Literal = []byte("code2")
+	_, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
 
-	testFunc.Metadata.Uid = m.Uid
-	//log.Printf("f = %#v", f)
-	//log.Printf("testFunc = %#v", testFunc)
-	assert(*f == *testFunc, "first version should match when read by uid")
-
-	m.Uid = uid2
-	testFunc.Metadata.Uid = m.Uid
-	testFunc.Code = "code2"
-	f, err = g.client.FunctionGet(m)
-	panicIf(err)
-
-	assert(*f == *testFunc, "second version should match when read by uid")
-
-	m.Uid = ""
-	testFunc.Metadata.Uid = uid2
-	testFunc.Code = "code2"
-	f, err = g.client.FunctionGet(m)
-	panicIf(err)
-
-	assert(*f == *testFunc, "second version should match when read as latest")
-
-	testFunc.Metadata.Name = "bar"
+	testFunc.Metadata.Name = name2
 	m, err = g.client.FunctionCreate(testFunc)
 	panicIf(err)
 
@@ -127,7 +117,7 @@ func TestFunctionApi(t *testing.T) {
 	assert(len(funcs) == 2,
 		"created two functions, but didn't find them")
 
-	funcs_url := g.client.Url + "/v1/functions"
+	funcs_url := g.client.Url + "/v2/functions"
 	resp, err := http.Get(funcs_url)
 	panicIf(err)
 	defer resp.Body.Close()
@@ -141,112 +131,55 @@ func TestFunctionApi(t *testing.T) {
 	}
 	assert(found, "incorrect response content type")
 
-	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo"})
+	err = g.client.FunctionDelete(&api.ObjectMeta{Name: name1, Namespace: api.NamespaceDefault})
 	panicIf(err)
-	err = g.client.FunctionDelete(&fission.Metadata{Name: "bar"})
+	err = g.client.FunctionDelete(&api.ObjectMeta{Name: name2, Namespace: api.NamespaceDefault})
 	panicIf(err)
-}
-
-func TestFunctionVersionApi(t *testing.T) {
-	testFunc := &fission.Function{
-		Metadata: fission.Metadata{
-			Name: "foo",
-			Uid:  "",
-		},
-		Environment: fission.Metadata{
-			Name: "nodejs",
-			Uid:  "xxx",
-		},
-		Code: "code1",
-	}
-
-	testFunc.Code = "code1"
-	m, err := g.client.FunctionCreate(testFunc)
-	panicIf(err)
-	uid1 := m.Uid
-
-	testFunc.Code = "code2"
-	m, err = g.client.FunctionUpdate(testFunc)
-	panicIf(err)
-	uid2 := m.Uid
-
-	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo", Uid: uid1})
-	panicIf(err)
-
-	f, err := g.client.FunctionGet(&fission.Metadata{Name: "foo"})
-	panicIf(err)
-	assert(f.Metadata.Uid == uid2, "deleted version1, but version2 does not exist")
-
-	testFunc.Code = "code3"
-	m, err = g.client.FunctionUpdate(testFunc)
-	panicIf(err)
-	uid3 := m.Uid
-
-	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo", Uid: uid3})
-	panicIf(err)
-
-	f, err = g.client.FunctionGet(&fission.Metadata{Name: "foo"})
-	panicIf(err)
-	assert(f.Metadata.Uid == uid2, "deleted version3, but version2 does not exist")
-
-	testFunc.Code = "code4"
-	m, err = g.client.FunctionUpdate(testFunc)
-	panicIf(err)
-
-	err = g.client.FunctionDelete(&fission.Metadata{Name: "foo"})
-	panicIf(err)
-
-	funcs, err := g.client.FunctionList()
-	panicIf(err)
-	assert(len(funcs) == 0,
-		"created one function with two versions(2 and 4), delete without uid but cannot delete them all")
 }
 
 func TestHTTPTriggerApi(t *testing.T) {
-	testTrigger := &fission.HTTPTrigger{
-		Metadata: fission.Metadata{
-			Name: "xxx",
-			Uid:  "yyy",
+	testTrigger := &tpr.Httptrigger{
+		Metadata: api.ObjectMeta{
+			Name:      "foo",
+			Namespace: api.NamespaceDefault,
 		},
-		UrlPattern: "/hello",
-		Function: fission.Metadata{
-			Name: "foo",
-			Uid:  "",
+		Spec: fission.HTTPTriggerSpec{
+			RelativeURL: "/hello",
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: "foo",
+			},
 		},
 	}
-	_, err := g.client.HTTPTriggerGet(&fission.Metadata{Name: "foo"})
-	assertNotFoundFails(err, "trigger")
+	_, err := g.client.HTTPTriggerGet(&api.ObjectMeta{
+		Name:      testTrigger.Metadata.Name,
+		Namespace: api.NamespaceDefault,
+	})
+	assertNotFoundFailure(err, "httptrigger")
 
 	m, err := g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
 	defer g.client.HTTPTriggerDelete(m)
 
 	_, err = g.client.HTTPTriggerCreate(testTrigger)
-	assertNameReuseFails(err, "trigger")
+	assertNameReuseFailure(err, "httptrigger")
 
 	tr, err := g.client.HTTPTriggerGet(m)
 	panicIf(err)
-	testTrigger.Metadata.Uid = m.Uid
-	assert(*testTrigger == *tr, "trigger should match after reading")
+	assert(testTrigger.Spec == tr.Spec, "trigger should match after reading")
 
-	testTrigger.UrlPattern = "/hi"
-	m2, err := g.client.HTTPTriggerUpdate(testTrigger)
+	testTrigger.Spec.RelativeURL = "/hi"
+	_, err = g.client.HTTPTriggerUpdate(testTrigger)
 	panicIf(err)
-
-	m.Uid = m2.Uid
-	tr, err = g.client.HTTPTriggerGet(m)
-	panicIf(err)
-	testTrigger.Metadata.Uid = m.Uid
-	assert(*testTrigger == *tr, "trigger should match after reading")
 
 	testTrigger.Metadata.Name = "yyy"
-	m, err = g.client.HTTPTriggerCreate(testTrigger)
+	_, err = g.client.HTTPTriggerCreate(testTrigger)
 	assert(err != nil, "duplicate trigger should not be allowed")
 
-	testTrigger.UrlPattern = "/hi2"
-	m, err = g.client.HTTPTriggerCreate(testTrigger)
+	testTrigger.Spec.RelativeURL = "/hi2"
+	m2, err := g.client.HTTPTriggerCreate(testTrigger)
 	panicIf(err)
-	defer g.client.HTTPTriggerDelete(m)
+	defer g.client.HTTPTriggerDelete(m2)
 
 	ts, err := g.client.HTTPTriggerList()
 	panicIf(err)
@@ -254,42 +187,42 @@ func TestHTTPTriggerApi(t *testing.T) {
 }
 
 func TestEnvironmentApi(t *testing.T) {
-	testEnv := &fission.Environment{
-		Metadata: fission.Metadata{
-			Name: "xxx",
-			Uid:  "yyy",
+	testEnv := &tpr.Environment{
+		Metadata: api.ObjectMeta{
+			Name:      "foo",
+			Namespace: api.NamespaceDefault,
 		},
-		RunContainerImageUrl: "gcr.io/xyz",
+		Spec: fission.EnvironmentSpec{
+			Runtime: fission.Runtime{
+				Image: "gcr.io/xyz",
+			},
+		},
 	}
-	_, err := g.client.EnvironmentGet(&fission.Metadata{Name: "foo"})
-	assertNotFoundFails(err, "environment")
+	_, err := g.client.EnvironmentGet(&api.ObjectMeta{
+		Name:      testEnv.Metadata.Name,
+		Namespace: api.NamespaceDefault,
+	})
+	assertNotFoundFailure(err, "environment")
 
 	m, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
 	defer g.client.EnvironmentDelete(m)
 
 	_, err = g.client.EnvironmentCreate(testEnv)
-	assertNameReuseFails(err, "environment")
+	assertNameReuseFailure(err, "environment")
 
-	tr, err := g.client.EnvironmentGet(m)
+	e, err := g.client.EnvironmentGet(m)
 	panicIf(err)
-	testEnv.Metadata.Uid = m.Uid
-	assert(*testEnv == *tr, "env should match after reading")
+	assert(testEnv.Spec == e.Spec, "env should match after reading")
 
-	testEnv.RunContainerImageUrl = "/hi"
-	m2, err := g.client.EnvironmentUpdate(testEnv)
+	testEnv.Spec.Runtime.Image = "another-img"
+	_, err = g.client.EnvironmentUpdate(testEnv)
 	panicIf(err)
 
-	m.Uid = m2.Uid
-	tr, err = g.client.EnvironmentGet(m)
+	testEnv.Metadata.Name = "bar"
+	m2, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
-	testEnv.Metadata.Uid = m.Uid
-	assert(*testEnv == *tr, "env should match after reading")
-
-	testEnv.Metadata.Name = "yyy"
-	m, err = g.client.EnvironmentCreate(testEnv)
-	panicIf(err)
-	defer g.client.EnvironmentDelete(m)
+	defer g.client.EnvironmentDelete(m2)
 
 	ts, err := g.client.EnvironmentList()
 	panicIf(err)
@@ -297,36 +230,38 @@ func TestEnvironmentApi(t *testing.T) {
 }
 
 func TestWatchApi(t *testing.T) {
-	testWatch := &fission.Watch{
-		Metadata: fission.Metadata{
-			Name: "xxx",
-			Uid:  "yyy",
+	testWatch := &tpr.Kuberneteswatchtrigger{
+		Metadata: api.ObjectMeta{
+			Name:      "xxx",
+			Namespace: api.NamespaceDefault,
 		},
-		Namespace:     "default",
-		ObjType:       "pod",
-		LabelSelector: "",
-		FieldSelector: "",
-		Function: fission.Metadata{
-			Name: "foo",
-			Uid:  "",
+		Spec: fission.KubernetesWatchTriggerSpec{
+			Namespace: "default",
+			Type:      "pod",
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: "foo",
+			},
 		},
-		Target: "",
 	}
-	_, err := g.client.WatchGet(&fission.Metadata{Name: "foo"})
-	assertNotFoundFails(err, "watch")
+	_, err := g.client.WatchGet(&api.ObjectMeta{
+		Name:      testWatch.Metadata.Name,
+		Namespace: api.NamespaceDefault,
+	})
+	assertNotFoundFailure(err, "watch")
 
 	m, err := g.client.WatchCreate(testWatch)
 	panicIf(err)
 	defer g.client.WatchDelete(m)
 
 	_, err = g.client.WatchCreate(testWatch)
-	assertNameReuseFails(err, "watch")
+	assertNameReuseFailure(err, "watch")
 
 	w, err := g.client.WatchGet(m)
 	panicIf(err)
-	testWatch.Metadata.Uid = m.Uid
-	w.Target = ""
-	assert(*testWatch == *w, "watch should match after reading")
+	assert((testWatch.Spec.Namespace == w.Spec.Namespace &&
+		testWatch.Spec.Type == w.Spec.Type &&
+		testWatch.Spec.FunctionReference == w.Spec.FunctionReference), "watch should match after reading")
 
 	testWatch.Metadata.Name = "yyy"
 	m2, err := g.client.WatchCreate(testWatch)
@@ -339,45 +274,40 @@ func TestWatchApi(t *testing.T) {
 }
 
 func TestTimeTriggerApi(t *testing.T) {
-	testTrigger := &fission.TimeTrigger{
-		Metadata: fission.Metadata{
-			Name: "xxx",
-			Uid:  "yyy",
+	testTrigger := &tpr.Timetrigger{
+		Metadata: api.ObjectMeta{
+			Name:      "xxx",
+			Namespace: api.NamespaceDefault,
 		},
-		Cron: "0 30 * * * *",
-		Function: fission.Metadata{
-			Name: "foo",
-			Uid:  "",
+		Spec: fission.TimeTriggerSpec{
+			Cron: "0 30 * * * *",
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: "asdf",
+			},
 		},
 	}
-	_, err := g.client.TimeTriggerGet(&fission.Metadata{Name: "foo"})
-	assertNotFoundFails(err, "trigger")
+	_, err := g.client.TimeTriggerGet(&api.ObjectMeta{Name: testTrigger.Metadata.Name})
+	assertNotFoundFailure(err, "trigger")
 
 	m, err := g.client.TimeTriggerCreate(testTrigger)
 	panicIf(err)
 	defer g.client.TimeTriggerDelete(m)
 
 	_, err = g.client.TimeTriggerCreate(testTrigger)
-	assertNameReuseFails(err, "trigger")
+	assertNameReuseFailure(err, "trigger")
 
 	tr, err := g.client.TimeTriggerGet(m)
 	panicIf(err)
-	testTrigger.Metadata.Uid = m.Uid
-	assert(*testTrigger == *tr, "trigger should match after reading")
+	assert(testTrigger.Spec == tr.Spec, "trigger should match after reading")
 
-	testTrigger.Cron = "@hourly"
-	m2, err := g.client.TimeTriggerUpdate(testTrigger)
+	testTrigger.Spec.Cron = "@hourly"
+	_, err = g.client.TimeTriggerUpdate(testTrigger)
 	panicIf(err)
-
-	m.Uid = m2.Uid
-	tr, err = g.client.TimeTriggerGet(m)
-	panicIf(err)
-	testTrigger.Metadata.Uid = m.Uid
-	assert(*testTrigger == *tr, "trigger should match after reading")
 
 	testTrigger.Metadata.Name = "yyy"
-	testTrigger.Cron = "Not valid cron spec"
-	m, err = g.client.TimeTriggerCreate(testTrigger)
+	testTrigger.Spec.Cron = "Not valid cron spec"
+	_, err = g.client.TimeTriggerCreate(testTrigger)
 	assertCronSpecFails(err)
 
 	ts, err := g.client.TimeTriggerList()
@@ -388,20 +318,17 @@ func TestTimeTriggerApi(t *testing.T) {
 func TestMain(m *testing.M) {
 	flag.Parse()
 
-	fileStore, ks, rs := getTestResourceStore()
-	defer os.RemoveAll(fileStore.root)
+	// skip test if no cluster available for testing
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if len(kubeconfig) == 0 {
+		log.Println("Skipping test, no kubernetes cluster")
+		return
+	}
 
-	api := MakeAPI(rs)
-	g.client = client.MakeClient("http://localhost:8888")
+	go Start(8888)
 
-	ks.Delete(context.Background(), "Function", &etcdClient.DeleteOptions{Recursive: true})
-	ks.Delete(context.Background(), "HTTPTrigger", &etcdClient.DeleteOptions{Recursive: true})
-	ks.Delete(context.Background(), "TimeTrigger", &etcdClient.DeleteOptions{Recursive: true})
-	ks.Delete(context.Background(), "Environment", &etcdClient.DeleteOptions{Recursive: true})
-	ks.Delete(context.Background(), "Watch", &etcdClient.DeleteOptions{Recursive: true})
-
-	go api.Serve(8888)
 	time.Sleep(500 * time.Millisecond)
+	g.client = client.MakeClient("http://localhost:8888")
 
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)

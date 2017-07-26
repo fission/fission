@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -26,165 +25,161 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
-func (api *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := api.FunctionStore.List()
+func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
+	funcs, err := a.fissionClient.Functions(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(funcs)
+	resp, err := json.Marshal(funcs.Items)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
+func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var f fission.Function
+	var f tpr.Function
 	err = json.Unmarshal(body, &f)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	dec, err := base64.StdEncoding.DecodeString(f.Code)
-	if err != nil {
-		api.respondWithError(w, err)
+	// Ensure size limits
+	if len(f.Spec.Source.Literal) > 256*1024 {
+		err := fission.MakeError(fission.ErrorInvalidArgument, "Source package literal larger than 256K")
+		a.respondWithError(w, err)
 		return
 	}
-	f.Code = string(dec)
-
-	uid, err := api.FunctionStore.Create(&f)
-	if err != nil {
-		api.respondWithError(w, err)
+	if len(f.Spec.Deployment.Literal) > 256*1024 {
+		err := fission.MakeError(fission.ErrorInvalidArgument, "Deployment package literal larger than 256K")
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: f.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Create(&f)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
+		return
+	}
+
+	resp, err := json.Marshal(fnew.Metadata)
+	if err != nil {
+		a.respondWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
-	var m fission.Metadata
-
+func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	m.Name = vars["function"]
-	m.Uid = r.FormValue("uid") // empty if uid is absent
-	raw := r.FormValue("raw")  // just the code
+	name := vars["function"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
+	}
+	raw := r.FormValue("deploymentraw") // just the deployment pkg
 
-	f, err := api.FunctionStore.Get(&m)
+	f, err := a.fissionClient.Functions(ns).Get(name)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	var resp []byte
 	if raw != "" {
-		resp = []byte(f.Code)
+		resp = []byte(f.Spec.Deployment.Literal)
 	} else {
-		f.Code = base64.StdEncoding.EncodeToString([]byte(f.Code))
 		resp, err = json.Marshal(f)
 		if err != nil {
-			api.respondWithError(w, err)
+			a.respondWithError(w, err)
 			return
 		}
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	funcName := vars["function"]
+	name := vars["function"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var f fission.Function
+	var f tpr.Function
 	err = json.Unmarshal(body, &f)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	if funcName != f.Metadata.Name {
+	if name != f.Metadata.Name {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "Function name doesn't match URL")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	dec, err := base64.StdEncoding.DecodeString(f.Code)
+	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Update(&f)
 	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-	f.Code = string(dec)
-
-	uid, err := api.FunctionStore.Update(&f)
-	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: f.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	resp, err := json.Marshal(fnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	var m fission.Metadata
-	m.Name = vars["function"]
-
-	m.Uid = r.FormValue("uid") // empty if uid is absent
-	if len(m.Uid) == 0 {
-		log.WithFields(log.Fields{"function": m.Name}).Info("Deleting all versions")
+	name := vars["function"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
 
-	err := api.FunctionStore.Delete(m)
+	err := a.fissionClient.Functions(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, []byte(""))
+	a.respondWithSuccess(w, []byte(""))
 }
 
 // FunctionLogsApiPost establishes a proxy server to log database, and redirect
 // query command send from client to database then proxy back the db response.
-func (api *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
+func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	// get dbType from url
 	dbType := vars["dbType"]
 
 	// find correspond db http url
-	dbCnf := api.getLogDBConfig(dbType)
+	dbCnf := a.getLogDBConfig(dbType)
 
 	svcUrl, err := url.Parse(dbCnf.httpURL)
 	if err != nil {
