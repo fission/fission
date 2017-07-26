@@ -29,6 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 const (
@@ -57,17 +58,17 @@ func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQu
 	return nats, nil
 }
 
-func (nats Nats) subscribe(trigger fission.MessageQueueTrigger) (messageQueueSubscription, error) {
-	subj := trigger.Topic
+func (nats Nats) subscribe(trigger *tpr.Messagequeuetrigger) (messageQueueSubscription, error) {
+	subj := trigger.Spec.Topic
 
 	if !isTopicValidForNats(subj) {
-		return nil, errors.New(fmt.Sprintf("Not a valid topic: %s", trigger.Topic))
+		return nil, errors.New(fmt.Sprintf("Not a valid topic: %s", trigger.Spec.Topic))
 	}
 
 	opts := []ns.SubscriptionOption{
 		// Create a durable subscription to nats, so that triggers could retrieve last unack message.
 		// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
-		ns.DurableName(trigger.Uid),
+		ns.DurableName(string(trigger.Metadata.UID)),
 
 		// Nats-streaming server is auto-ack mode by default. Since we want nats-streaming server to
 		// resend a message if the trigger does not ack it, we need to enable the manual ack mode, so that
@@ -90,14 +91,21 @@ func isTopicValidForNats(topic string) bool {
 	return nsUtil.IsSubjectValid(topic)
 }
 
-func msgHandler(nats *Nats, trigger fission.MessageQueueTrigger) func(*ns.Msg) {
+func msgHandler(nats *Nats, trigger *tpr.Messagequeuetrigger) func(*ns.Msg) {
 	return func(msg *ns.Msg) {
-		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(&trigger.Function), "/")
+
+		// Support other function ref types
+		if trigger.Spec.FunctionReference.Type != fission.FunctionReferenceTypeFunctionName {
+			log.Fatalf("Unsupported function reference type (%v) for trigger %v",
+				trigger.Spec.FunctionReference.Type, trigger.Metadata.Name)
+		}
+
+		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name), "/")
 		log.Printf("Making HTTP request to %v", url)
 
 		headers := map[string]string{
-			"X-Fission-MQTrigger-Topic":     trigger.Topic,
-			"X-Fission-MQTrigger-RespTopic": trigger.ResponseTopic,
+			"X-Fission-MQTrigger-Topic":     trigger.Spec.Topic,
+			"X-Fission-MQTrigger-RespTopic": trigger.Spec.ResponseTopic,
 		}
 
 		// Create request
@@ -129,10 +137,10 @@ func msgHandler(nats *Nats, trigger fission.MessageQueueTrigger) func(*ns.Msg) {
 			log.Warningf("Failed to ack message: %v", err)
 		}
 
-		if len(trigger.ResponseTopic) > 0 {
-			err = nats.nsConn.Publish(trigger.ResponseTopic, body)
+		if len(trigger.Spec.ResponseTopic) > 0 {
+			err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
 			if err != nil {
-				log.Warningf("Failed to publish message to topic %s: %v", trigger.ResponseTopic, err)
+				log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
 			}
 		}
 	}
