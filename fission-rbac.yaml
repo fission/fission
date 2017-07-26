@@ -62,7 +62,7 @@ spec:
         - name: controller
           image: fission/fission-bundle
           command: ["/fission-bundle"]
-          args: ["--controllerPort", "8888", "--filepath", "/filestore"]
+          args: ["--controllerPort", "8888"]
       serviceAccountName: fission-svc
 ---
 apiVersion: extensions/v1beta1
@@ -115,6 +115,9 @@ spec:
         image: fission/fission-bundle
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888"]
+        env:
+        - name: FETCHER_IMAGE
+          value: fission/fetcher:v2
       serviceAccountName: fission-svc
 ---
 apiVersion: extensions/v1beta1
@@ -134,41 +137,4 @@ spec:
         image: fission/fission-bundle
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
-      serviceAccountName: fission-svc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: etcd
-  namespace: fission
-  labels:
-    svc: etcd
-spec:
-  ports:
-  - port: 2379
-    targetPort: 2379
-  selector:
-    svc: etcd
----
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: etcd
-  namespace: fission
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        svc: etcd
-    spec:
-      containers:
-      - name: etcd
-        image: quay.io/coreos/etcd
-        imagePullPolicy: IfNotPresent
-        env:
-        - name: ETCD_LISTEN_CLIENT_URLS
-          value: http://0.0.0.0:2379
-        - name: ETCD_ADVERTISE_CLIENT_URLS
-          value: http://etcd:2379
       serviceAccountName: fission-svc
