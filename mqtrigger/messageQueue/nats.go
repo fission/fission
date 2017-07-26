@@ -128,9 +128,12 @@ func msgHandler(nats *Nats, trigger fission.MessageQueueTrigger) func(*ns.Msg) {
 		if err != nil {
 			log.Warningf("Failed to ack message: %v", err)
 		}
-		err = nats.nsConn.Publish(trigger.ResponseTopic, body)
-		if err != nil {
-			log.Warningf("Failed to publish message to topic %s: %v", trigger.ResponseTopic, err)
+
+		if len(trigger.ResponseTopic) > 0 {
+			err = nats.nsConn.Publish(trigger.ResponseTopic, body)
+			if err != nil {
+				log.Warningf("Failed to publish message to topic %s: %v", trigger.ResponseTopic, err)
+			}
 		}
 	}
 }
