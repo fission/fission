@@ -30,3 +30,37 @@ spec:
     nodePort: {{ .Values.controllerPort }}
   selector:
     svc: controller
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fission-ui
+  labels:
+    svc: fission-ui
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: {{ .Values.serviceType }}
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 31319
+  selector:
+    svc: fission-ui
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-streaming
+  labels:
+    svc: nats-streaming
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: {{ .Values.serviceType }}
+  ports:
+  - port: 4222
+    targetPort: 4222
+    nodePort: 31316
+  selector:
+    svc: nats-streaming

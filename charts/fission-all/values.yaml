@@ -1,0 +1,40 @@
+#
+# Fission chart configuration
+# 
+
+## Kubernetes configuration
+## For minikube, set this to NodePort, elsewhere use LoadBalancer.
+serviceType: LoadBalancer
+
+## Fission image repostiroy
+image: fission/fission-bundle
+
+## Fission image version
+imageTag: nightly20170705
+
+## Port at which Fission controller service should be exposed
+controllerPort: 31313
+
+## Port at which Fission router service should be exposed
+routerPort: 31314
+
+## Namespace in which to run fission functions (this is different from
+## the release namespace)
+functionNamespace: fission-function
+
+## Set up openshift RBAC rule
+openshift: false
+
+## Logger config
+logger:
+  influxdbAdmin: "admin"
+  fluentdImage: fission/fluentd
+
+## Fission ui config
+fissionUiImage: fission/fission-ui:0.1.0
+
+## Message queue trigger config
+### NATS Streaming
+nats:
+  authToken: "defaultFissionAuthToken"
+  clusterID: "fissionMQTrigger"
