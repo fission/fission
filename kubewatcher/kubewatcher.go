@@ -19,7 +19,6 @@ package kubewatcher
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -28,12 +27,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	apierrs "k8s.io/client-go/1.5/pkg/api/errors"
-	"k8s.io/client-go/1.5/pkg/api/meta"
-	"k8s.io/client-go/1.5/pkg/runtime"
-	"k8s.io/client-go/1.5/pkg/watch"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
@@ -150,7 +149,7 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 	var watchTimeoutSec int64 = 120
 
 	// TODO populate labelselector and fieldselector
-	listOptions := api.ListOptions{
+	listOptions := v1.ListOptions{
 		ResourceVersion: resourceVersion,
 		TimeoutSeconds:  &watchTimeoutSec,
 	}
@@ -158,17 +157,17 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.ObjType) {
 	case "POD":
-		wi, err = kubeClient.Core().Pods(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().Pods(w.Namespace).Watch(listOptions)
 	case "SERVICE":
-		wi, err = kubeClient.Core().Services(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().Services(w.Namespace).Watch(listOptions)
 	case "REPLICATIONCONTROLLER":
-		wi, err = kubeClient.Core().ReplicationControllers(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Namespace).Watch(listOptions)
 	case "JOB":
-		wi, err = kubeClient.Batch().Jobs(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.BatchV1().Jobs(w.Namespace).Watch(listOptions)
 	default:
 		msg := fmt.Sprintf("Error: unknown obj type '%v'", w.ObjType)
 		log.Println(msg)
-		err = errors.New(msg)
+		err = errors.NewBadRequest(msg)
 	}
 	return wi, err
 }
@@ -251,11 +250,11 @@ func (ws *watchSubscription) restartWatch() error {
 }
 
 func getResourceVersion(obj runtime.Object) (string, error) {
-	meta, err := meta.Accessor(obj)
+	m, err := meta.Accessor(obj)
 	if err != nil {
 		return "", err
 	}
-	return meta.GetResourceVersion(), nil
+	return m.GetResourceVersion(), nil
 }
 
 func (ws *watchSubscription) eventDispatchLoop() {
@@ -286,7 +285,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 		}
 
 		if ev.Type == watch.Error {
-			e := apierrs.FromObject(ev.Object)
+			e := errors.FromObject(ev.Object)
 			log.Println("Watch error, retrying in a second: %v", e)
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""

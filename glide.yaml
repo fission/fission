@@ -20,15 +20,15 @@ import:
   subpackages:
   - context
 - package: k8s.io/client-go
-  version: v1.5.0
+  version: v3.0.0
   subpackages:
-  - 1.5/kubernetes
-  - 1.5/pkg/api
-  - 1.5/pkg/api/v1
-  - 1.5/pkg/apis/extensions/v1beta1
-  - 1.5/pkg/labels
-  - 1.5/pkg/util/intstr
-  - 1.5/rest
+  - kubernetes
+  - pkg/api
+  - pkg/api/v1
+  - pkg/apis/extensions/v1beta1
+  - pkg/labels
+  - pkg/util/intstr
+  - rest
 - package: github.com/influxdata/influxdb
   version: v1.2.0
   subpackages:

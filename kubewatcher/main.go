@@ -19,8 +19,8 @@ package kubewatcher
 import (
 	"log"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/rest"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/publisher"
