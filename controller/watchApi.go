@@ -22,102 +22,101 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
-func (api *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
-	watches, err := api.WatchStore.List()
+func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
+	watches, err := a.fissionClient.Kuberneteswatchtriggers(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(watches)
+	resp, err := json.Marshal(watches.Items)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
+func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var watch fission.Watch
+	var watch tpr.Kuberneteswatchtrigger
 	err = json.Unmarshal(body, &watch)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	watch.Target = fission.UrlForFunction(&watch.Function)
+	// TODO check for duplicate watches
 
-	uid, err := api.WatchStore.Create(&watch)
+	wnew, err := a.fissionClient.Kuberneteswatchtriggers(watch.Metadata.Namespace).Create(&watch)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: watch.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	resp, err := json.Marshal(wnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
-	var m fission.Metadata
-
+func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	m.Name = vars["watch"]
-	m.Uid = r.FormValue("uid") // empty if uid is absent
+	name := vars["watch"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
+	}
 
-	watch, err := api.WatchStore.Get(&m)
+	watch, err := a.fissionClient.Kuberneteswatchtriggers(ns).Get(name)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	resp, err := json.Marshal(watch)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) WatchApiUpdate(w http.ResponseWriter, r *http.Request) {
-	api.respondWithError(w, fission.MakeError(fission.ErrorNotImplmented,
+func (a *API) WatchApiUpdate(w http.ResponseWriter, r *http.Request) {
+	a.respondWithError(w, fission.MakeError(fission.ErrorNotImplmented,
 		"Not implemented"))
 }
 
-func (api *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	var m fission.Metadata
-	m.Name = vars["watch"]
-
-	m.Uid = r.FormValue("uid") // empty if uid is absent
-	if len(m.Uid) == 0 {
-		log.WithFields(log.Fields{"watch": m.Name}).Info("Deleting all versions")
+	name := vars["watch"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
 
-	err := api.WatchStore.Delete(m)
+	err := a.fissionClient.Kuberneteswatchtriggers(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, []byte(""))
+	a.respondWithSuccess(w, []byte(""))
 }

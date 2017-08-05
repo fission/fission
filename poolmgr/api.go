@@ -29,54 +29,46 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
-	controllerclient "github.com/fission/fission/controller/client"
+	"github.com/fission/fission/tpr"
 )
 
-type funcSvc struct {
-	function    *fission.Metadata    // function this pod/service is for
-	environment *fission.Environment // env it was obtained from
-	address     string               // Host:Port or IP:Port that the service can be reached at.
-	podName     string               // pod name (within the function namespace)
+type (
+	createFuncServiceRequest struct {
+		funcMeta *api.ObjectMeta
+		respChan chan *createFuncServiceResponse
+	}
 
-	ctime time.Time
-	atime time.Time
-}
+	createFuncServiceResponse struct {
+		address string
+		err     error
+	}
 
-type createFuncServiceRequest struct {
-	funcMeta *fission.Metadata
-	respChan chan *createFuncServiceResponse
-}
-type createFuncServiceResponse struct {
-	address string
-	err     error
-}
+	Poolmgr struct {
+		gpm           *GenericPoolManager
+		functionEnv   *cache.Cache // map[string]tpr.Environment
+		fsCache       *functionServiceCache
+		fissionClient *tpr.FissionClient
 
-type API struct {
-	poolMgr          *GenericPoolManager
-	functionEnv      *cache.Cache // map[fission.Metadata]fission.Environment
-	fsCache          *functionServiceCache
-	controller       *controllerclient.Client
-	fsCreateChannels map[fission.Metadata]*sync.WaitGroup
-	requestChan      chan *createFuncServiceRequest
+		fsCreateChannels map[string]*sync.WaitGroup // xxx no channels here, rename this
+		requestChan      chan *createFuncServiceRequest
+	}
+)
 
-	//functionService *cache.Cache // map[fission.Metadata]*funcSvc
-	//urlFuncSvc      *cache.Cache // map[string]*funcSvc
-}
-
-func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCache *functionServiceCache) *API {
-	api := API{
-		poolMgr:          gpm,
-		functionEnv:      cache.MakeCache(time.Minute, 0),
+func MakePoolmgr(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fissionNs string, fsCache *functionServiceCache) *Poolmgr {
+	poolMgr := &Poolmgr{
+		gpm:              gpm,
+		functionEnv:      cache.MakeCache(10*time.Second, 0),
 		fsCache:          fsCache,
-		controller:       controller,
-		fsCreateChannels: make(map[fission.Metadata]*sync.WaitGroup),
+		fissionClient:    fissionClient,
+		fsCreateChannels: make(map[string]*sync.WaitGroup),
 		requestChan:      make(chan *createFuncServiceRequest),
 	}
-	go api.serveCreateFuncServices()
-	return &api
+	go poolMgr.serveCreateFuncServices()
+	return poolMgr
 }
 
 // All non-cached function service requests go through this goroutine
@@ -85,29 +77,29 @@ func MakeAPI(gpm *GenericPoolManager, controller *controllerclient.Client, fsCac
 // get specialized. In other words, it ensures that when there's an
 // ongoing request for a certain function, all other requests wait for
 // that request to complete.
-func (api *API) serveCreateFuncServices() {
+func (poolMgr *Poolmgr) serveCreateFuncServices() {
 	for {
-		req := <-api.requestChan
+		req := <-poolMgr.requestChan
 		m := req.funcMeta
 
 		// Cache miss -- is this first one to request the func?
-		wg, found := api.fsCreateChannels[*m]
+		wg, found := poolMgr.fsCreateChannels[tpr.CacheKey(m)]
 		if !found {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
-			api.fsCreateChannels[*m] = wg
+			poolMgr.fsCreateChannels[tpr.CacheKey(m)] = wg
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
 			go func() {
-				address, err := api.createServiceForFunction(m)
+				address, err := poolMgr.createServiceForFunction(m)
 				req.respChan <- &createFuncServiceResponse{
 					address: address,
 					err:     err,
 				}
-				delete(api.fsCreateChannels, *m)
+				delete(poolMgr.fsCreateChannels, tpr.CacheKey(m))
 				wg.Done()
 			}()
 		} else {
@@ -117,7 +109,7 @@ func (api *API) serveCreateFuncServices() {
 				wg.Wait()
 
 				// get the function service from the cache
-				fsvc, err := api.fsCache.GetByFunction(m)
+				fsvc, err := poolMgr.fsCache.GetByFunction(m)
 				address := ""
 				if err == nil {
 					address = fsvc.address
@@ -131,7 +123,7 @@ func (api *API) serveCreateFuncServices() {
 	}
 }
 
-func (api *API) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
+func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", 500)
@@ -139,14 +131,14 @@ func (api *API) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request)
 	}
 
 	// get function metadata
-	m := fission.Metadata{}
+	m := api.ObjectMeta{}
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		http.Error(w, "Failed to parse request", 400)
 		return
 	}
 
-	serviceName, err := api.getServiceForFunction(&m)
+	serviceName, err := poolMgr.getServiceForFunction(&m)
 	if err != nil {
 		code, msg := fission.GetHTTPError(err)
 		log.Printf("Error: %v: %v", code, msg)
@@ -156,55 +148,46 @@ func (api *API) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(serviceName))
 }
 
-func (api *API) getFunctionEnv(m *fission.Metadata) (*fission.Environment, error) {
-	var env *fission.Environment
+func (poolMgr *Poolmgr) getFunctionEnv(m *api.ObjectMeta) (*tpr.Environment, error) {
+	var env *tpr.Environment
 
 	// Cached ?
-	result, err := api.functionEnv.Get(*m)
+	result, err := poolMgr.functionEnv.Get(tpr.CacheKey(m))
 	if err == nil {
-		env = result.(*fission.Environment)
+		env = result.(*tpr.Environment)
 		return env, nil
 	}
 
 	// Cache miss -- get func from controller
-	log.Printf("[%v] getting function from controller", m)
-	f, err := api.controller.FunctionGet(m)
+	f, err := poolMgr.fissionClient.Functions(m.Namespace).Get(m.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get env from metadata
-	log.Printf("[%v] getting env from controller", m)
-	env, err = api.controller.EnvironmentGet(&f.Environment)
+	log.Printf("[%v] getting env", m)
+	env, err = poolMgr.fissionClient.Environments(f.Metadata.Namespace).Get(f.Spec.EnvironmentName)
 	if err != nil {
 		return nil, err
 	}
 
-	// cache for future
-	api.functionEnv.Set(*m, env)
+	// cache for future lookups
+	poolMgr.functionEnv.Set(tpr.CacheKey(m), env)
 
 	return env, nil
 }
 
-func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
-	// Make sure we have the full metadata.  This ensures that
-	// poolmgr does not implicitly interpret empty-UID as latest
-	// version.
-	if len(m.Uid) == 0 {
-		return "", fission.MakeError(fission.ErrorInvalidArgument,
-			fmt.Sprintf("invalid metadata for function %v", m.Name))
-	}
-
+func (poolMgr *Poolmgr) getServiceForFunction(m *api.ObjectMeta) (string, error) {
 	// Check function -> svc cache
 	log.Printf("[%v] Checking for cached function service", m.Name)
-	fsvc, err := api.fsCache.GetByFunction(m)
+	fsvc, err := poolMgr.fsCache.GetByFunction(m)
 	if err == nil {
 		// Cached, return svc address
 		return fsvc.address, nil
 	}
 
 	respChan := make(chan *createFuncServiceResponse)
-	api.requestChan <- &createFuncServiceRequest{
+	poolMgr.requestChan <- &createFuncServiceRequest{
 		funcMeta: m,
 		respChan: respChan,
 	}
@@ -212,20 +195,20 @@ func (api *API) getServiceForFunction(m *fission.Metadata) (string, error) {
 	return resp.address, resp.err
 }
 
-func (api *API) createServiceForFunction(m *fission.Metadata) (string, error) {
+func (poolMgr *Poolmgr) createServiceForFunction(m *api.ObjectMeta) (string, error) {
 	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 
 	// from Func -> get Env
 	log.Printf("[%v] getting environment for function", m.Name)
-	env, err := api.getFunctionEnv(m)
+	env, err := poolMgr.getFunctionEnv(m)
 	if err != nil {
 		return "", err
 	}
 
 	// from Env -> get GenericPool
 	log.Printf("[%v] getting generic pool for env", m.Name)
-	pool, err := api.poolMgr.GetPool(env)
+	pool, err := poolMgr.gpm.GetPool(env)
 	if err != nil {
 		return "", err
 	}
@@ -241,7 +224,7 @@ func (api *API) createServiceForFunction(m *fission.Metadata) (string, error) {
 }
 
 // find funcSvc and update its atime
-func (api *API) tapService(w http.ResponseWriter, r *http.Request) {
+func (poolMgr *Poolmgr) tapService(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", 500)
@@ -250,7 +233,7 @@ func (api *API) tapService(w http.ResponseWriter, r *http.Request) {
 	svcName := string(body)
 	svcHost := strings.TrimPrefix(svcName, "http://")
 
-	err = api.fsCache.TouchByAddress(svcHost)
+	err = poolMgr.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		log.Printf("funcSvc tap error: %v", err)
 		http.Error(w, "Not found", 404)
@@ -259,11 +242,10 @@ func (api *API) tapService(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (api *API) Serve(port int) {
+func (poolMgr *Poolmgr) Serve(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/getServiceForFunction", api.getServiceForFunctionApi).Methods("POST")
-	r.HandleFunc("/v1/tapService", api.tapService).Methods("POST")
-
+	r.HandleFunc("/v2/getServiceForFunction", poolMgr.getServiceForFunctionApi).Methods("POST")
+	r.HandleFunc("/v2/tapService", poolMgr.tapService).Methods("POST")
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))

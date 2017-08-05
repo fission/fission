@@ -14,28 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission
+package controller
 
-func (f Function) Key() string {
-	return f.Metadata.Name
-}
+import (
+	"log"
 
-func (e Environment) Key() string {
-	return e.Metadata.Name
-}
+	"github.com/fission/fission/tpr"
+)
 
-func (ht HTTPTrigger) Key() string {
-	return ht.Metadata.Name
-}
+func Start(port int) {
+	fc, kc, err := tpr.MakeFissionClient()
+	if err != nil {
+		log.Fatalf("Failed to connect to K8s API: %v", err)
+	}
 
-func (mqt MessageQueueTrigger) Key() string {
-	return mqt.Metadata.Name
-}
+	err = tpr.EnsureFissionTPRs(kc)
+	if err != nil {
+		log.Fatalf("Failed to create fission TPRs: %v", err)
+	}
 
-func (tt TimeTrigger) Key() string {
-	return tt.Metadata.Name
-}
+	fc.WaitForTPRs()
 
-func (w Watch) Key() string {
-	return w.Metadata.Name
+	api, err := MakeAPI()
+	if err != nil {
+		log.Fatalf("Failed to start controller: %v", err)
+	}
+	api.Serve(port)
 }

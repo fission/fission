@@ -20,8 +20,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/fission/fission"
+	"k8s.io/client-go/1.5/pkg/api"
+
 	"github.com/fission/fission/cache"
+	"github.com/fission/fission/tpr"
 )
 
 type fscRequestType int
@@ -34,10 +36,20 @@ const (
 )
 
 type (
+	funcSvc struct {
+		function    *api.ObjectMeta  // function this pod/service is for
+		environment *tpr.Environment // function's environment
+		address     string           // Host:Port or IP:Port that the function's service can be reached at.
+		podName     string           // pod name (within the function namespace)
+
+		ctime time.Time
+		atime time.Time
+	}
+
 	functionServiceCache struct {
-		byFunction *cache.Cache // function -> funcSvc : map[fission.Metadata]*funcSvc
-		byAddress  *cache.Cache // address -> function : map[string]fission.Metadata
-		byPod      *cache.Cache // podname -> function : map[string]fission.Metadata
+		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress  *cache.Cache // address      -> function : map[string]api.ObjectMeta
+		byPod      *cache.Cache // podname      -> function : map[string]api.ObjectMeta
 
 		requestChannel chan *fscRequest
 	}
@@ -79,8 +91,8 @@ func (fsc *functionServiceCache) service() {
 			byPodCopy := fsc.byPod.Copy()
 			pods := make([]string, 0)
 			for podNameI, mI := range byPodCopy {
-				m := mI.(fission.Metadata)
-				fsvcI, err := fsc.byFunction.Get(m)
+				m := mI.(api.ObjectMeta)
+				fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 				if err != nil {
 					resp.error = err
 				} else {
@@ -95,10 +107,9 @@ func (fsc *functionServiceCache) service() {
 		case LOG:
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
-			for mI, fsvcI := range funcCopy {
-				m := mI.(fission.Metadata)
+			for key, fsvcI := range funcCopy {
 				fsvc := fsvcI.(*funcSvc)
-				log.Printf("%v:%v\t%v", m.Name, m.Uid, fsvc.podName)
+				log.Printf("%v\t%v", key, fsvc.podName)
 			}
 		case DELETE_BY_POD:
 			resp.deleted, resp.error = fsc._deleteByPod(req.podName, req.age)
@@ -107,11 +118,14 @@ func (fsc *functionServiceCache) service() {
 	}
 }
 
-func (fsc *functionServiceCache) GetByFunction(m *fission.Metadata) (*funcSvc, error) {
-	fsvcI, err := fsc.byFunction.Get(*m)
+func (fsc *functionServiceCache) GetByFunction(m *api.ObjectMeta) (*funcSvc, error) {
+	key := tpr.CacheKey(m)
+
+	fsvcI, err := fsc.byFunction.Get(key)
 	if err != nil {
 		return nil, err
 	}
+
 	// update atime
 	fsvc := fsvcI.(*funcSvc)
 	fsvc.atime = time.Now()
@@ -121,7 +135,7 @@ func (fsc *functionServiceCache) GetByFunction(m *fission.Metadata) (*funcSvc, e
 }
 
 func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
-	err, existing := fsc.byFunction.Set(*fsvc.function, &fsvc)
+	err, existing := fsc.byFunction.Set(tpr.CacheKey(fsvc.function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*funcSvc)
@@ -167,8 +181,8 @@ func (fsc *functionServiceCache) _touchByAddress(address string) error {
 	if err != nil {
 		return err
 	}
-	m := mI.(fission.Metadata)
-	fsvcI, err := fsc.byFunction.Get(m)
+	m := mI.(api.ObjectMeta)
+	fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 	if err != nil {
 		return err
 	}
@@ -196,8 +210,8 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	if err != nil {
 		return false, err
 	}
-	m := mI.(fission.Metadata)
-	fsvcI, err := fsc.byFunction.Get(m)
+	m := mI.(api.ObjectMeta)
+	fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 	if err != nil {
 		return false, err
 	}
@@ -207,7 +221,7 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 		return false, nil
 	}
 
-	fsc.byFunction.Delete(m)
+	fsc.byFunction.Delete(tpr.CacheKey(&m))
 	fsc.byAddress.Delete(fsvc.address)
 	fsc.byPod.Delete(podName)
 	return true, nil

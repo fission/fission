@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"k8s.io/client-go/1.5/kubernetes"
+	"k8s.io/client-go/1.5/pkg/api"
 
-	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/tpr"
 )
 
 type requestType int
@@ -35,19 +35,18 @@ const (
 
 type (
 	GenericPoolManager struct {
-		pools            map[fission.Environment]*GenericPool
+		pools            map[string]*GenericPool
 		kubernetesClient *kubernetes.Clientset
 		namespace        string
-		controllerUrl    string
-		controllerClient *client.Client
+		fissionClient    *tpr.FissionClient
 		fsCache          *functionServiceCache
 		instanceId       string
 		requestChannel   chan *request
 	}
 	request struct {
 		requestType
-		env             *fission.Environment
-		envList         []fission.Environment
+		env             *tpr.Environment
+		envList         []tpr.Environment
 		responseChannel chan *response
 	}
 	response struct {
@@ -57,18 +56,18 @@ type (
 )
 
 func MakeGenericPoolManager(
-	controllerUrl string,
+	fissionClient *tpr.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
-	namespace string,
+	fissionNamespace string,
+	functionNamespace string,
 	fsCache *functionServiceCache,
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{
-		pools:            make(map[fission.Environment]*GenericPool),
+		pools:            make(map[string]*GenericPool),
 		kubernetesClient: kubernetesClient,
-		namespace:        namespace,
-		controllerUrl:    controllerUrl,
-		controllerClient: client.MakeClient(controllerUrl),
+		namespace:        functionNamespace,
+		fissionClient:    fissionClient,
 		fsCache:          fsCache,
 		instanceId:       instanceId,
 		requestChannel:   make(chan *request),
@@ -85,30 +84,30 @@ func (gpm *GenericPoolManager) service() {
 		switch req.requestType {
 		case GET_POOL:
 			var err error
-			pool, ok := gpm.pools[*req.env]
+			pool, ok := gpm.pools[tpr.CacheKey(&req.env.Metadata)]
 			if !ok {
 				pool, err = MakeGenericPool(
-					gpm.controllerUrl, gpm.kubernetesClient, req.env,
+					gpm.kubernetesClient, req.env,
 					3, // TODO configurable/autoscalable
 					gpm.namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
-				gpm.pools[*req.env] = pool
+				gpm.pools[tpr.CacheKey(&req.env.Metadata)] = pool
 			}
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
-			uids := make(map[string]bool)
+			latestEnvSet := make(map[string]bool)
 			for _, env := range req.envList {
-				uids[env.Metadata.Uid] = true
+				latestEnvSet[tpr.CacheKey(&env.Metadata)] = true
 			}
-			for env, pool := range gpm.pools {
-				_, ok := uids[env.Metadata.Uid]
+			for key, pool := range gpm.pools {
+				_, ok := latestEnvSet[key]
 				if !ok {
 					// Env no longer exists -- remove our cache
-					log.Printf("Destroying generic pool for environment [%v]", env)
-					delete(gpm.pools, env)
+					log.Printf("Destroying generic pool for environment [%v]", key)
+					delete(gpm.pools, key)
 
 					// and delete the pool asynchronously.
 					go pool.destroy()
@@ -119,7 +118,7 @@ func (gpm *GenericPoolManager) service() {
 	}
 }
 
-func (gpm *GenericPoolManager) GetPool(env *fission.Environment) (*GenericPool, error) {
+func (gpm *GenericPoolManager) GetPool(env *tpr.Environment) (*GenericPool, error) {
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
 		requestType:     GET_POOL,
@@ -130,7 +129,7 @@ func (gpm *GenericPoolManager) GetPool(env *fission.Environment) (*GenericPool, 
 	return resp.pool, resp.error
 }
 
-func (gpm *GenericPoolManager) CleanupPools(envs []fission.Environment) {
+func (gpm *GenericPoolManager) CleanupPools(envs []tpr.Environment) {
 	gpm.requestChannel <- &request{
 		requestType: CLEANUP_POOLS,
 		envList:     envs,
@@ -145,11 +144,11 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		time.Sleep(pollSleep)
 
 		// get list of envs from controller
-		envs, err := gpm.controllerClient.EnvironmentList()
+		envs, err := gpm.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
 		if err != nil {
 			failureCount++
 			if failureCount >= maxFailures {
-				log.Fatalf("Failed to connect to controller %v times: %v", maxFailures, err)
+				log.Fatalf("Failed %v times: %v", maxFailures, err)
 			}
 		}
 
@@ -157,14 +156,14 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// creating pools for envs that are actually used by functions.  Also we might want
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
-		for i := range envs {
-			_, err := gpm.GetPool(&envs[i])
+		for i := range envs.Items {
+			_, err := gpm.GetPool(&envs.Items[i])
 			if err != nil {
 				log.Printf("eager-create pool failed: %v", err)
 			}
 		}
 
 		// Clean up pools whose env was deleted
-		gpm.CleanupPools(envs)
+		gpm.CleanupPools(envs.Items)
 	}
 }

@@ -14,19 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package tpr
 
 import (
-	"encoding/json"
+	"fmt"
+
+	"k8s.io/client-go/1.5/pkg/api"
 )
 
-type JsonSerializer struct {
-}
-
-func (j JsonSerializer) serialize(r resource) ([]byte, error) {
-	return json.Marshal(r)
-}
-
-func (j JsonSerializer) deserialize(buf []byte, r resource) error {
-	return json.Unmarshal(buf, r)
+// Given metadata, create a key that uniquely identifies the contents
+// of the object. Since resourceVersion changes on every update and
+// UIDs are unique, uid+resourceVersion identifies the
+// content. (ResourceVersion may also update on status updates, so
+// this will result in some unnecessary cache misses. That should be
+// ok.)
+func CacheKey(metadata *api.ObjectMeta) string {
+	return fmt.Sprintf("%v_%v", metadata.UID, metadata.ResourceVersion)
 }

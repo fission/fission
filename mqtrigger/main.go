@@ -19,12 +19,16 @@ package messagequeue
 import (
 	"os"
 
-	controllerClient "github.com/fission/fission/controller/client"
 	"github.com/fission/fission/mqtrigger/messageQueue"
+	"github.com/fission/fission/tpr"
+	"log"
 )
 
-func Start(controllerUrl string, routerUrl string) error {
-	controller := controllerClient.MakeClient(controllerUrl)
+func Start(routerUrl string) error {
+	fissionClient, _, err := tpr.MakeFissionClient()
+	if err != nil {
+		log.Fatalf("Failed to get fission client: %v", err)
+	}
 
 	// Message queue type: nats is the only supported one for now
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
@@ -33,6 +37,6 @@ func Start(controllerUrl string, routerUrl string) error {
 		MQType: mqType,
 		Url:    mqUrl,
 	}
-	messageQueue.MakeMessageQueueTriggerManager(controller, routerUrl, mqCfg)
+	messageQueue.MakeMessageQueueTriggerManager(fissionClient, routerUrl, mqCfg)
 	return nil
 }

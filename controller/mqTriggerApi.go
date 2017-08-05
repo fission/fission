@@ -22,145 +22,126 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
-func (api *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	mqType := r.FormValue("mqtype")
-	triggers, err := api.MessageQueueTriggerStore.List(mqType)
+func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
+	//mqType := r.FormValue("mqtype") // ignored for now
+	triggers, err := a.fissionClient.Messagequeuetriggers(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	resp, err := json.Marshal(triggers)
+	resp, err := json.Marshal(triggers.Items)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) MessageQueueApiCreate(w http.ResponseWriter, r *http.Request) {
+func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var mqTrigger fission.MessageQueueTrigger
+	var mqTrigger tpr.Messagequeuetrigger
 	err = json.Unmarshal(body, &mqTrigger)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	// trigger name must not conflict with any other trigger
-	// even they are different message queue type
-	triggers, err := api.MessageQueueTriggerStore.List("")
+	tnew, err := a.fissionClient.Messagequeuetriggers(mqTrigger.Metadata.Namespace).Create(&mqTrigger)
 	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-	for _, trigger := range triggers {
-		if trigger.Name == mqTrigger.Name {
-			err = fission.MakeError(fission.ErrorNameExists,
-				"Message queue trigger with same name already exists")
-			api.respondWithError(w, err)
-			return
-		}
-	}
-
-	// save trigger info
-	uid, err := api.MessageQueueTriggerStore.Create(&mqTrigger)
-	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	mqTriggerMeta := fission.Metadata{Name: mqTrigger.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(mqTriggerMeta)
+	resp, err := json.Marshal(tnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) MessageQueueApiGet(w http.ResponseWriter, r *http.Request) {
+func (a *API) MessageQueueTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	mqTriggerMeta := fission.Metadata{
-		Name: vars["mqTrigger"],
-		Uid:  r.FormValue("uid"), // empty if uid is absent
+	name := vars["mqTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
-	mqTrigger, err := api.MessageQueueTriggerStore.Get(&mqTriggerMeta)
+
+	mqTrigger, err := a.fissionClient.Messagequeuetriggers(ns).Get(name)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 	resp, err := json.Marshal(mqTrigger)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) MessageQueueApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	mqtName := vars["mqTrigger"]
+	name := vars["mqTrigger"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var mqTrigger fission.MessageQueueTrigger
+	var mqTrigger tpr.Messagequeuetrigger
 	err = json.Unmarshal(body, &mqTrigger)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	if mqtName != mqTrigger.Metadata.Name {
+	if name != mqTrigger.Metadata.Name {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "Message queue trigger name doesn't match URL")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.MessageQueueTriggerStore.Update(&mqTrigger)
+	tnew, err := a.fissionClient.Messagequeuetriggers(mqTrigger.Metadata.Namespace).Update(&mqTrigger)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	mqTriggerMeta := fission.Metadata{Name: mqTrigger.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(mqTriggerMeta)
+	resp, err := json.Marshal(tnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) MessageQueueApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) MessageQueueTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	mqTriggerMeta := fission.Metadata{
-		Name: vars["mqTrigger"],
-		Uid:  r.FormValue("uid"), // empty if uid is absent
+	name := vars["mqTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
 
-	if len(mqTriggerMeta.Uid) == 0 {
-		log.WithFields(log.Fields{"mqTrigger": mqTriggerMeta.Name}).Info("Deleting all versions")
-	}
-
-	err := api.MessageQueueTriggerStore.Delete(mqTriggerMeta)
+	err := a.fissionClient.Messagequeuetriggers(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, []byte(""))
+	a.respondWithSuccess(w, []byte(""))
 }

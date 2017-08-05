@@ -18,151 +18,164 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
-func (api *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := api.HTTPTriggerStore.List()
+func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
+	triggers, err := a.fissionClient.Httptriggers(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(triggers)
+	resp, err := json.Marshal(triggers.Items)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+func (a *API) checkHttpTriggerDuplicates(t *tpr.Httptrigger) error {
+	triggers, err := a.fissionClient.Httptriggers(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
-		return
+		return err
 	}
-
-	var t fission.HTTPTrigger
-	err = json.Unmarshal(body, &t)
-	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-
-	triggers, err := api.HTTPTriggerStore.List()
-	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-	for _, url := range triggers {
-		if url.UrlPattern == t.UrlPattern && url.Method == t.Method {
-			err = fission.MakeError(fission.ErrorNameExists,
-				"HTTPTrigger with same URL & method already exists")
-			api.respondWithError(w, err)
-			return
+	for _, ht := range triggers.Items {
+		if ht.Spec.RelativeURL == t.Spec.RelativeURL && ht.Spec.Method == t.Spec.Method {
+			return fission.MakeError(fission.ErrorNameExists,
+				fmt.Sprintf("HTTPTrigger with same URL & method already exists (%v)",
+					ht.Metadata.Name))
 		}
 	}
+	return nil
+}
 
-	uid, err := api.HTTPTriggerStore.Create(&t)
+func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	var t tpr.Httptrigger
+	err = json.Unmarshal(body, &t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
+		return
+	}
+
+	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
+	err = a.checkHttpTriggerDuplicates(&t)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	tnew, err := a.fissionClient.Httptriggers(t.Metadata.Namespace).Create(&t)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	resp, err := json.Marshal(tnew.Metadata)
+	if err != nil {
+		a.respondWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
-	var m fission.Metadata
-
+func (a *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	m.Name = vars["httpTrigger"]
-	m.Uid = r.FormValue("uid") // empty if uid is absent
+	name := vars["httpTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
+	}
 
-	t, err := api.HTTPTriggerStore.Get(&m)
+	t, err := a.fissionClient.Httptriggers(ns).Get(name)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	resp, err := json.Marshal(t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["httpTrigger"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var t fission.HTTPTrigger
+	var t tpr.Httptrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	if name != t.Metadata.Name {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "HTTPTrigger name doesn't match URL")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.HTTPTriggerStore.Update(&t)
+	err = a.checkHttpTriggerDuplicates(&t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	tnew, err := a.fissionClient.Httptriggers(t.Metadata.Namespace).Update(&t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+
+	resp, err := json.Marshal(tnew.Metadata)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	var m fission.Metadata
-	m.Name = vars["httpTrigger"]
-
-	m.Uid = r.FormValue("uid") // empty if uid is absent
-	if len(m.Uid) == 0 {
-		log.WithFields(log.Fields{"httpTrigger": m.Name}).Info("Deleting all versions")
+	name := vars["httpTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
 
-	err := api.HTTPTriggerStore.Delete(m)
+	err := a.fissionClient.Httptriggers(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, []byte(""))
+	a.respondWithSuccess(w, []byte(""))
 }

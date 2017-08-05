@@ -22,8 +22,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 func envCreate(c *cli.Context) error {
@@ -39,11 +41,17 @@ func envCreate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
-	env := &fission.Environment{
-		Metadata: fission.Metadata{
-			Name: envName,
+	env := &tpr.Environment{
+		Metadata: api.ObjectMeta{
+			Name:      envName,
+			Namespace: api.NamespaceDefault,
 		},
-		RunContainerImageUrl: envImg,
+		Spec: fission.EnvironmentSpec{
+			Version: 1,
+			Runtime: fission.Runtime{
+				Image: envImg,
+			},
+		},
 	}
 
 	_, err := client.EnvironmentCreate(env)
@@ -61,14 +69,17 @@ func envGet(c *cli.Context) error {
 		fatal("Need a name, use --name.")
 	}
 
-	m := &fission.Metadata{Name: envName}
+	m := &api.ObjectMeta{
+		Name:      envName,
+		Namespace: api.NamespaceDefault,
+	}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
 	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl)
+		env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image)
 	w.Flush()
 	return nil
 }
@@ -86,14 +97,15 @@ func envUpdate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
-	env := &fission.Environment{
-		Metadata: fission.Metadata{
-			Name: envName,
-		},
-		RunContainerImageUrl: envImg,
-	}
+	env, err := client.EnvironmentGet(&api.ObjectMeta{
+		Name:      envName,
+		Namespace: api.NamespaceDefault,
+	})
+	checkErr(err, "find environment")
 
-	_, err := client.EnvironmentUpdate(env)
+	env.Spec.Runtime.Image = envImg
+
+	_, err = client.EnvironmentUpdate(env)
 	checkErr(err, "update environment")
 
 	fmt.Printf("environment '%v' updated\n", envName)
@@ -108,7 +120,10 @@ func envDelete(c *cli.Context) error {
 		fatal("Need a name , use --name.")
 	}
 
-	m := &fission.Metadata{Name: envName}
+	m := &api.ObjectMeta{
+		Name:      envName,
+		Namespace: api.NamespaceDefault,
+	}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")
 
@@ -126,7 +141,7 @@ func envList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
 	for _, env := range envs {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			env.Metadata.Name, env.Metadata.Uid, env.RunContainerImageUrl)
+			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image)
 	}
 	w.Flush()
 

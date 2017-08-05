@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/client-go/1.5/pkg/api"
+
 	"github.com/fission/fission"
 )
 
@@ -45,8 +47,9 @@ func MakeClient(poolmgrUrl string) *Client {
 	return c
 }
 
-func (c *Client) GetServiceForFunction(metadata *fission.Metadata) (string, error) {
-	poolmgrUrl := c.poolmgrUrl + "/v1/getServiceForFunction"
+func (c *Client) GetServiceForFunction(metadata *api.ObjectMeta) (string, error) {
+	poolmgrUrl := c.poolmgrUrl + "/v2/getServiceForFunction"
+
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return "", err
@@ -97,7 +100,7 @@ func (c *Client) TapService(serviceUrl *url.URL) {
 }
 
 func (c *Client) _tapService(serviceUrlStr string) error {
-	poolmgrUrl := c.poolmgrUrl + "/v1/tapService"
+	poolmgrUrl := c.poolmgrUrl + "/v2/tapService"
 
 	resp, err := http.Post(poolmgrUrl, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
 	if err != nil {

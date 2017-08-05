@@ -1,0 +1,131 @@
+/*
+Copyright 2016 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package client
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"k8s.io/client-go/1.5/pkg/api"
+
+	"github.com/fission/fission/tpr"
+)
+
+func (c *Client) HTTPTriggerCreate(t *tpr.Httptrigger) (*api.ObjectMeta, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(c.url("triggers/http"), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleCreateResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m api.ObjectMeta
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m, nil
+}
+
+func (c *Client) HTTPTriggerGet(m *api.ObjectMeta) (*tpr.Httptrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var t tpr.Httptrigger
+	err = json.Unmarshal(body, &t)
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func (c *Client) HTTPTriggerUpdate(t *tpr.Httptrigger) (*api.ObjectMeta, error) {
+	reqbody, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+	relativeUrl := fmt.Sprintf("triggers/http/%v", t.Metadata.Name)
+
+	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var m api.ObjectMeta
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (c *Client) HTTPTriggerDelete(m *api.ObjectMeta) error {
+	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
+	return c.delete(relativeUrl)
+}
+
+func (c *Client) HTTPTriggerList() ([]tpr.Httptrigger, error) {
+	resp, err := http.Get(c.url("triggers/http"))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	triggers := make([]tpr.Httptrigger, 0)
+	err = json.Unmarshal(body, &triggers)
+	if err != nil {
+		return nil, err
+	}
+
+	return triggers, nil
+}

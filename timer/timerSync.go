@@ -20,39 +20,36 @@ import (
 	"log"
 	"time"
 
-	controllerClient "github.com/fission/fission/controller/client"
+	"k8s.io/client-go/1.5/pkg/api"
+
+	"github.com/fission/fission/tpr"
 )
 
 type (
 	TimerSync struct {
-		controller *controllerClient.Client
-		timer      *Timer
+		fissionClient *tpr.FissionClient
+		timer         *Timer
 	}
 )
 
-func MakeTimerSync(controller *controllerClient.Client, timer *Timer) *TimerSync {
+func MakeTimerSync(fissionClient *tpr.FissionClient, timer *Timer) *TimerSync {
 	ws := &TimerSync{
-		controller: controller,
-		timer:      timer,
+		fissionClient: fissionClient,
+		timer:         timer,
 	}
 	go ws.syncSvc()
 	return ws
 }
 
 func (ws *TimerSync) syncSvc() {
-	failureCount := 0
-	maxFailures := 6
 	for {
-		triggers, err := ws.controller.TimeTriggerList()
+		triggers, err := ws.fissionClient.Timetriggers(api.NamespaceAll).List(api.ListOptions{})
 		if err != nil {
-			failureCount++
-			if failureCount > maxFailures {
-				log.Fatalf("Failed to connect to controller: %v", err)
-			}
-			time.Sleep(10 * time.Second)
-			continue
+			log.Fatalf("Failed get time trigger list: %v", err)
 		}
-		ws.timer.Sync(triggers)
+		ws.timer.Sync(triggers.Items)
+
+		// TODO switch to watches
 		time.Sleep(3 * time.Second)
 	}
 }

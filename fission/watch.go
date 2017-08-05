@@ -23,8 +23,10 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
 func wCreate(c *cli.Context) error {
@@ -34,7 +36,6 @@ func wCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a watch, use --function")
 	}
-	fnUid := c.String("uid")
 
 	namespace := c.String("ns")
 	if len(namespace) == 0 {
@@ -52,23 +53,28 @@ func wCreate(c *cli.Context) error {
 	// empty 'labels' selects everything
 	if len(labels) == 0 {
 		fmt.Printf("Watching all objects of type '%v', use --labels to refine selection.\n", objType)
+	} else {
+		// TODO
+		fmt.Printf("Label selector not implemented, watching all objects")
 	}
 
 	// automatically name watches
 	watchName := uuid.NewV4().String()
 
-	w := &fission.Watch{
-		Metadata: fission.Metadata{
-			Name: watchName,
+	w := &tpr.Kuberneteswatchtrigger{
+		Metadata: api.ObjectMeta{
+			Name:      watchName,
+			Namespace: api.NamespaceDefault,
 		},
-		Function: fission.Metadata{
-			Name: fnName,
-			Uid:  fnUid,
+		Spec: fission.KubernetesWatchTriggerSpec{
+			Namespace: namespace,
+			Type:      objType,
+			//LabelSelector: labels,
+			FunctionReference: fission.FunctionReference{
+				Name: fnName,
+				Type: fission.FunctionReferenceTypeFunctionName,
+			},
 		},
-		Namespace:     namespace,
-		ObjType:       objType,
-		LabelSelector: labels,
-		FieldSelector: "", // TODO
 	}
 
 	_, err := client.WatchCreate(w)
@@ -79,10 +85,14 @@ func wCreate(c *cli.Context) error {
 }
 
 func wGet(c *cli.Context) error {
+	// TODO
+	fatal("Not implemented")
 	return nil
 }
 
 func wUpdate(c *cli.Context) error {
+	// TODO
+	fatal("Not implemented")
 	return nil
 }
 
@@ -94,7 +104,10 @@ func wDelete(c *cli.Context) error {
 		fatal("Need name of watch to delete, use --name")
 	}
 
-	err := client.WatchDelete(&fission.Metadata{Name: wName})
+	err := client.WatchDelete(&api.ObjectMeta{
+		Name:      wName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, "delete watch")
 
 	fmt.Printf("watch '%v' deleted\n", wName)
@@ -109,10 +122,11 @@ func wList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME", "FUNCTION_UID")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME")
 	for _, wa := range ws {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-			wa.Metadata.Name, wa.Namespace, wa.ObjType, wa.LabelSelector, wa.Function.Name, wa.Function.Uid)
+			wa.Metadata.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

@@ -23,161 +23,146 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
-	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/tpr"
 )
 
-func (api *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := api.TimeTriggerStore.List()
+func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
+	triggers, err := a.fissionClient.Timetriggers(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(triggers)
+	resp, err := json.Marshal(triggers.Items)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
+func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var t fission.TimeTrigger
+	var t tpr.Timetrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	triggers, err := api.TimeTriggerStore.List()
-	if err != nil {
-		api.respondWithError(w, err)
-		return
-	}
-	for _, trigger := range triggers {
-		if trigger.Name == t.Name {
-			err = fission.MakeError(fission.ErrorNameExists,
-				"TimeTrigger with same name already exists")
-			api.respondWithError(w, err)
-			return
-		}
-	}
-
-	_, err = cron.Parse(t.Cron)
+	// validate
+	_, err = cron.Parse(t.Spec.Cron)
 	if err != nil {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.TimeTriggerStore.Create(&t)
+	tnew, err := a.fissionClient.Timetriggers(t.Metadata.Namespace).Create(&t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	resp, err := json.Marshal(tnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
-	var m fission.Metadata
-
+func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	m.Name = vars["timeTrigger"]
-	m.Uid = r.FormValue("uid") // empty if uid is absent
+	name := vars["timeTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
+	}
 
-	t, err := api.TimeTriggerStore.Get(&m)
+	t, err := a.fissionClient.Timetriggers(ns).Get(name)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	resp, err := json.Marshal(t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["timeTrigger"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	var t fission.TimeTrigger
+	var t tpr.Timetrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
 	if name != t.Metadata.Name {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "TimeTrigger name doesn't match URL")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	_, err = cron.Parse(t.Cron)
+	_, err = cron.Parse(t.Spec.Cron)
 	if err != nil {
 		err = fission.MakeError(fission.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	uid, err := api.TimeTriggerStore.Update(&t)
+	tnew, err := a.fissionClient.Timetriggers(t.Metadata.Namespace).Update(&t)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	m := &fission.Metadata{Name: t.Metadata.Name, Uid: uid}
-	resp, err := json.Marshal(m)
+	resp, err := json.Marshal(tnew.Metadata)
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
-	api.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, resp)
 }
 
-func (api *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	var m fission.Metadata
-	m.Name = vars["timeTrigger"]
-
-	m.Uid = r.FormValue("uid") // empty if uid is absent
-	if len(m.Uid) == 0 {
-		log.WithFields(log.Fields{"timeTrigger": m.Name}).Info("Deleting all versions")
+	name := vars["timeTrigger"]
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = api.NamespaceDefault
 	}
 
-	err := api.TimeTriggerStore.Delete(m)
+	err := a.fissionClient.Timetriggers(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
-		api.respondWithError(w, err)
+		a.respondWithError(w, err)
 		return
 	}
 
-	api.respondWithSuccess(w, []byte(""))
+	a.respondWithSuccess(w, []byte(""))
 }

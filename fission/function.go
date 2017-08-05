@@ -20,45 +20,53 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
+	//"net/http"
 	"os"
-	"os/exec"
-	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"
+	"github.com/fission/fission/tpr"
 )
 
-func fnFetchCode(filePath string) []byte {
+func downloadUrl(url string) {
+	// var resp *http.Response
+	// resp, err := http.Get(url)
+	// if err != nil {
+	// 	checkErr(err, fmt.Sprintf("download function"))
+	// }
+
+	// defer resp.Body.Close()
+	// if resp.StatusCode != http.StatusOK {
+	// 	err = fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
+	// 	checkErr(err, fmt.Sprintf("download function"))
+	// }
+
+	// contents, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	checkErr(err, fmt.Sprintf("download function body %v", url))
+	// }
+
+	// return
+}
+
+func fileSize(filePath string) int64 {
+	info, err := os.Stat(filePath)
+	checkErr(err, fmt.Sprintf("stat %v", filePath))
+	return info.Size()
+}
+
+func getPackageContents(filePath string) []byte {
 	var code []byte
 	var err error
 
-	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
-		var resp *http.Response
-		resp, err = http.Get(filePath)
-		if err != nil {
-			checkErr(err, fmt.Sprintf("download function"))
-		}
-
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			err = fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
-			checkErr(err, fmt.Sprintf("download function"))
-		}
-
-		code, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			checkErr(err, fmt.Sprintf("download function body %v", filePath))
-		}
-	} else {
-		code, err = ioutil.ReadFile(filePath)
-		checkErr(err, fmt.Sprintf("read %v", filePath))
-	}
+	code, err = ioutil.ReadFile(filePath)
+	checkErr(err, fmt.Sprintf("read %v", filePath))
 	return code
 }
 
@@ -83,12 +91,25 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 
-	code := fnFetchCode(fileName)
+	if fileSize(fileName) > fission.PackageLiteralSizeLimit {
+		// TODO fallback to uploading + setting a Package URL
+		fmt.Printf("File size not supported yet")
+		os.Exit(1)
+	}
 
-	function := &fission.Function{
-		Metadata:    fission.Metadata{Name: fnName},
-		Environment: fission.Metadata{Name: envName},
-		Code:        string(code),
+	pkgContents := getPackageContents(fileName)
+
+	function := &tpr.Function{
+		Metadata: api.ObjectMeta{
+			Name:      fnName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: fission.FunctionSpec{
+			EnvironmentName: envName,
+			Deployment: fission.Package{
+				Literal: pkgContents,
+			},
+		},
 	}
 
 	_, err := client.FunctionCreate(function)
@@ -106,14 +127,18 @@ func fnCreate(c *cli.Context) error {
 		method = "GET"
 	}
 	triggerName := uuid.NewV4().String()
-	ht := &fission.HTTPTrigger{
-		Metadata: fission.Metadata{
-			Name: triggerName,
+	ht := &tpr.Httptrigger{
+		Metadata: api.ObjectMeta{
+			Name:      triggerName,
+			Namespace: api.NamespaceDefault,
 		},
-		UrlPattern: triggerUrl,
-		Method:     getMethod(method),
-		Function: fission.Metadata{
-			Name: fnName,
+		Spec: fission.HTTPTriggerSpec{
+			RelativeURL: triggerUrl,
+			Method:      getMethod(method),
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+				Name: fnName,
+			},
 		},
 	}
 	_, err = client.HTTPTriggerCreate(ht)
@@ -130,13 +155,15 @@ func fnGet(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
-	fnUid := c.String("uid")
-	m := &fission.Metadata{Name: fnName, Uid: fnUid}
+	m := &api.ObjectMeta{
+		Name:      fnName,
+		Namespace: api.NamespaceDefault,
+	}
 
-	code, err := client.FunctionGetRaw(m)
+	code, err := client.FunctionGetRawDeployment(m)
 	checkErr(err, "get function")
 
-	fmt.Println(string(code))
+	os.Stdout.Write(code)
 	return err
 }
 
@@ -148,8 +175,10 @@ func fnGetMeta(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	fnUid := c.String("uid")
-	m := &fission.Metadata{Name: fnName, Uid: fnUid}
+	m := &api.ObjectMeta{
+		Name:      fnName,
+		Namespace: api.NamespaceDefault,
+	}
 
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")
@@ -157,7 +186,7 @@ func fnGetMeta(c *cli.Context) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
 	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		f.Metadata.Name, f.Metadata.Uid, f.Environment.Name)
+		f.Metadata.Name, f.Metadata.UID, f.Spec.EnvironmentName)
 	w.Flush()
 	return err
 }
@@ -170,14 +199,13 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	function, err := client.FunctionGet(&fission.Metadata{Name: fnName})
+	function, err := client.FunctionGet(&api.ObjectMeta{
+		Name:      fnName,
+		Namespace: api.NamespaceDefault,
+	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
 	envName := c.String("env")
-	if len(envName) > 0 {
-		function.Environment.Name = envName
-	}
-
 	fileName := c.String("code")
 	if len(fileName) == 0 {
 		fileName = c.String("package")
@@ -188,8 +216,16 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	if len(fileName) > 0 {
-		code := fnFetchCode(fileName)
-		function.Code = string(code)
+		if fileSize(fileName) > fission.PackageLiteralSizeLimit {
+			// TODO fallback to uploading + setting a Package URL
+			fmt.Printf("File size >256k not supported yet")
+			os.Exit(1)
+		}
+
+		function.Spec.Deployment.Literal = getPackageContents(fileName)
+	}
+	if len(envName) > 0 {
+		function.Spec.EnvironmentName = envName
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -207,8 +243,10 @@ func fnDelete(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	fnUid := c.String("uid")
-	m := &fission.Metadata{Name: fnName, Uid: fnUid}
+	m := &api.ObjectMeta{
+		Name:      fnName,
+		Namespace: api.NamespaceDefault,
+	}
 
 	err := client.FunctionDelete(m)
 	checkErr(err, fmt.Sprintf("delete function '%v'", fnName))
@@ -228,63 +266,11 @@ func fnList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
 	for _, f := range fns {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.Uid, f.Environment.Name)
+			f.Metadata.Name, f.Metadata.UID, f.Spec.EnvironmentName)
 	}
 	w.Flush()
 
 	return err
-}
-
-func fnEdit(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
-
-	fnName := c.String("name")
-	if len(fnName) == 0 {
-		fatal("Need name of function, use --name")
-	}
-	fnUid := c.String("uid")
-
-	// get function meta
-	function, err := client.FunctionGet(&fission.Metadata{Name: fnName, Uid: fnUid})
-	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
-
-	// write to tmp file
-	tmpFile, err := ioutil.TempFile("", fnName)
-	checkErr(err, "create temp file")
-	defer os.Remove(tmpFile.Name())
-
-	_, err = tmpFile.Write([]byte(function.Code))
-	checkErr(err, "write temp file")
-	tmpFile.Close()
-
-	// invoke $EDITOR on tmp file and wait for it
-	editor := os.Getenv("EDITOR")
-	if len(editor) == 0 {
-		editor = "vi"
-	}
-	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%v %v", editor, tmpFile.Name()))
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Start()
-	checkErr(err, "start editor")
-
-	err = cmd.Wait()
-	checkErr(err, "wait for editor")
-
-	// read new code out of the file
-	contents, err := ioutil.ReadFile(tmpFile.Name())
-	checkErr(err, "read temp file")
-
-	function.Code = string(contents)
-
-	// upload the updated function
-	newfn, err := client.FunctionUpdate(function)
-	checkErr(err, "upload edited function")
-
-	fmt.Printf("function %v updated, new uuid: %v\n", newfn.Name, newfn.Uid)
-	return nil
 }
 
 func fnLogs(c *cli.Context) error {
@@ -301,13 +287,15 @@ func fnLogs(c *cli.Context) error {
 	}
 
 	fnPod := c.String("pod")
-	m := &fission.Metadata{Name: fnName}
+	m := &api.ObjectMeta{
+		Name:      fnName,
+		Namespace: api.NamespaceDefault,
+	}
 
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
-	// client first send db query to controller, then controller will
-	// establishe a proxy server that bridges the client and the database.
+	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, c.GlobalString("server"))
 	if err != nil {
 		fatal("failed to connect log database")
@@ -325,7 +313,7 @@ func fnLogs(c *cli.Context) error {
 				logFilter := logdb.LogFilter{
 					Pod:      fnPod,
 					Function: f.Metadata.Name,
-					FuncUid:  f.Metadata.Uid,
+					FuncUid:  string(f.Metadata.UID),
 					Since:    t,
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
@@ -372,7 +360,7 @@ func fnPods(c *cli.Context) error {
 		dbType = logdb.INFLUXDB
 	}
 
-	m := &fission.Metadata{Name: fnName}
+	m := &api.ObjectMeta{Name: fnName}
 
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")
@@ -386,7 +374,7 @@ func fnPods(c *cli.Context) error {
 
 	logFilter := logdb.LogFilter{
 		Function: f.Metadata.Name,
-		FuncUid:  f.Metadata.Uid,
+		FuncUid:  string(f.Metadata.UID),
 	}
 	pods, err := logDB.GetPods(logFilter)
 	if err != nil {

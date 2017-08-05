@@ -20,17 +20,19 @@ import (
 	"log"
 	"time"
 
-	"github.com/fission/fission/controller/client"
+	"k8s.io/client-go/1.5/pkg/api"
+
+	"github.com/fission/fission/tpr"
 )
 
 type (
 	WatchSync struct {
-		client      *client.Client
+		client      *tpr.FissionClient
 		kubeWatcher *KubeWatcher
 	}
 )
 
-func MakeWatchSync(client *client.Client, kubeWatcher *KubeWatcher) *WatchSync {
+func MakeWatchSync(client *tpr.FissionClient, kubeWatcher *KubeWatcher) *WatchSync {
 	ws := &WatchSync{
 		client:      client,
 		kubeWatcher: kubeWatcher,
@@ -40,20 +42,14 @@ func MakeWatchSync(client *client.Client, kubeWatcher *KubeWatcher) *WatchSync {
 }
 
 func (ws *WatchSync) syncSvc() {
-	failureCount := 0
-	maxFailures := 6
+	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.WatchList()
+		watches, err := ws.client.Kuberneteswatchtriggers(api.NamespaceAll).List(api.ListOptions{})
 		if err != nil {
-			failureCount++
-			if failureCount > maxFailures {
-				log.Fatalf("Failed to connect to controller: %v", err)
-			}
-			time.Sleep(10 * time.Second)
-			continue
+			log.Fatalf("Failed to get Kubernetes watch trigger list: %v", err)
 		}
 
-		ws.kubeWatcher.Sync(watches)
+		ws.kubeWatcher.Sync(watches.Items)
 		time.Sleep(3 * time.Second)
 	}
 }

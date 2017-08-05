@@ -16,13 +16,14 @@ limitations under the License.
 
 package controller
 
-type (
-	resource interface {
-		Key() string
-	}
-
-	serializer interface {
-		serialize(r resource) ([]byte, error)
-		deserialize(buf []byte, r resource) error
-	}
+import (
+	"github.com/fission/fission/tpr"
 )
+
+func makeTPRBackedAPI() (*API, error) {
+	fissionClient, _, err := tpr.MakeFissionClient()
+	if err != nil {
+		return nil, err
+	}
+	return &API{fissionClient: fissionClient}, nil
+}

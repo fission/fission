@@ -14,37 +14,25 @@ import (
 	"github.com/fission/fission/timer"
 )
 
-func runController(port int, etcdUrl string, filepath string) {
-	// filePath will be created if it doesn't exist.
-	fileStore := controller.MakeFileStore(filepath)
-	if fileStore == nil {
-		log.Fatalf("Failed to initialize filestore")
-	}
-
-	rs, err := controller.MakeResourceStore(fileStore, []string{etcdUrl})
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-	}
-
-	api := controller.MakeAPI(rs)
-	api.Serve(port)
+func runController(port int) {
+	controller.Start(port)
 	log.Fatalf("Error: Controller exited.")
 }
 
-func runRouter(port int, controllerUrl string, poolmgrUrl string) {
-	router.Start(port, controllerUrl, poolmgrUrl)
+func runRouter(port int, poolmgrUrl string) {
+	router.Start(port, poolmgrUrl)
 	log.Fatalf("Error: Router exited.")
 }
 
-func runPoolmgr(port int, controllerUrl string, namespace string) {
-	err := poolmgr.StartPoolmgr(controllerUrl, namespace, port)
+func runPoolmgr(port int, fissionNamespace, functionNamespace string) {
+	err := poolmgr.StartPoolmgr(fissionNamespace, functionNamespace, port)
 	if err != nil {
 		log.Fatalf("Error starting poolmgr: %v", err)
 	}
 }
 
-func runKubeWatcher(controllerUrl, routerUrl string) {
-	err := kubewatcher.Start(controllerUrl, routerUrl)
+func runKubeWatcher(routerUrl string) {
+	err := kubewatcher.Start(routerUrl)
 	if err != nil {
 		log.Fatalf("Error starting kubewatcher: %v", err)
 	}
@@ -55,15 +43,15 @@ func runLogger() {
 	log.Fatalf("Error: Logger exited.")
 }
 
-func runTimer(controllerUrl, routerUrl string) {
-	err := timer.Start(controllerUrl, routerUrl)
+func runTimer(routerUrl string) {
+	err := timer.Start(routerUrl)
 	if err != nil {
 		log.Fatalf("Error starting timer: %v", err)
 	}
 }
 
-func runMessageQueueMgr(controllerUrl, routerUrl string) {
-	err := messagequeue.Start(controllerUrl, routerUrl)
+func runMessageQueueMgr(routerUrl string) {
+	err := messagequeue.Start(routerUrl)
 	if err != nil {
 		log.Fatalf("Error starting timer: %v", err)
 	}
@@ -98,18 +86,17 @@ Use it to start one or more of the fission servers:
  Router implements HTTP triggers: it routes to running instances, working with the controller and poolmgr.
 
 Usage:
-  fission-bundle --controllerPort=<port> [--etcdUrl=<etcdUrl>] --filepath=<filepath>
-  fission-bundle --routerPort=<port> [--controllerUrl=<url> --poolmgrUrl=<url>]
-  fission-bundle --poolmgrPort=<port> [--controllerUrl=<url> --namespace=<namespace>]
-  fission-bundle --kubewatcher [--controllerUrl=<url> --routerUrl=<url>]
+  fission-bundle --controllerPort=<port>
+  fission-bundle --routerPort=<port> [--poolmgrUrl=<url>]
+  fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
+  fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --logger
-  fission-bundle --timer [--controllerUrl=<url> --routerUrl=<url>]
-  fission-bundle --mqt   [--controllerUrl=<url> --routerUrl=<url>]
+  fission-bundle --timer [--routerUrl=<url>]
+  fission-bundle --mqt   [--routerUrl=<url>]
 Options:
   --controllerPort=<port>  Port that the controller should listen on.
   --routerPort=<port>      Port that the router should listen on.
   --poolmgrPort=<port>     Port that the poolmgr should listen on.
-  --controllerUrl=<url>    Controller URL. Not required if --controllerPort is specified.
   --poolmgrUrl=<url>       Poolmgr URL. Not required if --poolmgrPort is specified.
   --routerUrl=<url>        Router URL.
   --etcdUrl=<etcdUrl>      Etcd URL.
@@ -125,30 +112,29 @@ Options:
 		log.Fatalf("Error: %v", err)
 	}
 
-	namespace := getStringArgWithDefault(arguments["--namespace"], "fission-function")
+	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
+	fissionNs := getStringArgWithDefault(arguments["--fission-namespace"], "fission")
 
-	controllerUrl := getStringArgWithDefault(arguments["--controllerUrl"], "http://controller.fission")
-	etcdUrl := getStringArgWithDefault(arguments["--etcdUrl"], "http://etcd:2379")
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
-		runController(port, etcdUrl, arguments["--filepath"].(string))
+		runController(port)
 	}
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(arguments["--routerPort"])
-		runRouter(port, controllerUrl, poolmgrUrl)
+		runRouter(port, poolmgrUrl)
 	}
 
 	if arguments["--poolmgrPort"] != nil {
 		port := getPort(arguments["--poolmgrPort"])
-		runPoolmgr(port, controllerUrl, namespace)
+		runPoolmgr(port, fissionNs, functionNs)
 	}
 
 	if arguments["--kubewatcher"] == true {
-		runKubeWatcher(controllerUrl, routerUrl)
+		runKubeWatcher(routerUrl)
 	}
 
 	if arguments["--logger"] == true {
@@ -156,11 +142,11 @@ Options:
 	}
 
 	if arguments["--timer"] == true {
-		runTimer(controllerUrl, routerUrl)
+		runTimer(routerUrl)
 	}
 
 	if arguments["--mqt"] == true {
-		runMessageQueueMgr(controllerUrl, routerUrl)
+		runMessageQueueMgr(routerUrl)
 	}
 
 	select {}

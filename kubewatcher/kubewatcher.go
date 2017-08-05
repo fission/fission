@@ -33,10 +33,12 @@ import (
 	apierrs "k8s.io/client-go/1.5/pkg/api/errors"
 	"k8s.io/client-go/1.5/pkg/api/meta"
 	"k8s.io/client-go/1.5/pkg/runtime"
+	"k8s.io/client-go/1.5/pkg/types"
 	"k8s.io/client-go/1.5/pkg/watch"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"
+	"github.com/fission/fission/tpr"
 )
 
 type requestType int
@@ -47,7 +49,7 @@ const (
 
 type (
 	KubeWatcher struct {
-		watches          map[string]watchSubscription
+		watches          map[types.UID]watchSubscription
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *kubeWatcherRequest
 		publisher        publisher.Publisher
@@ -55,7 +57,7 @@ type (
 	}
 
 	watchSubscription struct {
-		fission.Watch
+		watch               tpr.Kuberneteswatchtrigger
 		kubeWatch           watch.Interface
 		lastResourceVersion string
 		stopped             *int32
@@ -65,7 +67,7 @@ type (
 
 	kubeWatcherRequest struct {
 		requestType
-		watches         []fission.Watch
+		watches         []tpr.Kuberneteswatchtrigger
 		responseChannel chan *kubeWatcherResponse
 	}
 	kubeWatcherResponse struct {
@@ -75,7 +77,7 @@ type (
 
 func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
-		watches:          make(map[string]watchSubscription),
+		watches:          make(map[types.UID]watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
 		requestChannel:   make(chan *kubeWatcherRequest),
@@ -84,7 +86,7 @@ func MakeKubeWatcher(kubernetesClient *kubernetes.Clientset, publisher publisher
 	return kw
 }
 
-func (kw *KubeWatcher) Sync(watches []fission.Watch) error {
+func (kw *KubeWatcher) Sync(watches []tpr.Kuberneteswatchtrigger) error {
 	req := &kubeWatcherRequest{
 		requestType:     SYNC,
 		watches:         watches,
@@ -100,19 +102,19 @@ func (kw *KubeWatcher) svc() {
 		req := <-kw.requestChannel
 		switch req.requestType {
 		case SYNC:
-			newWatchUids := make(map[string]bool)
+			newWatchUids := make(map[types.UID]bool)
 			for _, w := range req.watches {
-				newWatchUids[w.Metadata.Uid] = true
+				newWatchUids[w.Metadata.UID] = true
 			}
 			// Remove old watches
 			for uid, ws := range kw.watches {
 				if _, ok := newWatchUids[uid]; !ok {
-					kw.removeWatch(&ws.Watch)
+					kw.removeWatch(&ws.watch)
 				}
 			}
 			// Add new watches
 			for _, w := range req.watches {
-				if _, ok := kw.watches[w.Metadata.Uid]; !ok {
+				if _, ok := kw.watches[w.Metadata.UID]; !ok {
 					kw.addWatch(&w)
 				}
 			}
@@ -144,7 +146,7 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, resourceVersion string) (watch.Interface, error) {
+func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *tpr.Kuberneteswatchtrigger, resourceVersion string) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
 	var watchTimeoutSec int64 = 120
@@ -156,41 +158,41 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fission.Watch, r
 	}
 
 	// TODO handle the full list of types
-	switch strings.ToUpper(w.ObjType) {
+	switch strings.ToUpper(w.Spec.Type) {
 	case "POD":
-		wi, err = kubeClient.Core().Pods(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Core().Pods(w.Spec.Namespace).Watch(listOptions)
 	case "SERVICE":
-		wi, err = kubeClient.Core().Services(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Core().Services(w.Spec.Namespace).Watch(listOptions)
 	case "REPLICATIONCONTROLLER":
-		wi, err = kubeClient.Core().ReplicationControllers(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Core().ReplicationControllers(w.Spec.Namespace).Watch(listOptions)
 	case "JOB":
-		wi, err = kubeClient.Batch().Jobs(w.Namespace).Watch(listOptions)
+		wi, err = kubeClient.Batch().Jobs(w.Spec.Namespace).Watch(listOptions)
 	default:
-		msg := fmt.Sprintf("Error: unknown obj type '%v'", w.ObjType)
+		msg := fmt.Sprintf("Error: unknown obj type '%v'", w.Spec.Type)
 		log.Println(msg)
 		err = errors.New(msg)
 	}
 	return wi, err
 }
 
-func (kw *KubeWatcher) addWatch(w *fission.Watch) error {
-	log.Printf("Adding watch %v: %v", w.Metadata.Name, w.Function.Name)
+func (kw *KubeWatcher) addWatch(w *tpr.Kuberneteswatchtrigger) error {
+	log.Printf("Adding watch %v: %v", w.Metadata.Name, w.Spec.FunctionReference)
 	ws, err := MakeWatchSubscription(w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
 		return err
 	}
-	kw.watches[w.Metadata.Uid] = *ws
+	kw.watches[w.Metadata.UID] = *ws
 	return nil
 }
 
-func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
-	log.Printf("Removing watch %v: %v", w.Metadata.Name, w.Function.Name)
-	ws, ok := kw.watches[w.Metadata.Uid]
+func (kw *KubeWatcher) removeWatch(w *tpr.Kuberneteswatchtrigger) error {
+	log.Printf("Removing watch %v: %v", w.Metadata.Name, w.Spec.FunctionReference)
+	ws, ok := kw.watches[w.Metadata.UID]
 	if !ok {
 		return fission.MakeError(fission.ErrorNotFound,
 			fmt.Sprintf("watch doesn't exist: %v", w.Metadata))
 	}
-	delete(kw.watches, w.Metadata.Uid)
+	delete(kw.watches, w.Metadata.UID)
 	ws.stop()
 	return nil
 }
@@ -210,10 +212,10 @@ func (kw *KubeWatcher) removeWatch(w *fission.Watch) error {
 // 	return nil
 // }
 
-func MakeWatchSubscription(w *fission.Watch, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(w *tpr.Kuberneteswatchtrigger, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
-		Watch:               *w,
+		watch:               *w,
 		kubeWatch:           nil,
 		stopped:             &stopped,
 		kubernetesClient:    kubeClient,
@@ -234,8 +236,8 @@ func (ws *watchSubscription) restartWatch() error {
 	retries := 60
 	for {
 		log.Printf("(re)starting watch %v (ns:%v type:%v) at rv:%v",
-			ws.Watch.Metadata, ws.Watch.Namespace, ws.Watch.ObjType, ws.lastResourceVersion)
-		wi, err := createKubernetesWatch(ws.kubernetesClient, &ws.Watch, ws.lastResourceVersion)
+			ws.watch.Metadata, ws.watch.Spec.Namespace, ws.watch.Spec.Type, ws.lastResourceVersion)
+		wi, err := createKubernetesWatch(ws.kubernetesClient, &ws.watch, ws.lastResourceVersion)
 		if err != nil {
 			retries--
 			if retries > 0 {
@@ -259,7 +261,7 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 }
 
 func (ws *watchSubscription) eventDispatchLoop() {
-	log.Println("Listening to watch ", ws.Watch.Metadata.Name)
+	log.Println("Listening to watch ", ws.watch.Metadata.Name)
 	for {
 		// check watchSubscription is stopped or not before waiting for event
 		// comes from the kubeWatch.ResultChan(). This fix the edge case that
@@ -272,11 +274,11 @@ func (ws *watchSubscription) eventDispatchLoop() {
 		if !more {
 			if ws.isStopped() {
 				// watch is removed by user.
-				log.Println("Watch stopped", ws.Watch.Metadata.Name)
+				log.Println("Watch stopped", ws.watch.Metadata.Name)
 				return
 			} else {
 				// watch closed due to timeout, restart it.
-				log.Printf("Watch %v timed out, restarting", ws.Watch.Metadata.Name)
+				log.Printf("Watch %v timed out, restarting", ws.watch.Metadata.Name)
 				err := ws.restartWatch()
 				if err != nil {
 					log.Panicf("Failed to restart watch: %v", err)
@@ -318,7 +320,16 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			"X-Kubernetes-Event-Type":  string(ev.Type),
 			"X-Kubernetes-Object-Type": reflect.TypeOf(ev.Object).Elem().Name(),
 		}
-		ws.publisher.Publish(buf.String(), headers, ws.Watch.Target)
+
+		// TODO support other function ref types. Or perhaps delegate to router?
+		if ws.watch.Spec.FunctionReference.Type != fission.FunctionReferenceTypeFunctionName {
+			log.Printf("Error: unsupported function ref type: %v, can't publish event",
+				ws.watch.Spec.FunctionReference.Type)
+			continue
+		}
+
+		url := fission.UrlForFunction(ws.watch.Spec.FunctionReference.Name)
+		ws.publisher.Publish(buf.String(), headers, url)
 	}
 }
 

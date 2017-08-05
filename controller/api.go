@@ -26,19 +26,16 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
+	kerrors "k8s.io/client-go/1.5/pkg/api/errors"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"
+	"github.com/fission/fission/tpr"
 )
 
 type (
 	API struct {
-		FunctionStore
-		HTTPTriggerStore
-		TimeTriggerStore
-		MessageQueueTriggerStore
-		EnvironmentStore
-		WatchStore
+		fissionClient *tpr.FissionClient
 	}
 
 	logDBConfig struct {
@@ -48,16 +45,8 @@ type (
 	}
 )
 
-func MakeAPI(rs *ResourceStore) *API {
-	api := &API{
-		FunctionStore:            FunctionStore{ResourceStore: *rs},
-		HTTPTriggerStore:         HTTPTriggerStore{ResourceStore: *rs},
-		TimeTriggerStore:         TimeTriggerStore{ResourceStore: *rs},
-		MessageQueueTriggerStore: MessageQueueTriggerStore{ResourceStore: *rs},
-		EnvironmentStore:         EnvironmentStore{ResourceStore: *rs},
-		WatchStore:               WatchStore{ResourceStore: *rs},
-	}
-	return api
+func MakeAPI() (*API, error) {
+	return makeTPRBackedAPI()
 }
 
 func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
@@ -71,6 +60,14 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	debug.PrintStack()
+
+	// this error type comes with an HTTP code, so just use that
+	se, ok := err.(*kerrors.StatusError)
+	if ok {
+		http.Error(w, string(se.ErrStatus.Reason), int(se.ErrStatus.Code))
+		return
+	}
+
 	code, msg := fission.GetHTTPError(err)
 	log.Errorf("Error: %v: %v", code, msg)
 	http.Error(w, msg, code)
@@ -102,41 +99,41 @@ func (api *API) Serve(port int) {
 	r := mux.NewRouter()
 	r.HandleFunc("/", api.HomeHandler)
 
-	r.HandleFunc("/v1/functions", api.FunctionApiList).Methods("GET")
-	r.HandleFunc("/v1/functions", api.FunctionApiCreate).Methods("POST")
-	r.HandleFunc("/v1/functions/{function}", api.FunctionApiGet).Methods("GET")
-	r.HandleFunc("/v1/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/functions", api.FunctionApiList).Methods("GET")
+	r.HandleFunc("/v2/functions", api.FunctionApiCreate).Methods("POST")
+	r.HandleFunc("/v2/functions/{function}", api.FunctionApiGet).Methods("GET")
+	r.HandleFunc("/v2/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiList).Methods("GET")
-	r.HandleFunc("/v1/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
-	r.HandleFunc("/v1/triggers/http/{httpTrigger}", api.HTTPTriggerApiGet).Methods("GET")
-	r.HandleFunc("/v1/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/triggers/http", api.HTTPTriggerApiList).Methods("GET")
+	r.HandleFunc("/v2/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
+	r.HandleFunc("/v2/triggers/http/{httpTrigger}", api.HTTPTriggerApiGet).Methods("GET")
+	r.HandleFunc("/v2/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v1/environments", api.EnvironmentApiList).Methods("GET")
-	r.HandleFunc("/v1/environments", api.EnvironmentApiCreate).Methods("POST")
-	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
-	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/environments", api.EnvironmentApiList).Methods("GET")
+	r.HandleFunc("/v2/environments", api.EnvironmentApiCreate).Methods("POST")
+	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
+	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v1/watches", api.WatchApiList).Methods("GET")
-	r.HandleFunc("/v1/watches", api.WatchApiCreate).Methods("POST")
-	r.HandleFunc("/v1/watches/{watch}", api.WatchApiGet).Methods("GET")
-	r.HandleFunc("/v1/watches/{watch}", api.WatchApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/watches/{watch}", api.WatchApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/watches", api.WatchApiList).Methods("GET")
+	r.HandleFunc("/v2/watches", api.WatchApiCreate).Methods("POST")
+	r.HandleFunc("/v2/watches/{watch}", api.WatchApiGet).Methods("GET")
+	r.HandleFunc("/v2/watches/{watch}", api.WatchApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/watches/{watch}", api.WatchApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v1/triggers/time", api.TimeTriggerApiList).Methods("GET")
-	r.HandleFunc("/v1/triggers/time", api.TimeTriggerApiCreate).Methods("POST")
-	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiGet).Methods("GET")
-	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/triggers/time", api.TimeTriggerApiList).Methods("GET")
+	r.HandleFunc("/v2/triggers/time", api.TimeTriggerApiCreate).Methods("POST")
+	r.HandleFunc("/v2/triggers/time/{timeTrigger}", api.TimeTriggerApiGet).Methods("GET")
+	r.HandleFunc("/v2/triggers/time/{timeTrigger}", api.TimeTriggerApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/triggers/time/{timeTrigger}", api.TimeTriggerApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueTriggerApiList).Methods("GET")
-	r.HandleFunc("/v1/triggers/messagequeue", api.MessageQueueApiCreate).Methods("POST")
-	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiGet).Methods("GET")
-	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiUpdate).Methods("PUT")
-	r.HandleFunc("/v1/triggers/messagequeue/{mqTrigger}", api.MessageQueueApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/triggers/messagequeue", api.MessageQueueTriggerApiList).Methods("GET")
+	r.HandleFunc("/v2/triggers/messagequeue", api.MessageQueueTriggerApiCreate).Methods("POST")
+	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiGet).Methods("GET")
+	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiDelete).Methods("DELETE")
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 

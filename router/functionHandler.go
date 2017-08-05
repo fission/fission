@@ -26,20 +26,20 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"k8s.io/client-go/1.5/pkg/api"
 
-	"github.com/fission/fission"
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
 )
 
 type functionHandler struct {
 	fmap     *functionServiceMap
 	poolmgr  *poolmgrClient.Client
-	Function fission.Metadata
+	function *api.ObjectMeta
 }
 
 func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
 	// call poolmgr, get a url for a function
-	svcName, err := fh.poolmgr.GetServiceForFunction(&fh.Function)
+	svcName, err := fh.poolmgr.GetServiceForFunction(fh.function)
 	if err != nil {
 		return nil, err
 	}
@@ -99,16 +99,15 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	}
 
 	// cache lookup
-	serviceUrl, err := fh.fmap.lookup(&fh.Function)
+	serviceUrl, err := fh.fmap.lookup(fh.function)
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
-		log.Printf("Not cached, getting new service for %v", fh.Function)
+		log.Printf("Not cached, getting new service for %v", fh.function)
 
 		var poolErr error
 		serviceUrl, poolErr = fh.getServiceForFunction()
 		if poolErr != nil {
-			log.Printf("Failed to get service for function (%v,%v): %v",
-				fh.Function.Name, fh.Function.Uid, poolErr)
+			log.Printf("Failed to get service for function %v: %v", fh.function.Name, poolErr)
 			// We might want a specific error code or header for fission
 			// failures as opposed to user function bugs.
 			http.Error(responseWriter, "Internal server error (fission)", 500)
@@ -116,7 +115,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		}
 
 		// add it to the map
-		fh.fmap.assign(&fh.Function, serviceUrl)
+		fh.fmap.assign(fh.function, serviceUrl)
 	} else {
 		// if we're using our cache, asynchronously tell
 		// poolmgr we're using this service
