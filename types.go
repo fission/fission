@@ -175,12 +175,14 @@ type (
 	}
 
 	errorCode int
+)
 
-	//
-	// Fission-Environment interface. The following types are not
-	// exposed in the Fission API, but rather used by Fission to
-	// talk to environments.
-	//
+//
+// Fission-Environment interface. The following types are not
+// exposed in the Fission API, but rather used by Fission to
+// talk to environments.
+//
+type (
 	FunctionLoadRequest struct {
 		// FilePath is an absolute filesystem path to the
 		// function. What exactly is stored here is
