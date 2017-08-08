@@ -10,6 +10,7 @@ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s htt
 chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
 
+mkdir ${HOME}/.kube
 echo $KUBECONFIG_CONTENTS | base64 -D - > ${HOME}/.kube/config
 
 kubectl version
