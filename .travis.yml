@@ -22,6 +22,4 @@ script:
 - glide install
 - ./fission-bundle/build.sh
 - hack/verify-gofmt.sh
-- go test -v -i $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
-- go test -v $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
-
+- hack/runtests.sh
