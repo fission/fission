@@ -39,7 +39,7 @@ gcloud auth activate-service-account --key-file ${HOME}/gcloud-service-key.json
 gcloud container clusters get-credentials fission-ci-1 --zone us-central1-a --project fission-ci
 
 # remove gcloud creds
-unset $FISSION_CI_SERVICE_ACCOUNT
+unset FISSION_CI_SERVICE_ACCOUNT
 rm ${HOME}/gcloud-service-key.json
 
 # does it work?
