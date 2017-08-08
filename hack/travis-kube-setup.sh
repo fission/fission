@@ -32,7 +32,7 @@ export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
 gcloud version
 
 # get gcloud credentials
-echo $FISSION_CI_SERVICE_ACCOUNT | base64 -D - > ${HOME}/gcloud-service-key.json
+echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > ${HOME}/gcloud-service-key.json
 gcloud auth activate-service-account --key-file ${HOME}/gcloud-service-key.json
 
 # get kube config
