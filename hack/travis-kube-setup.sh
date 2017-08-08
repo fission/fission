@@ -43,4 +43,11 @@ unset FISSION_CI_SERVICE_ACCOUNT
 rm ${HOME}/gcloud-service-key.json
 
 # does it work?
+
+if [ ! -f ${HOME}/.kube/config ]
+then
+    echo "Missing kubeconfig"
+    exit 1
+fi
+
 kubectl get node

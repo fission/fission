@@ -14,6 +14,9 @@ install:
 - go get github.com/Masterminds/glide
 - hack/travis-kube-setup.sh
 
+env:
+- KUBECONFIG=${HOME}/.kube/config
+
 script:
 - cd ${TRAVIS_BUILD_DIR}
 - glide install
