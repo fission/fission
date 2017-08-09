@@ -1,20 +1,25 @@
 sudo: required
 dist: trusty
-
 language: go
+
 go:
-    - 1.8
-    - tip
+- 1.8
+- tip
+
+cache:
+  directories:
+  - $HOME/google-cloud-sdk/
 
 install:
-   - go get github.com/Masterminds/glide
-   - curl -L https://github.com/coreos/etcd/releases/download/v3.0.15/etcd-v3.0.15-linux-amd64.tar.gz -o /tmp/etcd-v3.0.15-linux-amd64.tar.gz && mkdir -p /tmp/test-etcd && tar xzvf /tmp/etcd-v3.0.15-linux-amd64.tar.gz -C /tmp/test-etcd --strip-components=1
+- go get github.com/Masterminds/glide
+- hack/travis-kube-setup.sh
+
+env:
+- KUBECONFIG=${HOME}/.kube/config
 
 script:
-   - cd ${TRAVIS_BUILD_DIR}
-   - glide install
-   - ./fission-bundle/build.sh
-   - hack/verify-gofmt.sh
-   - /tmp/test-etcd/etcd &
-   - go test -v -i $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
-   - go test -v $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go')
+- cd ${TRAVIS_BUILD_DIR}
+- glide install
+- ./fission-bundle/build.sh
+- hack/verify-gofmt.sh
+- hack/runtests.sh
