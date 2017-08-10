@@ -137,8 +137,6 @@ func (gpm *GenericPoolManager) CleanupPools(envs []tpr.Environment) {
 }
 
 func (gpm *GenericPoolManager) eagerPoolCreator() {
-	failureCount := 0
-	maxFailures := 5
 	pollSleep := time.Duration(2 * time.Second)
 	for {
 		time.Sleep(pollSleep)
@@ -146,10 +144,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// get list of envs from controller
 		envs, err := gpm.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
 		if err != nil {
-			failureCount++
-			if failureCount >= maxFailures {
-				log.Fatalf("Failed %v times: %v", maxFailures, err)
-			}
+			log.Fatalf("Failed to get environment list: %v", err)
 		}
 
 		// Create pools for all envs.  TODO: we should make this a bit less eager, only
