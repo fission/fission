@@ -14,7 +14,7 @@ metadata:
 apiVersion: v1
 kind: ProjectRequest
 metadata:
-  name: fission-function
+  name: {{ .Values.functionNamespace }}
   labels:
     name: fission-function
 
@@ -23,7 +23,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: fission-admin
-  namespace: fission
+  namespace: {{ .Release.Namespace }}
 
 ---
 apiVersion: v1
@@ -58,13 +58,13 @@ groupNames: null
 kind: RoleBinding
 metadata:
   name: fission:fission-admin
-  namespace: fission-function
+  namespace: {{ .Values.functionNamespace }}
 roleRef:
   name: fission:fission-admin
 subjects:
 - kind: ServiceAccount
   name: fission-admin
-  namespace: fission
+  namespace: {{ .Release.Namespace }}
 userNames:
 - system:serviceaccount:fission:fission-admin
 
@@ -85,19 +85,19 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: fission-admin
-  namespace: fission
+  name: fission-svc
+  namespace: {{ .Release.Namespace }}
 
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: fission-admin
-  namespace: fission
+  namespace: {{ .Release.Namespace }}
 subjects:
   - kind: ServiceAccount
-    name: fission-admin
-    namespace: fission
+    name: fission-svc
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: admin
@@ -108,14 +108,28 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: fission-function-admin
-  namespace: fission-function
+  namespace: {{ .Values.functionNamespace }}
 subjects:
   - kind: ServiceAccount
-    name: fission-admin
-    namespace: fission
+    name: fission-svc
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-tpr
+subjects:
+- kind: ServiceAccount
+  name: fission-svc
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
 
 {{ end }}
@@ -138,7 +152,8 @@ spec:
       - name: controller
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888", "--filepath", "/filestore"]
+        args: ["--controllerPort", "8888"]
+      serviceAccount: fission-svc
 
 ---
 apiVersion: extensions/v1beta1
@@ -159,6 +174,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888"]
+      serviceAccount: fission-svc
 
 ---
 apiVersion: v1
@@ -194,8 +210,8 @@ spec:
       - name: poolmgr
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
-        args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
-      serviceAccount: fission-admin
+        args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
+      serviceAccount: fission-svc
 
 ---
 apiVersion: extensions/v1beta1
@@ -216,29 +232,13 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
-      serviceAccount: fission-admin
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: etcd
-  labels:
-    svc: etcd
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-spec:
-  type: ClusterIP
-  ports:
-  - port: 2379
-    targetPort: 2379
-  selector:
-    svc: etcd
+      serviceAccount: fission-svc
 
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etcd
+  name: timer
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
@@ -246,13 +246,11 @@ spec:
   template:
     metadata:
       labels:
-        svc: etcd
+        svc: timer
     spec:
       containers:
-      - name: etcd
-        image: quay.io/coreos/etcd
-        env:
-        - name: ETCD_LISTEN_CLIENT_URLS
-          value: http://0.0.0.0:2379
-        - name: ETCD_ADVERTISE_CLIENT_URLS
-          value: http://etcd:2379
+      - name: timer
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        command: ["/fission-bundle"]
+        args: ["--timer"]
+      serviceAccount: fission-svc
