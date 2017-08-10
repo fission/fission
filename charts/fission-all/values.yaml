@@ -9,6 +9,9 @@ serviceType: LoadBalancer
 ## Fission image repostiroy
 image: fission/fission-bundle
 
+## Image pull policy
+pullPolicy: ifNotPresent
+
 ## Fission image version
 imageTag: nightly20170705
 
@@ -38,3 +41,4 @@ fissionUiImage: fission/fission-ui:0.1.0
 nats:
   authToken: "defaultFissionAuthToken"
   clusterID: "fissionMQTrigger"
+  

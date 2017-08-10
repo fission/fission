@@ -64,3 +64,4 @@ spec:
     nodePort: 31316
   selector:
     svc: nats-streaming
+
