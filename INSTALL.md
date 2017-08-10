@@ -103,7 +103,10 @@ If you're using minishift or no cloud provider, use these commands to set up ser
   $ oc adm policy add-cluster-role-to-user cluster-admin developer
   $ oc login -u developer
   $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-openshift.yaml
-  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-nodeport.yaml
+  $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-cloud.yaml
+  $ oc project fission
+  $ oc expose service router --port 8888
+  $ oc expose service controller --port 8888
 ```
 
 #### Using other clouds
@@ -114,8 +117,6 @@ If you're using any cloud provider that supports the LoadBalancer service type, 
 $ oc login -u system:admin
 $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-openshift.yaml
 $ oc create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-cloud.yaml
-$ oc expose service router --port 8888
-$ oc expose service controller --port 8888
 ```
 
 Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUTER environment variables. If you're using minishift, use these commands:
