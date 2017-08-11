@@ -211,6 +211,9 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
+        env:
+        - name: FETCHER_IMAGE
+          value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
       serviceAccount: fission-svc
 
 ---

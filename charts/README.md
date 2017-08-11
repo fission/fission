@@ -42,6 +42,8 @@ The following table lists the configurable parameters of the Fission chart and t
 | `serviceType`       | Type of service to use                     | `LoadBalancer`.          |
 | `image`             | Fission image                              | `fission/fission-bundle` |
 | `imageTag`          | Fission image tag                          | `alpha20170124`          |
+| `fetcherImage`      | Fission fetcher image                      | `fission/fetcher`        |
+| `fetcherImageTag`   | Fission fetcher image tag                  | `latest`                 |
 | `controllerPort`    | Fission Controller Service Port            | `31313`                  |
 | `routerPort`        | Fission Router Service Port                | `31314`                  |
 | `functionNamespace` | Namespace for Fission functions            | `fission-function`       |

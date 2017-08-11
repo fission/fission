@@ -12,6 +12,12 @@ image: fission/fission-bundle
 ## Fission image version
 imageTag: alpha20170124
 
+## Fission fetcher repostiroy
+fetcherImage: fission/fetcher
+
+## Fission fetcher image version
+fetcherImageTag: latest
+
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
 
