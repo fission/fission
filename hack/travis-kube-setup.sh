@@ -6,6 +6,14 @@
 
 set -e 
 
+# If we don't have gcloud credentials, bail out of these tests.
+if [ -z ${FISSION_CI_SERVICE_ACCOUNT:+} ]
+then
+    echo "Skipping tests, no cluster credentials"
+    exit 0
+fi
+
+# Get kubectl
 curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
 chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
