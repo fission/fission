@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source test_utils.sh
+source $(dirname $0)/test_utils.sh
 
 IMAGE=gcr.io/fission-ci/fission-bundle
 TAG=test
