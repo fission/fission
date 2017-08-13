@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+if [ ! -f ${HOME}/.kube/config ]
+then
+    echo "Skipping end to end tests, no cluster credentials"
+    exit 0
+fi
+
 source $(dirname $0)/test_utils.sh
 
 IMAGE=gcr.io/fission-ci/fission-bundle
