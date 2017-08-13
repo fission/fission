@@ -61,6 +61,12 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = validateResourceName(f.Metadata.Name)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	// Ensure size limits
 	if len(f.Spec.Source.Literal) > 256*1024 {
 		err := fission.MakeError(fission.ErrorInvalidArgument, "Source package literal larger than 256K")

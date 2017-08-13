@@ -74,6 +74,12 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = validateResourceName(t.Metadata.Name)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
 	err = a.checkHttpTriggerDuplicates(&t)
 	if err != nil {
