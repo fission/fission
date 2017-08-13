@@ -6,13 +6,13 @@
 ## For minikube, set this to NodePort, elsewhere use LoadBalancer.
 serviceType: LoadBalancer
 
-## Fission image repostiroy
+## Fission image repository
 image: fission/fission-bundle
 
 ## Fission image version
 imageTag: alpha20170124
 
-## Fission fetcher repostiroy
+## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
