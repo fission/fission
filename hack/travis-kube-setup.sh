@@ -43,6 +43,9 @@ gcloud version
 echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > ${HOME}/gcloud-service-key.json
 gcloud auth activate-service-account --key-file ${HOME}/gcloud-service-key.json
 
+# debugging a failure to auth:
+gcloud config list account
+
 # get kube config
 gcloud container clusters get-credentials fission-ci-1 --zone us-central1-a --project fission-ci
 
