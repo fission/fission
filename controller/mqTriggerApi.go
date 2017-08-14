@@ -57,6 +57,12 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	err = validateResourceName(mqTrigger.Metadata.Name)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	tnew, err := a.fissionClient.Messagequeuetriggers(mqTrigger.Metadata.Namespace).Create(&mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
