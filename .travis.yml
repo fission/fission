@@ -16,8 +16,7 @@ install:
 - hack/travis-kube-setup.sh
 
 env:
-- KUBECONFIG=${HOME}/.kube/config
-- PATH=$HOME/k8scli:${PATH}
+- KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH}
 
 script:
 - cd ${TRAVIS_BUILD_DIR}
