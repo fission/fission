@@ -67,7 +67,7 @@ helm_install_fission() {
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 ../charts/fission-all
+	 $ROOT/../charts/fission-all
 }
 
 wait_for_service() {
