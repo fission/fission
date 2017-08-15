@@ -40,7 +40,7 @@ build_fission_cli() {
 }
 
 generate_test_id() {
-    echo $(date|md5|cut -c1-6)
+    echo $(date|md5sum|cut -c1-6)
 }
 
 helm_install_fission() {
