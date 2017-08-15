@@ -6,6 +6,8 @@
 
 set -e 
 
+echo $FISSION_CI_SERVICE_ACCOUNT | md5sum
+
 # If we don't have gcloud credentials, bail out of these tests.
 if [ -z ${FISSION_CI_SERVICE_ACCOUNT:+} ]
 then

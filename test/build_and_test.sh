@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+echo $FISSION_CI_SERVICE_ACCOUNT | md5sum
+
 if [ ! -f ${HOME}/.kube/config ]
 then
     echo "Skipping end to end tests, no cluster credentials"
