@@ -122,8 +122,8 @@ $ oc create -f https://github.com/fission/fission/releases/download/nightly20170
 Identically as with Kubernetes, you need to set the FISSION_URL and FISSION_ROUTER environment variables. If you're using minishift, use these commands:
 
 ```
-  $ export FISSION_URL=http://$(oc export route/controller -o json | jq -r '.spec.host')¬
-  $ export FISSION_ROUTER=$(oc export route/router -o json | jq -r '.spec.host')¬
+  $ export FISSION_URL=http://$(oc get route/controller -o=jsonpath='{.spec.host}')¬
+  $ export FISSION_ROUTER=$(oc get route/router -o=jsonpath='{.spec.host}')¬
 ```
 After these steps, you should be able to run fission client as with kubernetes.
 
