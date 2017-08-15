@@ -10,6 +10,10 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/..
 
+helm_setup() {
+    helm init
+}
+
 gcloud_login() {
     KEY=${HOME}/gcloud-service-key.json
     if [ ! -f $KEY ]
@@ -55,6 +59,8 @@ helm_install_fission() {
 
     helmVars=image=$image,imageTag=$imageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=alwaysPull
 
+    helm_setup
+    
     echo "Installing fission"
     helm install		\
 	 --wait			\

@@ -13,10 +13,28 @@ then
     exit 0
 fi
 
+K8SCLI_DIR=$HOME/k8scli
+
+if [ ! -d $K8SCLI_DIR ]
+then
+    mkdir -p $K8SCLI_DIR
+fi
+
 # Get kubectl
-curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-chmod +x ./kubectl
-sudo mv ./kubectl /usr/local/bin/kubectl
+if [ ! -f $K8SCLI_DIR/kubectl ]
+then
+   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+   chmod +x ./kubectl
+   mv kubectl $K8SCLI_DIR/kubectl
+fi
+
+# Get helm
+if [ ! -f $K8SCLI_DIR/helm ]
+then
+    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.5.1-linux-amd64.tar.gz
+    tar xzvf helm-*.tar.gz
+    mv linux-amd64/helm $K8SCLI_DIR/helm
+fi
 
 mkdir ${HOME}/.kube
 

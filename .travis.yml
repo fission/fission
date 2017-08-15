@@ -9,6 +9,7 @@ go:
 cache:
   directories:
   - $HOME/google-cloud-sdk/
+  - $HOME/k8scli
 
 install:
 - go get github.com/Masterminds/glide
@@ -16,6 +17,7 @@ install:
 
 env:
 - KUBECONFIG=${HOME}/.kube/config
+- PATH=$HOME/k8scli:${PATH}
 
 script:
 - cd ${TRAVIS_BUILD_DIR}
