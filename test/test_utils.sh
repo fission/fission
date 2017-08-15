@@ -10,12 +10,25 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/..
 
+gcloud_login() {
+    KEY=${HOME}/gcloud-service-key.json
+    if [ ! -f $KEY ]
+    then
+	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
+    fi
+    
+    gcloud auth activate-service-account --key-file $KEY
+}
+
 build_and_push_fission_bundle() {
     image_tag=$1
 
     pushd $ROOT/fission-bundle
     ./build.sh
     docker build -t $image_tag .
+
+    gcloud_login
+    
     gcloud docker -- push $image_tag
     popd
 }
