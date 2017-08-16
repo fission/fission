@@ -10,12 +10,29 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/..
 
+helm_setup() {
+    helm init
+}
+
+gcloud_login() {
+    KEY=${HOME}/gcloud-service-key.json
+    if [ ! -f $KEY ]
+    then
+	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
+    fi
+    
+    gcloud auth activate-service-account --key-file $KEY
+}
+
 build_and_push_fission_bundle() {
     image_tag=$1
 
     pushd $ROOT/fission-bundle
     ./build.sh
     docker build -t $image_tag .
+
+    gcloud_login
+    
     gcloud docker -- push $image_tag
     popd
 }
@@ -27,7 +44,7 @@ build_fission_cli() {
 }
 
 generate_test_id() {
-    echo $(date|md5|cut -c1-6)
+    echo $(date|md5sum|cut -c1-6)
 }
 
 helm_install_fission() {
@@ -42,13 +59,15 @@ helm_install_fission() {
 
     helmVars=image=$image,imageTag=$imageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=alwaysPull
 
+    helm_setup
+    
     echo "Installing fission"
     helm install		\
 	 --wait			\
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 ../charts/fission-all
+	 $ROOT/charts/fission-all
 }
 
 wait_for_service() {

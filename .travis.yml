@@ -4,18 +4,18 @@ language: go
 
 go:
 - 1.8
-- tip
 
 cache:
   directories:
   - $HOME/google-cloud-sdk/
+  - $HOME/k8scli
 
 install:
 - go get github.com/Masterminds/glide
 - hack/travis-kube-setup.sh
 
 env:
-- KUBECONFIG=${HOME}/.kube/config
+- KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH}
 
 script:
 - cd ${TRAVIS_BUILD_DIR}
