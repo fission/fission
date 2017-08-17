@@ -65,6 +65,11 @@ func mqtCreate(c *cli.Context) error {
 		fatal("Listen topic should not equal to response topic")
 	}
 
+	contentType := c.String("contenttype")
+	if len(contentType) == 0 {
+		contentType = "application/json"
+	}
+
 	checkMQTopicAvailability(mqType, topic, respTopic)
 
 	mqt := tpr.Messagequeuetrigger{
@@ -80,6 +85,7 @@ func mqtCreate(c *cli.Context) error {
 			MessageQueueType: mqType,
 			Topic:            topic,
 			ResponseTopic:    respTopic,
+			ContentType:      contentType,
 		},
 	}
 
@@ -103,6 +109,7 @@ func mqtUpdate(c *cli.Context) error {
 	topic := c.String("topic")
 	respTopic := c.String("resptopic")
 	fnName := c.String("function")
+	contentType := c.String("contenttype")
 
 	mqt, err := client.MessageQueueTriggerGet(&api.ObjectMeta{
 		Name:      mqtName,
@@ -123,6 +130,10 @@ func mqtUpdate(c *cli.Context) error {
 	}
 	if len(fnName) > 0 {
 		mqt.Spec.FunctionReference.Name = fnName
+		updated = true
+	}
+	if len(contentType) > 0 {
+		mqt.Spec.ContentType = contentType
 		updated = true
 	}
 
@@ -162,11 +173,11 @@ func mqtList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "PUB_MSG_CONTENT_TYPE")
 	for _, mqt := range mqts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			mqt.Metadata.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+			mqt.Metadata.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ContentType)
 	}
 	w.Flush()
 

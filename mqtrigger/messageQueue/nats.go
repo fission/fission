@@ -106,6 +106,7 @@ func msgHandler(nats *Nats, trigger *tpr.Messagequeuetrigger) func(*ns.Msg) {
 		headers := map[string]string{
 			"X-Fission-MQTrigger-Topic":     trigger.Spec.Topic,
 			"X-Fission-MQTrigger-RespTopic": trigger.Spec.ResponseTopic,
+			"Content-Type":                  trigger.Spec.ContentType,
 		}
 
 		// Create request

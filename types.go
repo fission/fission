@@ -159,6 +159,7 @@ type (
 		MessageQueueType  string            `json:"messageQueueType"`
 		Topic             string            `json:"topic"`
 		ResponseTopic     string            `json:"respTopic,omitempty"`
+		ContentType       string            `json:"contentType"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or
