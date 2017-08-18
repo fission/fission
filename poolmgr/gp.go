@@ -387,6 +387,7 @@ func (gp *GenericPool) createPool() error {
 							Command: []string{"/fetcher", sharedMountPath},
 						},
 					},
+					ServiceAccountName: "fission-fetcher",
 				},
 			},
 		},
