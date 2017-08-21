@@ -194,7 +194,7 @@ spec:
       - name: router
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         command: ["/fission-bundle"]
-        args: ["--routerPort", "8888"]
+        args: ["--routerPort", "8888", "--poolmgrUrl", "poolmgr.{{ .Release.Namespace }}"]
       serviceAccount: fission-svc
 
 ---
