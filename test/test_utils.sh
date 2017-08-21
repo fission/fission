@@ -115,19 +115,9 @@ set_environment() {
     export PATH=$ROOT/fission:$PATH
 }
 
-dump_logs() {
-    id=$1
-
-    ns=f-$id
-    fns=f-func-$id
-
-    echo --- router logs ---
-    kubectl -n $ns get pod -o name  | grep router | xargs kubectl -n $ns logs 
-    echo --- end router logs ---
-
-    echo --- poolmgr logs ---
-    kubectl -n $ns get pod -o name  | grep poolmgr | xargs kubectl -n $ns logs 
-    echo --- end poolmgr logs ---
+dump_function_pod_logs() {
+    ns=$1
+    fns=$2
 
     functionPods=$(kubectl -n $fns get pod -o name -l functionName)
     for p in $functionPods
@@ -144,6 +134,43 @@ dump_logs() {
     done
 }
 
+dump_fission_logs() {
+    ns=$1
+    fns=$2
+    component=$3
+
+    echo --- $component logs ---
+    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs 
+    echo --- end $component logs ---
+}
+
+dump_fission_resource() {
+    type=$1
+    echo --- All objects of type $type ---
+    kubectl --all-namespaces=true get $type -o yaml
+    echo --- End objects of type $type ---
+}
+
+dump_fission_resources() {
+    dump_fission_resource function.fission.io    
+    dump_fission_resource httptrigger.fission.io    
+    dump_fission_resource environment.fission.io    
+}
+
+dump_logs() {
+    id=$1
+
+    ns=f-$id
+    fns=f-func-$id
+
+    dump_fission_logs $ns $fns router
+    dump_fission_logs $ns $fns poolmgr
+
+    dump_function_pod_logs $ns $fns
+
+    dump_fission_resources
+}
+
 run_all_tests() {
     id=$1
 
@@ -154,8 +181,10 @@ run_all_tests() {
     for file in $ROOT/test/tests/test_*.sh
     do
 	echo ------- Running $file -------
-	if [ ! $file ]
+	if $file
 	then
+	    echo SUCCESS: $file
+	else
 	    echo FAILED: $file
 	    failures=$(($failures+1))
 	fi
