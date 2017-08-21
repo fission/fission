@@ -154,8 +154,7 @@ run_all_tests() {
     for file in $ROOT/test/tests/test_*.sh
     do
 	echo ------- Running $file -------
-	e=$file
-	if [ ! $e ]
+	if [ ! $file ]
 	then
 	    echo FAILED: $file
 	    failures=$(($failures+1))
