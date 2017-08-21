@@ -93,7 +93,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Versions: []v1beta1.APIVersion{
 				{Name: "v1"},
 			},
-			Description: "Messqge queue triggers for functions",
+			Description: "Message queue triggers for functions",
 		},
 	}
 	for _, tpr := range tprs {
