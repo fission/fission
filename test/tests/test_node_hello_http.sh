@@ -14,7 +14,7 @@ fission env create --name nodejs --image fission/node-env
 trap "fission env delete --name nodejs" EXIT
 
 fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js
-trap "fission fn delete --name hello" EXIT
+trap "fission fn delete --name $fn" EXIT
 
 fission route create --function $fn --url /$fn --method GET
 

@@ -171,13 +171,14 @@ dump_logs() {
     dump_fission_resources
 }
 
+export FAILURES=0
+
 run_all_tests() {
     id=$1
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
         
-    failures=0
     for file in $ROOT/test/tests/test_*.sh
     do
 	echo ------- Running $file -------
@@ -186,14 +187,9 @@ run_all_tests() {
 	    echo SUCCESS: $file
 	else
 	    echo FAILED: $file
-	    failures=$(($failures+1))
+	    export FAILURES=$(($FAILURES+1))
 	fi
     done
-
-    if [ $failures -ne 0 ]
-    then
-	exit 1
-    fi
 }
 
 install_and_test() {
@@ -210,16 +206,11 @@ install_and_test() {
     wait_for_services $id
     set_environment $id
 
-    if run_all_tests $id
-    then
-	success=0
-    else
-	success=1
-    fi
+    run_all_tests $id
 
     dump_logs $id
 
-    if [ ! $success ]
+    if [ $FAILURES -ne 0 ]
     then
 	exit 1
     fi
