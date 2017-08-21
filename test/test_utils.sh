@@ -115,12 +115,57 @@ set_environment() {
     export PATH=$ROOT/fission:$PATH
 }
 
+dump_logs() {
+    id=$1
+
+    ns=f-$id
+    fns=f-func-$id
+
+    echo --- router logs ---
+    kubectl -n $ns get pod -o name  | grep router | xargs kubectl -n $ns logs 
+    echo --- end router logs ---
+
+    echo --- poolmgr logs ---
+    kubectl -n $ns get pod -o name  | grep poolmgr | xargs kubectl -n $ns logs 
+    echo --- end poolmgr logs ---
+
+    functionPods=$(kubectl -n $fns get pod -o name -l functionName)
+    for p in $functionPods
+    do
+	echo "--- function pod logs $p ---"
+	containers=$(kubectl -n $fns get pod $p -o jsonpath={.spec.containers[*].name})
+	for c in $containers
+	do
+	    echo "--- function pod logs $p: container $c ---"
+	    kubectl -n $fns logs $p $c
+	    echo "--- end function pod logs $p: container $c ---"
+	done
+	echo "--- end function pod logs $p ---"
+    done
+}
+
 run_all_tests() {
+    id=$1
+
+    export FISSION_NAMESPACE=f-$id
+    export FUNCTION_NAMESPACE=f-func-$id
+        
+    failures=0
     for file in $ROOT/test/tests/test_*.sh
     do
 	echo ------- Running $file -------
-	$file
+	e=$file
+	if [ ! $e ]
+	then
+	    echo FAILED: $file
+	    failures=$(($failures+1))
+	fi
     done
+
+    if [ $failures -ne 0 ]
+    then
+	exit 1
+    fi
 }
 
 install_and_test() {
@@ -137,7 +182,14 @@ install_and_test() {
     wait_for_services $id
     set_environment $id
 
-    run_all_tests
+    success=run_all_tests $id
+
+    dump_logs $id
+
+    if [ ! $success ]
+    then
+	exit 1
+    fi
 }
 
 
