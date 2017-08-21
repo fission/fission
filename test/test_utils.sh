@@ -182,7 +182,12 @@ install_and_test() {
     wait_for_services $id
     set_environment $id
 
-    success=run_all_tests $id
+    if run_all_tests $id
+    then
+	success=0
+    else
+	success=1
+    fi
 
     dump_logs $id
 
