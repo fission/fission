@@ -29,7 +29,7 @@ $ chmod +x go-function-build
 $ go-function-build hello.go
 
 # Upload the function to fission
-$ fission function create --name hello --env go-runtime --package function.so
+$ fission function create --name hello --env go-env --package function.so
 
 # Map /hello to the hello function
 $ fission route create --method GET --url /hello --function hello
