@@ -95,8 +95,15 @@ func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.1.0\"}\n")
 }
 
+func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {
+	err := fission.MakeError(fission.ErrorNotFound, "Fission server supports API v2 only - v1 is not supported. Please upgrade your Fission client / CLI")
+	api.respondWithError(w, err)
+}
+
 func (api *API) Serve(port int) {
 	r := mux.NewRouter()
+	// Give a useful error message if an older CLI attempts to make a request
+	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)
 	r.HandleFunc("/", api.HomeHandler)
 
 	r.HandleFunc("/v2/functions", api.FunctionApiList).Methods("GET")
