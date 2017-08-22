@@ -37,6 +37,20 @@ build_and_push_fission_bundle() {
     popd
 }
 
+build_and_push_fetcher() {
+    image_tag=$1
+
+    pushd $ROOT/environments/fetcher/cmd
+    ./build.sh
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
+
 build_fission_cli() {
     pushd $ROOT/fission
     go build .
@@ -51,13 +65,15 @@ helm_install_fission() {
     id=$1
     image=$2
     imageTag=$3
-    controllerNodeport=$4
-    routerNodeport=$5
+    fetcherImage=$4
+    fetcherImageTag=$5
+    controllerNodeport=$6
+    routerNodeport=$7
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=alwaysPull
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=alwaysPull
 
     helm_setup
     
@@ -195,13 +211,15 @@ run_all_tests() {
 install_and_test() {
     image=$1
     imageTag=$2
+    fetcherImage=$3
+    fetcherImageTag=$4
 
     controllerPort=31234
     routerPort=31235
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $controllerPort $routerPort
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort
 
     wait_for_services $id
     set_environment $id
