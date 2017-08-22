@@ -139,7 +139,7 @@ dump_function_pod_logs() {
     for p in $functionPods
     do
 	echo "--- function pod logs $p ---"
-	containers=$(kubectl -n $fns get pod $p -o jsonpath={.spec.containers[*].name})
+	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name})
 	for c in $containers
 	do
 	    echo "--- function pod logs $p: container $c ---"
