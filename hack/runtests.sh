@@ -5,7 +5,7 @@ if [ ! -f ${KUBECONFIG} ]
 then
     unset KUBECONFIG
 else
-    K=kubectl --kubeconfig $KUBECONFIG
+    K="kubectl --kubeconfig $KUBECONFIG"
     if $K get configmap ok-to-destroy
     then
 	$K get function.fission.io -o name | cut -f2 -d'/' | xargs $K delete function.fission.io
