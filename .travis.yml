@@ -1,22 +1,17 @@
 sudo: required
 dist: trusty
 language: go
-
 go:
 - 1.8
-
 cache:
   directories:
   - $HOME/google-cloud-sdk/
   - $HOME/k8scli
-
 install:
 - go get github.com/Masterminds/glide
 - hack/travis-kube-setup.sh
-
 env:
 - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH}
-
 script:
 - cd ${TRAVIS_BUILD_DIR}
 - glide install
@@ -24,3 +19,6 @@ script:
 - hack/verify-gofmt.sh
 - hack/runtests.sh
 - test/build_and_test.sh
+notifications:
+  slack:
+    secure: YZ34vsfw1TtftJypg1MyP4+ihONI4gaxeS3FghBQli6+EezjzcxOXyj5VD+x0ucXfDeTaDrFfmVN0SAGObOoZUE+ea9KAoTo50tRLaD9kwOTACiekZalC4uuBguH0D1/A6vlbU8dchsr9mvIhbisG6mTncdPtqGYYHtyBQme6ngmmHbVAQFZcIBHmNuDb/HWhSr8KMEuyB6+mBXLYELHnXnf26cOhdGNaagqCOJTiemX85RGwIuOPxyBhKDFMLyHohDT7FJMH/qijveE6YgOYTQC5nYc2Np1KvC7hQkIu4nuyczyYlrNQl/TWv+SVI8PjIs0PYuCuD3gUqoVEi8d94HbrOPzFEpbwDS9P4qL39DGmco1Q56Vqxe6sRI0vDWPb5gCP1lSgs3PMECVn7Wor/pTvcL+C+U2jLwWJUl0vbyWCL7ngl/3iTssV7qBpUrI7Oclwp8LrQo9fPj0DL4gE9rNanpEWjQ6yPGaysIL1zLHtRghhm52A22NJGp71jkS2KEpLi6ZWFYjMeuXw5eOQFhqFlzyRJOmLYa3B607TLWuyo2L2CxAfMmq0FGfemvrkLZIWtlQKK4y9ImpsURwaGT2XCtThFtHl77wEss913nC+T2dX3O5Bl0UmxFd5S3mVM109I8c4lDosxnAjRfS9MheFlrG0gjSJSBCw57x7f0=
