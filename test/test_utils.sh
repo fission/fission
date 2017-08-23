@@ -37,6 +37,20 @@ build_and_push_fission_bundle() {
     popd
 }
 
+build_and_push_fetcher() {
+    image_tag=$1
+
+    pushd $ROOT/environments/fetcher/cmd
+    ./build.sh
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
+
 build_fission_cli() {
     pushd $ROOT/fission
     go build .
@@ -51,13 +65,15 @@ helm_install_fission() {
     id=$1
     image=$2
     imageTag=$3
-    controllerNodeport=$4
-    routerNodeport=$5
+    fetcherImage=$4
+    fetcherImageTag=$5
+    controllerNodeport=$6
+    routerNodeport=$7
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=alwaysPull
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always
 
     helm_setup
     
@@ -115,29 +131,107 @@ set_environment() {
     export PATH=$ROOT/fission:$PATH
 }
 
+dump_function_pod_logs() {
+    ns=$1
+    fns=$2
+
+    functionPods=$(kubectl -n $fns get pod -o name -l functionName)
+    for p in $functionPods
+    do
+	echo "--- function pod logs $p ---"
+	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name})
+	for c in $containers
+	do
+	    echo "--- function pod logs $p: container $c ---"
+	    kubectl -n $fns logs $p $c
+	    echo "--- end function pod logs $p: container $c ---"
+	done
+	echo "--- end function pod logs $p ---"
+    done
+}
+
+dump_fission_logs() {
+    ns=$1
+    fns=$2
+    component=$3
+
+    echo --- $component logs ---
+    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs 
+    echo --- end $component logs ---
+}
+
+dump_fission_resource() {
+    type=$1
+    echo --- All objects of type $type ---
+    kubectl --all-namespaces=true get $type -o yaml
+    echo --- End objects of type $type ---
+}
+
+dump_fission_resources() {
+    dump_fission_resource function.fission.io    
+    dump_fission_resource httptrigger.fission.io    
+    dump_fission_resource environment.fission.io    
+}
+
+dump_logs() {
+    id=$1
+
+    ns=f-$id
+    fns=f-func-$id
+
+    dump_fission_logs $ns $fns router
+    dump_fission_logs $ns $fns poolmgr
+
+    dump_function_pod_logs $ns $fns
+
+    dump_fission_resources
+}
+
+export FAILURES=0
+
 run_all_tests() {
+    id=$1
+
+    export FISSION_NAMESPACE=f-$id
+    export FUNCTION_NAMESPACE=f-func-$id
+        
     for file in $ROOT/test/tests/test_*.sh
     do
 	echo ------- Running $file -------
-	$file
+	if $file
+	then
+	    echo SUCCESS: $file
+	else
+	    echo FAILED: $file
+	    export FAILURES=$(($FAILURES+1))
+	fi
     done
 }
 
 install_and_test() {
     image=$1
     imageTag=$2
+    fetcherImage=$3
+    fetcherImageTag=$4
 
     controllerPort=31234
     routerPort=31235
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $controllerPort $routerPort
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort
 
     wait_for_services $id
     set_environment $id
 
-    run_all_tests
+    run_all_tests $id
+
+    dump_logs $id
+
+    if [ $FAILURES -ne 0 ]
+    then
+	exit 1
+    fi
 }
 
 

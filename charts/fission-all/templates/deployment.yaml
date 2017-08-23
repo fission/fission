@@ -172,6 +172,7 @@ spec:
       containers:
       - name: controller
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888"]
       serviceAccount: fission-svc
@@ -193,8 +194,9 @@ spec:
       containers:
       - name: router
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--routerPort", "8888"]
+        args: ["--routerPort", "8888", "--poolmgrUrl", "http://poolmgr.{{ .Release.Namespace }}"]
       serviceAccount: fission-svc
 
 ---
@@ -230,6 +232,7 @@ spec:
       containers:
       - name: poolmgr
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
         env:
@@ -254,6 +257,7 @@ spec:
       containers:
       - name: kubewatcher
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--kubewatcher"]
       serviceAccount: fission-svc
@@ -321,7 +325,7 @@ spec:
       containers:
         - name: logger
           image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.pullPolicy }}
           command: ["/fission-bundle"]
           args: ["--logger"]
           volumeMounts:
@@ -340,7 +344,7 @@ spec:
               protocol: TCP
         - name: fluentd
           image: {{ .Values.logger.fluentdImage }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: INFLUXDB_ADDRESS
               value: influxdb
@@ -397,6 +401,7 @@ spec:
       containers:
       - name: timer
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--timer"]
       serviceAccount: fission-svc
@@ -468,6 +473,7 @@ spec:
       containers:
       - name: mqtrigger
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt"]
         env:
