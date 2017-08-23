@@ -94,9 +94,8 @@ Status
 Fission is in early alpha.  It's not suitable for production use just
 yet.  
 
-We're looking for early developer feedback -- if you do use Fission,
-we'd love to hear how it's working for you, what parts in particular
-you'd like to see improved, and so on.  Talk to us on
-[slack](http://slack.fission.io) or
+Reach us on [slack](http://slack.fission.io) or
 [twitter](https://twitter.com/fissionio).
 
+Fission is a project by [Platform9 Systems](https://platform9.com/fission/)
+and [many contributors](https://github.com/fission/fission/graphs/contributors).
