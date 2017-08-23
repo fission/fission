@@ -177,7 +177,7 @@ func environmentTests(tprClient *rest.RESTClient) {
 	el, err := ei.List(api.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
-		log.Panicf("wrong count from list: %v", el)
+		log.Panicf("wrong count from list: %v", len(el.Items))
 	}
 	if el.Items[0].Spec.Runtime.Image != environment.Spec.Runtime.Image {
 		log.Panicf("bad object from list: %v", el.Items[0])
