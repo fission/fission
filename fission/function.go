@@ -78,18 +78,18 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	pkgContents := getPackageContents(fileName)
-	pkgName := fmt.Printf("%v-%v", fnName, uniuri.NewLen(6))
+	pkgName := fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6))
 	pkg := &tpr.Package{
 		Metadata: api.ObjectMeta{
 			Name:      pkgName,
 			Namespace: api.NamespaceDefault,
 		},
-		Spec: {
+		Spec: fission.PackageSpec{
 			Type:    fission.PackageTypeLiteral,
 			Literal: pkgContents,
 		},
 	}
-	_, err = client.PackageCreate(pkg)
+	_, err := client.PackageCreate(pkg)
 	checkErr(err, "upload package")
 
 	function := &tpr.Function{
@@ -108,7 +108,7 @@ func fnCreate(c *cli.Context) error {
 		},
 	}
 
-	_, err := client.FunctionCreate(function)
+	_, err = client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -158,13 +158,13 @@ func fnGet(c *cli.Context) error {
 	fn, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
-	pkg, err = client.PackageGet(&api.ObjectMeta{
+	pkg, err := client.PackageGet(&api.ObjectMeta{
 		Name:      fn.Spec.Deployment.PackageRef.Name,
 		Namespace: fn.Spec.Deployment.PackageRef.Namespace,
 	})
 	checkErr(err, "get package")
 
-	os.Stdout.Write(pkg.Literal)
+	os.Stdout.Write(pkg.Spec.Literal)
 	return err
 }
 

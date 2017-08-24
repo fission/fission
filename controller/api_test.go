@@ -27,7 +27,6 @@ import (
 
 	"k8s.io/client-go/1.5/pkg/api"
 
-	"bytes"
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/tpr"
@@ -83,8 +82,8 @@ func TestFunctionApi(t *testing.T) {
 		},
 		Spec: fission.FunctionSpec{
 			EnvironmentName: "nodejs",
-			Deployment: fission.Package{
-				Literal: []byte("code1"),
+			Deployment: fission.FunctionPackageRef{
+				FunctionName: "xxx",
 			},
 		},
 	}
@@ -100,11 +99,7 @@ func TestFunctionApi(t *testing.T) {
 	_, err = g.client.FunctionCreate(testFunc)
 	assertNameReuseFailure(err, "function")
 
-	code, err := g.client.FunctionGetRawDeployment(m)
-	panicIf(err)
-	assert(bytes.Compare(code, testFunc.Spec.Deployment.Literal) == 0, "code from FunctionGetRawDeployment must match created function")
-
-	testFunc.Spec.Deployment.Literal = []byte("code2")
+	testFunc.Spec.Deployment.FunctionName = "yyy"
 	_, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
 
