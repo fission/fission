@@ -33,6 +33,8 @@ import (
 //   5. Add the type to configureClient in client.go
 //   6. Add the type to EnsureFissionTPRs in tpr.go
 //   7. Add tests to tpr_test.go
+//   8. Add a CRUD Interface type (analogous to FunctionInterface in function.go)
+//   9. Add a getter method for your interface type to FissionClient in client.go
 //
 
 type (

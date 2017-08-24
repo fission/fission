@@ -200,6 +200,10 @@ func (fc *FissionClient) Timetriggers(ns string) TimetriggerInterface {
 func (fc *FissionClient) Messagequeuetriggers(ns string) MessagequeuetriggerInterface {
 	return MakeMessagequeuetriggerInterface(fc.tprClient, ns)
 }
+func (fc *FissionClient) Packages(ns string) PackageInterface {
+	return MakePackageInterface(fc.tprClient, ns)
+}
+
 func (fc *FissionClient) WaitForTPRs() {
 	waitForTPRs(fc.tprClient)
 }

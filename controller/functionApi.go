@@ -67,18 +67,6 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure size limits
-	if len(f.Spec.Source.Literal) > 256*1024 {
-		err := fission.MakeError(fission.ErrorInvalidArgument, "Source package literal larger than 256K")
-		a.respondWithError(w, err)
-		return
-	}
-	if len(f.Spec.Deployment.Literal) > 256*1024 {
-		err := fission.MakeError(fission.ErrorInvalidArgument, "Deployment package literal larger than 256K")
-		a.respondWithError(w, err)
-		return
-	}
-
 	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -102,7 +90,6 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 	if len(ns) == 0 {
 		ns = api.NamespaceDefault
 	}
-	raw := r.FormValue("deploymentraw") // just the deployment pkg
 
 	f, err := a.fissionClient.Functions(ns).Get(name)
 	if err != nil {
@@ -110,15 +97,10 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp []byte
-	if raw != "" {
-		resp = []byte(f.Spec.Deployment.Literal)
-	} else {
-		resp, err = json.Marshal(f)
-		if err != nil {
-			a.respondWithError(w, err)
-			return
-		}
+	resp, err = json.Marshal(f)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
 	}
 	a.respondWithSuccess(w, resp)
 }

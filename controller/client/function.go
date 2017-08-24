@@ -30,14 +30,6 @@ import (
 
 func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
 
-	// ensure size limits
-	if len(f.Spec.Source.Literal) > 256*1024 {
-		return nil, fission.MakeError(fission.ErrorSizeLimitExceeded, "Source package literal larger than 256k")
-	}
-	if len(f.Spec.Deployment.Literal) > 256*1024 {
-		return nil, fission.MakeError(fission.ErrorSizeLimitExceeded, "Deployment package literal larger than 256k")
-	}
-
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err

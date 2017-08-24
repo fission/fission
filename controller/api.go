@@ -106,6 +106,12 @@ func (api *API) Serve(port int) {
 	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)
 	r.HandleFunc("/", api.HomeHandler)
 
+	r.HandleFunc("/v2/packages", api.PackageApiList).Methods("GET")
+	r.HandleFunc("/v2/packages", api.PackageApiCreate).Methods("POST")
+	r.HandleFunc("/v2/packages/{package}", api.PackageApiGet).Methods("GET")
+	r.HandleFunc("/v2/packages/{package}", api.PackageApiUpdate).Methods("PUT")
+	r.HandleFunc("/v2/packages/{package}", api.PackageApiDelete).Methods("DELETE")
+
 	r.HandleFunc("/v2/functions", api.FunctionApiList).Methods("GET")
 	r.HandleFunc("/v2/functions", api.FunctionApiCreate).Methods("POST")
 	r.HandleFunc("/v2/functions/{function}", api.FunctionApiGet).Methods("GET")
