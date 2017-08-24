@@ -97,7 +97,7 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err = json.Marshal(f)
+	resp, err := json.Marshal(f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

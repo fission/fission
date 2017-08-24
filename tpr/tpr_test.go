@@ -47,8 +47,12 @@ func functionTests(tprClient *rest.RESTClient) {
 		},
 		Spec: fission.FunctionSpec{
 			Source: fission.Package{},
-			Deployment: fission.Package{
-				Literal: []byte("hi"),
+			Deployment: fission.FunctionPackageRef{
+				PackageRef: fission.PackageRef{
+					Name:      "foo",
+					Namespace: "bar",
+				},
+				FunctionName: "hello",
 			},
 			EnvironmentName: "xxx",
 		},
@@ -70,7 +74,7 @@ func functionTests(tprClient *rest.RESTClient) {
 	// read
 	f, err = fi.Get(function.Metadata.Name)
 	panicIf(err)
-	if len(f.Spec.Deployment.Literal) != len(function.Spec.Deployment.Literal) {
+	if f.Spec.Deployment.PackageRef.FunctionName != function.Spec.Deployment.PackageRef.FunctionName {
 		log.Panicf("Bad result from Get: %v", f)
 	}
 

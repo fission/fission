@@ -20,11 +20,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
