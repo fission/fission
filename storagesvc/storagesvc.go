@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2017 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,25 +18,33 @@ package storagesvc
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/local"
 	"github.com/satori/go.uuid"
 )
 
 type (
+	StorageType   string
 	storageConfig struct {
-		storageType string
-		localPath   string
+		storageType   StorageType
+		localPath     string
+		containerName string
 		// other stuff, such as google or s3 credentials, bucket names etc
 	}
 
-	storageSvc struct {
+	StorageService struct {
 		config    storageConfig
+		location  stow.Location
 		container stow.Container
 		port      int
 	}
@@ -46,8 +54,12 @@ type (
 	}
 )
 
+const (
+	StorageTypeLocal StorageType = "local"
+)
+
 // Handle multipart file uploads.
-func (ss *storageSvc) uploadHandler(w http.ResponseWriter, r *http.Request) {
+func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// handle upload
 	r.ParseMultipartForm(0)
 	file, handler, err := r.FormFile("uploadfile")
@@ -57,18 +69,27 @@ func (ss *storageSvc) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// We want the file size, which is separate from the content
-	// length, the content length being the size of the encoded
-	// file in the HTTP request.
-	fileSizeS := r.Header["X-File-Size"][0]
-	fileSize, err := strconv.Atoi(fileSizeS)
+	// stow wants the file size, but that's different from the
+	// content length, the content length being the size of the
+	// encoded file in the HTTP request. So we require an
+	// "X-File-Size" header in bytes.
+
+	fileSizeS, ok := r.Header["X-File-Size"]
+	if !ok {
+		log.Printf("Missing x-file-size: '%v'")
+		http.Error(w, "missing X-File-Size header", 400)
+		return
+	}
+
+	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
 		log.Printf("Error parsing x-file-size: '%v'", fileSizeS)
 		http.Error(w, "missing or bad X-File-Size header", 400)
 		return
 	}
 
-	// TODO: metadata. e.g. environment; function id; version
+	// TODO: allow headers to add more metadata (e.g. environment
+	// and function metadata)
 	fileMetadata := make(map[string]interface{})
 	fileMetadata["filename"] = handler.Filename
 
@@ -94,7 +115,7 @@ func (ss *storageSvc) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func (ss *storageSvc) downloadHandler(w http.ResponseWriter, r *http.Request) {
+func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	// get id from request
 	fileId := r.FormValue("id")
 	if len(fileId) == 0 {
@@ -129,20 +150,53 @@ func (ss *storageSvc) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setupStorage(sc *storageConfig) stow.Location {
-	if sc.storageType != "local" {
-		panic("Storage types other than 'local' are not implemented")
+func MakeStorageService(sc *storageConfig) (*StorageService, error) {
+	ss := &StorageService{
+		config: *sc,
 	}
+
+	if sc.storageType != StorageTypeLocal {
+		return nil, errors.New("Storage types other than 'local' are not implemented")
+	}
+
 	cfg := stow.ConfigMap{"path": sc.localPath}
-	loc, err := stow.Dial(sc.storageType, cfg)
+	loc, err := stow.Dial("local", cfg)
+	if err != nil {
+		log.Printf("Error initializing storage: %v", err)
+		return nil, err
+	}
+	ss.location = loc
+
+	con, err := loc.CreateContainer(sc.containerName)
+	if err != nil {
+		log.Printf("Error initializing storage: %v", err)
+		return nil, err
+	}
+	ss.container = con
+
+	return ss, nil
+}
+
+func (ss *StorageService) Start(port int) {
+	r := mux.NewRouter()
+	r.HandleFunc("/v2/package", ss.downloadHandler).Methods("GET")
+	r.HandleFunc("/v2/package", ss.uploadHandler).Methods("POST")
+
+	address := fmt.Sprintf(":%v", port)
+	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+}
+
+func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) {
+	// storage
+	ss, err := MakeStorageService(&storageConfig{
+		storageType:   storageType,
+		localPath:     storagePath,
+		containerName: containerName,
+	})
 	if err != nil {
 		log.Panicf("Error initializing storage: %v", err)
 	}
 
-	return loc
-}
-
-func Start(storageType string, storagePath string, port int) {
-	// setup storage
-	// setup handlers
+	// http handlers
+	go ss.Start(port)
 }
