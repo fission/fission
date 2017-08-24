@@ -138,6 +138,13 @@ func configureClient(config *rest.Config) {
 				&api.ListOptions{},
 				&api.DeleteOptions{},
 			)
+			scheme.AddKnownTypes(
+				groupversion,
+				&Package{},
+				&PackageList{},
+				&api.ListOptions{},
+				&api.DeleteOptions{},
+			)
 			return nil
 		})
 	schemeBuilder.AddToScheme(api.Scheme)

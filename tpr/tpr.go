@@ -95,6 +95,15 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			},
 			Description: "Message queue triggers for functions",
 		},
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "package.fission.io",
+			},
+			Versions: []v1beta1.APIVersion{
+				{Name: "v1"},
+			},
+			Description: "Packages: archives containing source or binaries for one or more functions",
+		},
 	}
 	for _, tpr := range tprs {
 		err := ensureTPR(clientset, &tpr)

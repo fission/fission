@@ -41,7 +41,7 @@ type (
 
 	// Package contains or references a collection of source or
 	// binary files.
-	Package struct {
+	PackageSpec struct {
 		// Type defines how the package is specified: literal or URL.
 		Type PackageType `json:"type"`
 
@@ -55,6 +55,11 @@ type (
 		// Checksum ensures the integrity of packages
 		// refereced by URL. Ignored for literals.
 		Checksum Checksum `json:"checksum"`
+	}
+
+	PackageRef struct {
+		PackageName      string
+		PackageNamespace string
 
 		// EntryPoint optionally specifies an entry point in
 		// the package. Each environment defines a default
@@ -71,11 +76,11 @@ type (
 
 		// Source is an source package for this function; it's used for the build step if
 		// the environment defines a build container.
-		Source Package `json:"source"`
+		Source PackageRef `json:"source"`
 
 		// Deployment is a deployable package for this function. This is the package that's
 		// loaded into the environment's runtime container.
-		Deployment Package `json:"deployment"`
+		Deployment PackageRef `json:"deployment"`
 	}
 
 	FunctionReferenceType string
