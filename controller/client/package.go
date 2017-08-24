@@ -24,7 +24,6 @@ import (
 
 	"k8s.io/client-go/1.5/pkg/api"
 
-	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
