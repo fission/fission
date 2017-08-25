@@ -322,7 +322,7 @@ func TestMain(m *testing.M) {
 
 	go Start(8888)
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(time.Second)
 	g.client = client.MakeClient("http://localhost:8888")
 
 	resp, err := http.Get("http://localhost:8888/")
