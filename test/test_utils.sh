@@ -173,17 +173,24 @@ dump_fission_resources() {
     dump_fission_resource environment.fission.io    
 }
 
+dump_env_pods() {
+    fns=$1
+
+    echo --- All environment pods ---
+    kubectl -n $fns get pod -o yaml
+    echo --- End environment pods ---
+}
+
 dump_logs() {
     id=$1
 
     ns=f-$id
     fns=f-func-$id
 
+    dump_env_pods $fns
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns poolmgr
-
     dump_function_pod_logs $ns $fns
-
     dump_fission_resources
 }
 

@@ -123,6 +123,8 @@ func MakeGenericPool(
 		gp.fetcherImagePullPolicy = v1.PullIfNotPresent
 	}
 
+	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
+
 	// Labels for generic deployment/RS/pods.
 	gp.labelsForPool = map[string]string{
 		"environmentName":        gp.env.Metadata.Name,
