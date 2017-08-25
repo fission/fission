@@ -20,8 +20,8 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	//"net/http"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -78,7 +78,7 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	pkgContents := getPackageContents(fileName)
-	pkgName := fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6))
+	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
 	pkg := &tpr.Package{
 		Metadata: api.ObjectMeta{
 			Name:      pkgName,
