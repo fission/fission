@@ -93,7 +93,7 @@ func TestFunctionApi(t *testing.T) {
 	})
 	assertNotFoundFailure(err, "function")
 
-	m, err := g.client.FunctionCreate(testFunc)
+	_, err = g.client.FunctionCreate(testFunc)
 	panicIf(err)
 
 	_, err = g.client.FunctionCreate(testFunc)
@@ -104,7 +104,7 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 
 	testFunc.Metadata.Name = name2
-	m, err = g.client.FunctionCreate(testFunc)
+	_, err = g.client.FunctionCreate(testFunc)
 	panicIf(err)
 
 	funcs, err := g.client.FunctionList()
