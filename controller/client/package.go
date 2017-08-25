@@ -27,14 +27,14 @@ import (
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
+func (c *Client) PackageCreate(f *tpr.Package) (*api.ObjectMeta, error) {
 
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("functions"), "application/json", bytes.NewReader(reqbody))
+	resp, err := http.Post(c.url("packages"), "application/json", bytes.NewReader(reqbody))
 	if err != nil {
 		return nil, err
 	}
@@ -54,8 +54,8 @@ func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) FunctionGet(m *api.ObjectMeta) (*tpr.Function, error) {
-	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
+func (c *Client) PackageGet(m *api.ObjectMeta) (*tpr.Package, error) {
+	relativeUrl := fmt.Sprintf("packages/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
 	resp, err := http.Get(c.url(relativeUrl))
@@ -69,7 +69,7 @@ func (c *Client) FunctionGet(m *api.ObjectMeta) (*tpr.Function, error) {
 		return nil, err
 	}
 
-	var f tpr.Function
+	var f tpr.Package
 	err = json.Unmarshal(body, &f)
 	if err != nil {
 		return nil, err
@@ -78,26 +78,12 @@ func (c *Client) FunctionGet(m *api.ObjectMeta) (*tpr.Function, error) {
 	return &f, nil
 }
 
-func (c *Client) FunctionGetRawDeployment(m *api.ObjectMeta) ([]byte, error) {
-	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
-	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	relativeUrl += fmt.Sprintf("&deploymentraw=1")
-
-	resp, err := http.Get(c.url(relativeUrl))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return c.handleResponse(resp)
-}
-
-func (c *Client) FunctionUpdate(f *tpr.Function) (*api.ObjectMeta, error) {
+func (c *Client) PackageUpdate(f *tpr.Package) (*api.ObjectMeta, error) {
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("functions/%v", f.Metadata.Name)
+	relativeUrl := fmt.Sprintf("packages/%v", f.Metadata.Name)
 
 	resp, err := c.put(relativeUrl, "application/json", reqbody)
 	if err != nil {
@@ -118,14 +104,14 @@ func (c *Client) FunctionUpdate(f *tpr.Function) (*api.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) FunctionDelete(m *api.ObjectMeta) error {
-	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
+func (c *Client) PackageDelete(m *api.ObjectMeta) error {
+	relativeUrl := fmt.Sprintf("packages/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) FunctionList() ([]tpr.Function, error) {
-	resp, err := http.Get(c.url("functions"))
+func (c *Client) PackageList() ([]tpr.Package, error) {
+	resp, err := http.Get(c.url("packages"))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +122,7 @@ func (c *Client) FunctionList() ([]tpr.Function, error) {
 		return nil, err
 	}
 
-	funcs := make([]tpr.Function, 0)
+	funcs := make([]tpr.Package, 0)
 	err = json.Unmarshal(body, &funcs)
 	if err != nil {
 		return nil, err

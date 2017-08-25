@@ -20,11 +20,12 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	//"net/http"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/dchest/uniuri"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	"k8s.io/client-go/1.5/pkg/api"
@@ -33,27 +34,6 @@ import (
 	"github.com/fission/fission/fission/logdb"
 	"github.com/fission/fission/tpr"
 )
-
-func downloadUrl(url string) {
-	// var resp *http.Response
-	// resp, err := http.Get(url)
-	// if err != nil {
-	// 	checkErr(err, fmt.Sprintf("download function"))
-	// }
-
-	// defer resp.Body.Close()
-	// if resp.StatusCode != http.StatusOK {
-	// 	err = fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
-	// 	checkErr(err, fmt.Sprintf("download function"))
-	// }
-
-	// contents, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	checkErr(err, fmt.Sprintf("download function body %v", url))
-	// }
-
-	// return
-}
 
 func fileSize(filePath string) int64 {
 	info, err := os.Stat(filePath)
@@ -98,6 +78,19 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	pkgContents := getPackageContents(fileName)
+	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: fission.PackageSpec{
+			Type:    fission.PackageTypeLiteral,
+			Literal: pkgContents,
+		},
+	}
+	_, err := client.PackageCreate(pkg)
+	checkErr(err, "upload package")
 
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -106,13 +99,16 @@ func fnCreate(c *cli.Context) error {
 		},
 		Spec: fission.FunctionSpec{
 			EnvironmentName: envName,
-			Deployment: fission.Package{
-				Literal: pkgContents,
+			Deployment: fission.FunctionPackageRef{
+				PackageRef: fission.PackageRef{
+					Name:      pkgName,
+					Namespace: api.NamespaceDefault,
+				},
 			},
 		},
 	}
 
-	_, err := client.FunctionCreate(function)
+	_, err = client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -159,11 +155,16 @@ func fnGet(c *cli.Context) error {
 		Name:      fnName,
 		Namespace: api.NamespaceDefault,
 	}
-
-	code, err := client.FunctionGetRawDeployment(m)
+	fn, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
-	os.Stdout.Write(code)
+	pkg, err := client.PackageGet(&api.ObjectMeta{
+		Name:      fn.Spec.Deployment.PackageRef.Name,
+		Namespace: fn.Spec.Deployment.PackageRef.Namespace,
+	})
+	checkErr(err, "get package")
+
+	os.Stdout.Write(pkg.Spec.Literal)
 	return err
 }
 
@@ -205,6 +206,13 @@ func fnUpdate(c *cli.Context) error {
 	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
+	pkgName := function.Spec.Deployment.PackageRef.Name
+	pkg, err := client.PackageGet(&api.ObjectMeta{
+		Name:      pkgName,
+		Namespace: api.NamespaceDefault,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
+
 	envName := c.String("env")
 	fileName := c.String("code")
 	if len(fileName) == 0 {
@@ -222,14 +230,18 @@ func fnUpdate(c *cli.Context) error {
 			os.Exit(1)
 		}
 
-		function.Spec.Deployment.Literal = getPackageContents(fileName)
-	}
-	if len(envName) > 0 {
-		function.Spec.EnvironmentName = envName
+		pkg.Spec.Literal = getPackageContents(fileName)
+
+		_, err = client.PackageUpdate(pkg)
+		checkErr(err, "update package")
 	}
 
-	_, err = client.FunctionUpdate(function)
-	checkErr(err, "update function")
+	if len(envName) > 0 {
+		function.Spec.EnvironmentName = envName
+
+		_, err = client.FunctionUpdate(function)
+		checkErr(err, "update function")
+	}
 
 	fmt.Printf("function '%v' updated\n", fnName)
 	return err

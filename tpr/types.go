@@ -33,9 +33,24 @@ import (
 //   5. Add the type to configureClient in client.go
 //   6. Add the type to EnsureFissionTPRs in tpr.go
 //   7. Add tests to tpr_test.go
+//   8. Add a CRUD Interface type (analogous to FunctionInterface in function.go)
+//   9. Add a getter method for your interface type to FissionClient in client.go
 //
 
 type (
+	// Packages. Think of these as function-level images.
+	Package struct {
+		unversioned.TypeMeta `json:",inline"`
+		Metadata             api.ObjectMeta      `json:"metadata"`
+		Spec                 fission.PackageSpec `json:"spec"`
+	}
+	PackageList struct {
+		unversioned.TypeMeta `json:",inline"`
+		Metadata             unversioned.ListMeta `json:"metadata"`
+
+		Items []Package `json:"items"`
+	}
+
 	// Functions.
 	Function struct {
 		unversioned.TypeMeta `json:",inline"`
@@ -144,6 +159,9 @@ func (w *Timetrigger) GetObjectKind() unversioned.ObjectKind {
 func (w *Messagequeuetrigger) GetObjectKind() unversioned.ObjectKind {
 	return &w.TypeMeta
 }
+func (w *Package) GetObjectKind() unversioned.ObjectKind {
+	return &w.TypeMeta
+}
 
 func (f *Function) GetObjectMeta() meta.Object {
 	return &f.Metadata
@@ -161,6 +179,9 @@ func (w *Timetrigger) GetObjectMeta() meta.Object {
 	return &w.Metadata
 }
 func (w *Messagequeuetrigger) GetObjectMeta() meta.Object {
+	return &w.Metadata
+}
+func (w *Package) GetObjectMeta() meta.Object {
 	return &w.Metadata
 }
 
@@ -182,6 +203,9 @@ func (wl *TimetriggerList) GetObjectKind() unversioned.ObjectKind {
 func (wl *MessagequeuetriggerList) GetObjectKind() unversioned.ObjectKind {
 	return &wl.TypeMeta
 }
+func (wl *PackageList) GetObjectKind() unversioned.ObjectKind {
+	return &wl.TypeMeta
+}
 
 func (fl *FunctionList) GetListMeta() unversioned.List {
 	return &fl.Metadata
@@ -201,8 +225,6 @@ func (wl *TimetriggerList) GetListMeta() unversioned.List {
 func (wl *MessagequeuetriggerList) GetListMeta() unversioned.List {
 	return &wl.Metadata
 }
-
-// In the client-go TPR example, UnmarshalJSON is defined here for the
-// singular and list types.  That's supposed to be a workaround for
-// some ugorji bug.  But we don't seem to need it, and all our tests
-// pass without it, so we don't define any UnmarshalJSON methods.
+func (wl *PackageList) GetListMeta() unversioned.List {
+	return &wl.Metadata
+}

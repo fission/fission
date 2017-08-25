@@ -151,17 +151,23 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// get pkg
-		var pkg *fission.Package
+		var pkg *tpr.Package
 		if req.FetchType == FETCH_SOURCE {
-			pkg = &fn.Spec.Source
+			pkg, err = fetcher.fissionClient.Packages(fn.Spec.Source.PackageRef.Namespace).Get(fn.Spec.Source.PackageRef.Name)
 		} else if req.FetchType == FETCH_DEPLOYMENT {
-			pkg = &fn.Spec.Deployment
+			pkg, err = fetcher.fissionClient.Packages(fn.Spec.Deployment.PackageRef.Namespace).Get(fn.Spec.Deployment.PackageRef.Name)
+		}
+		if err != nil {
+			e := fmt.Sprintf("Failed to get package: %v", err)
+			log.Printf(e)
+			http.Error(w, e, 500)
+			return
 		}
 
 		// get package data as literal or by url
-		if len(pkg.Literal) > 0 {
+		if len(pkg.Spec.Literal) > 0 {
 			// write pkg.Literal into tmpPath
-			err = ioutil.WriteFile(tmpPath, pkg.Literal, 0600)
+			err = ioutil.WriteFile(tmpPath, pkg.Spec.Literal, 0600)
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
@@ -171,7 +177,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// download and verify
 
-			err = downloadUrl(pkg.URL, tmpPath)
+			err = downloadUrl(pkg.Spec.URL, tmpPath)
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
@@ -179,7 +185,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			err = verifyChecksum(tmpPath, &pkg.Checksum)
+			err = verifyChecksum(tmpPath, &pkg.Spec.Checksum)
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)

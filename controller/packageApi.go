@@ -20,19 +20,16 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
-func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := a.fissionClient.Functions(api.NamespaceAll).List(api.ListOptions{})
+func (a *API) PackageApiList(w http.ResponseWriter, r *http.Request) {
+	funcs, err := a.fissionClient.Packages(api.NamespaceAll).List(api.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -47,14 +44,14 @@ func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
 	a.respondWithSuccess(w, resp)
 }
 
-func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
+func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	var f tpr.Function
+	var f tpr.Package
 	err = json.Unmarshal(body, &f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -67,7 +64,14 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Create(&f)
+	// Ensure size limits
+	if len(f.Spec.Literal) > 256*1024 {
+		err := fission.MakeError(fission.ErrorInvalidArgument, "Package literal larger than 256K")
+		a.respondWithError(w, err)
+		return
+	}
+
+	fnew, err := a.fissionClient.Packages(f.Metadata.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -83,31 +87,37 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	a.respondWithSuccess(w, resp)
 }
 
-func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
+func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["function"]
+	name := vars["package"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
 		ns = api.NamespaceDefault
 	}
+	raw := r.FormValue("raw") // just the deployment pkg
 
-	f, err := a.fissionClient.Functions(ns).Get(name)
+	f, err := a.fissionClient.Packages(ns).Get(name)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(f)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
+	var resp []byte
+	if raw != "" {
+		resp = []byte(f.Spec.Literal)
+	} else {
+		resp, err = json.Marshal(f)
+		if err != nil {
+			a.respondWithError(w, err)
+			return
+		}
 	}
 	a.respondWithSuccess(w, resp)
 }
 
-func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
+func (a *API) PackageApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["function"]
+	name := vars["package"]
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -115,7 +125,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var f tpr.Function
+	var f tpr.Package
 	err = json.Unmarshal(body, &f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -123,12 +133,12 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name != f.Metadata.Name {
-		err = fission.MakeError(fission.ErrorInvalidArgument, "Function name doesn't match URL")
+		err = fission.MakeError(fission.ErrorInvalidArgument, "Package name doesn't match URL")
 		a.respondWithError(w, err)
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Update(&f)
+	fnew, err := a.fissionClient.Packages(f.Metadata.Namespace).Update(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -142,49 +152,19 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 	a.respondWithSuccess(w, resp)
 }
 
-func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
+func (a *API) PackageApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["function"]
+	name := vars["package"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
 		ns = api.NamespaceDefault
 	}
 
-	err := a.fissionClient.Functions(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Packages(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
 	a.respondWithSuccess(w, []byte(""))
-}
-
-// FunctionLogsApiPost establishes a proxy server to log database, and redirect
-// query command send from client to database then proxy back the db response.
-func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	// get dbType from url
-	dbType := vars["dbType"]
-
-	// find correspond db http url
-	dbCnf := a.getLogDBConfig(dbType)
-
-	svcUrl, err := url.Parse(dbCnf.httpURL)
-	if err != nil {
-		log.Printf("Failed to establish proxy server for function logs: %v", err)
-	}
-	// set up proxy server director
-	director := func(req *http.Request) {
-		// only replace url Scheme and Host to remote influxDB
-		// and leave query string intact
-		req.URL.Scheme = svcUrl.Scheme
-		req.URL.Host = svcUrl.Host
-		req.URL.Path = svcUrl.Path
-		// set up http basic auth for database authentication
-		req.SetBasicAuth(dbCnf.username, dbCnf.password)
-	}
-	proxy := &httputil.ReverseProxy{
-		Director: director,
-	}
-	proxy.ServeHTTP(w, r)
 }

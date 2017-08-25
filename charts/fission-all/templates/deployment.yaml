@@ -238,6 +238,8 @@ spec:
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
+        - name: FETCHER_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
       serviceAccount: fission-svc
 
 ---

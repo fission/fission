@@ -63,6 +63,7 @@ func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
 	if err != nil {
 		log.Panicf("failed to create ns %v: %v", ns, err)
 	}
+	log.Printf("Created namespace %v", ns)
 }
 
 // create a nodeport service
@@ -172,6 +173,22 @@ func TestPoolmgr(t *testing.T) {
 	// waitForPool(functionNs, "nodejs")
 	time.Sleep(6 * time.Second)
 
+	// create a package
+	p := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      "hello",
+			Namespace: fissionNs,
+		},
+		Spec: fission.PackageSpec{
+			Type:    fission.PackageTypeLiteral,
+			Literal: []byte(`module.exports = async function(context) { return { status: 200, body: "Hello, world!\n" }; }`),
+		},
+	}
+	_, err = fissionClient.Packages(fissionNs).Create(p)
+	if err != nil {
+		log.Panicf("failed to create package: %v", err)
+	}
+
 	// create a function
 	f := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -179,10 +196,12 @@ func TestPoolmgr(t *testing.T) {
 			Namespace: fissionNs,
 		},
 		Spec: fission.FunctionSpec{
-			Source: fission.Package{},
-			Deployment: fission.Package{
-				Type:    fission.PackageTypeLiteral,
-				Literal: []byte(`module.exports = async function(context) { return { status: 200, body: "Hello, world!\n" }; }`),
+			Source: fission.FunctionPackageRef{},
+			Deployment: fission.FunctionPackageRef{
+				PackageRef: fission.PackageRef{
+					Name:      p.Metadata.Name,
+					Namespace: p.Metadata.Namespace,
+				},
 			},
 			EnvironmentName: env.Metadata.Name,
 		},

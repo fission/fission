@@ -41,7 +41,7 @@ type (
 
 	// Package contains or references a collection of source or
 	// binary files.
-	Package struct {
+	PackageSpec struct {
 		// Type defines how the package is specified: literal or URL.
 		Type PackageType `json:"type"`
 
@@ -55,11 +55,24 @@ type (
 		// Checksum ensures the integrity of packages
 		// refereced by URL. Ignored for literals.
 		Checksum Checksum `json:"checksum"`
+	}
 
-		// EntryPoint optionally specifies an entry point in
-		// the package. Each environment defines a default
-		// entry point, but that can be overridden here.
-		EntryPoint string `json:"entrypoint"`
+	PackageRef struct {
+		Name      string
+		Namespace string
+	}
+	FunctionPackageRef struct {
+		PackageRef PackageRef
+
+		// FunctionName specifies a specific function within the package. This allows
+		// functions to share packages, by having different functions within the same
+		// package.
+		//
+		// Fission itself does not interpret this path. It is passed verbatim to
+		// build and runtime environments.
+		//
+		// This is optional: if unspecified, the environment has a default name.
+		FunctionName string `json:"functionName"`
 	}
 
 	// FunctionSpec describes the contents of the function.
@@ -71,11 +84,11 @@ type (
 
 		// Source is an source package for this function; it's used for the build step if
 		// the environment defines a build container.
-		Source Package `json:"source"`
+		Source FunctionPackageRef `json:"source"`
 
 		// Deployment is a deployable package for this function. This is the package that's
 		// loaded into the environment's runtime container.
-		Deployment Package `json:"deployment"`
+		Deployment FunctionPackageRef `json:"deployment"`
 	}
 
 	FunctionReferenceType string
