@@ -50,20 +50,21 @@ const POD_PHASE_RUNNING string = "Running"
 
 type (
 	GenericPool struct {
-		env              *tpr.Environment
-		replicas         int32                 // num idle pods
-		deployment       *v1beta1.Deployment   // kubernetes deployment
-		namespace        string                // namespace to keep our resources
-		podReadyTimeout  time.Duration         // timeout for generic pods to become ready
-		idlePodReapTime  time.Duration         // pods unused for idlePodReapTime are deleted
-		fsCache          *functionServiceCache // cache funcSvc's by function, address and podname
-		useSvc           bool                  // create k8s service for specialized pods
-		poolInstanceId   string                // small random string to uniquify pod names
-		fetcherImage     string
-		kubernetesClient *kubernetes.Clientset
-		instanceId       string // poolmgr instance id
-		labelsForPool    map[string]string
-		requestChannel   chan *choosePodRequest
+		env                    *tpr.Environment
+		replicas               int32                 // num idle pods
+		deployment             *v1beta1.Deployment   // kubernetes deployment
+		namespace              string                // namespace to keep our resources
+		podReadyTimeout        time.Duration         // timeout for generic pods to become ready
+		idlePodReapTime        time.Duration         // pods unused for idlePodReapTime are deleted
+		fsCache                *functionServiceCache // cache funcSvc's by function, address and podname
+		useSvc                 bool                  // create k8s service for specialized pods
+		poolInstanceId         string                // small random string to uniquify pod names
+		fetcherImage           string
+		fetcherImagePullPolicy v1.PullPolicy
+		kubernetesClient       *kubernetes.Clientset
+		instanceId             string // poolmgr instance id
+		labelsForPool          map[string]string
+		requestChannel         chan *choosePodRequest
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -91,6 +92,10 @@ func MakeGenericPool(
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
 	}
+	fetcherImagePullPolicyS := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
+	if len(fetcherImagePullPolicyS) == 0 {
+		fetcherImagePullPolicyS = "IfNotPresent"
+	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
@@ -107,6 +112,15 @@ func MakeGenericPool(
 		instanceId:       instanceId,
 		fetcherImage:     fetcherImage,
 		useSvc:           false, // defaults off -- svc takes a second or more to become routable, slowing cold start
+	}
+
+	switch fetcherImagePullPolicyS {
+	case "Always":
+		gp.fetcherImagePullPolicy = v1.PullAlways
+	case "Never":
+		gp.fetcherImagePullPolicy = v1.PullNever
+	default:
+		gp.fetcherImagePullPolicy = v1.PullIfNotPresent
 	}
 
 	// Labels for generic deployment/RS/pods.
@@ -376,7 +390,7 @@ func (gp *GenericPool) createPool() error {
 						{
 							Name:                   "fetcher",
 							Image:                  gp.fetcherImage,
-							ImagePullPolicy:        v1.PullIfNotPresent,
+							ImagePullPolicy:        gp.fetcherImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
 								{
