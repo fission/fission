@@ -50,10 +50,9 @@ func getPackageFileName(srcPkgName string, deployPkgName string) (string, error)
 	} else if len(srcPkgName) == 0 && len(deployPkgName) > 0 {
 		// deploy pkg is available
 		return deployPkgName, nil
-	} else {
-		// source pkg is available
-		return srcPkgName, nil
 	}
+	// source pkg is available
+	return srcPkgName, nil
 }
 
 func getPackageContents(filePath string) []byte {
@@ -233,10 +232,15 @@ func fnUpdate(c *cli.Context) error {
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
 	var pkgName string
+	var isSrcPkg bool
 
+	// Since a deployment pkg may be built from the source pkg,
+	// we need to check whether source pkg is available or not.
 	if len(function.Spec.Source.PackageRef.Name) > 0 {
+		isSrcPkg = true
 		pkgName = function.Spec.Source.PackageRef.Name
 	} else {
+		isSrcPkg = false
 		pkgName = function.Spec.Deployment.PackageRef.Name
 	}
 
@@ -255,6 +259,14 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(envName) == 0 && len(deployPkgName) == 0 && len(srcPkgName) == 0 {
 		fatal("Need --env or --code or --package or --srcpkg argument.")
+	}
+
+	// We should not allow a user to update deployment pkg if the source
+	// pkg is not empty, since the deployment pkg may be overwritten with
+	// a new one, which is built from the old source pkg, once env builder
+	// finished it's build process.
+	if isSrcPkg && len(deployPkgName) > 0 && len(srcPkgName) == 0 {
+		fatal("Not allow to update deployment package of the function that created with source package.")
 	}
 
 	fileName, err := getPackageFileName(srcPkgName, deployPkgName)
