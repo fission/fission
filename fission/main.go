@@ -40,15 +40,16 @@ func main() {
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for source code"}
 	fnPackageFlag := cli.StringFlag{Name: "package", Usage: "local path or URL for binary package"}
+	fnSrcPackageFlag := cli.StringFlag{Name: "srcpkg", Usage: "local path or URL for source package"}
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
 	fnDetailFlag := cli.BoolFlag{Name: "detail, d", Usage: "display detailed information"}
 	fnLogDBTypeFlag := cli.StringFlag{Name: "dbtype", Usage: "log database type, e.g. influxdb (currently only influxdb is supported)"}
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, htUrlFlag, htMethodFlag}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcPackageFlag, htUrlFlag, htMethodFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag}, Action: fnGet},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag}, Action: fnGetMeta},
-		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag}, Action: fnUpdate},
+		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcPackageFlag}, Action: fnUpdate},
 		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag}, Action: fnDelete},
 		{Name: "list", Usage: "List all functions", Flags: []cli.Flag{}, Action: fnList},
 		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag}, Action: fnLogs},

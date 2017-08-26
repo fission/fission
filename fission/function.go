@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -39,6 +40,20 @@ func fileSize(filePath string) int64 {
 	info, err := os.Stat(filePath)
 	checkErr(err, fmt.Sprintf("stat %v", filePath))
 	return info.Size()
+}
+
+func getPackageFileName(srcPkgName string, deployPkgName string) (string, error) {
+	if len(srcPkgName) == 0 && len(deployPkgName) == 0 {
+		return "", errors.New("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
+	} else if len(srcPkgName) > 0 && len(deployPkgName) > 0 {
+		return "", errors.New("Cannot specify deployment package (--code, --package) and source package (--srcpkg) at the same time.")
+	} else if len(srcPkgName) == 0 && len(deployPkgName) > 0 {
+		// deploy pkg is available
+		return deployPkgName, nil
+	} else {
+		// source pkg is available
+		return srcPkgName, nil
+	}
 }
 
 func getPackageContents(filePath string) []byte {
@@ -63,12 +78,16 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --env argument.")
 	}
 
-	fileName := c.String("code")
-	if len(fileName) == 0 {
-		fileName = c.String("package")
-		if len(fileName) == 0 {
-			fatal("Need --code or --package argument.")
-		}
+	srcPkgName := c.String("srcpkg")
+
+	deployPkgName := c.String("code")
+	if len(deployPkgName) == 0 {
+		deployPkgName = c.String("package")
+	}
+
+	fileName, err := getPackageFileName(srcPkgName, deployPkgName)
+	if err != nil {
+		fatal(err.Error())
 	}
 
 	if fileSize(fileName) > fission.PackageLiteralSizeLimit {
@@ -89,8 +108,15 @@ func fnCreate(c *cli.Context) error {
 			Literal: pkgContents,
 		},
 	}
-	_, err := client.PackageCreate(pkg)
+	_, err = client.PackageCreate(pkg)
 	checkErr(err, "upload package")
+
+	fnPkgRef := fission.FunctionPackageRef{
+		PackageRef: fission.PackageRef{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+	}
 
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -99,13 +125,13 @@ func fnCreate(c *cli.Context) error {
 		},
 		Spec: fission.FunctionSpec{
 			EnvironmentName: envName,
-			Deployment: fission.FunctionPackageRef{
-				PackageRef: fission.PackageRef{
-					Name:      pkgName,
-					Namespace: api.NamespaceDefault,
-				},
-			},
 		},
+	}
+
+	if len(srcPkgName) > 0 {
+		function.Spec.Source = fnPkgRef
+	} else {
+		function.Spec.Deployment = fnPkgRef
 	}
 
 	_, err = client.FunctionCreate(function)
@@ -206,7 +232,14 @@ func fnUpdate(c *cli.Context) error {
 	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
-	pkgName := function.Spec.Deployment.PackageRef.Name
+	var pkgName string
+
+	if len(function.Spec.Source.PackageRef.Name) > 0 {
+		pkgName = function.Spec.Source.PackageRef.Name
+	} else {
+		pkgName = function.Spec.Deployment.PackageRef.Name
+	}
+
 	pkg, err := client.PackageGet(&api.ObjectMeta{
 		Name:      pkgName,
 		Namespace: api.NamespaceDefault,
@@ -214,13 +247,19 @@ func fnUpdate(c *cli.Context) error {
 	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 
 	envName := c.String("env")
-	fileName := c.String("code")
-	if len(fileName) == 0 {
-		fileName = c.String("package")
+	deployPkgName := c.String("code")
+	if len(deployPkgName) == 0 {
+		deployPkgName = c.String("package")
+	}
+	srcPkgName := c.String("srcpkg")
+
+	if len(envName) == 0 && len(deployPkgName) == 0 && len(srcPkgName) == 0 {
+		fatal("Need --env or --code or --package or --srcpkg argument.")
 	}
 
-	if len(envName) == 0 && len(fileName) == 0 {
-		fatal("Need --env or --code or --package argument.")
+	fileName, err := getPackageFileName(srcPkgName, deployPkgName)
+	if err != nil {
+		fatal(err.Error())
 	}
 
 	if len(fileName) > 0 {
