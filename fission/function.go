@@ -32,6 +32,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/fission/logdb"
 	"github.com/fission/fission/tpr"
 )
@@ -42,17 +43,53 @@ func fileSize(filePath string) int64 {
 	return info.Size()
 }
 
-func getPackageFileName(srcPkgName string, deployPkgName string) (string, error) {
-	if len(srcPkgName) == 0 && len(deployPkgName) == 0 {
-		return "", errors.New("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
-	} else if len(srcPkgName) > 0 && len(deployPkgName) > 0 {
-		return "", errors.New("Cannot specify deployment package (--code, --package) and source package (--srcpkg) at the same time.")
-	} else if len(srcPkgName) == 0 && len(deployPkgName) > 0 {
-		// deploy pkg is available
-		return deployPkgName, nil
+func getFnPkgRef(client *client.Client, fnName string, fileName string) fission.FunctionPackageRef {
+	// TODO fallback to uploading + setting a Package URL
+	checkFileSize(fileName)
+	pkgContents := getPackageContents(fileName)
+	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: fission.PackageSpec{
+			Type:    fission.PackageTypeLiteral,
+			Literal: pkgContents,
+		},
 	}
-	// source pkg is available
-	return srcPkgName, nil
+	_, err := client.PackageCreate(pkg)
+	checkErr(err, "upload package")
+
+	return fission.FunctionPackageRef{
+		PackageRef: fission.PackageRef{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+	}
+}
+
+func updatePkgContent(client *client.Client, pkgName string, fileName string) error {
+	// TODO fallback to uploading + setting a Package URL
+	checkFileSize(pkgName)
+	pkg, err := client.PackageGet(&api.ObjectMeta{
+		Name:      pkgName,
+		Namespace: api.NamespaceDefault,
+	})
+	if err != nil {
+		return errors.New(fmt.Sprintf("read package '%v'", pkgName))
+	}
+	pkg.Spec.Literal = getPackageContents(fileName)
+	_, err = client.PackageUpdate(pkg)
+	return err
+}
+
+func checkFileSize(fileName string) {
+	if fileSize(fileName) > fission.PackageLiteralSizeLimit {
+		// TODO fallback to uploading + setting a Package URL
+		fmt.Printf("File size >256k not supported yet")
+		os.Exit(1)
+	}
 }
 
 func getPackageContents(filePath string) []byte {
@@ -84,37 +121,8 @@ func fnCreate(c *cli.Context) error {
 		deployPkgName = c.String("package")
 	}
 
-	fileName, err := getPackageFileName(srcPkgName, deployPkgName)
-	if err != nil {
-		fatal(err.Error())
-	}
-
-	if fileSize(fileName) > fission.PackageLiteralSizeLimit {
-		// TODO fallback to uploading + setting a Package URL
-		fmt.Printf("File size not supported yet")
-		os.Exit(1)
-	}
-
-	pkgContents := getPackageContents(fileName)
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-		Spec: fission.PackageSpec{
-			Type:    fission.PackageTypeLiteral,
-			Literal: pkgContents,
-		},
-	}
-	_, err = client.PackageCreate(pkg)
-	checkErr(err, "upload package")
-
-	fnPkgRef := fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
+	if len(srcPkgName) == 0 && len(deployPkgName) == 0 {
+		fatal("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
 	}
 
 	function := &tpr.Function{
@@ -128,12 +136,13 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	if len(srcPkgName) > 0 {
-		function.Spec.Source = fnPkgRef
-	} else {
-		function.Spec.Deployment = fnPkgRef
+		function.Spec.Source = getFnPkgRef(client, fnName, srcPkgName)
+	}
+	if len(deployPkgName) > 0 {
+		function.Spec.Deployment = getFnPkgRef(client, fnName, deployPkgName)
 	}
 
-	_, err = client.FunctionCreate(function)
+	_, err := client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -231,25 +240,6 @@ func fnUpdate(c *cli.Context) error {
 	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
-	var pkgName string
-	var isSrcPkg bool
-
-	// Since a deployment pkg may be built from the source pkg,
-	// we need to check whether source pkg is available or not.
-	if len(function.Spec.Source.PackageRef.Name) > 0 {
-		isSrcPkg = true
-		pkgName = function.Spec.Source.PackageRef.Name
-	} else {
-		isSrcPkg = false
-		pkgName = function.Spec.Deployment.PackageRef.Name
-	}
-
-	pkg, err := client.PackageGet(&api.ObjectMeta{
-		Name:      pkgName,
-		Namespace: api.NamespaceDefault,
-	})
-	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
-
 	envName := c.String("env")
 	deployPkgName := c.String("code")
 	if len(deployPkgName) == 0 {
@@ -261,30 +251,14 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need --env or --code or --package or --srcpkg argument.")
 	}
 
-	// We should not allow a user to update deployment pkg if the source
-	// pkg is not empty, since the deployment pkg may be overwritten with
-	// a new one, which is built from the old source pkg, once env builder
-	// finished it's build process.
-	if isSrcPkg && len(deployPkgName) > 0 && len(srcPkgName) == 0 {
-		fatal("Not allow to update deployment package of the function that created with source package.")
-	}
-
-	fileName, err := getPackageFileName(srcPkgName, deployPkgName)
-	if err != nil {
-		fatal(err.Error())
-	}
-
-	if len(fileName) > 0 {
-		if fileSize(fileName) > fission.PackageLiteralSizeLimit {
-			// TODO fallback to uploading + setting a Package URL
-			fmt.Printf("File size >256k not supported yet")
-			os.Exit(1)
+	// Now builder manager only starts a build if a function has a source package
+	// but no deployment package. This behavior will be changed after we move builds
+	// to package level (https://github.com/fission/fission/pull/297).
+	for _, pkgName := range []string{srcPkgName, deployPkgName} {
+		if len(pkgName) > 0 {
+			err := updatePkgContent(client, function.Spec.Source.PackageRef.Name, srcPkgName)
+			checkErr(err, "update package")
 		}
-
-		pkg.Spec.Literal = getPackageContents(fileName)
-
-		_, err = client.PackageUpdate(pkg)
-		checkErr(err, "update package")
 	}
 
 	if len(envName) > 0 {
