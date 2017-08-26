@@ -50,7 +50,7 @@ type (
 	}
 
 	uploadResponse struct {
-		Id string `json:"id"`
+		packageID string `json:"packageID"`
 	}
 )
 
@@ -93,6 +93,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	fileMetadata := make(map[string]interface{})
 	fileMetadata["filename"] = handler.Filename
 
+	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
 	uploadName := uuid.NewV4().String()
 
@@ -106,7 +107,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &uploadResponse{
-		Id: item.ID(),
+		packageID: item.ID(),
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
@@ -117,8 +118,9 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	// get id from request
-	fileId := r.FormValue("id")
-	if len(fileId) == 0 {
+	vars := mux.Vars(r)
+	fileId, ok := vars["packageID"]
+	if !ok || len(fileId) == 0 {
 		http.Error(w, "missing file id", 400)
 	}
 
@@ -179,8 +181,8 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 
 func (ss *StorageService) Start(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v2/package", ss.downloadHandler).Methods("GET")
-	r.HandleFunc("/v2/package", ss.uploadHandler).Methods("POST")
+	r.HandleFunc("/v1/package/{packageID}", ss.downloadHandler).Methods("GET")
+	r.HandleFunc("/v1/package", ss.uploadHandler).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
