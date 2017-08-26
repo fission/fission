@@ -34,16 +34,16 @@ type (
 		Sum  string       `json:"sum"`
 	}
 
-	// PackageType is either literal or URL, indicating whether
-	// the package is specified in the Package struct or
+	// ArchiveType is either literal or URL, indicating whether
+	// the package is specified in the Archive struct or
 	// externally.
-	PackageType string
+	ArchiveType string
 
 	// Package contains or references a collection of source or
 	// binary files.
-	PackageSpec struct {
+	Archive struct {
 		// Type defines how the package is specified: literal or URL.
-		Type PackageType `json:"type"`
+		Type ArchiveType `json:"type"`
 
 		// Literal contents of the package. Can be used for
 		// encoding packages below TODO (256KB?) size.
@@ -55,6 +55,15 @@ type (
 		// Checksum ensures the integrity of packages
 		// refereced by URL. Ignored for literals.
 		Checksum Checksum `json:"checksum"`
+	}
+
+	PackageSpec struct {
+		Source     Archive
+		Deployment Archive
+	}
+	PackageStatus struct {
+		BuildStatus BuildStatus // success/in-progress/failure
+		BuildLog    string      // output of build
 	}
 
 	PackageRef struct {
@@ -82,13 +91,8 @@ type (
 		// be invoked.
 		EnvironmentName string `json:"environmentName"`
 
-		// Source is an source package for this function; it's used for the build step if
-		// the environment defines a build container.
-		Source FunctionPackageRef `json:"source"`
-
-		// Deployment is a deployable package for this function. This is the package that's
-		// loaded into the environment's runtime container.
-		Deployment FunctionPackageRef `json:"deployment"`
+		// Reference to a package containing deployment and optionally the source
+		Packages FunctionPackageRef
 	}
 
 	FunctionReferenceType string
