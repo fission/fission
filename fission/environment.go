@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"text/tabwriter"
 
@@ -45,7 +46,8 @@ func envCreate(c *cli.Context) error {
 
 	envBuildCmd := c.String("buildcmd")
 	if len(envBuilderImg) > 0 && len(envBuildCmd) == 0 {
-		fatal("Need a build command for env builder to run with")
+		log.Printf("No build command is specified, use the default build command.")
+		envBuildCmd = "build"
 	}
 
 	env := &tpr.Environment{
