@@ -215,6 +215,27 @@ type (
 	}
 )
 
+type (
+	PackageBuildRequest struct {
+		SrcPkgFilename string `json:"srcPkgFilename"`
+		// Command for builder to run with.
+		// A build command consists of commands, parameters and environment variables.
+		// Now, only two environment variables is support:
+		// 1. SRC_PKG: path to source package directory
+		// 2. DEPLOY_PKG: path to deployment package directory
+		// The environment variables will be replaced with correspond package directory path.
+		// For example:
+		// Defined Build command: "pip3 install -r ${SRC_PKG}/requirements.txt -t ${SRC_PKG} && cp -r ${SRC_PKG} ${DEPLOY_PKG}"
+		// Real build command:    "pip3 install -r /tmp/fission/srcPkg/requirements.txt -t /tmp/fission/srcPkg --upgrade && cp -r /tmp/fission/srcPkg /tmp/fission/deployPkg"
+		BuildCommand string `json:"command"`
+	}
+
+	PackageBuildResponse struct {
+		ArchiveFilename string `json:"archiveFilename"`
+		BuildLogs       string `json:"buildLogs"`
+	}
+)
+
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
