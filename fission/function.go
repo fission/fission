@@ -76,7 +76,7 @@ func createPackageFromFile(client *client.Client, fnName string, fileName string
 // and updates the package content of TPR package resource.
 func updatePackageContents(client *client.Client, pkgName string, fileName string) error {
 	// TODO fallback to uploading + setting a Package URL
-	checkFileSize(pkgName)
+	checkFileSize(fileName)
 	pkg, err := client.PackageGet(&api.ObjectMeta{
 		Name:      pkgName,
 		Namespace: api.NamespaceDefault,
