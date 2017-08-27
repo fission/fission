@@ -259,19 +259,32 @@ func fnUpdate(c *cli.Context) error {
 	// Now builder manager only starts a build if a function has a source package
 	// but no deployment package. This behavior will be changed after we move builds
 	// to package level (https://github.com/fission/fission/pull/297).
-	for _, pkgName := range []string{srcPkgName, deployPkgName} {
-		if len(pkgName) > 0 {
-			err := updatePackageContents(client, function.Spec.Source.PackageRef.Name, pkgName)
-			checkErr(err, "update package")
+
+	if len(srcPkgName) > 0 {
+		// Check the existence of the package, create it if not exist.
+		if len(function.Spec.Source.PackageRef.Name) > 0 {
+			err := updatePackageContents(client, function.Spec.Source.PackageRef.Name, srcPkgName)
+			checkErr(err, "update source package")
+		} else {
+			function.Spec.Source = createPackageFromFile(client, fnName, srcPkgName)
+		}
+	}
+
+	if len(deployPkgName) > 0 {
+		if len(function.Spec.Deployment.PackageRef.Name) > 0 {
+			err := updatePackageContents(client, function.Spec.Deployment.PackageRef.Name, deployPkgName)
+			checkErr(err, "update source package")
+		} else {
+			function.Spec.Deployment = createPackageFromFile(client, fnName, deployPkgName)
 		}
 	}
 
 	if len(envName) > 0 {
 		function.Spec.EnvironmentName = envName
-
-		_, err = client.FunctionUpdate(function)
-		checkErr(err, "update function")
 	}
+
+	_, err = client.FunctionUpdate(function)
+	checkErr(err, "update function")
 
 	fmt.Printf("function '%v' updated\n", fnName)
 	return err
