@@ -43,7 +43,10 @@ func fileSize(filePath string) int64 {
 	return info.Size()
 }
 
-func getFnPkgRef(client *client.Client, fnName string, fileName string) fission.FunctionPackageRef {
+// createPackageFromFile is a function that helps to upload the content
+// of given file to controller to create a TPR package resource, and then
+// return a function package reference for further usage.
+func createPackageFromFile(client *client.Client, fnName string, fileName string) fission.FunctionPackageRef {
 	// TODO fallback to uploading + setting a Package URL
 	checkFileSize(fileName)
 	pkgContents := getPackageContents(fileName)
@@ -69,7 +72,9 @@ func getFnPkgRef(client *client.Client, fnName string, fileName string) fission.
 	}
 }
 
-func updatePkgContent(client *client.Client, pkgName string, fileName string) error {
+// updatePackageContents is a function that reads content from given file
+// and updates the package content of TPR package resource.
+func updatePackageContents(client *client.Client, pkgName string, fileName string) error {
 	// TODO fallback to uploading + setting a Package URL
 	checkFileSize(pkgName)
 	pkg, err := client.PackageGet(&api.ObjectMeta{
@@ -136,10 +141,10 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	if len(srcPkgName) > 0 {
-		function.Spec.Source = getFnPkgRef(client, fnName, srcPkgName)
+		function.Spec.Source = createPackageFromFile(client, fnName, srcPkgName)
 	}
 	if len(deployPkgName) > 0 {
-		function.Spec.Deployment = getFnPkgRef(client, fnName, deployPkgName)
+		function.Spec.Deployment = createPackageFromFile(client, fnName, deployPkgName)
 	}
 
 	_, err := client.FunctionCreate(function)
@@ -256,7 +261,7 @@ func fnUpdate(c *cli.Context) error {
 	// to package level (https://github.com/fission/fission/pull/297).
 	for _, pkgName := range []string{srcPkgName, deployPkgName} {
 		if len(pkgName) > 0 {
-			err := updatePkgContent(client, function.Spec.Source.PackageRef.Name, srcPkgName)
+			err := updatePackageContents(client, function.Spec.Source.PackageRef.Name, pkgName)
 			checkErr(err, "update package")
 		}
 	}
