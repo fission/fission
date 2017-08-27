@@ -67,7 +67,7 @@ func createPackageFromFile(client *client.Client, fnName string, fileName string
 	return fission.FunctionPackageRef{
 		PackageRef: fission.PackageRef{
 			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
+			Namespace: pkg.Metadata.Namespace,
 		},
 	}
 }
