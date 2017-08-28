@@ -57,13 +57,14 @@ type (
 		Checksum Checksum `json:"checksum"`
 	}
 
+	BuildStatus string
 	PackageSpec struct {
 		Source     Archive
 		Deployment Archive
 	}
 	PackageStatus struct {
-		BuildStatus BuildStatus // success/in-progress/failure
-		BuildLog    string      // output of build
+		BuildStatus BuildStatus
+		BuildLog    string // output of the build (errors etc)
 	}
 
 	PackageRef struct {
@@ -92,7 +93,7 @@ type (
 		EnvironmentName string `json:"environmentName"`
 
 		// Reference to a package containing deployment and optionally the source
-		Packages FunctionPackageRef
+		Package FunctionPackageRef
 	}
 
 	FunctionReferenceType string
@@ -224,12 +225,19 @@ const (
 )
 
 const (
-	// PackageTypeLiteral means the package contents are specified in the Literal field of
+	// ArchiveTypeLiteral means the package contents are specified in the Literal field of
 	// resource itself.
-	PackageTypeLiteral PackageType = "literal"
+	ArchiveTypeLiteral ArchiveType = "literal"
 
-	// PackageTypeUrl means the package contents are at the specified URL.
-	PackageTypeUrl PackageType = "url"
+	// ArchiveTypeUrl means the package contents are at the specified URL.
+	ArchiveTypeUrl ArchiveType = "url"
+)
+
+const (
+	BuildStatusPending   = "pending"
+	BuildStatusRunning   = "running"
+	BuildStatusSucceeded = "succeeded"
+	BuildStatusFailed    = "failed"
 )
 
 const (
