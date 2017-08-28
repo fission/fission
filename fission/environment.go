@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"text/tabwriter"
 
@@ -41,6 +42,14 @@ func envCreate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
+	envBuilderImg := c.String("builder")
+
+	envBuildCmd := c.String("buildcmd")
+	if len(envBuilderImg) > 0 && len(envBuildCmd) == 0 {
+		log.Printf("No build command is specified, use the default build command.")
+		envBuildCmd = "build"
+	}
+
 	env := &tpr.Environment{
 		Metadata: api.ObjectMeta{
 			Name:      envName,
@@ -50,6 +59,10 @@ func envCreate(c *cli.Context) error {
 			Version: 1,
 			Runtime: fission.Runtime{
 				Image: envImg,
+			},
+			Builder: fission.Builder{
+				Image:   envBuilderImg,
+				Command: envBuildCmd,
 			},
 		},
 	}
@@ -91,10 +104,12 @@ func envUpdate(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
-
 	envImg := c.String("image")
-	if len(envImg) == 0 {
-		fatal("Need an image, use --image.")
+	envBuilderImg := c.String("builder")
+	envBuildCmd := c.String("buildcmd")
+
+	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
+		fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
 	env, err := client.EnvironmentGet(&api.ObjectMeta{
@@ -103,7 +118,15 @@ func envUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "find environment")
 
-	env.Spec.Runtime.Image = envImg
+	if len(envImg) > 0 {
+		env.Spec.Runtime.Image = envImg
+	}
+	if len(envBuilderImg) > 0 {
+		env.Spec.Builder.Image = envBuilderImg
+	}
+	if len(envBuildCmd) > 0 {
+		env.Spec.Builder.Command = envBuildCmd
+	}
 
 	_, err = client.EnvironmentUpdate(env)
 	checkErr(err, "update environment")
