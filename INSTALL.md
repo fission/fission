@@ -166,7 +166,7 @@ Fission uses InfluxDB to store logs and fluentd to forward them from
 function pods into InfluxDB.  
 
 ```
-  $ kubectl create -f fission-logger.yaml
+  $ kubectl create -f https://github.com/fission/fission/releases/download/nightly20170705/fission-logger.yaml
 ```
 
 That's it for the basic setup.  You can now use following command to view function logs:
