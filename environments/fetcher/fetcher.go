@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
-	"io"
 )
 
 type (
@@ -102,7 +102,7 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 
 func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "", 404)
+		http.Error(w, "", 405)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), 400)
 		return
 	}
 	log.Printf("fetcher received request: %v", req)

@@ -58,7 +58,7 @@ func MakeBuilder(sharedVolumePath string) *Builder {
 
 func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "", 404)
+		http.Error(w, "", 405)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), 400)
 		return
 	}
 	log.Printf("builder received request: %v", req)
