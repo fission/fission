@@ -82,8 +82,9 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	log.Printf("builder received request: %v", req)
+	log.Println("builder received request: %v", req)
 
+	log.Println("Uncompressing source package...")
 	srcPkgArchivePath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
 	err = builder.unarchive(srcPkgArchivePath, srcPkgPath)
 	if err != nil {
@@ -92,13 +93,16 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Starting build...")
 	buildLogs, err := builder.build(req.BuildCommand, srcPkgPath)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Failed to build source package: %v", err))
 		http.Error(w, e.Error(), 500)
 		return
 	}
+	log.Printf("\n=== Build Logs ===\n%v\n\n", buildLogs)
 
+	log.Println("Compressing deployment package...")
 	archivePath := filepath.Join(builder.sharedVolumePath, archiveFilename)
 	err = builder.archive(deployPkgPath, archivePath)
 	if err != nil {
