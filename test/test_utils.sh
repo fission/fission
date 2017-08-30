@@ -84,6 +84,7 @@ helm_install_fission() {
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
+	 --debug                \
 	 $ROOT/charts/fission-all
 }
 
