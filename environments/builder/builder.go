@@ -129,14 +129,12 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (builder *Builder) build(command string, workDir string) (string, error) {
-	// use `/bin/sh -c` to run multiple commands at the same time
-	cmdStrs := []string{"-c", command}
-	cmd := exec.Command("/bin/sh", cmdStrs...)
+	cmd := exec.Command(command)
 	cmd.Dir = workDir
 	// set env variables for build command
 	cmd.Env = append(os.Environ(),
-		envSrcPkg+"="+srcPkgPath,
-		envDeployPkg+"="+deployPkgPath,
+		fmt.Sprintf("%v=%v", envSrcPkg, srcPkgPath),
+		fmt.Sprintf("%v=%v", envDeployPkg, deployPkgPath),
 	)
 
 	cmdReader, err := cmd.StdoutPipe()

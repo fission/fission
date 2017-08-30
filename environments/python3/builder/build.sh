@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 builderDir=${GOPATH}/src/github.com/fission/fission/environments/builder/cmd
 pushd ${builderDir}
 GOOS=linux GOARCH=386 go build -o builder .
