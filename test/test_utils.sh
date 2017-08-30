@@ -80,6 +80,7 @@ helm_install_fission() {
     echo "Installing fission"
     helm install		\
 	 --wait			\
+	 --timeout 600	        \
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \

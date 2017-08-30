@@ -23,6 +23,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dchest/uniuri"
 
@@ -53,6 +54,7 @@ func TestStorageService(t *testing.T) {
 	_ = storagesvc.RunStorageService(
 		storagesvc.StorageTypeLocal, "/tmp", testId, port)
 
+	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
 
 	// generate a test file
