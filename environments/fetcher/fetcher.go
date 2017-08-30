@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mholt/archiver"
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 
@@ -196,16 +198,59 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	// move tmp file to requested filename
-	err = os.Rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	targetFilename := filepath.Join(fetcher.sharedVolumePath, req.Filename)
+	// check file type here, if the file is a zip file unarchive it.
+	if archiver.Zip.Match(tmpPath) {
+		// unarchive tmp file to requested filename
+		err = fetcher.unarchive(tmpPath, targetFilename)
+	} else {
+		// move tmp file to requested filename
+		err = fetcher.rename(tmpPath, targetFilename)
+	}
+
 	if err != nil {
-		e := fmt.Sprintf("Failed to move file: %v", err)
-		log.Printf(e)
-		http.Error(w, e, 500)
+		log.Println(err.Error())
+		http.Error(w, err.Error(), 500)
 		return
 	}
 
 	log.Printf("Completed fetch request")
 	// all done
 	w.WriteHeader(http.StatusOK)
+}
+
+func (fetcher *Fetcher) rename(src string, dst string) error {
+	err := os.Rename(src, dst)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to move file: %v", err))
+	}
+	return nil
+}
+
+// archive is a function that zips directory into a zip file
+func (fetcher *Fetcher) archive(src string, dst string) error {
+	var files []string
+	target, err := os.Stat(src)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to zip file: %v", err))
+	}
+	if target.IsDir() {
+		// list all
+		fs, _ := ioutil.ReadDir(src)
+		for _, f := range fs {
+			files = append(files, filepath.Join(src, f.Name()))
+		}
+	} else {
+		files = append(files, src)
+	}
+	return archiver.Zip.Make(dst, files)
+}
+
+// unarchive is a function that unzips a zip file to destination
+func (fetcher *Fetcher) unarchive(src string, dst string) error {
+	err := archiver.Zip.Open(src, dst)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to unzip file: %v", err))
+	}
+	return nil
 }

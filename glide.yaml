@@ -39,3 +39,4 @@ import:
 - package: github.com/nats-io/nats-streaming-server
   version: ^v0.4.0
 - package: github.com/graymeta/stow
+- package: github.com/mholt/archiver
