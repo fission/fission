@@ -132,6 +132,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
+	var srcPkgFilename string
 
 	if req.FetchType == FETCH_URL {
 		// fetch the file and save it to the tmp path
@@ -156,6 +157,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 		var pkg *tpr.Package
 		if req.FetchType == FETCH_SOURCE {
 			pkg, err = fetcher.fissionClient.Packages(fn.Spec.Source.PackageRef.Namespace).Get(fn.Spec.Source.PackageRef.Name)
+			srcPkgFilename = fmt.Sprintf("%v-%v", pkg.GetObjectMeta().GetName(), pkg.GetObjectMeta().GetResourceVersion())
 		} else if req.FetchType == FETCH_DEPLOYMENT {
 			pkg, err = fetcher.fissionClient.Packages(fn.Spec.Deployment.PackageRef.Namespace).Get(fn.Spec.Deployment.PackageRef.Name)
 		}
@@ -202,9 +204,9 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 	// check file type here, if the file is a zip file unarchive it.
 	if archiver.Zip.Match(tmpPath) {
 		if req.FetchType == FETCH_SOURCE {
-			// builder accepts multiple builds at the same time, use `req.Function.Name`
+			// builder accepts multiple builds at the same time, use `pkg.Name`-`pkg.ResourceVersion`
 			// to separate source pacakages for different functions.
-			targetFilename = filepath.Join(fetcher.sharedVolumePath, req.Function.Name)
+			targetFilename = filepath.Join(fetcher.sharedVolumePath, srcPkgFilename)
 		}
 		// unarchive tmp file to requested filename
 		err = fetcher.unarchive(tmpPath, targetFilename)
