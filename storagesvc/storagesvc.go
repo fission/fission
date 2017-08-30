@@ -49,8 +49,8 @@ type (
 		port      int
 	}
 
-	uploadResponse struct {
-		packageID string `json:"packageID"`
+	UploadResponse struct {
+		ID string `json:"id"`
 	}
 )
 
@@ -76,7 +76,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
-		log.Printf("Missing x-file-size: '%v'")
+		log.Printf("Missing X-File-Size")
 		http.Error(w, "missing X-File-Size header", 400)
 		return
 	}
@@ -90,38 +90,64 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	// TODO: allow headers to add more metadata (e.g. environment
 	// and function metadata)
-	fileMetadata := make(map[string]interface{})
-	fileMetadata["filename"] = handler.Filename
+	log.Printf("Handling upload for %v", handler.Filename)
+	//fileMetadata := make(map[string]interface{})
+	//fileMetadata["filename"] = handler.Filename
 
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
 	uploadName := uuid.NewV4().String()
 
 	// save the file to the storage backend
-	item, err := ss.container.Put(uploadName, file, int64(fileSize), fileMetadata)
+	item, err := ss.container.Put(uploadName, file, int64(fileSize), nil)
 	if err != nil {
-		log.Printf("Error saving uploaded file: '%v'", fileSizeS)
+		log.Printf("Error saving uploaded file: '%v'", err)
 		http.Error(w, "Error saving uploaded file", 400)
 		return
 	}
 
 	// respond with an ID that can be used to retrieve the file
-	ur := &uploadResponse{
-		packageID: item.ID(),
+	ur := &UploadResponse{
+		ID: item.ID(),
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
 		http.Error(w, "Error marshaling response", 500)
+		return
 	}
 	w.Write(resp)
 }
 
+func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
+	values := r.URL.Query()
+	ids, ok := values["id"]
+	if !ok || len(ids) == 0 {
+		return "", errors.New("Missing `id' query param")
+	}
+	return ids[0], nil
+}
+
+func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) {
+	// get id from request
+	fileId, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+	}
+
+	err = ss.container.RemoveItem(fileId)
+	if err != nil {
+		msg := fmt.Sprintf("Error deleting item: %v", err)
+		http.Error(w, msg, 500)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	// get id from request
-	vars := mux.Vars(r)
-	fileId, ok := vars["packageID"]
-	if !ok || len(fileId) == 0 {
-		http.Error(w, "missing file id", 400)
+	fileId, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
 	}
 
 	// Get the file (called "item" in stow's jargon), open it,
@@ -181,14 +207,15 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 
 func (ss *StorageService) Start(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/package/{packageID}", ss.downloadHandler).Methods("GET")
-	r.HandleFunc("/v1/package", ss.uploadHandler).Methods("POST")
+	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
+	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
+	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
 
 	address := fmt.Sprintf(":%v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }
 
-func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) {
+func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) *StorageService {
 	// storage
 	ss, err := MakeStorageService(&storageConfig{
 		storageType:   storageType,
@@ -201,4 +228,6 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 
 	// http handlers
 	go ss.Start(port)
+
+	return ss
 }
