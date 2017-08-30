@@ -17,6 +17,7 @@ limitations under the License.
 package builder
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,7 +101,6 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, e.Error(), 500)
 		return
 	}
-	log.Printf("\n=== Build Logs ===\n%v\n\n", buildLogs)
 
 	log.Println("Compressing deployment package...")
 	archivePath := filepath.Join(builder.sharedVolumePath, archiveFilename)
@@ -138,11 +138,38 @@ func (builder *Builder) build(command string, workDir string) (string, error) {
 		envSrcPkg+"="+srcPkgPath,
 		envDeployPkg+"="+deployPkgPath,
 	)
-	buildLogs, err := cmd.Output()
+
+	cmdReader, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return "", errors.New(fmt.Sprintf("Error creating stdout pipe for cmd: %v", err.Error()))
 	}
-	return string(buildLogs), nil
+
+	scanner := bufio.NewScanner(cmdReader)
+
+	err = cmd.Start()
+	if err != nil {
+		return "", errors.New(fmt.Sprintf("Error starting cmd: %v", err.Error()))
+	}
+
+	var buildLogs string
+
+	fmt.Printf("\n=== Build Logs ===\n")
+	for scanner.Scan() {
+		output := scanner.Text()
+		fmt.Println(output)
+		buildLogs += fmt.Sprintf("%v\n", output)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", errors.New(fmt.Sprintf("Error reading cmd output: %v", err.Error()))
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return "", errors.New(fmt.Sprintf("Error waiting for cmd: %v", err.Error()))
+	}
+
+	return buildLogs, nil
 }
 
 // archive is a function that zips directory into a zip file
