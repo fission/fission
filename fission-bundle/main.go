@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/docopt/docopt-go"
@@ -11,6 +12,7 @@ import (
 	"github.com/fission/fission/mqtrigger"
 	"github.com/fission/fission/poolmgr"
 	"github.com/fission/fission/router"
+	"github.com/fission/fission/storagesvc"
 	"github.com/fission/fission/timer"
 )
 
@@ -55,6 +57,15 @@ func runMessageQueueMgr(routerUrl string) {
 	if err != nil {
 		log.Fatalf("Error starting timer: %v", err)
 	}
+}
+
+func runStorageSvc(port int, filePath string) {
+	subdir := os.Getenv("SUBDIR")
+	if len(subdir) == 0 {
+		subdir = "fission-functions"
+	}
+	storagesvc.RunStorageService(storagesvc.StorageTypeLocal,
+		filePath, subdir, port)
 }
 
 func getPort(portArg interface{}) int {

@@ -135,11 +135,13 @@ func (c *Client) Download(id string, filePath string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
+		os.Remove(filePath)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		msg := fmt.Sprintf("HTTP error %v", resp.StatusCode)
+		os.Remove(filePath)
 		return errors.New(msg)
 	}
 

@@ -56,7 +56,7 @@ func TestStorageService(t *testing.T) {
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
 
 	// generate a test file
-	tmpfile := MakeTestFile(10 * 1024 * 1024)
+	tmpfile := MakeTestFile(10 * 1024)
 	defer os.Remove(tmpfile.Name())
 
 	// store it
@@ -86,6 +86,12 @@ func TestStorageService(t *testing.T) {
 	// delete uploaded file
 	err = client.Delete(fileId)
 	panicIf(err)
+
+	// make sure download fails
+	err = client.Download(fileId, "xxx")
+	if err == nil {
+		log.Panicf("Download succeeded but file isn't supposed to exist")
+	}
 
 	// cleanup /tmp
 	os.RemoveAll(fmt.Sprintf("/tmp/", testId))

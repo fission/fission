@@ -156,8 +156,11 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	item, err := ss.container.Item(fileId)
 	if err != nil {
 		log.Printf("Error getting item id '%v': %v", fileId, err)
-		// TODO better http errors based on err
-		http.Error(w, "Error retrieving item", 400)
+		if err == stow.ErrNotFound {
+			http.Error(w, "Error retrieving item: not found", 404)
+		} else {
+			http.Error(w, "Error retrieving item", 400)
+		}
 		return
 	}
 
