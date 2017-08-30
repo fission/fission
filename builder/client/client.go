@@ -27,23 +27,23 @@ import (
 )
 
 type (
-	BuilderClient struct {
-		Url string
+	Client struct {
+		url string
 	}
 )
 
-func MakeBuilderClient(serverUrl string) *BuilderClient {
-	return &BuilderClient{
-		Url: strings.TrimSuffix(serverUrl, "/"),
+func MakeClient(serverUrl string) *Client {
+	return &Client{
+		url: strings.TrimSuffix(serverUrl, "/"),
 	}
 }
 
-func (br *BuilderClient) Build(req *builder.PackageBuildRequest) error {
+func (c *Client) Build(req *builder.PackageBuildRequest) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(br.Url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
