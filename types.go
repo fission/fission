@@ -215,23 +215,6 @@ type (
 	}
 )
 
-type (
-	PackageBuildRequest struct {
-		SrcPkgFilename string `json:"srcPkgFilename"`
-		// Command for builder to run with.
-		// A build command consists of commands, parameters and environment variables.
-		// For now, two environment variables are supported:
-		// 1. SRC_PKG: path to source package directory
-		// 2. DEPLOY_PKG: path to deployment package directory
-		BuildCommand string `json:"command"`
-	}
-
-	PackageBuildResponse struct {
-		ArtifactFilename string `json:"artifactFilename"`
-		BuildLogs        string `json:"buildLogs"`
-	}
-)
-
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )

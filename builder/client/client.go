@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/fission/fission"
+	builder "github.com/fission/fission/builder"
 )
 
 type (
@@ -37,7 +38,7 @@ func MakeBuilderClient(serverUrl string) *BuilderClient {
 	}
 }
 
-func (br *BuilderClient) Build(req *fission.PackageBuildRequest) error {
+func (br *BuilderClient) Build(req *builder.PackageBuildRequest) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return err

@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-
-	"github.com/fission/fission"
 )
 
 const (
@@ -42,6 +40,21 @@ const (
 )
 
 type (
+	PackageBuildRequest struct {
+		SrcPkgFilename string `json:"srcPkgFilename"`
+		// Command for builder to run with.
+		// A build command consists of commands, parameters and environment variables.
+		// For now, two environment variables are supported:
+		// 1. SRC_PKG: path to source package directory
+		// 2. DEPLOY_PKG: path to deployment package directory
+		BuildCommand string `json:"command"`
+	}
+
+	PackageBuildResponse struct {
+		ArtifactFilename string `json:"artifactFilename"`
+		BuildLogs        string `json:"buildLogs"`
+	}
+
 	Builder struct {
 		sharedVolumePath string
 	}
@@ -72,7 +85,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	var req fission.PackageBuildRequest
+	var req PackageBuildRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error parsing json body: %v", err)
@@ -92,7 +105,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := fission.PackageBuildResponse{
+	resp := PackageBuildResponse{
 		ArtifactFilename: deployPkgFilename,
 		BuildLogs:        buildLogs,
 	}
