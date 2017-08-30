@@ -201,6 +201,11 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 	targetFilename := filepath.Join(fetcher.sharedVolumePath, req.Filename)
 	// check file type here, if the file is a zip file unarchive it.
 	if archiver.Zip.Match(tmpPath) {
+		if req.FetchType == FETCH_SOURCE {
+			// builder accepts multiple builds at the same time, use `req.Function.Name`
+			// to separate source pacakages for different functions.
+			targetFilename = filepath.Join(fetcher.sharedVolumePath, req.Function.Name)
+		}
 		// unarchive tmp file to requested filename
 		err = fetcher.unarchive(tmpPath, targetFilename)
 	} else {
