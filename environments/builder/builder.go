@@ -75,11 +75,11 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	var req fission.PackageBuildRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		log.Printf("Error reading request body: %v", err)
+		log.Printf("Error parsing json body: %v", err)
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	log.Printf("builder received request: %v", req)
+	log.Printf("Builder received request: %v", req)
 
 	log.Println("Starting build...")
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
@@ -87,7 +87,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	deployPkgPath := filepath.Join(builder.sharedVolumePath, deployPkgFilename)
 	buildLogs, err := builder.build(req.BuildCommand, srcPkgPath, deployPkgPath)
 	if err != nil {
-		e := errors.New(fmt.Sprintf("Failed to build source package: %v", err))
+		e := errors.New(fmt.Sprintf("Error building source package: %v", err))
 		http.Error(w, e.Error(), 500)
 		return
 	}
@@ -99,7 +99,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 
 	rBody, err := json.Marshal(resp)
 	if err != nil {
-		e := errors.New(fmt.Sprintf("Failed to encode response body: %v", err))
+		e := errors.New(fmt.Sprintf("Error encoding response body: %v", err))
 		http.Error(w, e.Error(), 500)
 		return
 	}
