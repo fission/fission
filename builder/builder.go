@@ -93,8 +93,8 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := fission.PackageBuildResponse{
-		ArchiveFilename: deployPkgFilename,
-		BuildLogs:       buildLogs,
+		ArtifactFilename: deployPkgFilename,
+		BuildLogs:        buildLogs,
 	}
 
 	rBody, err := json.Marshal(resp)

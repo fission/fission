@@ -227,8 +227,8 @@ type (
 	}
 
 	PackageBuildResponse struct {
-		ArchiveFilename string `json:"archiveFilename"`
-		BuildLogs       string `json:"buildLogs"`
+		ArtifactFilename string `json:"artifactFilename"`
+		BuildLogs        string `json:"buildLogs"`
 	}
 )
 
