@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"os"
 
-	builder "github.com/fission/fission/environments/builder"
+	builder "github.com/fission/fission/builder"
 )
 
 // Usage: builder <shared volume path>
