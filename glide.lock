@@ -1,5 +1,5 @@
-hash: 2703407b4ae6e28cd146b14ff6b77175a17f0f944f7d75131ac0fa0406793d5b
-updated: 2017-08-27T22:38:51.57334855+08:00
+hash: 51b5eda27974aac228f42002cb0a9f89bf2f79d36a574a3694c142c2f83e4042
+updated: 2017-03-24T11:01:00.667996869+08:00
 imports:
 - name: github.com/blang/semver
   version: 60ec3488bfea7cca02b021d106d9911120d25fe9
@@ -37,14 +37,6 @@ imports:
   - reference
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
-- name: github.com/dsnet/compress
-  version: 0ae8e136a5df9e3caf6c0f69983608b07438411b
-  subpackages:
-  - bzip2
-  - bzip2/internal/sais
-  - internal
-  - internal/errors
-  - internal/prefix
 - name: github.com/emicklei/go-restful
   version: 3d66f886316ac990eb502aaa89ea38546420b8b7
   subpackages:
@@ -72,8 +64,6 @@ imports:
   subpackages:
   - jsonpb
   - proto
-- name: github.com/golang/snappy
-  version: 553a641470496b2327abcac10b36396bd98e45c9
 - name: github.com/google/gofuzz
   version: fd52762d25a41827db7ef64c43756fd4b9f7e382
 - name: github.com/gorilla/context
@@ -82,10 +72,6 @@ imports:
   version: 3a5767ca75ece5f7f1440b1d16975247f8d8b221
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
-- name: github.com/howeyc/gopass
-  version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
-- name: github.com/imdario/mergo
-  version: e3000cb3d28c72b837601cac94debd91032d19fe
 - name: github.com/influxdata/influxdb
   version: b7bb7e8359642b6e071735b50ae41f5eb343fd42
   subpackages:
@@ -102,8 +88,6 @@ imports:
   - buffer
   - jlexer
   - jwriter
-- name: github.com/mholt/archiver
-  version: fe92d3d85a514d2752ad3b61ec412b598a2754f9
 - name: github.com/nats-io/go-nats
   version: 6949c8e06a246e4177961aab22940b5c411e48f0
   subpackages:
@@ -119,16 +103,8 @@ imports:
   - util
 - name: github.com/nats-io/nuid
   version: 289cccf02c178dc782430d534e3c1f5b72af807f
-- name: github.com/nwaples/rardecode
-  version: f22b7ef81a0afac9ce1447d37e5ab8e99fbd2f73
 - name: github.com/pborman/uuid
   version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
-- name: github.com/pierrec/lz4
-  version: 5a3d2245f97fc249850e7802e3c01fad02a1c316
-- name: github.com/pierrec/xxHash
-  version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
-  subpackages:
-  - xxHash32
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -145,18 +121,8 @@ imports:
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
   - codec
-- name: github.com/ulikunitz/xz
-  version: 0c6b41e72360850ca4f98dc341fd999726ea007f
-  subpackages:
-  - internal/hash
-  - internal/xlog
-  - lzma
 - name: github.com/urfave/cli
   version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
-- name: golang.org/x/crypto
-  version: 9477e0b78b9ac3d0b03822fd95422e2fe07627cd
-  subpackages:
-  - ssh/terminal
 - name: golang.org/x/net
   version: 6acef71eb69611914f7a30939ea9f6e194c78172
   subpackages:
