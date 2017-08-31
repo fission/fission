@@ -78,6 +78,10 @@ imports:
   - client/v2
   - models
   - pkg/escape
+- name: github.com/graymeta/stow
+  version: da285caa6daa337ae04a9ac603dbaf9009ffe687
+  subpackages:
+  - local
 - name: github.com/jonboulle/clockwork
   version: 2eee05ed794112d45db504eb05aa693efd2b8b09
 - name: github.com/juju/ratelimit

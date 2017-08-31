@@ -80,9 +80,11 @@ helm_install_fission() {
     echo "Installing fission"
     helm install		\
 	 --wait			\
+	 --timeout 600	        \
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
+	 --debug                \
 	 $ROOT/charts/fission-all
 }
 
@@ -160,17 +162,17 @@ dump_fission_logs() {
     echo --- end $component logs ---
 }
 
-dump_fission_resource() {
+dump_fission_tpr() {
     type=$1
     echo --- All objects of type $type ---
     kubectl --all-namespaces=true get $type -o yaml
     echo --- End objects of type $type ---
 }
 
-dump_fission_resources() {
-    dump_fission_resource function.fission.io    
-    dump_fission_resource httptrigger.fission.io    
-    dump_fission_resource environment.fission.io    
+dump_fission_tprs() {
+    dump_fission_tpr function.fission.io    
+    dump_fission_tpr httptrigger.fission.io    
+    dump_fission_tpr environment.fission.io    
 }
 
 dump_env_pods() {
@@ -181,17 +183,27 @@ dump_env_pods() {
     echo --- End environment pods ---
 }
 
+dump_all_fission_resources() {
+    ns=$1
+
+    echo "--- All objects in the fission namespace $ns ---"
+    kubectl -n $ns get all 
+    echo "--- End objects in the fission namespace $ns ---"
+}
+
 dump_logs() {
     id=$1
 
     ns=f-$id
     fns=f-func-$id
 
+    dump_all_fission_resources $ns
     dump_env_pods $fns
+    dump_fission_logs $ns $fns controller
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns poolmgr
     dump_function_pod_logs $ns $fns
-    dump_fission_resources
+    dump_fission_tprs
 }
 
 export FAILURES=0
@@ -226,7 +238,11 @@ install_and_test() {
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort
+    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort
+    then
+	dump_logs $id
+	exit 1
+    fi
 
     wait_for_services $id
     set_environment $id
