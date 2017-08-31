@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/fission/logdb"
+	storageSvcClient "github.com/fission/fission/storagesvc/client"
 	"github.com/fission/fission/tpr"
 )
 
@@ -43,24 +44,43 @@ func fileSize(filePath string) int64 {
 	return info.Size()
 }
 
+// updatePackageSpecWithFile uploads or serializes the file into the
+// provided package object
+func updatePackageSpecWithFile(client *client.Client, pkgSpec *fission.PackageSpec, fileName string) {
+	if fileSize(fileName) < fission.PackageLiteralSizeLimit {
+		pkgContents := getPackageContents(fileName)
+
+		pkgSpec.Type = fission.PackageTypeLiteral
+		pkgSpec.Literal = pkgContents
+	} else {
+		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
+		ssClient := storageSvcClient.MakeClient(u)
+
+		// TODO add a progress bar
+		id, err := ssClient.Upload(fileName, nil)
+		checkErr(err, fmt.Sprintf("upload file %v", fileName))
+
+		archiveUrl := ssClient.GetUrl(id)
+
+		pkgSpec.Type = fission.PackageTypeUrl
+		pkgSpec.URL = archiveUrl
+	}
+}
+
 // createPackageFromFile is a function that helps to upload the content
 // of given file to controller to create a TPR package resource, and then
 // return a function package reference for further usage.
 func createPackageFromFile(client *client.Client, fnName string, fileName string) fission.FunctionPackageRef {
-	// TODO fallback to uploading + setting a Package URL
-	checkFileSize(fileName)
-	pkgContents := getPackageContents(fileName)
 	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
 	pkg := &tpr.Package{
 		Metadata: api.ObjectMeta{
 			Name:      pkgName,
 			Namespace: api.NamespaceDefault,
 		},
-		Spec: fission.PackageSpec{
-			Type:    fission.PackageTypeLiteral,
-			Literal: pkgContents,
-		},
 	}
+
+	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
+
 	_, err := client.PackageCreate(pkg)
 	checkErr(err, "upload package")
 
@@ -75,8 +95,6 @@ func createPackageFromFile(client *client.Client, fnName string, fileName string
 // updatePackageContents is a function that reads content from given file
 // and updates the package content of TPR package resource.
 func updatePackageContents(client *client.Client, pkgName string, fileName string) error {
-	// TODO fallback to uploading + setting a Package URL
-	checkFileSize(fileName)
 	pkg, err := client.PackageGet(&api.ObjectMeta{
 		Name:      pkgName,
 		Namespace: api.NamespaceDefault,
@@ -84,17 +102,11 @@ func updatePackageContents(client *client.Client, pkgName string, fileName strin
 	if err != nil {
 		return errors.New(fmt.Sprintf("read package '%v'", pkgName))
 	}
-	pkg.Spec.Literal = getPackageContents(fileName)
+
+	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
+
 	_, err = client.PackageUpdate(pkg)
 	return err
-}
-
-func checkFileSize(fileName string) {
-	if fileSize(fileName) > fission.PackageLiteralSizeLimit {
-		// TODO fallback to uploading + setting a Package URL
-		fmt.Printf("File size >256k not supported yet")
-		os.Exit(1)
-	}
 }
 
 func getPackageContents(filePath string) []byte {

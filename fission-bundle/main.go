@@ -90,33 +90,46 @@ func main() {
 
 Use it to start one or more of the fission servers:
 
- Controller keeps track of functions, triggers, environments.
+ Controller is a stateless API frontend for fission resources.
 
- Pool manager maintains a pool of generalized function containers, and specializes them on-demand. Poolmgr must be run from a pod in a Kubernetes cluster.
+ Pool manager maintains a pool of generalized function containers, and
+ specializes them on-demand. Poolmgr must be run from a pod in a
+ Kubernetes cluster.
 
- Router implements HTTP triggers: it routes to running instances, working with the controller and poolmgr.
+ Router implements HTTP triggers: it routes to running instances,
+ working with the controller and poolmgr.
+
+ Kubewatcher implements Kubernetes Watch triggers: it watches
+ Kubernetes resources and invokes functions described in the
+ KubernetesWatchTrigger.
+
+ The storage service implements storage for functions too large to fit
+ in the Kubernetes API resource object. It supports various storage
+ backends.
 
 Usage:
   fission-bundle --controllerPort=<port>
   fission-bundle --routerPort=<port> [--poolmgrUrl=<url>]
   fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
+  fission-bundle --storageServicePort=<port> --filePath=<filePath>
   fission-bundle --logger
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
 Options:
-  --controllerPort=<port>  Port that the controller should listen on.
-  --routerPort=<port>      Port that the router should listen on.
-  --poolmgrPort=<port>     Port that the poolmgr should listen on.
-  --poolmgrUrl=<url>       Poolmgr URL. Not required if --poolmgrPort is specified.
-  --routerUrl=<url>        Router URL.
-  --etcdUrl=<etcdUrl>      Etcd URL.
-  --filepath=<filepath>    Directory to store functions in.
-  --namespace=<namespace>  Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
-  --kubewatcher            Start Kubernetes events watcher.
-  --logger                 Start logger.
-  --timer 		           Start Timer.
-  --mqt 		           Start message queue trigger.
+  --controllerPort=<port>     Port that the controller should listen on.
+  --routerPort=<port>         Port that the router should listen on.
+  --poolmgrPort=<port>        Port that the poolmgr should listen on.
+  --storageServicePort=<port> Port that the storage service should listen on.
+  --poolmgrUrl=<url>          Poolmgr URL. Not required if --poolmgrPort is specified.
+  --routerUrl=<url>           Router URL.
+  --etcdUrl=<etcdUrl>         Etcd URL.
+  --filePath=<filePath>       Directory to store functions in.
+  --namespace=<namespace>     Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
+  --kubewatcher               Start Kubernetes events watcher.
+  --logger                    Start logger.
+  --timer 		      Start Timer.
+  --mqt 		      Start message queue trigger.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {
@@ -158,6 +171,12 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(routerUrl)
+	}
+
+	if arguments["--storageServicePort"] == true {
+		port := getPort(arguments["--storageServicePort"])
+		filePath := arguments["--filePath"].(string)
+		runStorageSvc(port, filePath)
 	}
 
 	select {}
