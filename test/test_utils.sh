@@ -162,17 +162,17 @@ dump_fission_logs() {
     echo --- end $component logs ---
 }
 
-dump_fission_resource() {
+dump_fission_tpr() {
     type=$1
     echo --- All objects of type $type ---
     kubectl --all-namespaces=true get $type -o yaml
     echo --- End objects of type $type ---
 }
 
-dump_fission_resources() {
-    dump_fission_resource function.fission.io    
-    dump_fission_resource httptrigger.fission.io    
-    dump_fission_resource environment.fission.io    
+dump_fission_tprs() {
+    dump_fission_tpr function.fission.io    
+    dump_fission_tpr httptrigger.fission.io    
+    dump_fission_tpr environment.fission.io    
 }
 
 dump_env_pods() {
@@ -183,7 +183,7 @@ dump_env_pods() {
     echo --- End environment pods ---
 }
 
-dump_env_pods() {
+dump_all_fission_resources() {
     ns=$1
 
     echo "--- All objects in the fission namespace $ns ---"
@@ -197,13 +197,13 @@ dump_logs() {
     ns=f-$id
     fns=f-func-$id
 
-    dump_fission_pods $ns
+    dump_all_fission_resources $ns
     dump_env_pods $fns
     dump_fission_logs $ns $fns controller
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns poolmgr
     dump_function_pod_logs $ns $fns
-    dump_fission_resources
+    dump_fission_tprs
 }
 
 export FAILURES=0
