@@ -35,7 +35,8 @@ import (
 
 type (
 	API struct {
-		fissionClient *tpr.FissionClient
+		fissionClient     *tpr.FissionClient
+		storageServiceUrl string
 	}
 
 	logDBConfig struct {
@@ -46,7 +47,16 @@ type (
 )
 
 func MakeAPI() (*API, error) {
-	return makeTPRBackedAPI()
+	api, err := makeTPRBackedAPI()
+
+	u := os.Getenv("STORAGE_SERVICE_URL")
+	if len(u) > 0 {
+		api.storageServiceUrl = strings.TrimSuffix(u, "/")
+	} else {
+		api.storageServiceUrl = "http://storagesvc"
+	}
+
+	return api, err
 }
 
 func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
@@ -149,6 +159,7 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiDelete).Methods("DELETE")
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
+	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 
 	address := fmt.Sprintf(":%v", port)
 
