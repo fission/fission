@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mholt/archiver"
+	"github.com/satori/go.uuid"
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 
@@ -196,16 +199,50 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	// check file type here, if the file is a zip file unarchive it.
+	if archiver.Zip.Match(tmpPath) {
+		// unarchive tmp file to a tmp unarchive path
+		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
+		err = fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		tmpPath = tmpUnarchivePath
+	}
+
 	// move tmp file to requested filename
-	err = os.Rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	err = fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
-		e := fmt.Sprintf("Failed to move file: %v", err)
-		log.Printf(e)
-		http.Error(w, e, 500)
+		log.Println(err.Error())
+		http.Error(w, err.Error(), 500)
 		return
 	}
 
 	log.Printf("Completed fetch request")
 	// all done
 	w.WriteHeader(http.StatusOK)
+}
+
+func (fetcher *Fetcher) rename(src string, dst string) error {
+	err := os.Rename(src, dst)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to move file: %v", err))
+	}
+	return nil
+}
+
+// archive is a function that zips directory into a zip file
+func (fetcher *Fetcher) archive(src string, dst string) error {
+	return archiver.Zip.Make(dst, []string{src})
+}
+
+// unarchive is a function that unzips a zip file to destination
+func (fetcher *Fetcher) unarchive(src string, dst string) error {
+	err := archiver.Zip.Open(src, dst)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to unzip file: %v", err))
+	}
+	return nil
 }
