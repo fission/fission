@@ -285,3 +285,25 @@ spec:
         command: ["/fission-bundle"]
         args: ["--timer"]
       serviceAccount: fission-svc
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: storagesvc
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: storagesvc
+    spec:
+      containers:
+      - name: storagesvc
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+      serviceAccount: fission-svc
