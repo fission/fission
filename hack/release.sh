@@ -75,32 +75,6 @@ push_fission_bundle_image() {
     docker push $tag
 }
 
-#
-# Create fission.yaml
-#
-# TODO: get rid of this in favour of the helm chart
-#
-build_yaml() {
-    version=$1
-    tag=fission/fission-bundle:$version
-
-    outdir=$BUILDDIR/yaml/
-    mkdir -p $outdir
-    
-    pushd $DIR
-    
-    cat fission.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission.yaml
-    cat fission-logger.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-logger.yaml
-    cat fission-openshift.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-openshift.yaml
-    cat fission-rbac.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-rbac.yaml
-    cat fission-nats.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-nats.yaml
-
-    cp fission-nodeport.yaml $outdir
-    cp fission-cloud.yaml    $outdir
-    
-    popd
-}
-
 build_all() {
     version=$1
     if [ -z "$version" ]
@@ -118,13 +92,12 @@ build_all() {
     mkdir -p $BUILDDIR
     
     build_fission_bundle_image $version
-    build_yaml $version
     build_all_cli
 }
 
 make_github_release() {
     version=$1
-    gittag=nightly$(date +%Y%m%d)
+    gittag=$version
 
     # tag the release
     git tag $gittag
@@ -137,8 +110,8 @@ make_github_release() {
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
-	   --name "Nightly release for $(date +%Y-%b-%d)" \
-	   --description "Nightly release for $(date +%Y-%b-%d)" \
+	   --name "$version" \
+	   --description "$version" \
 
     # attach files
 
@@ -162,26 +135,14 @@ make_github_release() {
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-windows.exe \
-	   --file $BUILDDIR/cli/windows/fission.exe
-
-    # yamls
-    yaml_files="fission.yaml fission-logger.yaml fission-rbac.yaml fission-openshift.yaml fission-nodeport.yaml fission-cloud.yaml fission-nats.yaml"
-    for f in $yaml_files
-    do
-	gothub upload \
-	       --user fission \
-	       --repo fission \
-	       --tag $gittag \
-	       --name $f \
-	       --file $BUILDDIR/yaml/$f
-    done
-    
+	   --file $BUILDDIR/cli/windows/fission.exe    
 }
 
 
-# check_master
+check_branch
 check_clean
 version=$1
+
 build_all $version
 push_fission_bundle_image $version
 make_github_release $version
