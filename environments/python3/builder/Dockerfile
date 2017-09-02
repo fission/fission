@@ -8,4 +8,4 @@ RUN rm -r /root/.cache
 ADD defaultBuildCmd /usr/local/bin/build
 ADD builder /
 
-EXPOSE 8000
+EXPOSE 8001
