@@ -1,5 +1,12 @@
 #!/bin/sh
 set -e
+
+tag=$1
+if [ -z "$tag" ]
+then
+    tag=latest
+fi
+
 builderDir=${GOPATH}/src/github.com/fission/fission/builder/cmd
 pushd ${builderDir}
 GOOS=linux GOARCH=386 go build -o builder .

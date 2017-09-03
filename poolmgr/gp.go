@@ -297,7 +297,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// tell fetcher to get the function.
 	fetcherUrl := gp.getFetcherUrl(podIP)
 	log.Printf("[%v] calling fetcher to copy function", metadata.Name)
-	err := fetcherClient.DoFetchRequest(fetcherUrl, &fetcher.FetchRequest{
+	err := fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Function:  *metadata,
 		Filename:  "user", // XXX use function id instead
@@ -316,7 +316,9 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
 	for i := 0; i < maxRetries; i++ {
-		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
+		resp2, err := http.Post(specializeUrl, "application/json",
+			bytes.NewReader([]byte(`{"codepath":"/userfunc/user/user"}`)))
+
 		if err == nil && resp2.StatusCode < 300 {
 			// Success
 			resp2.Body.Close()

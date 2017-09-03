@@ -3,6 +3,7 @@
 import logging
 import sys
 import imp
+import os
 
 from flask import Flask, request, abort, g
 
@@ -15,6 +16,11 @@ userfunc = None
 @app.route('/specialize', methods=['POST'])
 def load():
     global userfunc
+    body = request.get_json()
+    loadpath = body['codepath']
+    if loadpath != '':
+        sys.path.append(os.path.dirname(loadpath))
+        codepath = loadpath
     userfunc = (imp.load_source('user', codepath)).main
     return ""
 
