@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
+	storageSvcClient "github.com/fission/fission/storagesvc/client"
 	"github.com/fission/fission/tpr"
 )
 
@@ -32,6 +33,16 @@ type (
 		Url           string           `json:"url"`
 		StorageSvcUrl string           `json:"storagesvcurl"`
 		Filename      string           `json:"filename"`
+	}
+
+	UploadRequest struct {
+		DeployPkgFilename string `json:"deployPkgFilename"`
+		StorageSvcUrl     string `json:"storagesvcurl"`
+	}
+
+	UploadResponse struct {
+		ArchiveDownloadUrl string           `json:"archiveDownloadUrl"`
+		Checksum           fission.Checksum `json:"checksum"`
 	}
 
 	Fetcher struct {
@@ -79,31 +90,42 @@ func downloadUrl(url string, localPath string) error {
 	return nil
 }
 
-func verifyChecksum(path string, checksum *fission.Checksum) error {
-	if checksum.Type != fission.ChecksumTypeSHA256 {
-		return fission.MakeError(fission.ErrorInvalidArgument, "Unsupported checksum type")
-	}
-
+func getChecksum(path string) (*fission.Checksum, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
 	hasher := sha256.New()
 	_, err = io.Copy(hasher, f)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	c := hex.EncodeToString(hasher.Sum(nil))
-	if c != checksum.Sum {
+
+	return &fission.Checksum{
+		Type: fission.ChecksumTypeSHA256,
+		Sum:  c,
+	}, nil
+}
+
+func verifyChecksum(path string, checksum *fission.Checksum) error {
+	if checksum.Type != fission.ChecksumTypeSHA256 {
+		return fission.MakeError(fission.ErrorInvalidArgument, "Unsupported checksum type")
+	}
+	c, err := getChecksum(path)
+	if err != nil {
+		return err
+	}
+	if c.Sum != checksum.Sum {
 		return fission.MakeError(fission.ErrorChecksumFail, "Checksum validation failed")
 	}
 	return nil
 }
 
-func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
+func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "", 405)
 		return
@@ -129,7 +151,7 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	log.Printf("fetcher received request: %v", req)
+	log.Printf("fetcher received fetch request: %v", req)
 
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
@@ -229,6 +251,76 @@ func (fetcher *Fetcher) Handler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "", 405)
+		return
+	}
+
+	// parse request
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading request body")
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	var req UploadRequest
+	err = json.Unmarshal(body, &req)
+	if err != nil {
+		log.Printf("Error reading request body: %v", err)
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	log.Printf("fetcher received upload request: %v", req)
+
+	zipFilename := req.DeployPkgFilename + ".zip"
+	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.DeployPkgFilename)
+	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
+
+	err = fetcher.archive(srcFilepath, dstFilepath)
+	if err != nil {
+		e := fmt.Sprintf("Error archiving zip file: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
+	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
+
+	fileID, err := ssClient.Upload(dstFilepath, nil)
+	if err != nil {
+		e := fmt.Sprintf("Error uploading zip file: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
+	sum, err := getChecksum(dstFilepath)
+	if err != nil {
+		e := fmt.Sprintf("Error calculating checksum of zip file: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
+	resp := UploadResponse{
+		ArchiveDownloadUrl: ssClient.GetUrl(fileID),
+		Checksum:           *sum,
+	}
+
+	rBody, err := json.Marshal(resp)
+	if err != nil {
+		e := fmt.Sprintf("Error encoding upload response: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.Write(rBody)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (fetcher *Fetcher) rename(src string, dst string) error {
 	err := os.Rename(src, dst)
 	if err != nil {
@@ -239,7 +331,21 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 
 // archive is a function that zips directory into a zip file
 func (fetcher *Fetcher) archive(src string, dst string) error {
-	return archiver.Zip.Make(dst, []string{src})
+	var files []string
+	target, err := os.Stat(src)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to zip file: %v", err))
+	}
+	if target.IsDir() {
+		// list all
+		fs, _ := ioutil.ReadDir(src)
+		for _, f := range fs {
+			files = append(files, filepath.Join(src, f.Name()))
+		}
+	} else {
+		files = append(files, src)
+	}
+	return archiver.Zip.Make(dst, files)
 }
 
 // unarchive is a function that unzips a zip file to destination
