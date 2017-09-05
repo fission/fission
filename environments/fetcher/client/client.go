@@ -68,7 +68,7 @@ func (c *Client) Upload(fr *fetcher.UploadRequest) (*fetcher.UploadResponse, err
 		return nil, err
 	}
 
-	log.Printf("Received upload response: %v", rBody)
+	log.Printf("Received upload response: %v", string(rBody))
 
 	uploadReq := fetcher.UploadResponse{}
 	err = json.Unmarshal([]byte(rBody), &uploadReq)

@@ -37,6 +37,7 @@ type (
 	API struct {
 		fissionClient     *tpr.FissionClient
 		storageServiceUrl string
+		builderManagerUrl string
 	}
 
 	logDBConfig struct {
@@ -54,6 +55,13 @@ func MakeAPI() (*API, error) {
 		api.storageServiceUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.storageServiceUrl = "http://storagesvc"
+	}
+
+	u = os.Getenv("BUILDER_MANAGER_URL")
+	if len(u) > 0 {
+		api.builderManagerUrl = strings.TrimSuffix(u, "/")
+	} else {
+		api.builderManagerUrl = "http://buildermgr"
 	}
 
 	return api, err
