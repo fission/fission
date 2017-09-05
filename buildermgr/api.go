@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/api"
 	"k8s.io/client-go/1.5/pkg/api/v1"
 	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/util/intstr"
 
 	"github.com/fission/fission"
@@ -32,7 +33,6 @@ const (
 )
 
 type (
-	// should be removed since its only for testing
 	BuildRequest struct {
 		Function api.ObjectMeta `json:"function"`
 	}
@@ -169,20 +169,51 @@ func (builderMgr *BuilderMgr) deleteBuilder(w http.ResponseWriter, r *http.Reque
 		OrphanDependents: &falseVal,
 	}
 
-	err = builderMgr.kubernetesClient.Services(builderMgr.namespace).Delete(env.Metadata.Name, deleteOptions)
+	sel := make(map[string]string)
+	sel["env-builder"] = env.Metadata.Name
+
+	svcList, err := builderMgr.kubernetesClient.Services(builderMgr.namespace).List(
+		api.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector(),
+		})
+
 	if err != nil {
-		e := fmt.Sprintf("Error deleting builder service: %v", err)
+		e := fmt.Sprintf("Error getting builder service list: %v", err)
 		log.Println(e)
 		http.Error(w, e, 500)
 		return
 	}
 
-	err = builderMgr.kubernetesClient.Deployments(builderMgr.namespace).Delete(env.Metadata.Name, deleteOptions)
+	if len(svcList.Items) > 0 {
+		err = builderMgr.kubernetesClient.Services(builderMgr.namespace).Delete(env.Metadata.Name, deleteOptions)
+		if err != nil {
+			e := fmt.Sprintf("Error deleting builder service: %v", err)
+			log.Println(e)
+			http.Error(w, e, 500)
+			return
+		}
+	}
+
+	deployList, err := builderMgr.kubernetesClient.Deployments(builderMgr.namespace).List(
+		api.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector(),
+		})
+
 	if err != nil {
-		e := fmt.Sprintf("Error deleteing builder deployment: %v", err)
+		e := fmt.Sprintf("Error getting builder deployment list: %v", err)
 		log.Println(e)
 		http.Error(w, e, 500)
 		return
+	}
+
+	if len(deployList.Items) > 0 {
+		err = builderMgr.kubernetesClient.Deployments(builderMgr.namespace).Delete(env.Metadata.Name, deleteOptions)
+		if err != nil {
+			e := fmt.Sprintf("Error deleteing builder deployment: %v", err)
+			log.Println(e)
+			http.Error(w, e, 500)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
