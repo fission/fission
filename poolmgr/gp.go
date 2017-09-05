@@ -62,6 +62,7 @@ type (
 		fetcherImage           string
 		fetcherImagePullPolicy v1.PullPolicy
 		kubernetesClient       *kubernetes.Clientset
+		fissionClient          *tpr.FissionClient
 		instanceId             string // poolmgr instance id
 		labelsForPool          map[string]string
 		requestChannel         chan *choosePodRequest
@@ -76,9 +77,14 @@ type (
 		pod *v1.Pod
 		error
 	}
+
+	functionCodepath struct {
+		Codepath string `json:"codepath"`
+	}
 )
 
 func MakeGenericPool(
+	fissionClient *tpr.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
 	env *tpr.Environment,
 	initialReplicas int32,
@@ -103,6 +109,7 @@ func MakeGenericPool(
 		env:              env,
 		replicas:         initialReplicas, // TODO make this an env param instead?
 		requestChannel:   make(chan *choosePodRequest),
+		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
 		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
@@ -315,10 +322,24 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
-	for i := 0; i < maxRetries; i++ {
-		resp2, err := http.Post(specializeUrl, "application/json",
-			bytes.NewReader([]byte(`{"codepath":"/userfunc/user/user"}`)))
 
+	fn, err := gp.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
+	if err != nil {
+		return err
+	}
+
+	codepath := functionCodepath{
+		Codepath: fn.Spec.Deployment.FunctionName,
+	}
+
+	body, err := json.Marshal(codepath)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		resp2, err := http.Post(specializeUrl,
+			"application/json", bytes.NewReader(body))
 		if err == nil && resp2.StatusCode < 300 {
 			// Success
 			resp2.Body.Close()

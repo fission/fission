@@ -309,6 +309,10 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Copy the FunctionName from fn.Spec.Source to fn.Spec.Deployment.
+	if len(fn.Spec.Source.FunctionName) != 0 {
+		pkgRef.FunctionName = fn.Spec.Source.FunctionName
+	}
 	fn.Spec.Deployment = *pkgRef
 
 	_, err = builderMgr.fissionClient.Functions(fn.Metadata.Namespace).Update(fn)

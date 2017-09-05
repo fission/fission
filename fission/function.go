@@ -63,6 +63,32 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 		archive.Type = fission.ArchiveTypeUrl
 		archive.URL = archiveUrl
 	}
+}
+
+// createPackageFromFile is a function that helps to upload the content
+// of given file to controller to create a TPR package resource, and then
+// return a function package reference for further usage.
+func createPackageFromFile(client *client.Client, fnName string, fileName string, codepath string) fission.FunctionPackageRef {
+	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+	}
+
+	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
+
+	_, err := client.PackageCreate(pkg)
+	checkErr(err, "upload package")
+
+	return fission.FunctionPackageRef{
+		PackageRef: fission.PackageRef{
+			Name:      pkgName,
+			Namespace: pkg.Metadata.Namespace,
+		},
+		FunctionName: codepath,
+	}
 	return &archive
 }
 
@@ -99,6 +125,8 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
 	}
 
+	codepath := c.String("codepath")
+
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
 			Name:      fnName,
@@ -119,6 +147,7 @@ func fnCreate(c *cli.Context) error {
 	if len(deployPkgName) > 0 {
 		pkgSpec.Deployment = *createArchive(client, deployPkgName)
 	}
+
 	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
 	pkg := &tpr.Package{
 		Metadata: api.ObjectMeta{
@@ -261,7 +290,7 @@ func fnUpdate(c *cli.Context) error {
 			archive := createArchive(client, deployPkgName)
 			pkg.Spec.Deployment = *archive
 		}
-		// updage package object
+		// update package object
 		newpkg, err := client.PackageUpdate(pkg)
 		checkErr(err, "update package")
 		// update function spec with resource version
