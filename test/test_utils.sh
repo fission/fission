@@ -50,6 +50,31 @@ build_and_push_fetcher() {
     popd
 }
 
+build_and_push_python_env_runtime() {
+    image_tag=$1
+
+    pushd $ROOT/environments/python3/
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
+build_and_push_python_env_builder() {
+    image_tag=$1
+
+    pushd $ROOT/environments/python3/builder
+    ./build.sh
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
 
 build_fission_cli() {
     pushd $ROOT/fission
