@@ -511,10 +511,10 @@ func (builderMgr *BuilderMgr) createPackageFromUrl(fnName string,
 
 func (builderMgr *BuilderMgr) Serve(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/build", builderMgr.build).Methods("POST")
-	r.HandleFunc("/builder", builderMgr.createBuilder).Methods("POST")
-	r.HandleFunc("/builder", builderMgr.updateBuilder).Methods("PUT")
-	r.HandleFunc("/builder", builderMgr.deleteBuilder).Methods("DELETE")
+	r.HandleFunc("/v1/build", builderMgr.build).Methods("POST")
+	r.HandleFunc("/v1/builder", builderMgr.createBuilder).Methods("POST")
+	r.HandleFunc("/v1/builder", builderMgr.updateBuilder).Methods("PUT")
+	r.HandleFunc("/v1/builder", builderMgr.deleteBuilder).Methods("DELETE")
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("Start buildermgr at port %v", address)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))

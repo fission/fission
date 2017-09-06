@@ -35,7 +35,7 @@ type (
 
 func MakeClient(builderUrl string) *Client {
 	return &Client{
-		url: strings.TrimSuffix(builderUrl, "/"),
+		url: strings.TrimSuffix(builderUrl, "/") + "/v1",
 	}
 }
 

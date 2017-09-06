@@ -7,7 +7,6 @@ PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
 PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
 
 fn=python-srcbuild-$(date +%s)
-buildermgr=$(kubectl get svc/buildermgr -o jsonpath={.status.loadBalancer.ingress[*].ip})
 
 echo "Pre-test cleanup"
 fission env delete --name python || true
@@ -30,7 +29,7 @@ echo "Waiting for router to catch up"
 sleep 3
 
 echo "Doing an HTTP POST on the builder manager's route to start a build"
-response=$(curl -X POST http://$buildermgr/build \
+response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
   -H 'content-type: application/json' \
   -d "{\"function\": {\"namespace\": \"default\",\"name\": \"$fn\"}}")
 
