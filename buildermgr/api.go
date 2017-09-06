@@ -370,7 +370,7 @@ func (builderMgr *BuilderMgr) createBuilderService(env *tpr.Environment) error {
 			Selector: sel,
 			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
-				v1.ServicePort{
+				{
 					Name:     "fetcher-port",
 					Protocol: v1.ProtocolTCP,
 					Port:     8000,
@@ -379,7 +379,7 @@ func (builderMgr *BuilderMgr) createBuilderService(env *tpr.Environment) error {
 						IntVal: 8000,
 					},
 				},
-				v1.ServicePort{
+				{
 					Name:     "builder-port",
 					Protocol: v1.ProtocolTCP,
 					Port:     8001,
