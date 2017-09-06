@@ -31,5 +31,8 @@ routerPort: 31314
 ## the release namespace)
 functionNamespace: fission-function
 
+## Storage path for storage service
+storagePath: /tmp
+
 ## Set up openshift RBAC rule
 openshift: false

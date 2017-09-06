@@ -243,6 +243,44 @@ spec:
       serviceAccount: fission-svc
 
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storageservice
+  labels:
+    svc: storageservice
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8890
+  selector:
+    svc: storageservice
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: storageservice
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: storageservice
+    spec:
+      containers:
+      - name: storageservice
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--storageServicePort", "8890", "--filePath", "{{ .Values.storagePath }}"]
+      serviceAccount: fission-svc
+
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
