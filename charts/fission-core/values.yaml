@@ -31,6 +31,10 @@ routerPort: 31314
 ## the release namespace)
 functionNamespace: fission-function
 
+## Namespace in which to run fission builders (this is different from
+## the release namespace)
+builderNamespace: fission-builder
+
 ## Set up openshift RBAC rule
 openshift: false
   
