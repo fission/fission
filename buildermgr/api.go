@@ -275,7 +275,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 
 	// ignore function with non-empty deployment package
 	if len(fn.Spec.Deployment.PackageRef.Name) > 0 {
-		w.WriteHeader(http.StatusOK)
+		http.Error(w, "deployment package is not empty", 400)
 		return
 	}
 
