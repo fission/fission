@@ -39,62 +39,15 @@ func MakeClient(builderUrl string) *Client {
 	}
 }
 
-func (c *Client) PackageBuild(req *buildermgr.BuildRequest) error {
+func (c *Client) PackageBuild(req *buildermgr.BuildRequest) ([]byte, error) {
 	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	_, err = c.doHttpReq("POST", c.url+"/build", body)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) EnvBuilderCreate(req *buildermgr.EnvBuilderRequest) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	_, err = c.doHttpReq("POST", c.url+"/builder", body)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) EnvBuilderUpdate(req *buildermgr.EnvBuilderRequest) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	_, err = c.doHttpReq("PUT", c.url+"/builder", body)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) EnvBuilderDelete(req *buildermgr.EnvBuilderRequest) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	_, err = c.doHttpReq("DELETE", c.url+"/builder", body)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) doHttpReq(method string, url string, body []byte) ([]byte, error) {
-	client := http.Client{}
-	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
+	resp, err := http.Post(c.url+"/build", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
 	return c.handleResponse(resp)
 }
 
