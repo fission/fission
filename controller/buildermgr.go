@@ -55,7 +55,7 @@ func (api *API) _getBuilderManagerProxy(targetUrl string) (*httputil.ReverseProx
 	}
 	// set up proxy server director
 	director := func(req *http.Request) {
-		// only replace url Scheme and Host to remote influxDB
+		// only replace url Scheme and Host to remote server
 		// and leave query string intact
 		req.URL.Scheme = svcUrl.Scheme
 		req.URL.Host = svcUrl.Host
