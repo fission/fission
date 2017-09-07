@@ -30,14 +30,14 @@ my $options = optargs();
 
     post '/specialize' => sub {
         if($userfunc) {
-            send_error('Already done', 500);
+            send_error('Not a generic container', 400);
         }
 
         $userfunc = require($options->{codepath});
         return '';
     };
 
-    get '/' => sub {
+    any '/' => sub {
         return $userfunc ? $userfunc->(request) : send_error('Not yet specialized', 500);
     };
 }
