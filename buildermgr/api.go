@@ -46,14 +46,14 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		storageSvcUrl          string
 		namespace              string
-		sharedMountPath        string
 		fetcherImage           string
 		fetcherImagePullPolicy v1.PullPolicy
 	}
 )
 
-func MakeBuilderMgr(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes.Clientset,
-	sharedMountPath string, storageSvcUrl string) *BuilderMgr {
+func MakeBuilderMgr(fissionClient *tpr.FissionClient,
+	kubernetesClient *kubernetes.Clientset, storageSvcUrl string) *BuilderMgr {
+
 	fetcherImage := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
@@ -78,7 +78,6 @@ func MakeBuilderMgr(fissionClient *tpr.FissionClient, kubernetesClient *kubernet
 		kubernetesClient:       kubernetesClient,
 		storageSvcUrl:          storageSvcUrl,
 		namespace:              EnvBuilderNamespace,
-		sharedMountPath:        sharedMountPath,
 		fetcherImage:           fetcherImage,
 		fetcherImagePullPolicy: pullPolicy,
 	}
@@ -417,6 +416,8 @@ func (builderMgr *BuilderMgr) updateBuilderDeployment(env *tpr.Environment) erro
 }
 
 func (builderMgr *BuilderMgr) getDeployment(env *tpr.Environment) *v1beta1.Deployment {
+
+	sharedMountPath := "/package"
 	sel := make(map[string]string)
 	sel["env-builder"] = env.Metadata.Name
 	var replicas int32 = 1
@@ -453,10 +454,10 @@ func (builderMgr *BuilderMgr) getDeployment(env *tpr.Environment) *v1beta1.Deplo
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: builderMgr.sharedMountPath,
+									MountPath: sharedMountPath,
 								},
 							},
-							Command: []string{"/builder", builderMgr.sharedMountPath},
+							Command: []string{"/builder", sharedMountPath},
 						},
 						{
 							Name:                   "fetcher",
@@ -466,10 +467,10 @@ func (builderMgr *BuilderMgr) getDeployment(env *tpr.Environment) *v1beta1.Deplo
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: builderMgr.sharedMountPath,
+									MountPath: sharedMountPath,
 								},
 							},
-							Command: []string{"/fetcher", builderMgr.sharedMountPath},
+							Command: []string{"/fetcher", sharedMountPath},
 						},
 					},
 					ServiceAccountName: "fission-builder",

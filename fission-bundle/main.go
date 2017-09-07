@@ -70,11 +70,7 @@ func runStorageSvc(port int, filePath string) {
 }
 
 func runBuilderMgr(port int, storageSvcUrl string) {
-	shareVolumePath := os.Getenv("SHARE_VOLUME_PATH")
-	if len(shareVolumePath) == 0 {
-		shareVolumePath = "/tmp"
-	}
-	err := buildermgr.Start(port, shareVolumePath, storageSvcUrl)
+	err := buildermgr.Start(port, storageSvcUrl)
 	if err != nil {
 		log.Fatalf("Error starting buildermgr: %v", err)
 	}

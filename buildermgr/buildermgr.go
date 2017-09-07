@@ -23,15 +23,14 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(port int, shareVolumePath string, storageSvcUrl string) error {
+func Start(port int, storageSvcUrl string) error {
 	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
 
-	api := MakeBuilderMgr(fissionClient,
-		kubernetesClient, shareVolumePath, storageSvcUrl)
+	api := MakeBuilderMgr(fissionClient, kubernetesClient, storageSvcUrl)
 
 	go api.Serve(port)
 
