@@ -306,4 +306,15 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+        volumeMounts:
+        - name: fission-storage
+          mountPath: /fission
       serviceAccount: fission-svc
+      volumes:
+      - name: fission-storage
+      {{- if .Values.persistence.enabled }}   
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim | default "fission-storage-pvc" }}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}

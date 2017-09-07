@@ -7,19 +7,19 @@
 serviceType: LoadBalancer
 
 ## Fission image repository
-image: fission/fission-bundle
+image: minikube/fission-bundle
 
 ## Fission image version
-imageTag: v0.2.0-20170822
+imageTag: testing
 
 ## Image pull policy
 pullPolicy: IfNotPresent
 
 ## Fission fetcher repository
-fetcherImage: fission/fetcher
+fetcherImage: minikube/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: v0.2.0-20170822
+fetcherImageTag: testing
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -33,3 +33,13 @@ functionNamespace: fission-function
 
 ## Set up openshift RBAC rule
 openshift: false
+  
+## Persist data to a persistent volume.
+persistence:
+  enabled: true
+  ## If defined, volume.beta.kubernetes.io/storage-class: <storageClass>
+  ## Default: volume.alpha.kubernetes.io/storage-class: default
+  ##
+  # storageClass:
+  accessMode: ReadWriteOnce
+  size: 8Gi

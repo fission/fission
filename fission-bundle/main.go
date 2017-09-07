@@ -173,7 +173,7 @@ Options:
 		runMessageQueueMgr(routerUrl)
 	}
 
-	if arguments["--storageServicePort"] == true {
+	if arguments["--storageServicePort"] != nil {
 		port := getPort(arguments["--storageServicePort"])
 		filePath := arguments["--filePath"].(string)
 		runStorageSvc(port, filePath)

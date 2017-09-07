@@ -484,3 +484,36 @@ spec:
         - name: MESSAGE_QUEUE_URL
           value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
       serviceAccount: fission-svc
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: storagesvc
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: storagesvc
+    spec:
+      containers:
+      - name: storagesvc
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+        volumeMounts:
+        - name: fission-storage
+          mountPath: /fission
+      serviceAccount: fission-svc
+      volumes:
+      - name: fission-storage
+      {{- if .Values.persistence.enabled }}   
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim | default "fission-storage-pvc" }}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}
