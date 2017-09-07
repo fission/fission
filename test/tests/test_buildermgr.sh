@@ -18,8 +18,11 @@ trap "fission env delete --name python" EXIT
 echo "Waiting for env builder to catch up"
 sleep 10
 
+echo "Creating source pacakage"
+zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
+
 echo "Creating function"
-fission fn create --name $fn --env python --srcpkg $ROOT/examples/python/sourcepkg/demo-src-pkg.zip --codepath /userfunc/user/user
+fission fn create --name $fn --env python --srcpkg demo-src-pkg.zip --codepath /userfunc/user/user
 trap "fission fn delete --name $fn" EXIT
 
 echo "Creating route"
