@@ -26,8 +26,6 @@ import (
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/buildermgr"
-	buildermgrClient "github.com/fission/fission/buildermgr/client"
 	"github.com/fission/fission/tpr"
 )
 
@@ -78,19 +76,6 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.respondWithError(w, err)
 		return
-	}
-
-	// create environment builder
-	if len(env.Spec.Builder.Image) > 0 {
-		client := buildermgrClient.MakeClient(a.builderManagerUrl)
-		envBuilderReq := buildermgr.EnvBuilderRequest{
-			Environment: env.Metadata,
-		}
-		err := client.EnvBuilderCreate(&envBuilderReq)
-		if err != nil {
-			a.respondWithError(w, err)
-			return
-		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -155,19 +140,6 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// update environment builder
-	if len(env.Spec.Builder.Image) > 0 {
-		client := buildermgrClient.MakeClient(a.builderManagerUrl)
-		envBuilderReq := buildermgr.EnvBuilderRequest{
-			Environment: env.Metadata,
-		}
-		err := client.EnvBuilderUpdate(&envBuilderReq)
-		if err != nil {
-			a.respondWithError(w, err)
-			return
-		}
-	}
-
 	a.respondWithSuccess(w, resp)
 }
 
@@ -179,28 +151,7 @@ func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = api.NamespaceDefault
 	}
 
-	env, err := a.fissionClient.Environments(ns).Get(name)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-
-	// delete environment builder before TPR env source is removed,
-	// so that a user can still delete the env correctly even the
-	// builder manager failed to delete the builder svc & deployment
-	if len(env.Spec.Builder.Image) > 0 {
-		client := buildermgrClient.MakeClient(a.builderManagerUrl)
-		envBuilderReq := buildermgr.EnvBuilderRequest{
-			Environment: env.Metadata,
-		}
-		err := client.EnvBuilderDelete(&envBuilderReq)
-		if err != nil {
-			a.respondWithError(w, err)
-			return
-		}
-	}
-
-	err = a.fissionClient.Environments(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Environments(ns).Delete(name, &api.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -8,6 +8,8 @@ PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
 
 fn=python-srcbuild-$(date +%s)
 
+# Create a function with source package in python to test builder manger functionality
+
 echo "Pre-test cleanup"
 fission env delete --name python || true
 
