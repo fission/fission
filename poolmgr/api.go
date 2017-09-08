@@ -143,6 +143,7 @@ func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.
 		code, msg := fission.GetHTTPError(err)
 		log.Printf("Error: %v: %v", code, msg)
 		http.Error(w, msg, code)
+		return
 	}
 
 	w.Write([]byte(serviceName))
@@ -178,6 +179,21 @@ func (poolMgr *Poolmgr) getFunctionEnv(m *api.ObjectMeta) (*tpr.Environment, err
 }
 
 func (poolMgr *Poolmgr) getServiceForFunction(m *api.ObjectMeta) (string, error) {
+	// Pool manager uses function metadata to generate a key
+	// for cache index. However the function metadata passed
+	// from router may be out-of-date (e.g. resourceVersion).
+	// We should always use the latest function metadata grab
+	// from TPR for the following operation.
+	fn, err := poolMgr.fissionClient.Functions(m.Namespace).Get(m.Name)
+	if err != nil {
+		e := fmt.Sprintf("Error getting TPR resource info for function %v: %v", m.Name, err)
+		log.Println(e)
+		return "", err
+	}
+
+	// update function metadata
+	m = &fn.Metadata
+
 	// Check function -> svc cache
 	log.Printf("[%v] Checking for cached function service", m.Name)
 	fsvc, err := poolMgr.fsCache.GetByFunction(m)
