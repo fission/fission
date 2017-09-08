@@ -57,22 +57,30 @@ type (
 		Checksum Checksum `json:"checksum"`
 	}
 
+	EnvironmentReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
 	BuildStatus string
+
 	PackageSpec struct {
-		Source     Archive
-		Deployment Archive
+		Environment EnvironmentReference `json:"environment"`
+		Source      Archive              `json:"source"`
+		Deployment  Archive              `json:"deployment"`
+		// In the future, we can have a debug build here too
 	}
 	PackageStatus struct {
-		BuildStatus BuildStatus
-		BuildLog    string // output of the build (errors etc)
+		BuildStatus BuildStatus `json:"buildstatus"`
+		BuildLog    string      `json:"buildlog"` // output of the build (errors etc)
 	}
 
 	PackageRef struct {
-		Name      string
-		Namespace string
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
 	}
 	FunctionPackageRef struct {
-		PackageRef PackageRef
+		PackageRef PackageRef `json:"packageref"`
 
 		// FunctionName specifies a specific function within the package. This allows
 		// functions to share packages, by having different functions within the same
@@ -87,13 +95,13 @@ type (
 
 	// FunctionSpec describes the contents of the function.
 	FunctionSpec struct {
-		// EnvironmentName is the name of the environment that this function is associated
-		// with. An Environment with this name should exist, otherwise the function cannot
-		// be invoked.
-		EnvironmentName string `json:"environmentName"`
+		// Environment is the build and runtime environment that this function is
+		// associated with. An Environment with this name should exist, otherwise the
+		// function cannot be invoked.
+		Environment EnvironmentReference `json:"environment"`
 
 		// Reference to a package containing deployment and optionally the source
-		Package FunctionPackageRef
+		Package FunctionPackageRef `json:"package"`
 	}
 
 	FunctionReferenceType string
