@@ -105,7 +105,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envList, err := builderMgr.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
+	env, err := builderMgr.fissionClient.Environments(api.NamespaceDefault).Get(fn.Spec.EnvironmentName)
 	if err != nil {
 		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
 		log.Println(e)
@@ -113,14 +113,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var svcName string
-	for _, env := range envList.Items {
-		if env.Metadata.Name == fn.Spec.EnvironmentName {
-			svcName = fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
-			break
-		}
-	}
-
+	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
 	srcPkgFilename := fmt.Sprintf("%v-%v", fn.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
 	svc, err := builderMgr.kubernetesClient.Services(builderMgr.namespace).Get(svcName)
 	if err != nil {

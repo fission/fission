@@ -18,7 +18,7 @@ fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON
 trap "fission env delete --name python" EXIT
 
 echo "Waiting for env builder to catch up"
-sleep 10
+sleep 20
 
 echo "Creating source pacakage"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
