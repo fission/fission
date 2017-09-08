@@ -65,7 +65,12 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure size limits
-	if len(f.Spec.Literal) > 256*1024 {
+	if len(f.Spec.Source.Literal) > 256*1024 {
+		err := fission.MakeError(fission.ErrorInvalidArgument, "Package literal larger than 256K")
+		a.respondWithError(w, err)
+		return
+	}
+	if len(f.Spec.Deployment.Literal) > 256*1024 {
 		err := fission.MakeError(fission.ErrorInvalidArgument, "Package literal larger than 256K")
 		a.respondWithError(w, err)
 		return
@@ -104,7 +109,7 @@ func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 
 	var resp []byte
 	if raw != "" {
-		resp = []byte(f.Spec.Literal)
+		resp = []byte(f.Spec.Deployment.Literal)
 	} else {
 		resp, err = json.Marshal(f)
 		if err != nil {
