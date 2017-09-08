@@ -96,5 +96,5 @@ func TestStorageService(t *testing.T) {
 	}
 
 	// cleanup /tmp
-	os.RemoveAll(fmt.Sprintf("/tmp/", testId))
+	os.RemoveAll(fmt.Sprintf("/tmp/%v", testId))
 }

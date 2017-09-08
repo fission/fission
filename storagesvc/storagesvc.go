@@ -132,6 +132,7 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 	fileId, err := ss.getIdFromRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
+		return
 	}
 
 	err = ss.container.RemoveItem(fileId)
@@ -148,6 +149,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	fileId, err := ss.getIdFromRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
+		return
 	}
 
 	// Get the file (called "item" in stow's jargon), open it,

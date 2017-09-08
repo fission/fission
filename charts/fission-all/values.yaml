@@ -48,3 +48,13 @@ nats:
   authToken: "defaultFissionAuthToken"
   clusterID: "fissionMQTrigger"
   
+
+## Persist data to a persistent volume.
+persistence:
+  enabled: true
+  ## If defined, volume.beta.kubernetes.io/storage-class: <storageClass>
+  ## Default: volume.alpha.kubernetes.io/storage-class: default
+  ##
+  # storageClass:
+  accessMode: ReadWriteOnce
+  size: 8Gi
