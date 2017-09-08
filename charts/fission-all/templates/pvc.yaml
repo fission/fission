@@ -2,8 +2,9 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: fissionStorageService
+  name: fission-storage-pvc
   labels:
+    app: fission-storage
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
   annotations:
