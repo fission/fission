@@ -81,8 +81,10 @@ func TestFunctionApi(t *testing.T) {
 			Namespace: api.NamespaceDefault,
 		},
 		Spec: fission.FunctionSpec{
-			EnvironmentName: "nodejs",
-			Deployment: fission.FunctionPackageRef{
+			Environment: fission.EnvironmentReference{
+				Name: "nodejs",
+			},
+			Package: fission.FunctionPackageRef{
 				FunctionName: "xxx",
 			},
 		},
@@ -99,7 +101,7 @@ func TestFunctionApi(t *testing.T) {
 	_, err = g.client.FunctionCreate(testFunc)
 	assertNameReuseFailure(err, "function")
 
-	testFunc.Spec.Deployment.FunctionName = "yyy"
+	testFunc.Spec.Package.FunctionName = "yyy"
 	_, err = g.client.FunctionUpdate(testFunc)
 	panicIf(err)
 
