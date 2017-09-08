@@ -75,3 +75,17 @@ func (fmap *functionServiceMap) assign(f *api.ObjectMeta, serviceUrl *url.URL) {
 		// ignore error
 	}
 }
+
+func (fmap *functionServiceMap) copy() map[metadataKey]*url.URL {
+	svcCache := make(map[metadataKey]*url.URL)
+	for k, v := range fmap.cache.Copy() {
+		key := k.(metadataKey)
+		val := v.(*url.URL)
+		svcCache[key] = val
+	}
+	return svcCache
+}
+
+func (fmap *functionServiceMap) delete(key metadataKey) error {
+	return fmap.cache.Delete(key)
+}

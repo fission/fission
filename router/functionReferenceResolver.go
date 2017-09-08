@@ -116,3 +116,21 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 	return &rr, nil
 }
+
+func (frr *functionReferenceResolver) delete(namespace string, fr *fission.FunctionReference) error {
+	nfr := namespacedFunctionReference{
+		namespace:         namespace,
+		functionReference: *fr,
+	}
+	return frr.refCache.Delete(nfr)
+}
+
+func (frr *functionReferenceResolver) copy() map[namespacedFunctionReference]resolveResult {
+	cache := make(map[namespacedFunctionReference]resolveResult)
+	for k, v := range frr.refCache.Copy() {
+		key := k.(namespacedFunctionReference)
+		val := v.(resolveResult)
+		cache[key] = val
+	}
+	return cache
+}
