@@ -46,15 +46,16 @@ func functionTests(tprClient *rest.RESTClient) {
 			Name: "hello",
 		},
 		Spec: fission.FunctionSpec{
-			Source: fission.FunctionPackageRef{},
-			Deployment: fission.FunctionPackageRef{
+			Package: fission.FunctionPackageRef{
 				PackageRef: fission.PackageRef{
 					Name:      "foo",
 					Namespace: "bar",
 				},
 				FunctionName: "hello",
 			},
-			EnvironmentName: "xxx",
+			Environment: fission.EnvironmentReference{
+				Name: "xxx",
+			},
 		},
 	}
 
@@ -74,14 +75,14 @@ func functionTests(tprClient *rest.RESTClient) {
 	// read
 	f, err = fi.Get(function.Metadata.Name)
 	panicIf(err)
-	if f.Spec.Deployment.FunctionName != function.Spec.Deployment.FunctionName {
+	if f.Spec.Environment.Name != function.Spec.Environment.Name {
 		log.Panicf("Bad result from Get: %v", f)
 	}
 
 	log.Printf("f.Metadata = %#v", f.Metadata)
 
 	// update
-	function.Spec.EnvironmentName = "yyy"
+	function.Spec.Environment.Name = "yyy"
 	f, err = fi.Update(function)
 	panicIf(err)
 
@@ -93,7 +94,7 @@ func functionTests(tprClient *rest.RESTClient) {
 	if len(fl.Items) != 1 {
 		log.Panicf("wrong count from list: %v", fl)
 	}
-	if fl.Items[0].Spec.EnvironmentName != function.Spec.EnvironmentName {
+	if fl.Items[0].Spec.Environment.Name != function.Spec.Environment.Name {
 		log.Panicf("bad object from list: %v", fl.Items[0])
 	}
 
@@ -122,7 +123,7 @@ func functionTests(tprClient *rest.RESTClient) {
 		if !ok {
 			log.Panicf("Can't cast to Function")
 		}
-		if wf.Spec.EnvironmentName != function.Spec.EnvironmentName {
+		if wf.Spec.Environment.Name != function.Spec.Environment.Name {
 			log.Panicf("Bad object from watch: %#v", wf)
 		}
 		log.Printf("watch event took %v", time.Now().Sub(start))

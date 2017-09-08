@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -44,14 +43,13 @@ func fileSize(filePath string) int64 {
 	return info.Size()
 }
 
-// updatePackageSpecWithFile uploads or serializes the file into the
-// provided package object
-func updatePackageSpecWithFile(client *client.Client, pkgSpec *fission.PackageSpec, fileName string) {
-	if fileSize(fileName) < fission.PackageLiteralSizeLimit {
-		pkgContents := getPackageContents(fileName)
-
-		pkgSpec.Type = fission.PackageTypeLiteral
-		pkgSpec.Literal = pkgContents
+// upload a file and return a fission.Archive
+func createArchive(client *client.Client, fileName string) *fission.Archive {
+	var archive fission.Archive
+	if fileSize(fileName) < fission.ArchiveLiteralSizeLimit {
+		contents := getContents(fileName)
+		archive.Type = fission.ArchiveTypeLiteral
+		archive.Literal = contents
 	} else {
 		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
 		ssClient := storageSvcClient.MakeClient(u)
@@ -62,54 +60,13 @@ func updatePackageSpecWithFile(client *client.Client, pkgSpec *fission.PackageSp
 
 		archiveUrl := ssClient.GetUrl(id)
 
-		pkgSpec.Type = fission.PackageTypeUrl
-		pkgSpec.URL = archiveUrl
+		archive.Type = fission.ArchiveTypeUrl
+		archive.URL = archiveUrl
 	}
+	return &archive
 }
 
-// createPackageFromFile is a function that helps to upload the content
-// of given file to controller to create a TPR package resource, and then
-// return a function package reference for further usage.
-func createPackageFromFile(client *client.Client, fnName string, fileName string) fission.FunctionPackageRef {
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-	}
-
-	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
-
-	_, err := client.PackageCreate(pkg)
-	checkErr(err, "upload package")
-
-	return fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:      pkgName,
-			Namespace: pkg.Metadata.Namespace,
-		},
-	}
-}
-
-// updatePackageContents is a function that reads content from given file
-// and updates the package content of TPR package resource.
-func updatePackageContents(client *client.Client, pkgName string, fileName string) error {
-	pkg, err := client.PackageGet(&api.ObjectMeta{
-		Name:      pkgName,
-		Namespace: api.NamespaceDefault,
-	})
-	if err != nil {
-		return errors.New(fmt.Sprintf("read package '%v'", pkgName))
-	}
-
-	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
-
-	_, err = client.PackageUpdate(pkg)
-	return err
-}
-
-func getPackageContents(filePath string) []byte {
+func getContents(filePath string) []byte {
 	var code []byte
 	var err error
 
@@ -148,18 +105,39 @@ func fnCreate(c *cli.Context) error {
 			Namespace: api.NamespaceDefault,
 		},
 		Spec: fission.FunctionSpec{
-			EnvironmentName: envName,
+			Environment: fission.EnvironmentReference{
+				Name:      envName,
+				Namespace: api.NamespaceDefault,
+			},
 		},
 	}
 
+	var pkgSpec fission.PackageSpec
 	if len(srcPkgName) > 0 {
-		function.Spec.Source = createPackageFromFile(client, fnName, srcPkgName)
+		pkgSpec.Source = *createArchive(client, srcPkgName)
 	}
 	if len(deployPkgName) > 0 {
-		function.Spec.Deployment = createPackageFromFile(client, fnName, deployPkgName)
+		pkgSpec.Deployment = *createArchive(client, deployPkgName)
 	}
+	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: pkgSpec,
+	}
+	newpkg, err := client.PackageCreate(pkg)
+	checkErr(err, "create package")
 
-	_, err := client.FunctionCreate(function)
+	function.Spec.Package = fission.FunctionPackageRef{
+		PackageRef: fission.PackageRef{
+			Name:            newpkg.Name,
+			Namespace:       newpkg.Namespace,
+			ResourceVersion: newpkg.ResourceVersion,
+		},
+	}
+	_, err = client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -210,12 +188,12 @@ func fnGet(c *cli.Context) error {
 	checkErr(err, "get function")
 
 	pkg, err := client.PackageGet(&api.ObjectMeta{
-		Name:      fn.Spec.Deployment.PackageRef.Name,
-		Namespace: fn.Spec.Deployment.PackageRef.Namespace,
+		Name:      fn.Spec.Package.PackageRef.Name,
+		Namespace: fn.Spec.Package.PackageRef.Namespace,
 	})
 	checkErr(err, "get package")
 
-	os.Stdout.Write(pkg.Spec.Literal)
+	os.Stdout.Write(pkg.Spec.Deployment.Literal)
 	return err
 }
 
@@ -238,7 +216,7 @@ func fnGetMeta(c *cli.Context) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
 	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		f.Metadata.Name, f.Metadata.UID, f.Spec.EnvironmentName)
+		f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name)
 	w.Flush()
 	return err
 }
@@ -268,31 +246,30 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need --env or --code or --package or --srcpkg argument.")
 	}
 
-	// Now builder manager only starts a build if a function has a source package
-	// but no deployment package. This behavior will be changed after we move builds
-	// to package level (https://github.com/fission/fission/pull/297).
-
-	if len(srcPkgName) > 0 {
-		// Check the existence of the package, create it if not exist.
-		if len(function.Spec.Source.PackageRef.Name) > 0 {
-			err := updatePackageContents(client, function.Spec.Source.PackageRef.Name, srcPkgName)
-			checkErr(err, "update source package")
-		} else {
-			function.Spec.Source = createPackageFromFile(client, fnName, srcPkgName)
+	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
+		// get existing package
+		pkg, err := client.PackageGet(&api.ObjectMeta{
+			Name:      function.Spec.Package.PackageRef.Name,
+			Namespace: function.Spec.Package.PackageRef.Namespace,
+		})
+		// update package spec
+		if len(srcPkgName) > 0 {
+			archive := createArchive(client, srcPkgName)
+			pkg.Spec.Source = *archive
 		}
-	}
-
-	if len(deployPkgName) > 0 {
-		if len(function.Spec.Deployment.PackageRef.Name) > 0 {
-			err := updatePackageContents(client, function.Spec.Deployment.PackageRef.Name, deployPkgName)
-			checkErr(err, "update source package")
-		} else {
-			function.Spec.Deployment = createPackageFromFile(client, fnName, deployPkgName)
+		if len(deployPkgName) > 0 {
+			archive := createArchive(client, deployPkgName)
+			pkg.Spec.Deployment = *archive
 		}
+		// updage package object
+		newpkg, err := client.PackageUpdate(pkg)
+		checkErr(err, "update package")
+		// update function spec with resource version
+		function.Spec.Package.PackageRef.ResourceVersion = newpkg.ResourceVersion
 	}
 
 	if len(envName) > 0 {
-		function.Spec.EnvironmentName = envName
+		function.Spec.Environment.Name = envName
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -333,7 +310,7 @@ func fnList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
 	for _, f := range fns {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.EnvironmentName)
+			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name)
 	}
 	w.Flush()
 

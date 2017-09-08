@@ -34,16 +34,16 @@ type (
 		Sum  string       `json:"sum"`
 	}
 
-	// PackageType is either literal or URL, indicating whether
-	// the package is specified in the Package struct or
+	// ArchiveType is either literal or URL, indicating whether
+	// the package is specified in the Archive struct or
 	// externally.
-	PackageType string
+	ArchiveType string
 
 	// Package contains or references a collection of source or
 	// binary files.
-	PackageSpec struct {
+	Archive struct {
 		// Type defines how the package is specified: literal or URL.
-		Type PackageType `json:"type"`
+		Type ArchiveType `json:"type"`
 
 		// Literal contents of the package. Can be used for
 		// encoding packages below TODO (256KB?) size.
@@ -57,12 +57,34 @@ type (
 		Checksum Checksum `json:"checksum"`
 	}
 
+	EnvironmentReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
+	BuildStatus string
+
+	PackageSpec struct {
+		Environment EnvironmentReference `json:"environment"`
+		Source      Archive              `json:"source"`
+		Deployment  Archive              `json:"deployment"`
+		// In the future, we can have a debug build here too
+	}
+	PackageStatus struct {
+		BuildStatus BuildStatus `json:"buildstatus"`
+		BuildLog    string      `json:"buildlog"` // output of the build (errors etc)
+	}
+
 	PackageRef struct {
-		Name      string
-		Namespace string
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+
+		// Including resource version in the reference forces the function to be updated on
+		// package update, making it possible to cache the function based on its metadata.
+		ResourceVersion string `json:"resourceversion"`
 	}
 	FunctionPackageRef struct {
-		PackageRef PackageRef
+		PackageRef PackageRef `json:"packageref"`
 
 		// FunctionName specifies a specific function within the package. This allows
 		// functions to share packages, by having different functions within the same
@@ -77,18 +99,13 @@ type (
 
 	// FunctionSpec describes the contents of the function.
 	FunctionSpec struct {
-		// EnvironmentName is the name of the environment that this function is associated
-		// with. An Environment with this name should exist, otherwise the function cannot
-		// be invoked.
-		EnvironmentName string `json:"environmentName"`
+		// Environment is the build and runtime environment that this function is
+		// associated with. An Environment with this name should exist, otherwise the
+		// function cannot be invoked.
+		Environment EnvironmentReference `json:"environment"`
 
-		// Source is an source package for this function; it's used for the build step if
-		// the environment defines a build container.
-		Source FunctionPackageRef `json:"source"`
-
-		// Deployment is a deployable package for this function. This is the package that's
-		// loaded into the environment's runtime container.
-		Deployment FunctionPackageRef `json:"deployment"`
+		// Reference to a package containing deployment and optionally the source
+		Package FunctionPackageRef `json:"package"`
 	}
 
 	FunctionReferenceType string
@@ -220,12 +237,19 @@ const (
 )
 
 const (
-	// PackageTypeLiteral means the package contents are specified in the Literal field of
+	// ArchiveTypeLiteral means the package contents are specified in the Literal field of
 	// resource itself.
-	PackageTypeLiteral PackageType = "literal"
+	ArchiveTypeLiteral ArchiveType = "literal"
 
-	// PackageTypeUrl means the package contents are at the specified URL.
-	PackageTypeUrl PackageType = "url"
+	// ArchiveTypeUrl means the package contents are at the specified URL.
+	ArchiveTypeUrl ArchiveType = "url"
+)
+
+const (
+	BuildStatusPending   = "pending"
+	BuildStatusRunning   = "running"
+	BuildStatusSucceeded = "succeeded"
+	BuildStatusFailed    = "failed"
 )
 
 const (
@@ -266,5 +290,5 @@ var errorDescriptions = []string{
 }
 
 const (
-	PackageLiteralSizeLimit int64 = 256 * 1024
+	ArchiveLiteralSizeLimit int64 = 256 * 1024
 )

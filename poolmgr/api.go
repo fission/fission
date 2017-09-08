@@ -167,7 +167,7 @@ func (poolMgr *Poolmgr) getFunctionEnv(m *api.ObjectMeta) (*tpr.Environment, err
 
 	// Get env from metadata
 	log.Printf("[%v] getting env", m)
-	env, err = poolMgr.fissionClient.Environments(f.Metadata.Namespace).Get(f.Spec.EnvironmentName)
+	env, err = poolMgr.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
 	}
