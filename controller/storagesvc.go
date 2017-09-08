@@ -25,7 +25,7 @@ import (
 )
 
 func (api *API) StorageServiceProxy(w http.ResponseWriter, r *http.Request) {
-	u := api.storageServiceUrl + "/v1/archive"
+	u := api.storageServiceUrl
 	ssUrl, err := url.Parse(u)
 	if err != nil {
 		msg := fmt.Sprintf("Error parsing url %v: %v", u, err)
@@ -33,6 +33,13 @@ func (api *API) StorageServiceProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, 500)
 		return
 	}
-	proxy := httputil.NewSingleHostReverseProxy(ssUrl)
+	director := func(req *http.Request) {
+		req.URL.Scheme = ssUrl.Scheme
+		req.URL.Host = ssUrl.Host
+		req.URL.Path = "/v1/archive"
+	}
+	proxy := &httputil.ReverseProxy{
+		Director: director,
+	}
 	proxy.ServeHTTP(w, r)
 }
