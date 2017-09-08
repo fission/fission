@@ -143,6 +143,7 @@ func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.
 		code, msg := fission.GetHTTPError(err)
 		log.Printf("Error: %v: %v", code, msg)
 		http.Error(w, msg, code)
+		return
 	}
 
 	w.Write([]byte(serviceName))

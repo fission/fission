@@ -61,6 +61,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
 		return
 	}
 	go ts.watchTriggers()
+	go ts.watchFunctions()
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +158,48 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 			}
 			ht := ev.Object.(*tpr.Httptrigger)
 			rv = ht.Metadata.ResourceVersion
+			ts.syncTriggers()
+		}
+	}
+}
+
+func (ts *HTTPTriggerSet) watchFunctions() {
+	rv := ""
+	for {
+		wi, err := ts.fissionClient.Functions(api.NamespaceAll).Watch(api.ListOptions{
+			ResourceVersion: rv,
+		})
+		if err != nil {
+			log.Fatalf("Failed to watch function list: %v", err)
+		}
+
+		for {
+			ev, more := <-wi.ResultChan()
+			if !more {
+				// restart watch from last rv
+				break
+			}
+			if ev.Type == watch.Error {
+				// restart watch from the start
+				rv = ""
+				time.Sleep(time.Second)
+				break
+			}
+			fn := ev.Object.(*tpr.Function)
+			rv = fn.Metadata.ResourceVersion
+
+			// update resolver function reference cache
+			for key, rr := range ts.resolver.copy() {
+				if key.functionReference.Name == fn.Metadata.Name &&
+					rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
+					err := ts.resolver.delete(key.namespace, &key.functionReference)
+					if err != nil {
+						log.Printf("Error deleting functionReferenceResolver cache: %v", err)
+					}
+					break
+				}
+			}
+
 			ts.syncTriggers()
 		}
 	}
