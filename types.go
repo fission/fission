@@ -78,6 +78,10 @@ type (
 	PackageRef struct {
 		Namespace string `json:"namespace"`
 		Name      string `json:"name"`
+
+		// Including resource version in the reference forces the function to be updated on
+		// package update, making it possible to cache the function based on its metadata.
+		ResourceVersion string `json:"resourceversion"`
 	}
 	FunctionPackageRef struct {
 		PackageRef PackageRef `json:"packageref"`
@@ -286,5 +290,5 @@ var errorDescriptions = []string{
 }
 
 const (
-	PackageLiteralSizeLimit int64 = 256 * 1024
+	ArchiveLiteralSizeLimit int64 = 256 * 1024
 )
