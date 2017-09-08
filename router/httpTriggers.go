@@ -188,19 +188,6 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 			fn := ev.Object.(*tpr.Function)
 			rv = fn.Metadata.ResourceVersion
 
-			// update service map cache
-			for key := range ts.functionServiceMap.copy() {
-				if key.Name == fn.Metadata.Name &&
-					key.ResourceVersion != fn.Metadata.ResourceVersion {
-					err := ts.functionServiceMap.delete(key)
-					if err != nil {
-						log.Printf("Error deleting functionServiceMap cache: %v", err)
-					}
-					break
-				}
-
-			}
-
 			// update resolver function reference cache
 			for key, rr := range ts.resolver.copy() {
 				if key.functionReference.Name == fn.Metadata.Name &&
