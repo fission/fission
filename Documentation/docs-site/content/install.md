@@ -1,7 +1,7 @@
 ---
 title: "Fission Installation Guide"
 date: 2017-09-07T20:10:05-07:00
-draft: true
+draft: false
 ---
 
 Welcome! This guide will get you up and running with Fission on a
@@ -9,8 +9,11 @@ Kubernetes cluster.
            
 ### Cluster preliminaries
 
+If you don't have a Kubernetes cluster, [here's a quick guide to set
+one up](../kubernetessetup).
+
 Let's ensure you have the Kubernetes CLI and Helm installed and
-ready. If you already have these tools, [skip to the next section](#install-fission).
+ready. If you already have helm, [skip ahead to the fission install](#install-fission).
 
 #### Kubernetes CLI
 
@@ -78,21 +81,20 @@ role-based access control.)
 
 ### Install Fission
 
-```
-$ helm repo add fission-charts https://fission-charts.github.io
-
-$ helm install --namespace fission fission-all
-```
-
 #### Minikube
-
-On minikube, you'll need to pass one additional option to the helm
-install command:
 
 ```
 $ helm repo add fission-charts https://fission-charts.github.io
 
 $ helm install --namespace fission fission-all --set serviceType=NodePort
+```
+
+#### Cloud hosted clusters (GKE, AWS, Azure etc.)
+
+```
+$ helm repo add fission-charts https://fission-charts.github.io
+
+$ helm install --namespace fission fission-all
 ```
 
 
@@ -102,7 +104,7 @@ The fission-all helm chart installs a full set of services including
 the NATS message queue, influxDB for logs, etc. If you want a more
 minimal setup, you can install the fission-core chart instead.
 
-### Install Fission CLI
+### Install the Fission CLI
 
 #### Mac OS
 
@@ -125,7 +127,29 @@ this windows executable: [fission.exe](https://github.com/fission/fission/releas
 
 ### Set environment vars
 
+Set the FISSION_URL and FISSION_ROUTER environment variables.
+FISSION_URL is used by the fission CLI to find the server.
+(FISSION_ROUTER is only needed for the examples below to work.)
 
+#### Minikube
+
+If you're using minikube, use these commands:
+
+```
+  $ export FISSION_URL=http://$(minikube ip):31313
+  $ export FISSION_ROUTER=$(minikube ip):31314
+```
+#### Cloud setups
+
+Save the external IP addresses of controller and router services in
+FISSION_URL and FISSION_ROUTER, respectively.  Wait for services to
+get IP addresses (check this with ```kubectl --namespace fission get
+svc```).  Then:
+
+```
+  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
+  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+```
 
 ### Run an example
 
@@ -143,4 +167,13 @@ $ fission route create --method GET --url /hello --function hello
 $ curl http://$FISSION_ROUTER/hello
 Hello, world!
 ```
+
+### What's next?
+
+If something went wrong, we'd love to help -- please [drop by the
+slack channel](http://slack.fission.io) and ask for help.
+
+Check out the
+[examples](https://github.com/fission/fission/tree/master/examples)
+for some example functions.
 

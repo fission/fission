@@ -1,7 +1,7 @@
 ---
 title: "Kubernetes Quick Install"
 date: 2017-09-07T20:10:05-07:00
-draft: true
+draft: false
 ---
 
 This is a quick guide to help you get started running Kubernetes on
@@ -12,7 +12,7 @@ intended to give you something quickly so you can try Fission on it.)
 
 ## Minikube
 
-Minikube is the simplest way to run Kubernetes on your laptop.
+Minikube is the usual way to run Kubernetes on your laptop:
 
 ### Install and start Kubernetes on OSX:
 
@@ -36,6 +36,6 @@ $ minikube start
 
 ## Google Container Engine
 
-You can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to
+Alternatively, you can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to
 get a 3-node cluster.  Hop over to [Google Cloud](https://cloud.google.com/container-engine/) to set that up.
 
