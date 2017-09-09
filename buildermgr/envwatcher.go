@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/util/intstr"
+	"k8s.io/client-go/1.5/pkg/watch"
 
 	"github.com/fission/fission/tpr"
 )
@@ -135,6 +136,36 @@ func (envw *environmentWatcher) getDelOption() *api.DeleteOptions {
 	}
 }
 
+func (envw *environmentWatcher) watchEnvironments() {
+	envw.sync()
+	rv := ""
+	for {
+		wi, err := envw.fissionClient.Environments(api.NamespaceAll).Watch(api.ListOptions{
+			ResourceVersion: rv,
+		})
+		if err != nil {
+			log.Fatalf("Error watching environment list: %v", err)
+		}
+
+		for {
+			ev, more := <-wi.ResultChan()
+			if !more {
+				// restart watch from last rv
+				break
+			}
+			if ev.Type == watch.Error {
+				// restart watch from the start
+				rv = ""
+				time.Sleep(time.Second)
+				break
+			}
+			ht := ev.Object.(*tpr.Environment)
+			rv = ht.Metadata.ResourceVersion
+			envw.sync()
+		}
+	}
+}
+
 func (envw *environmentWatcher) sync() {
 	for {
 		envList, err := envw.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
@@ -155,8 +186,6 @@ func (envw *environmentWatcher) sync() {
 		}
 
 		envw.cleanupEnvBuilders(envList.Items)
-
-		time.Sleep(2 * time.Second)
 	}
 }
 
