@@ -35,23 +35,6 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: fission-ui
-  labels:
-    svc: fission-ui
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-spec:
-  type: {{ .Values.serviceType }}
-  ports:
-  - port: 80
-    targetPort: 80
-    nodePort: 31319
-  selector:
-    svc: fission-ui
-
----
-apiVersion: v1
-kind: Service
-metadata:
   name: nats-streaming
   labels:
     svc: nats-streaming
@@ -61,7 +44,7 @@ spec:
   ports:
   - port: 4222
     targetPort: 4222
-    nodePort: 31316
+    nodePort: {{ .Values.natsStreamingPort }}
   selector:
     svc: nats-streaming
 

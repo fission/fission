@@ -27,6 +27,9 @@ controllerPort: 31313
 ## Port at which Fission router service should be exposed
 routerPort: 31314
 
+## Port at which NATS streaming service should be exposed
+natsStreamingPort: 31316
+
 ## Namespace in which to run fission functions (this is different from
 ## the release namespace)
 functionNamespace: fission-function
