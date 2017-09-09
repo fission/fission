@@ -304,9 +304,23 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// tell fetcher to get the function.
 	fetcherUrl := gp.getFetcherUrl(podIP)
 	log.Printf("[%v] calling fetcher to copy function", metadata.Name)
-	err := fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
+
+	fn, err := gp.fissionClient.
+		Functions(metadata.Namespace).Get(metadata.Name)
+	if err != nil {
+		return err
+	}
+
+	pkg, err := gp.fissionClient.
+		Packages(fn.Spec.Package.PackageRef.Namespace).
+		Get(fn.Spec.Package.PackageRef.Name)
+	if err != nil {
+		return err
+	}
+
+	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Function:  *metadata,
+		Package:   pkg.Metadata,
 		Filename:  "user", // XXX use function id instead
 	})
 	if err != nil {
@@ -323,13 +337,13 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
 
-	fn, err := gp.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
+	fn, err = gp.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
 	if err != nil {
 		return err
 	}
 
 	codepath := functionCodepath{
-		Codepath: fn.Spec.Deployment.FunctionName,
+		Codepath: fn.Spec.Package.FunctionName,
 	}
 
 	body, err := json.Marshal(codepath)

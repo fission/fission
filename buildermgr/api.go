@@ -45,7 +45,7 @@ const (
 
 type (
 	BuildRequest struct {
-		Function api.ObjectMeta `json:"function"`
+		Package api.ObjectMeta `json:"package"`
 	}
 
 	BuilderMgr struct {
@@ -88,8 +88,8 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fn, err := builderMgr.fissionClient.Functions(
-		buildReq.Function.GetNamespace()).Get(buildReq.Function.GetName())
+	pkg, err := builderMgr.fissionClient.Packages(
+		buildReq.Package.Namespace).Get(buildReq.Package.Name)
 	if err != nil {
 		e := fmt.Sprintln("Error getting function TPR info: %v", err)
 		log.Println(e)
@@ -98,14 +98,14 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ignore function with non-empty deployment package
-	if len(fn.Spec.Deployment.PackageRef.Name) > 0 {
-		e := "deployment package is not empty"
+	if pkg.Spec.Status.BuildStatus != fission.BuildStatusPending {
+		e := "package is not in pending state"
 		log.Println(e)
 		http.Error(w, e, 400)
 		return
 	}
 
-	env, err := builderMgr.fissionClient.Environments(api.NamespaceDefault).Get(fn.Spec.EnvironmentName)
+	env, err := builderMgr.fissionClient.Environments(api.NamespaceDefault).Get(pkg.Spec.Environment.Name)
 	if err != nil {
 		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
 		log.Println(e)
@@ -114,7 +114,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
-	srcPkgFilename := fmt.Sprintf("%v-%v", fn.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
+	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
 	svc, err := builderMgr.kubernetesClient.Services(builderMgr.namespace).Get(svcName)
 	if err != nil {
 		e := fmt.Sprintf("Error getting builder service info %v", err)
@@ -128,7 +128,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 
 	fetchReq := &fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_SOURCE,
-		Function:  fn.Metadata,
+		Package:   pkg.Metadata,
 		Filename:  srcPkgFilename,
 	}
 
@@ -166,7 +166,7 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pkgRef, err := builderMgr.createPackageFromUrl(fn.Metadata.Name,
+	newPkgRV, err := builderMgr.updatePackageFromUrl(pkg,
 		uploadResp.ArchiveDownloadUrl, uploadResp.Checksum)
 	if err != nil {
 		e := fmt.Sprintf("Error creating deployment package TPR resource: %v", err)
@@ -175,50 +175,48 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Copy the FunctionName from fn.Spec.Source to fn.Spec.Deployment.
-	if len(fn.Spec.Source.FunctionName) != 0 {
-		pkgRef.FunctionName = fn.Spec.Source.FunctionName
-	}
-	fn.Spec.Deployment = *pkgRef
-
-	_, err = builderMgr.fissionClient.Functions(fn.Metadata.Namespace).Update(fn)
+	fnList, err := builderMgr.fissionClient.
+		Functions(api.NamespaceDefault).List(api.ListOptions{})
 	if err != nil {
-		e := fmt.Sprintf("Error updating function deployment package spec: %v", err)
+		e := fmt.Sprintf("Error getting function list: %v", err)
 		log.Println(e)
 		http.Error(w, e, 500)
 		return
 	}
 
+	// A package may be used by multiple functions. Update
+	// functions with old package resource version
+	for _, fn := range fnList.Items {
+		if fn.Spec.Package.PackageRef.Name == pkg.Metadata.Name &&
+			fn.Spec.Package.PackageRef.ResourceVersion != pkg.Metadata.ResourceVersion {
+			fn.Spec.Package.PackageRef.ResourceVersion = newPkgRV
+			// update TPR
+			_, err = builderMgr.fissionClient.Functions(fn.Metadata.Namespace).Update(&fn)
+			if err != nil {
+				e := fmt.Sprintf("Error updating function package resource version: %v", err)
+				log.Printf(e)
+			}
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
-// createPackageFromUrl is a function that helps to create a
+// updatePackageFromUrl is a function that helps to update a
 // TPR package resource, and then return a function package
 // reference for further usage.
-func (builderMgr *BuilderMgr) createPackageFromUrl(fnName string,
-	fileUrl string, checksum fission.Checksum) (*fission.FunctionPackageRef, error) {
+func (builderMgr *BuilderMgr) updatePackageFromUrl(pkg *tpr.Package,
+	fileUrl string, checksum fission.Checksum) (string, error) {
 
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-		Spec: fission.PackageSpec{
-			URL:      fileUrl,
-			Checksum: checksum,
-		},
+	pkg.Spec.Deployment = fission.Archive{
+		Type:     fission.ArchiveTypeUrl,
+		URL:      fileUrl,
+		Checksum: checksum,
 	}
-	_, err := builderMgr.fissionClient.Packages(api.NamespaceDefault).Create(pkg)
-	if err != nil {
-		return nil, err
-	}
-	return &fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:      pkgName,
-			Namespace: pkg.Metadata.Namespace,
-		},
-	}, nil
+	// update package spec
+	pkg, err := builderMgr.fissionClient.Packages(api.NamespaceDefault).Update(pkg)
+	// return resource version for function to update function package ref
+	return pkg.Metadata.ResourceVersion, err
 }
 
 func (builderMgr *BuilderMgr) Serve(port int) {

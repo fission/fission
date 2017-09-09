@@ -29,7 +29,7 @@ type (
 
 	FetchRequest struct {
 		FetchType     FetchRequestType `json:"fetchType"`
-		Function      api.ObjectMeta   `json:"function"`
+		Package       api.ObjectMeta   `json:"package"`
 		Url           string           `json:"url"`
 		StorageSvcUrl string           `json:"storagesvcurl"`
 		Filename      string           `json:"filename"`
@@ -166,19 +166,8 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// get function object
-		fn, err := fetcher.fissionClient.Functions(req.Function.Namespace).Get(req.Function.Name)
-		if err != nil {
-			e := fmt.Sprintf("Failed to get function: %v", err)
-			log.Printf(e)
-			http.Error(w, e, 500)
-			return
-		}
-
 		// get pkg
-		var pkg *tpr.Package
-		pkg, err = fetcher.fissionClient.
-			Packages(fn.Spec.Package.PackageRef.Namespace).Get(fn.Spec.Package.PackageRef.Name)
+		pkg, err := fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name)
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
