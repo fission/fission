@@ -122,6 +122,10 @@ func main() {
 		{Name: "list", Usage: "List all watches", Flags: []cli.Flag{}, Action: wList},
 	}
 
+	upgradeSubCommands := []cli.Command{
+		{Name: "dump", Usage: "Dump all state from a v0.1 fission installation", Flags: nil, Action: upgradeDumpState},
+		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2 install", Flags: nil, Action: upgradeRestoreState},
+	}
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
@@ -129,6 +133,7 @@ func main() {
 		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
+		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
 	}
 
 	app.Run(os.Args)
