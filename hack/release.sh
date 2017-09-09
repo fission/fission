@@ -112,6 +112,7 @@ make_github_release() {
 	   --tag $gittag \
 	   --name "$version" \
 	   --description "$version" \
+	   --pre-release
 
     # attach files
 
@@ -135,9 +136,13 @@ make_github_release() {
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-windows.exe \
-	   --file $BUILDDIR/cli/windows/fission.exe    
+	   --file $BUILDDIR/cli/windows/fission.exe
+
+    # helm charts
+    # todo
 }
 
+export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
 check_branch
 check_clean
