@@ -1,0 +1,16 @@
+<div class="expand">
+    <div class="expand-label" style="cursor: pointer;" onclick="$h = $(this);$h.next('div').slideToggle(100,function () {$h.children('i').attr('class',function () {return $h.next('div').is(':visible') ? 'fa fa-chevron-down' : 'fa fa-chevron-right';});});">
+    	<i style="font-size:x-small;" class="fa fa-chevron-right"></i>
+    	<span>
+    	{{ if .IsNamedParams }}
+    	{{.Get "default" | default "Expand me..."}}
+    	{{else}}
+    	{{.Get 0 | default "Expand me..."}}
+    	{{end}}
+    	</span>
+    </div>
+    <div class="expand-content" style="display: none;">
+{{.Inner | safeHTML}}
+    </div>
+</div>
+

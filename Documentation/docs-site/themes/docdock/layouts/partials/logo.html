@@ -1,0 +1,10 @@
+{{ range where .Site.Pages "Source.BaseFileName" "_header" }} 
+	{{ .Content }} 
+{{else}}
+<span style="font-size:smaller">
+	<a id="logo" href="{{.Site.BaseURL}}">
+	  <span class="fa fa-gears" style="font-size:large"></span>
+	</a>
+	{{ T "create-header-md" }}
+</small>
+{{end}}

@@ -1,0 +1,12 @@
+{{- if in (.Get 0) "/_index.md" -}}
+	{{- $path := (trim (.Get 0) "_index.md") -}}
+	{{- with .Site.GetPage "section" (trim $path "/") -}}
+		{{- .URL -}}
+	{{- end -}}
+{{- else -}}
+	{{- with .Site.GetPage "section" (.Get 0) }}
+		{{- .URL -}}
+	{{- else -}}
+		{{- .Get 0 | relref .Page -}}
+	{{- end -}}
+{{- end -}}
