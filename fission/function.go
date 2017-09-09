@@ -25,7 +25,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/dchest/uniuri"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	"k8s.io/client-go/1.5/pkg/api"
@@ -62,32 +61,6 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 
 		archive.Type = fission.ArchiveTypeUrl
 		archive.URL = archiveUrl
-	}
-}
-
-// createPackageFromFile is a function that helps to upload the content
-// of given file to controller to create a TPR package resource, and then
-// return a function package reference for further usage.
-func createPackageFromFile(client *client.Client, fnName string, fileName string, codepath string) fission.FunctionPackageRef {
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-	}
-
-	updatePackageSpecWithFile(client, &pkg.Spec, fileName)
-
-	_, err := client.PackageCreate(pkg)
-	checkErr(err, "upload package")
-
-	return fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:      pkgName,
-			Namespace: pkg.Metadata.Namespace,
-		},
-		FunctionName: codepath,
 	}
 	return &archive
 }
@@ -127,6 +100,25 @@ func fnCreate(c *cli.Context) error {
 
 	codepath := c.String("codepath")
 
+	var pkgSpec fission.PackageSpec
+	if len(srcPkgName) > 0 {
+		pkgSpec.Source = *createArchive(client, srcPkgName)
+	}
+	if len(deployPkgName) > 0 {
+		pkgSpec.Deployment = *createArchive(client, deployPkgName)
+	}
+
+	pkgName := strings.ToLower(uuid.NewV4().String())
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: pkgSpec,
+	}
+	pkgMetadata, err := client.PackageCreate(pkg)
+	checkErr(err, "create package")
+
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
 			Name:      fnName,
@@ -137,33 +129,14 @@ func fnCreate(c *cli.Context) error {
 				Name:      envName,
 				Namespace: api.NamespaceDefault,
 			},
-		},
-	}
-
-	var pkgSpec fission.PackageSpec
-	if len(srcPkgName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcPkgName)
-	}
-	if len(deployPkgName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployPkgName)
-	}
-
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-		Spec: pkgSpec,
-	}
-	newpkg, err := client.PackageCreate(pkg)
-	checkErr(err, "create package")
-
-	function.Spec.Package = fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:            newpkg.Name,
-			Namespace:       newpkg.Namespace,
-			ResourceVersion: newpkg.ResourceVersion,
+			Package: fission.FunctionPackageRef{
+				FunctionName: codepath,
+				PackageRef: fission.PackageRef{
+					Namespace:       pkgMetadata.Namespace,
+					Name:            pkgMetadata.Name,
+					ResourceVersion: pkgMetadata.ResourceVersion,
+				},
+			},
 		},
 	}
 	_, err = client.FunctionCreate(function)

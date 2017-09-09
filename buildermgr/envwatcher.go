@@ -59,8 +59,7 @@ type (
 
 	response struct {
 		builderInfo *builderInfo
-		// builderInfoList []*builderInfo
-		err error
+		err         error
 	}
 
 	environmentWatcher struct {
