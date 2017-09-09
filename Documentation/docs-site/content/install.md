@@ -39,7 +39,7 @@ $ kubectl version
 We need at least Kubernetes 1.6 (older versions may work, but we don't
 test them).
 
-#### Set up helm
+#### Helm
 
 Helm is an installer for Kubernetes.  If you already use helm, [skip to
 the next section](#install-fission).
@@ -84,25 +84,28 @@ role-based access control.)
 #### Minikube
 
 ```
-$ helm repo add fission-charts https://fission-charts.github.io
-
-$ helm install --namespace fission fission-all --set serviceType=NodePort
+$ helm install --namespace fission --set serviceType=NodePort https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-all-0.2.1-rc.tgz
 ```
+
+The serviceType variable allows configuring the type of Kubernetes
+service outside the cluster.  You can use `ClusterIP` if you don't
+want to expose anything outside the cluster.
 
 #### Cloud hosted clusters (GKE, AWS, Azure etc.)
 
 ```
-$ helm repo add fission-charts https://fission-charts.github.io
-
-$ helm install --namespace fission fission-all
+$ helm install --namespace fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-all-0.2.1-rc.tgz
 ```
-
 
 #### Minimal version
 
 The fission-all helm chart installs a full set of services including
 the NATS message queue, influxDB for logs, etc. If you want a more
-minimal setup, you can install the fission-core chart instead.
+minimal setup, you can install the fission-core chart instead:
+
+```
+$ helm install --namespace fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-core-0.2.1-rc.tgz
+```
 
 ### Install the Fission CLI
 
