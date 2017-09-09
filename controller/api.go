@@ -102,11 +102,11 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.1.0\"}\n")
+	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.2.1-rc\"}\n")
 }
 
 func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {
-	err := fission.MakeError(fission.ErrorNotFound, "Fission server supports API v2 only - v1 is not supported. Please upgrade your Fission client / CLI")
+	err := fission.MakeError(fission.ErrorNotFound, "Fission server supports API v2 only -- v1 is not supported. Please upgrade your Fission client/CLI.")
 	api.respondWithError(w, err)
 }
 

@@ -26,6 +26,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
+	app.Version = "0.2.1-rc"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Usage: "Fission server URL", EnvVar: "FISSION_URL"},

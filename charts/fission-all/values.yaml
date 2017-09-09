@@ -13,13 +13,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: v0.2.0-20170822
+imageTag: v0.2.1-rc
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: v0.2.0-20170822
+fetcherImageTag: v0.2.1-rc
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -41,9 +41,6 @@ openshift: false
 logger:
   influxdbAdmin: "admin"
   fluentdImage: fission/fluentd
-
-## Fission ui config
-fissionUiImage: fission/fission-ui:0.1.0
 
 ## Message queue trigger config
 ### NATS Streaming

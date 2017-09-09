@@ -1,17 +1,15 @@
 1. Install the client CLI.
 
 Mac:
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 
 Linux:
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 
 Windows:
-  For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/nightly20170705/fission-cli-windows.exe
+  For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-windows.exe
 
 2. Set the FISSION_URL and FISSION_ROUTER environment variables.
-FISSION_URL is used by the fission CLI to find the server.
-FISSION_URL should be prefixed with a http://. (FISSION_ROUTER is only needed for the examples below to work.)
 
 {{- if contains "NodePort" .Values.serviceType }}
   $ export FISSION_URL=http://$(minikube ip):{{ .Values.controllerPort }}

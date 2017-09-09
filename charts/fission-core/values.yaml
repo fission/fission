@@ -7,19 +7,19 @@
 serviceType: LoadBalancer
 
 ## Fission image repository
-image: minikube/fission-bundle
+image: fission/fission-bundle
 
 ## Fission image version
-imageTag: testing
+imageTag: v0.2.1-rc
 
 ## Image pull policy
 pullPolicy: IfNotPresent
 
 ## Fission fetcher repository
-fetcherImage: minikube/fetcher
+fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: testing
+fetcherImageTag: v0.2.1-rc
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
