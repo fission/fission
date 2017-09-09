@@ -144,7 +144,7 @@ make_github_release() {
 
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
-check_branch
+#check_branch
 check_clean
 version=$1
 
