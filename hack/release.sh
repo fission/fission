@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set -e
-#set -x
+set -x
 
 DIR=$(realpath $(dirname $0))/../
 BUILDDIR=$(realpath $DIR)/build
@@ -62,9 +62,9 @@ build_fission_bundle_image() {
 
     pushd $DIR/fission-bundle
 
-    GOOS=linux go build 
+    ./build.sh
     docker build -t $tag .
-    
+   
     popd
 }
 
@@ -75,29 +75,64 @@ push_fission_bundle_image() {
     docker push $tag
 }
 
-#
-# Create fission.yaml
-#
-# TODO: get rid of this in favour of the helm chart
-#
-build_yaml() {
+build_fetcher_image() {
     version=$1
-    tag=fission/fission-bundle:$version
+    tag=fission/fetcher:$version
 
-    outdir=$BUILDDIR/yaml/
-    mkdir -p $outdir
-    
-    pushd $DIR
-    
-    cat fission.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission.yaml
-    cat fission-logger.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-logger.yaml
-    cat fission-openshift.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-openshift.yaml
-    cat fission-rbac.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-rbac.yaml
-    cat fission-nats.yaml | sed "s#fission/fission-bundle#$tag#g" > $outdir/fission-nats.yaml
+    pushd $DIR/environments/fetcher/cmd
 
-    cp fission-nodeport.yaml $outdir
-    cp fission-cloud.yaml    $outdir
+    ./build.sh
+    docker build -t $tag .
+
+    popd    
+}
+
+push_fetcher_image() {
+    version=$1
+    tag=fission/fetcher:$version
+    docker push $tag
+}
+
+build_and_push_env_image() {
+    version=$1
+    envdir=$2
+    imgname=$3
+
+    echo "Building $envdir -> $imgname:$version"
     
+    pushd $DIR/environments/$envdir
+    if [ -f build.sh ]
+    then
+       ./build.sh
+    fi
+    docker build -t fission/$imgname:$version .
+    docker push fission/$imgname:$version
+    popd
+}
+
+build_and_push_all_envs() {
+    version=$1
+
+    build_and_push_env_image $version nodejs node-env
+    build_and_push_env_image $version binary binary-env
+    build_and_push_env_image $version dotnet dotnet-env
+    build_and_push_env_image $version go go-env
+    build_and_push_env_image $version perl perl-env
+    build_and_push_env_image $version php7 php-env
+    build_and_push_env_image $version python3 python-env
+    build_and_push_env_image $version ruby ruby-env  
+}
+
+build_charts() {
+    version=$1
+    mkdir -p $BUILDDIR/charts
+    pushd $DIR/charts
+    for c in all core
+    do
+	tgz=fission-$c-$version.tgz
+	tar czvf $tgz fission-$c/
+	mv $tgz $BUILDDIR/charts/
+    done
     popd
 }
 
@@ -118,13 +153,19 @@ build_all() {
     mkdir -p $BUILDDIR
     
     build_fission_bundle_image $version
-    build_yaml $version
+    build_fetcher_image $version
     build_all_cli
+    build_charts $version
 }
 
-make_github_release() {
+push_all() {
+    push_fission_bundle_image $version
+    push_fetcher_image $version    
+}
+
+tag_and_release() {
     version=$1
-    gittag=nightly$(date +%Y%m%d)
+    gittag=$version
 
     # tag the release
     git tag $gittag
@@ -137,12 +178,16 @@ make_github_release() {
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
-	   --name "Nightly release for $(date +%Y-%b-%d)" \
-	   --description "Nightly release for $(date +%Y-%b-%d)" \
+	   --name "$version" \
+	   --description "$version" \
+	   --pre-release
+}
 
-    # attach files
-
+attach_github_release() {
+    version=$1
+    gittag=$version
     # cli
+    echo "Uploading osx cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
@@ -150,6 +195,7 @@ make_github_release() {
 	   --name fission-cli-osx \
 	   --file $BUILDDIR/cli/osx/fission
 
+    echo "Uploading linux cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
@@ -157,31 +203,47 @@ make_github_release() {
 	   --name fission-cli-linux \
 	   --file $BUILDDIR/cli/linux/fission
 
+    echo "Uploading windows cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-windows.exe \
 	   --file $BUILDDIR/cli/windows/fission.exe
-
-    # yamls
-    yaml_files="fission.yaml fission-logger.yaml fission-rbac.yaml fission-openshift.yaml fission-nodeport.yaml fission-cloud.yaml fission-nats.yaml"
-    for f in $yaml_files
-    do
-	gothub upload \
-	       --user fission \
-	       --repo fission \
-	       --tag $gittag \
-	       --name $f \
-	       --file $BUILDDIR/yaml/$f
-    done
-    
 }
 
+attach_github_release_charts() {
+    version=$1
+    gittag=$version
 
-# check_master
+    # helm charts
+    gothub upload \
+	   --user fission \
+	   --repo fission \
+	   --tag $gittag \
+	   --name fission-all-$version.tgz \
+	   --file $BUILDDIR/charts/fission-all-$version.tgz
+
+    gothub upload \
+	   --user fission \
+	   --repo fission \
+	   --tag $gittag \
+	   --name fission-core-$version.tgz \
+	   --file $BUILDDIR/charts/fission-core-$version.tgz
+
+}
+
+export GITHUB_TOKEN=$(cat ~/.gh-access-token)
+
+check_branch
 check_clean
 version=$1
+
 build_all $version
-push_fission_bundle_image $version
-make_github_release $version
+push_all $version
+build_and_push_all_envs $version 
+build_charts $version
+
+tag_and_release $version
+attach_github_release_cli $version
+attach_github_release_charts $version
