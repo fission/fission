@@ -62,9 +62,9 @@ build_fission_bundle_image() {
 
     pushd $DIR/fission-bundle
 
-    GOOS=linux go build 
+    ./build.sh
     docker build -t $tag .
-    
+   
     popd
 }
 
@@ -73,6 +73,54 @@ push_fission_bundle_image() {
     version=$1
     tag=fission/fission-bundle:$version
     docker push $tag
+}
+
+build_fetcher_image() {
+    version=$1
+    tag=fission/fetcher:$version
+
+    pushd $DIR/environments/fetcher/cmd
+
+    ./build.sh
+    docker build -t $tag .
+
+    popd    
+}
+
+push_fetcher_image() {
+    version=$1
+    tag=fission/fetcher:$version
+    docker push $tag
+}
+
+build_and_push_env_image() {
+    version=$1
+    envdir=$2
+    imgname=$3
+
+    echo "Building $envdir -> $imgname:$version"
+    
+    pushd $DIR/environments/$envdir
+    if [ -f build.sh ]
+    then
+       ./build.sh
+    fi
+    docker build -t fission/$imgname:$version .
+    docker push fission/$imgname:$version
+    popd
+}
+
+build_and_push_all_envs() {
+    version=$1
+
+    build_push_env_image $version nodejs node-env
+    build_push_env_image $version binary binary-env
+    build_push_env_image $version dotnet dotnet-env
+    build_push_env_image $version go go-env
+    build_push_env_image $version perl perl-env
+    build_push_env_image $version php7 php-env
+    build_push_env_image $version python3 python-env
+    build_push_env_image $version ruby ruby-env  
 }
 
 build_all() {
@@ -92,7 +140,13 @@ build_all() {
     mkdir -p $BUILDDIR
     
     build_fission_bundle_image $version
+    build_fetcher_image $version
     build_all_cli
+}
+
+push_all() {
+    push_fission_bundle_image $version
+    push_fetcher_image $version    
 }
 
 make_github_release() {
@@ -145,9 +199,10 @@ make_github_release() {
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
 #check_branch
-check_clean
+#check_clean
 version=$1
 
 build_all $version
-push_fission_bundle_image $version
-make_github_release $version
+push_all $version
+build_and_push_all_envs $version 
+#make_github_release $version
