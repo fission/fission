@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set -e
-#set -x
+set -x
 
 DIR=$(realpath $(dirname $0))/../
 BUILDDIR=$(realpath $DIR)/build
@@ -113,14 +113,27 @@ build_and_push_env_image() {
 build_and_push_all_envs() {
     version=$1
 
-    build_push_env_image $version nodejs node-env
-    build_push_env_image $version binary binary-env
-    build_push_env_image $version dotnet dotnet-env
-    build_push_env_image $version go go-env
-    build_push_env_image $version perl perl-env
-    build_push_env_image $version php7 php-env
-    build_push_env_image $version python3 python-env
-    build_push_env_image $version ruby ruby-env  
+    build_and_push_env_image $version nodejs node-env
+    build_and_push_env_image $version binary binary-env
+    build_and_push_env_image $version dotnet dotnet-env
+    build_and_push_env_image $version go go-env
+    build_and_push_env_image $version perl perl-env
+    build_and_push_env_image $version php7 php-env
+    build_and_push_env_image $version python3 python-env
+    build_and_push_env_image $version ruby ruby-env  
+}
+
+build_charts() {
+    version=$1
+    mkdir -p $BUILDDIR/charts
+    pushd $DIR/charts
+    for c in all core
+    do
+	tgz=fission-$c-$version.tgz
+	tar czvf $tgz fission-$c/
+	mv $tgz $BUILDDIR/charts/
+    done
+    popd
 }
 
 build_all() {
@@ -142,6 +155,7 @@ build_all() {
     build_fission_bundle_image $version
     build_fetcher_image $version
     build_all_cli
+    build_charts $version
 }
 
 push_all() {
@@ -149,7 +163,7 @@ push_all() {
     push_fetcher_image $version    
 }
 
-make_github_release() {
+tag_and_release() {
     version=$1
     gittag=$version
 
@@ -167,10 +181,13 @@ make_github_release() {
 	   --name "$version" \
 	   --description "$version" \
 	   --pre-release
+}
 
-    # attach files
-
+attach_github_release() {
+    version=$1
+    gittag=$version
     # cli
+    echo "Uploading osx cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
@@ -178,6 +195,7 @@ make_github_release() {
 	   --name fission-cli-osx \
 	   --file $BUILDDIR/cli/osx/fission
 
+    echo "Uploading linux cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
@@ -185,24 +203,47 @@ make_github_release() {
 	   --name fission-cli-linux \
 	   --file $BUILDDIR/cli/linux/fission
 
+    echo "Uploading windows cli"
     gothub upload \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-windows.exe \
 	   --file $BUILDDIR/cli/windows/fission.exe
+}
+
+attach_github_release_charts() {
+    version=$1
+    gittag=$version
 
     # helm charts
-    # todo
+    gothub upload \
+	   --user fission \
+	   --repo fission \
+	   --tag $gittag \
+	   --name fission-all-$version.tgz \
+	   --file $BUILDDIR/charts/fission-all-$version.tgz
+
+    gothub upload \
+	   --user fission \
+	   --repo fission \
+	   --tag $gittag \
+	   --name fission-core-$version.tgz \
+	   --file $BUILDDIR/charts/fission-core-$version.tgz
+
 }
 
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
-#check_branch
-#check_clean
+check_branch
+check_clean
 version=$1
 
 build_all $version
 push_all $version
 build_and_push_all_envs $version 
-#make_github_release $version
+build_charts $version
+
+tag_and_release $version
+attach_github_release_cli $version
+attach_github_release_charts $version
