@@ -10,7 +10,7 @@ serviceType: LoadBalancer
 image: fission/fission-bundle
 
 ## Fission image version
-imageTag: v0.2.1-rc
+imageTag: v0.2.1-rc2
 
 ## Image pull policy
 pullPolicy: IfNotPresent
@@ -19,7 +19,7 @@ pullPolicy: IfNotPresent
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: v0.2.1-rc
+fetcherImageTag: v0.2.1-rc2
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
