@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set -e
-set -x
+#set -x
 
 DIR=$(realpath $(dirname $0))/../
 BUILDDIR=$(realpath $DIR)/build
@@ -183,12 +183,13 @@ tag_and_release() {
 	   --pre-release
 }
 
-attach_github_release() {
+attach_github_release_cli() {
     version=$1
     gittag=$version
     # cli
     echo "Uploading osx cli"
     gothub upload \
+	   --replace \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
@@ -197,6 +198,7 @@ attach_github_release() {
 
     echo "Uploading linux cli"
     gothub upload \
+	   --replace \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
@@ -205,6 +207,7 @@ attach_github_release() {
 
     echo "Uploading windows cli"
     gothub upload \
+	   --replace \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
@@ -218,6 +221,7 @@ attach_github_release_charts() {
 
     # helm charts
     gothub upload \
+	   --replace \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
@@ -225,6 +229,7 @@ attach_github_release_charts() {
 	   --file $BUILDDIR/charts/fission-all-$version.tgz
 
     gothub upload \
+	   --replace \
 	   --user fission \
 	   --repo fission \
 	   --tag $gittag \
