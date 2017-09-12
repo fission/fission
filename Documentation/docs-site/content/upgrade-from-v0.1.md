@@ -34,47 +34,73 @@ rigorous about it from the beta release onwards.
 
 ## How to Upgrade
 
-1. Get the v0.2 CLI
-1. Get your Fission state from your old install
-1. Install v0.2.1
-1. Restore your Fission state
+1. Get the v0.2.1 CLI
+1. Get the Fission state from your old install
+1. Install Fission v0.2.1
+1. Restore Fission state into your new install
 1. Destroy your old install
 
 ### Get the new CLI
 
+#### OS X
+
 ```
-curl -Lo fission https://...
+$ curl -Lo fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
+
+#### Linux
+
+```
+$ curl -Lo fission https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+```
+
+#### Windows
+
+For Windows, you can use the linux binary on WSL. Or you can download
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/v0.2.1-rc/fission-cli-windows.exe)
 
 ### Get Fission state from v0.1 install
 
 ```
-fission upgrade dump
+fission --server <your V1 server> upgrade dump --file state.json
 ```
 
-This will create a JSON file with all your fission state in the current directory.
+You can skip the --server argument if you have the environment
+variable `$FISSION_URL` set to point at a v0.1 Fission server.
+
+This will create a JSON file with all your fission state in the
+current directory.
 
 ### Install the new version
 
-Follow the [install guide](../install), but you will need to ensure your two installs don't
-conflict. To do that, use separate namespaces and ensure nodeports don't conflict.  Install with a
-command similar to this:
+Read the [install guide](../install).  You can follow all of it, except that you will need to
+ensure your two installs don't conflict.  To do that, use separate namespaces and ensure nodeports
+don't conflict.  Install with a command similar to this:
 
 ```
 helm install fission-all --namespace fission2 --set controllerPort=31303,routerPort=31304,natsStreamingPort=31305,functionNamespace=fission2-function
 ```
 
+This installs fission in the `fission2` namespace and runs functions
+in the `fission2-function` namespace.
+
 ### Restore your Fission state into Fission v0.2.1
 
 ```
-fission upgrade restore
+fission upgrade restore --file state.json
 ```
 
-This uses the file created in the first step.
+This commands needs $FISSION_URL set to point to new fission installation.
+
+It uses the file created in the first step.  It doesn't modify state.json.
+
+(Note that you can run this restore on any cluster; it doesn't have the be the same kubernetes
+cluster as your old install.)
 
 ### Verify
 
-How exactly you do this is up to you! But, verify that your new install is working.
+How exactly you do this is up to you! But, at a minimum, run `fission
+fn list` to check that all the functions you expect are there.
 
 ### Switch over
 
@@ -82,7 +108,8 @@ If you had exposed fission's router to the outside world, switch over to using t
    
 ### Destroy your old install
 
-Once you're no longer using the old install, you can destroy it with:
+Once you're no longer using the old install, you can destroy it by
+deleting the namespaces that was installed in.
 
 ```
 kubectl delete namespace fission fission-function
