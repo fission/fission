@@ -122,9 +122,10 @@ func main() {
 		{Name: "list", Usage: "List all watches", Flags: []cli.Flag{}, Action: wList},
 	}
 
+	upgradeFileFlag := cli.StringFlag{Name: "file", Usage: "JSON file containing all fission state"}
 	upgradeSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Dump all state from a v0.1 fission installation", Flags: nil, Action: upgradeDumpState},
-		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2 install", Flags: nil, Action: upgradeRestoreState},
+		{Name: "dump", Usage: "Dump all state from a v0.1 fission installation", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeDumpState},
+		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2 install", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeRestoreState},
 	}
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
