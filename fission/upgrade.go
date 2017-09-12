@@ -187,7 +187,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 	fmt.Println("Getting functions")
 	// get each function
 	funcs := make(map[v1.Metadata]v1.Function)
-	for m, _ := range funcMetaSet {
+	for m := range funcMetaSet {
 		if len(m.Uid) != 0 {
 			resp = get(fmt.Sprintf("%v/functions/%v?uid=%v", v1url, m.Name, m.Uid))
 		} else {
