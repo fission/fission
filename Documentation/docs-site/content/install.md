@@ -109,7 +109,7 @@ $ helm install --namespace fission https://github.com/fission/fission/releases/d
 
 ### Install the Fission CLI
 
-#### Mac OS
+#### OS X
 
 Get the CLI binary for Mac:
 
