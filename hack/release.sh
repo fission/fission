@@ -9,7 +9,7 @@ BUILDDIR=$(realpath $DIR)/build
 # Ensure we're on the master branch
 check_branch() {
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
-    if $curr_branch != "master"
+    if [ $curr_branch != "master" ]
     then
 	echo "Not on master branch."
 	exit 1
