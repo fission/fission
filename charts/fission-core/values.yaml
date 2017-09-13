@@ -43,3 +43,7 @@ persistence:
   # storageClass:
   accessMode: ReadWriteOnce
   size: 8Gi
+
+## Analytics let us count how many people installed fission. Set to
+## false to disable analytics.
+analytics: true
