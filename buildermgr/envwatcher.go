@@ -147,7 +147,6 @@ func (envw *environmentWatcher) watchEnvironments() {
 		}
 
 		for {
-			log.Println("watching")
 			ev, more := <-wi.ResultChan()
 			if !more {
 				// restart watch from last rv

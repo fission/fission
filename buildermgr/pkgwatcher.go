@@ -78,7 +78,6 @@ func (pkgw *packageWatcher) watchPackages() {
 		}
 
 		for {
-			log.Println("watching")
 			ev, more := <-wi.ResultChan()
 			if !more {
 				break
