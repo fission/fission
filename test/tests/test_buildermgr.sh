@@ -8,6 +8,14 @@ PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
 
 fn=python-srcbuild-$(date +%s)
 
+checkFunctionResponse() {
+    echo "Doing an HTTP GET on the function's route"
+    response=$(curl http://$FISSION_ROUTER/$1)
+
+    echo "Checking for valid response"
+    echo $response | grep -i "a: 1 b: {c: 3, d: 4}"
+}
+
 # Create a function with source package in python to test builder manger functionality
 
 echo "Pre-test cleanup"
@@ -23,7 +31,7 @@ sleep 20
 echo "Creating source pacakage"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 
-echo "Creating function"
+echo "Creating function " $fn
 fission fn create --name $fn --env python --srcpkg demo-src-pkg.zip --codepath /userfunc/user/user
 trap "fission fn delete --name $fn" EXIT
 
@@ -40,14 +48,18 @@ response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
   -H 'content-type: application/json' \
   -d "{\"package\": {\"namespace\": \"default\",\"name\": \"$pkg\"}}")
 
-echo "Waiting for builder manager to finish the build"
-sleep 10
+echo "Waiting for builder manager to finish the build triggered by the http request"
+sleep 20
+checkFunctionResponse $fn
 
-echo "Doing an HTTP GET on the function's route"
-response=$(curl http://$FISSION_ROUTER/$fn)
+echo "Updating function " $fn
+fission fn update --name $fn --srcpkg demo-src-pkg.zip
+trap "fission fn delete --name $fn" EXIT
 
-echo "Checking for valid response"
-echo $response | grep -i "a: 1 b: {c: 3, d: 4}"
+echo "Waiting for builder manager to finish the build triggered by the packageWatcher"
+sleep 20
+
+checkFunctionResponse $fn
 
 # crappy cleanup, improve this later
 kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
