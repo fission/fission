@@ -34,9 +34,11 @@ echo "Waiting for router to catch up"
 sleep 3
 
 echo "Doing an HTTP POST on the builder manager's route to start a build"
+pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.packageref.name}')
+echo $pkg
 response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
   -H 'content-type: application/json' \
-  -d "{\"function\": {\"namespace\": \"default\",\"name\": \"$fn\"}}")
+  -d "{\"package\": {\"namespace\": \"default\",\"name\": \"$pkg\"}}")
 
 echo "Waiting for builder manager to finish the build"
 sleep 10
