@@ -307,7 +307,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--builderMgrPort", "8889"]
+        args: ["--builderMgrPort", "8889", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"

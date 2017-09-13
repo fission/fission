@@ -26,7 +26,7 @@ fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON
 trap "fission env delete --name python" EXIT
 
 echo "Waiting for env builder to catch up"
-sleep 20
+sleep 30
 
 echo "Creating source pacakage"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
@@ -49,7 +49,23 @@ response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
   -d "{\"package\": {\"namespace\": \"default\",\"name\": \"$pkg\"}}")
 
 echo "Waiting for builder manager to finish the build triggered by the http request"
-sleep 20
+sleep 30
+
+# for ci debug
+
+kubectl get svc --all-namespaces
+kubectl get pod --all-namespaces
+
+mgrns=$(kubectl get pod --all-namespaces|grep buildermgr|awk '{print $1}')
+mgrpod=$(kubectl get pod --all-namespaces|grep buildermgr|awk '{print $2}')
+kubectl --namespace $mgrns logs $mgrpod
+
+envpod=$(kubectl --namespace fission-builder get pod|grep python|awk '{print $1}')
+kubectl --namespace fission-builder describe pod $envpod
+kubectl --namespace fission-builder get pod $envpod -o yaml
+kubectl --namespace fission-builder logs $envpod -c fetcher
+kubectl --namespace fission-builder logs $envpod -c builder
+
 checkFunctionResponse $fn
 
 echo "Updating function " $fn
@@ -57,7 +73,7 @@ fission fn update --name $fn --srcpkg demo-src-pkg.zip
 trap "fission fn delete --name $fn" EXIT
 
 echo "Waiting for builder manager to finish the build triggered by the packageWatcher"
-sleep 20
+sleep 30
 
 checkFunctionResponse $fn
 

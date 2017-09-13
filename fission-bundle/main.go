@@ -121,7 +121,7 @@ Usage:
   fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
-  fission-bundle --builderMgrPort=<port>
+  fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<storageSvcUrl>]
   fission-bundle --logger
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
@@ -152,7 +152,7 @@ Options:
 
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
-	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storageservice.fission")
+	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
