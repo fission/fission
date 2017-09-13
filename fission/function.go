@@ -65,6 +65,36 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
+func createPackage(client *client.Client, envName, srcPkgName, deployPkgName string) *api.ObjectMeta {
+	pkgSpec := fission.PackageSpec{
+		Environment: fission.EnvironmentReference{
+			Namespace: api.NamespaceDefault,
+			Name:      envName,
+		},
+		Status: fission.PackageStatus{
+			BuildStatus: fission.BuildStatusPending,
+		},
+	}
+	if len(srcPkgName) > 0 {
+		pkgSpec.Source = *createArchive(client, srcPkgName)
+	}
+	if len(deployPkgName) > 0 {
+		pkgSpec.Deployment = *createArchive(client, deployPkgName)
+	}
+
+	pkgName := strings.ToLower(uuid.NewV4().String())
+	pkg := &tpr.Package{
+		Metadata: api.ObjectMeta{
+			Name:      pkgName,
+			Namespace: api.NamespaceDefault,
+		},
+		Spec: pkgSpec,
+	}
+	pkgMetadata, err := client.PackageCreate(pkg)
+	checkErr(err, "create package")
+	return pkgMetadata
+}
+
 func getContents(filePath string) []byte {
 	var code []byte
 	var err error
@@ -100,24 +130,7 @@ func fnCreate(c *cli.Context) error {
 
 	codepath := c.String("codepath")
 
-	var pkgSpec fission.PackageSpec
-	if len(srcPkgName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcPkgName)
-	}
-	if len(deployPkgName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployPkgName)
-	}
-
-	pkgName := strings.ToLower(uuid.NewV4().String())
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-		Spec: pkgSpec,
-	}
-	pkgMetadata, err := client.PackageCreate(pkg)
-	checkErr(err, "create package")
+	pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName)
 
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -139,7 +152,8 @@ func fnCreate(c *cli.Context) error {
 			},
 		},
 	}
-	_, err = client.FunctionCreate(function)
+
+	_, err := client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -249,25 +263,15 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
-		// get existing package
-		pkg, err := client.PackageGet(&api.ObjectMeta{
-			Name:      function.Spec.Package.PackageRef.Name,
-			Namespace: function.Spec.Package.PackageRef.Namespace,
-		})
-		// update package spec
-		if len(srcPkgName) > 0 {
-			archive := createArchive(client, srcPkgName)
-			pkg.Spec.Source = *archive
-		}
-		if len(deployPkgName) > 0 {
-			archive := createArchive(client, deployPkgName)
-			pkg.Spec.Deployment = *archive
-		}
-		// update package object
-		newpkg, err := client.PackageUpdate(pkg)
-		checkErr(err, "update package")
+		// create a new package for function
+		pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName)
+
 		// update function spec with resource version
-		function.Spec.Package.PackageRef.ResourceVersion = newpkg.ResourceVersion
+		function.Spec.Package.PackageRef = fission.PackageRef{
+			Namespace:       pkgMetadata.Namespace,
+			Name:            pkgMetadata.Name,
+			ResourceVersion: pkgMetadata.ResourceVersion,
+		}
 	}
 
 	if len(envName) > 0 {
