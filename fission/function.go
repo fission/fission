@@ -262,9 +262,14 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need --env or --code or --package or --srcpkg argument.")
 	}
 
+	if len(envName) > 0 {
+		function.Spec.Environment.Name = envName
+	}
+
 	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
 		// create a new package for function
-		pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName)
+		pkgMetadata := createPackage(client,
+			function.Spec.Environment.Name, srcPkgName, deployPkgName)
 
 		// update function spec with resource version
 		function.Spec.Package.PackageRef = fission.PackageRef{
@@ -272,10 +277,6 @@ func fnUpdate(c *cli.Context) error {
 			Name:            pkgMetadata.Name,
 			ResourceVersion: pkgMetadata.ResourceVersion,
 		}
-	}
-
-	if len(envName) > 0 {
-		function.Spec.Environment.Name = envName
 	}
 
 	_, err = client.FunctionUpdate(function)
