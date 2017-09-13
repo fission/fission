@@ -157,7 +157,10 @@ func MakeGenericPool(
 
 	go gp.choosePodService()
 
-	go gp.idlePodReaper()
+	// Unless specified otherwise, periodically cleanup inactive pods.
+	if env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
+		go gp.idlePodReaper()
+	}
 
 	return gp, nil
 }
@@ -202,8 +205,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		// Get pods; filter the ones that are ready
 		podList, err := gp.kubernetesClient.Core().Pods(gp.namespace).List(
 			api.ListOptions{
-				LabelSelector: labels.Set(
-					gp.deployment.Spec.Selector.MatchLabels).AsSelector(),
+				LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector(),
 			})
 		if err != nil {
 			return nil, err
@@ -228,8 +230,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 				readyPods = append(readyPods, &pod)
 			}
 		}
-		log.Printf("[%v] found %v ready pods of %v total",
-			newLabels, len(readyPods), len(podList.Items))
+		log.Printf("[%v] found %v ready pods of %v total", newLabels, len(readyPods), len(podList.Items))
 
 		// If there are no ready pods, wait and retry.
 		if len(readyPods) == 0 {
@@ -245,15 +246,17 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		// and make a good scheduling decision.
 		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
-		// Relabel.  If the pod already got picked and
-		// modified, this should fail; in that case just
-		// retry.
-		chosenPod.ObjectMeta.Labels = newLabels
-		log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
-		_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
-		if err != nil {
-			log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
-			continue
+		if gp.env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
+			// Relabel.  If the pod already got picked and
+			// modified, this should fail; in that case just
+			// retry.
+			chosenPod.ObjectMeta.Labels = newLabels
+			log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
+			_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
+			if err != nil {
+				log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
+				continue
+			}
 		}
 		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Now().Sub(startTime))
 		return chosenPod, nil
@@ -526,7 +529,7 @@ func (gp *GenericPool) GetFuncSvc(m *api.ObjectMeta) (*funcSvc, error) {
 	if gp.useSvc {
 		svcName := fmt.Sprintf("svc-%v", m.Name)
 		if len(m.UID) > 0 {
-			svcName += ("-" + string(m.UID))
+			svcName = fmt.Sprintf("%s-%v", svcName, m.UID)
 		}
 
 		labels := gp.labelsForFunction(m)

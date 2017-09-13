@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission/tpr"
+	"github.com/fission/fission"
 )
 
 type requestType int
@@ -86,9 +87,14 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[tpr.CacheKey(&req.env.Metadata)]
 			if !ok {
+				var poolSize int32 = 3
+				switch req.env.Spec.AllowedFunctionsPerContainer {
+				case fission.AllowedFunctionsPerContainerInfinite:
+					poolSize = 1
+				}
+
 				pool, err = MakeGenericPool(
-					gpm.fissionClient, gpm.kubernetesClient, req.env,
-					3, // TODO configurable/autoscalable
+					gpm.fissionClient, gpm.kubernetesClient, req.env, poolSize,
 					gpm.namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}

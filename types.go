@@ -163,7 +163,13 @@ type (
 		// Optional, but strongly encouraged. Used to populate
 		// links from UI, CLI, etc.
 		DocumentationURL string `json:"documentationurl"`
+
+		// Optional
+		// Defaults to 'Single'
+		AllowedFunctionsPerContainer AllowedFunctionsPerContainer
 	}
+
+	AllowedFunctionsPerContainer string
 
 	//
 	// Triggers
@@ -196,7 +202,7 @@ type (
 	// TimeTrigger invokes the specific function at a time or
 	// times specified by a cron string.
 	TimeTriggerSpec struct {
-		Cron              string `json:"cron"`
+		Cron string       `json:"cron"`
 		FunctionReference `json:"functionref"`
 	}
 
@@ -251,6 +257,11 @@ const (
 	BuildStatusRunning   = "running"
 	BuildStatusSucceeded = "succeeded"
 	BuildStatusFailed    = "failed"
+)
+
+const (
+	AllowedFunctionsPerContainerSingle   = "single"
+	AllowedFunctionsPerContainerInfinite = "infinite"
 )
 
 const (
