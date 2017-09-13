@@ -50,21 +50,21 @@ type (
 		service     *v1.Service
 	}
 
-	request struct {
+	envwRequest struct {
 		requestType
 		env      *tpr.Environment
 		envList  []tpr.Environment
-		respChan chan response
+		respChan chan envwResponse
 	}
 
-	response struct {
+	envwResponse struct {
 		builderInfo *builderInfo
 		err         error
 	}
 
 	environmentWatcher struct {
 		cache                  map[string]*builderInfo
-		requestChan            chan request
+		requestChan            chan envwRequest
 		builderNamespace       string
 		fissionClient          *tpr.FissionClient
 		kubernetesClient       *kubernetes.Clientset
@@ -98,7 +98,7 @@ func makeEnvironmentWatcher(fissionClient *tpr.FissionClient,
 
 	envWatcher := &environmentWatcher{
 		cache:                  make(map[string]*builderInfo),
-		requestChan:            make(chan request),
+		requestChan:            make(chan envwRequest),
 		builderNamespace:       builderNamespace,
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
@@ -136,7 +136,7 @@ func (envw *environmentWatcher) getDelOption() *api.DeleteOptions {
 }
 
 func (envw *environmentWatcher) watchEnvironments() {
-	envw.sync()
+	// envw.sync()
 	rv := ""
 	for {
 		wi, err := envw.fissionClient.Environments(api.NamespaceAll).Watch(api.ListOptions{
@@ -147,6 +147,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 		}
 
 		for {
+			log.Println("watching")
 			ev, more := <-wi.ResultChan()
 			if !more {
 				// restart watch from last rv
@@ -158,34 +159,31 @@ func (envw *environmentWatcher) watchEnvironments() {
 				time.Sleep(time.Second)
 				break
 			}
-			ht := ev.Object.(*tpr.Environment)
-			rv = ht.Metadata.ResourceVersion
+			env := ev.Object.(*tpr.Environment)
+			rv = env.Metadata.ResourceVersion
 			envw.sync()
 		}
 	}
 }
 
 func (envw *environmentWatcher) sync() {
-	for {
-		envList, err := envw.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
-		if err != nil {
-			log.Fatalf("Error syncing environment TPR resources: %v", err)
-		}
-
-		// Create environment builders for all environments
-		for i := range envList.Items {
-			env := envList.Items[i]
-			if len(env.Spec.Builder.Image) == 0 {
-				continue
-			}
-			_, err := envw.getEnvBuilder(&env)
-			if err != nil {
-				log.Printf("Error creating builder for %v: %v", env.Metadata.Name, err)
-			}
-		}
-
-		envw.cleanupEnvBuilders(envList.Items)
+	envList, err := envw.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
+	if err != nil {
+		log.Fatalf("Error syncing environment TPR resources: %v", err)
 	}
+
+	// Create environment builders for all environments
+	for i := range envList.Items {
+		env := envList.Items[i]
+		if len(env.Spec.Builder.Image) == 0 {
+			continue
+		}
+		_, err := envw.getEnvBuilder(&env)
+		if err != nil {
+			log.Printf("Error creating builder for %v: %v", env.Metadata.Name, err)
+		}
+	}
+	envw.cleanupEnvBuilders(envList.Items)
 }
 
 func (envw *environmentWatcher) service() {
@@ -198,12 +196,12 @@ func (envw *environmentWatcher) service() {
 			if !ok {
 				builderInfo, err := envw.createBuilder(req.env)
 				if err != nil {
-					req.respChan <- response{err: err}
+					req.respChan <- envwResponse{err: err}
 					continue
 				}
 				envw.cache[key] = builderInfo
 			}
-			req.respChan <- response{builderInfo: builderInfo}
+			req.respChan <- envwResponse{builderInfo: builderInfo}
 
 		case CLEANUP_BUILDERS:
 			latestEnvList := make(map[string]*tpr.Environment)
@@ -257,8 +255,8 @@ func (envw *environmentWatcher) service() {
 }
 
 func (envw *environmentWatcher) getEnvBuilder(env *tpr.Environment) (*builderInfo, error) {
-	respChan := make(chan response)
-	envw.requestChan <- request{
+	respChan := make(chan envwResponse)
+	envw.requestChan <- envwRequest{
 		requestType: GET_BUILDER,
 		env:         env,
 		respChan:    respChan,
@@ -268,7 +266,7 @@ func (envw *environmentWatcher) getEnvBuilder(env *tpr.Environment) (*builderInf
 }
 
 func (envw *environmentWatcher) cleanupEnvBuilders(envs []tpr.Environment) {
-	envw.requestChan <- request{
+	envw.requestChan <- envwRequest{
 		requestType: CLEANUP_BUILDERS,
 		envList:     envs,
 	}

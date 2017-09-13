@@ -1,108 +1,196 @@
+/*
+Copyright 2017 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package buildermgr
 
-import "github.com/fission/fission/tpr"
+import (
+	"errors"
+	"fmt"
+	"log"
+	"strings"
 
-func buildPackage(fissionClient *tpr.FissionClient, buildReq BuildRequest) (int, error) {
-	return 0, nil
-	// pkg, err := fissionClient.Package(
-	// 	buildReq.Package.Namespace).Get(buildReq.Package.Name)
-	// if err != nil {
-	// 	return 500, fmt.Errorf("Error getting package TPR info: %v", err)
-	// }
+	"k8s.io/client-go/1.5/kubernetes"
+	"k8s.io/client-go/1.5/pkg/api"
 
-	// if pkg.
+	"github.com/dchest/uniuri"
+	"github.com/fission/fission"
+	"github.com/fission/fission/builder"
+	builderClient "github.com/fission/fission/builder/client"
+	"github.com/fission/fission/environments/fetcher"
+	fetcherClient "github.com/fission/fission/environments/fetcher/client"
+	"github.com/fission/fission/tpr"
+)
 
-	// 	// ignore function with non-empty deployment package
-	// 	if len(fn.Spec.Deployment.PackageRef.Name) > 0 {
+func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes.Clientset,
+	builderNamespace string, storageSvcUrl string, buildReq BuildRequest) (httpCode int, buildLogs string, err error) {
 
-	// 		e := "deployment package is not empty"
-	// 		log.Println(e)
-	// 		http.Error(w, e, 400)
-	// 		return
-	// 	}
+	pkg, err := fissionClient.Packages(
+		buildReq.Package.Namespace).Get(buildReq.Package.Name)
+	if err != nil {
+		e := fmt.Errorf("Error getting function TPR info: %v", err)
+		log.Println(e.Error())
+		return 500, "", e
+	}
 
-	// 	env, err := builderMgr.fissionClient.Environments(api.NamespaceDefault).Get(fn.Spec.EnvironmentName)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
+	// Only do build for pending packages
+	if pkg.Spec.Status.BuildStatus != fission.BuildStatusPending {
+		e := errors.New("package is not in pending state")
+		log.Println(e.Error())
+		return 400, "", e
+	}
 
-	// 	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
-	// 	srcPkgFilename := fmt.Sprintf("%v-%v", fn.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
-	// 	svc, err := builderMgr.kubernetesClient.Services(builderMgr.namespace).Get(svcName)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error getting builder service info %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
-	// 	svcIP := svc.Spec.ClusterIP
-	// 	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcIP))
-	// 	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcIP))
+	defer func() {
+		if httpCode != 200 {
+			// set failed status for package
+			_, err = updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
+			if err != nil {
+				log.Printf("Error setting package failed state: %v", err)
+			}
+		}
+	}()
 
-	// 	fetchReq := &fetcher.FetchRequest{
-	// 		FetchType: fetcher.FETCH_SOURCE,
-	// 		Function:  fn.Metadata,
-	// 		Filename:  srcPkgFilename,
-	// 	}
+	_, err = updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
+	if err != nil {
+		e := fmt.Errorf("Error setting package pending state: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
 
-	// 	err = fetcherC.Fetch(fetchReq)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error fetching source package: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
+	env, err := fissionClient.Environments(api.NamespaceDefault).Get(pkg.Spec.Environment.Name)
+	if err != nil {
+		e := fmt.Errorf("Error getting environment TPR info: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
 
-	// 	pkgBuildReq := &builder.PackageBuildRequest{
-	// 		SrcPkgFilename: srcPkgFilename,
-	// 		BuildCommand:   "build",
-	// 	}
+	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
+	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
+	svc, err := kubernetesClient.Services(builderNamespace).Get(svcName)
+	if err != nil {
+		e := fmt.Errorf("Error getting builder service info %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
+	svcIP := svc.Spec.ClusterIP
+	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcIP))
+	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcIP))
 
-	// 	resp, err := builderC.Build(pkgBuildReq)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error building deployment package: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
+	fetchReq := &fetcher.FetchRequest{
+		FetchType: fetcher.FETCH_SOURCE,
+		Package:   pkg.Metadata,
+		Filename:  srcPkgFilename,
+	}
 
-	// 	uploadReq := &fetcher.UploadRequest{
-	// 		DeployPkgFilename: resp.ArtifactFilename,
-	// 		StorageSvcUrl:     builderMgr.storageSvcUrl,
-	// 	}
+	err = fetcherC.Fetch(fetchReq)
+	if err != nil {
+		e := fmt.Errorf("Error fetching source package: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
 
-	// 	uploadResp, err := fetcherC.Upload(uploadReq)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
+	pkgBuildReq := &builder.PackageBuildRequest{
+		SrcPkgFilename: srcPkgFilename,
+		BuildCommand:   "build",
+	}
 
-	// 	pkgRef, err := builderMgr.createPackageFromUrl(fn.Metadata.Name,
-	// 		uploadResp.ArchiveDownloadUrl, uploadResp.Checksum)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error creating deployment package TPR resource: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
+	buildResp, err := builderC.Build(pkgBuildReq)
+	if err != nil {
+		e := fmt.Errorf("Error building deployment package: %v", err)
+		log.Println(e.Error())
+		return 500, buildResp.BuildLogs, e
+	}
 
-	// 	// Copy the FunctionName from fn.Spec.Source to fn.Spec.Deployment.
-	// 	if len(fn.Spec.Source.FunctionName) != 0 {
-	// 		pkgRef.FunctionName = fn.Spec.Source.FunctionName
-	// 	}
-	// 	fn.Spec.Deployment = *pkgRef
+	uploadReq := &fetcher.UploadRequest{
+		DeployPkgFilename: buildResp.ArtifactFilename,
+		StorageSvcUrl:     storageSvcUrl,
+	}
 
-	// 	_, err = builderMgr.fissionClient.Functions(fn.Metadata.Namespace).Update(fn)
-	// 	if err != nil {
-	// 		e := fmt.Sprintf("Error updating function deployment package spec: %v", err)
-	// 		log.Println(e)
-	// 		http.Error(w, e, 500)
-	// 		return
-	// 	}
-	// }
+	uploadResp, err := fetcherC.Upload(uploadReq)
+	if err != nil {
+		e := fmt.Errorf("Error uploading deployment package: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
+
+	newPkgRV, err := updatePackage(fissionClient, pkg,
+		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
+	if err != nil {
+		e := fmt.Errorf("Error creating deployment package TPR resource: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
+
+	fnList, err := fissionClient.
+		Functions(api.NamespaceDefault).List(api.ListOptions{})
+	if err != nil {
+		e := fmt.Errorf("Error getting function list: %v", err)
+		log.Println(e.Error())
+		return 500, e.Error(), e
+	}
+
+	// A package may be used by multiple functions. Update
+	// functions with old package resource version
+	for _, fn := range fnList.Items {
+		if fn.Spec.Package.PackageRef.Name == pkg.Metadata.Name &&
+			fn.Spec.Package.PackageRef.ResourceVersion != pkg.Metadata.ResourceVersion {
+			fn.Spec.Package.PackageRef.ResourceVersion = newPkgRV
+			// update TPR
+			_, err = fissionClient.Functions(fn.Metadata.Namespace).Update(&fn)
+			if err != nil {
+				e := fmt.Errorf("Error updating function package resource version: %v", err)
+				log.Println(e.Error())
+				return 500, e.Error(), e
+			}
+		}
+	}
+
+	return 200, buildResp.BuildLogs, nil
+}
+
+func updatePackage(fissionClient *tpr.FissionClient,
+	pkg *tpr.Package, status fission.BuildStatus, buildLogs string,
+	uploadResp *fetcher.UploadResponse) (string, error) {
+
+	// Kubernetes checks resource version before applying
+	// new resource config. The update operation will be
+	// rejected if the resource version in metadata is lower
+	// than the latest version. Set resource version empty
+	// string to skip resource version check.
+	pkg.Metadata.ResourceVersion = ""
+
+	pkg.Spec.Status = fission.PackageStatus{
+		BuildStatus: status,
+		BuildLog:    buildLogs,
+	}
+
+	if uploadResp != nil {
+		pkg.Spec.Deployment = fission.Archive{
+			Type:     fission.ArchiveTypeUrl,
+			URL:      uploadResp.ArchiveDownloadUrl,
+			Checksum: uploadResp.Checksum,
+		}
+	}
+
+	// update package spec
+	pkg, err := fissionClient.Packages(api.NamespaceDefault).Update(pkg)
+	if err != nil {
+		log.Printf("Error updating package: %v", err)
+		return "", err
+	}
+
+	// return resource version for function to update function package ref
+	return pkg.Metadata.ResourceVersion, nil
 }
