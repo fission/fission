@@ -71,15 +71,23 @@ func createPackage(client *client.Client, envName, srcPkgName, deployPkgName str
 			Namespace: api.NamespaceDefault,
 			Name:      envName,
 		},
-		Status: fission.PackageStatus{
-			BuildStatus: fission.BuildStatusPending,
-		},
+	}
+	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
+
+	if len(deployPkgName) > 0 {
+		pkgSpec.Deployment = *createArchive(client, deployPkgName)
+		if len(srcPkgName) > 0 {
+			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
+		}
 	}
 	if len(srcPkgName) > 0 {
 		pkgSpec.Source = *createArchive(client, srcPkgName)
+		// set pending status to package
+		pkgStatus = fission.BuildStatusPending
 	}
-	if len(deployPkgName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployPkgName)
+
+	pkgSpec.Status = fission.PackageStatus{
+		BuildStatus: pkgStatus,
 	}
 
 	pkgName := strings.ToLower(uuid.NewV4().String())
