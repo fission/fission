@@ -48,7 +48,7 @@ response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
   -H 'content-type: application/json' \
   -d "{\"package\": {\"namespace\": \"default\",\"name\": \"$pkg\"}}")
 
-echo "Waiting for builder manager to finish the build triggered by the http request"
+echo "Waiting for builder manager to finish the build triggered by http request"
 sleep 30
 
 # for ci debug
@@ -72,7 +72,7 @@ echo "Updating function " $fn
 fission fn update --name $fn --srcpkg demo-src-pkg.zip
 trap "fission fn delete --name $fn" EXIT
 
-echo "Waiting for builder manager to finish the build triggered by the packageWatcher"
+echo "Waiting for builder manager to finish the build triggered by packageWatcher"
 sleep 30
 
 checkFunctionResponse $fn

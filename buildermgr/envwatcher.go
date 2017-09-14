@@ -136,7 +136,6 @@ func (envw *environmentWatcher) getDelOption() *api.DeleteOptions {
 }
 
 func (envw *environmentWatcher) watchEnvironments() {
-	// envw.sync()
 	rv := ""
 	for {
 		wi, err := envw.fissionClient.Environments(api.NamespaceAll).Watch(api.ListOptions{
