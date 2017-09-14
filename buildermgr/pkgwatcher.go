@@ -28,10 +28,6 @@ import (
 	"github.com/fission/fission/tpr"
 )
 
-const (
-	BUILD = iota
-)
-
 type (
 	packageWatcher struct {
 		fissionClient    *tpr.FissionClient
@@ -49,11 +45,7 @@ func makePackageWatcher(fissionClient *tpr.FissionClient,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
 	}
-	go pkgw.service()
 	return pkgw
-}
-
-func (pkgw *packageWatcher) service() {
 }
 
 func (pkgw *packageWatcher) build(pkgMetadata api.ObjectMeta) {
