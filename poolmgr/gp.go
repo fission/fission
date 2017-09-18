@@ -511,13 +511,18 @@ func (gp *GenericPool) GetFuncSvc(m *api.ObjectMeta) (*funcSvc, error) {
 
 	err, existingFsvc := gp.fsCache.Add(*fsvc)
 	if err != nil {
-		// Some other thread beat us to it -- return the other thread's fsvc and clean up
-		// our own.
-		log.Printf("func svc already exists: %v", existingFsvc.podName)
-		go func() {
-			gp.kubernetesClient.Core().Pods(gp.namespace).Delete(fsvc.podName, nil)
-		}()
-		return existingFsvc, nil
+		if fe, ok := err.(fission.Error); ok {
+			if fe.Code == fission.ErrorNameExists {
+				// Some other thread beat us to it -- return the other thread's fsvc and clean up
+				// our own.
+				log.Printf("func svc already exists: %v", existingFsvc.podName)
+				go func() {
+					gp.kubernetesClient.Core().Pods(gp.namespace).Delete(fsvc.podName, nil)
+				}()
+				return existingFsvc, nil
+			}
+		}
+		return nil, err
 	}
 	return fsvc, nil
 }
