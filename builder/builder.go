@@ -98,7 +98,12 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
 	deployPkgFilename := fmt.Sprintf("%v-%v", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath := filepath.Join(builder.sharedVolumePath, deployPkgFilename)
-	buildLogs, err := builder.build(req.BuildCommand, srcPkgPath, deployPkgPath)
+	buildCmd := req.BuildCommand
+	if len(buildCmd) == 0 {
+		// use default build command
+		buildCmd = "build"
+	}
+	buildLogs, err := builder.build(buildCmd, srcPkgPath, deployPkgPath)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Error building source package: %v", err))
 		http.Error(w, e.Error(), 500)
