@@ -103,7 +103,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 
 	pkgBuildReq := &builder.PackageBuildRequest{
 		SrcPkgFilename: srcPkgFilename,
-		BuildCommand:   "build",
+		BuildCommand:   pkg.Spec.BuildCommand,
 	}
 
 	buildResp, err := builderC.Build(pkgBuildReq)

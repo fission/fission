@@ -32,7 +32,7 @@ echo "Creating source pacakage"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 
 echo "Creating function " $fn
-fission fn create --name $fn --env python --srcpkg demo-src-pkg.zip --codepath /userfunc/user/user
+fission fn create --name $fn --env python --srcpkg demo-src-pkg.zip --codepath /userfunc/user/user --buildcmd './build.sh'
 trap "fission fn delete --name $fn" EXIT
 
 echo "Creating route"
