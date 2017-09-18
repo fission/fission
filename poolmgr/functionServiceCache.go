@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/client-go/1.5/pkg/api"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/tpr"
 )
@@ -134,6 +135,7 @@ func (fsc *functionServiceCache) GetByFunction(m *api.ObjectMeta) (*funcSvc, err
 	return &fsvcCopy, nil
 }
 
+// TODO: error should be second return
 func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	err, existing := fsc.byFunction.Set(tpr.CacheKey(fsvc.function), &fsvc)
 	if err != nil {
@@ -152,13 +154,25 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	fsvc.ctime = now
 	fsvc.atime = now
 
+	// Add to byAddress and byPod caches. Ignore NameExists errors
+	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byAddress.Set(fsvc.address, *fsvc.function)
 	if err != nil {
+		if fe, ok := err.(fission.Error); ok {
+			if fe.Code == fission.ErrorNameExists {
+				err = nil
+			}
+		}
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
 	err, _ = fsc.byPod.Set(fsvc.podName, *fsvc.function)
 	if err != nil {
+		if fe, ok := err.(fission.Error); ok {
+			if fe.Code == fission.ErrorNameExists {
+				err = nil
+			}
+		}
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}

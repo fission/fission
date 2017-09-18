@@ -17,7 +17,6 @@ limitations under the License.
 package cache
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -114,7 +113,7 @@ func (c *Cache) service() {
 				val := c.cache[req.key]
 				val.atime = time.Now()
 				resp.existingValue = val.value
-				resp.error = errors.New("value already exists")
+				resp.error = fission.MakeError(fission.ErrorNameExists, "key already exists")
 			} else {
 				c.cache[req.key] = &Value{
 					value: req.value,
