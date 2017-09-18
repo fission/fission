@@ -65,10 +65,11 @@ type (
 	BuildStatus string
 
 	PackageSpec struct {
-		Environment EnvironmentReference `json:"environment"`
-		Source      Archive              `json:"source"`
-		Deployment  Archive              `json:"deployment"`
-		Status      PackageStatus        `json:"status"`
+		Environment  EnvironmentReference `json:"environment"`
+		Source       Archive              `json:"source"`
+		Deployment   Archive              `json:"deployment"`
+		Status       PackageStatus        `json:"status"`
+		BuildCommand string               `json:"buildcmd"`
 		// In the future, we can have a debug build here too
 	}
 	PackageStatus struct {

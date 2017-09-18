@@ -65,7 +65,7 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcPkgName, deployPkgName string) *api.ObjectMeta {
+func createPackage(client *client.Client, envName, srcPkgName, deployPkgName, buildcmd string) *api.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: api.NamespaceDefault,
@@ -88,6 +88,10 @@ func createPackage(client *client.Client, envName, srcPkgName, deployPkgName str
 
 	pkgSpec.Status = fission.PackageStatus{
 		BuildStatus: pkgStatus,
+	}
+
+	if len(buildcmd) > 0 {
+		pkgSpec.BuildCommand = buildcmd
 	}
 
 	pkgName := strings.ToLower(uuid.NewV4().String())
@@ -137,8 +141,12 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	codepath := c.String("codepath")
+	buildcmd := c.String("buildcmd")
+	if len(buildcmd) == 0 {
+		buildcmd = "build"
+	}
 
-	pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName)
+	pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName, buildcmd)
 
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -274,10 +282,22 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.Environment.Name = envName
 	}
 
+	pkg, err := client.PackageGet(&api.ObjectMeta{
+		Name:      function.Spec.Package.PackageRef.Name,
+		Namespace: function.Spec.Package.PackageRef.Namespace,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", function.Spec.Package.PackageRef.Name))
+
+	buildcmd := c.String("buildcmd")
+	if len(buildcmd) == 0 {
+		// use previous build command if not specified.
+		buildcmd = pkg.Spec.BuildCommand
+	}
+
 	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
 		// create a new package for function
 		pkgMetadata := createPackage(client,
-			function.Spec.Environment.Name, srcPkgName, deployPkgName)
+			function.Spec.Environment.Name, srcPkgName, deployPkgName, buildcmd)
 
 		// update function spec with resource version
 		function.Spec.Package.PackageRef = fission.PackageRef{
