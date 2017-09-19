@@ -65,7 +65,7 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcPkgName, deployPkgName, buildcmd string) *api.ObjectMeta {
+func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *api.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: api.NamespaceDefault,
@@ -74,14 +74,14 @@ func createPackage(client *client.Client, envName, srcPkgName, deployPkgName, bu
 	}
 	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
 
-	if len(deployPkgName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployPkgName)
-		if len(srcPkgName) > 0 {
+	if len(deployArchiveName) > 0 {
+		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
+		if len(srcArchiveName) > 0 {
 			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
 		}
 	}
-	if len(srcPkgName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcPkgName)
+	if len(srcArchiveName) > 0 {
+		pkgSpec.Source = *createArchive(client, srcArchiveName)
 		// set pending status to package
 		pkgStatus = fission.BuildStatusPending
 	}
@@ -119,6 +119,10 @@ func getContents(filePath string) []byte {
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	if len(c.String("package")) > 0 {
+		fatal("--package is deprecated, please use --deploy instead.")
+	}
+
 	fnName := c.String("name")
 	if len(fnName) == 0 {
 		fatal("Need --name argument.")
@@ -129,15 +133,14 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --env argument.")
 	}
 
-	srcPkgName := c.String("srcpkg")
-
-	deployPkgName := c.String("code")
-	if len(deployPkgName) == 0 {
-		deployPkgName = c.String("package")
+	srcArchiveName := c.String("src")
+	deployArchiveName := c.String("code")
+	if len(deployArchiveName) == 0 {
+		deployArchiveName = c.String("deploy")
 	}
 
-	if len(srcPkgName) == 0 && len(deployPkgName) == 0 {
-		fatal("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
+	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
+		fatal("Need --code or --deploy to specify deployment archive, or use --src to specify source archive.")
 	}
 
 	entrypoint := c.String("entrypoint")
@@ -146,7 +149,7 @@ func fnCreate(c *cli.Context) error {
 		buildcmd = "build"
 	}
 
-	pkgMetadata := createPackage(client, envName, srcPkgName, deployPkgName, buildcmd)
+	pkgMetadata := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 
 	function := &tpr.Function{
 		Metadata: api.ObjectMeta{
@@ -261,6 +264,10 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
+	if len(c.String("package")) > 0 {
+		fatal("--package is deprecated, please use --deploy instead.")
+	}
+
 	function, err := client.FunctionGet(&api.ObjectMeta{
 		Name:      fnName,
 		Namespace: api.NamespaceDefault,
@@ -268,18 +275,23 @@ func fnUpdate(c *cli.Context) error {
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
 	envName := c.String("env")
-	deployPkgName := c.String("code")
-	if len(deployPkgName) == 0 {
-		deployPkgName = c.String("package")
+	deployArchiveName := c.String("code")
+	if len(deployArchiveName) == 0 {
+		deployArchiveName = c.String("deploy")
 	}
-	srcPkgName := c.String("srcpkg")
+	srcArchiveName := c.String("src")
 
-	if len(envName) == 0 && len(deployPkgName) == 0 && len(srcPkgName) == 0 {
-		fatal("Need --env or --code or --package or --srcpkg argument.")
+	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 {
+		fatal("Need --env or --code or --package or --deploy argument.")
 	}
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
+	}
+
+	entrypoint := c.String("entrypoint")
+	if len(entrypoint) > 0 {
+		function.Spec.Package.FunctionName = entrypoint
 	}
 
 	pkg, err := client.PackageGet(&api.ObjectMeta{
@@ -294,10 +306,10 @@ func fnUpdate(c *cli.Context) error {
 		buildcmd = pkg.Spec.BuildCommand
 	}
 
-	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
+	if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
 		// create a new package for function
 		pkgMetadata := createPackage(client,
-			function.Spec.Environment.Name, srcPkgName, deployPkgName, buildcmd)
+			function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
 
 		// update function spec with resource version
 		function.Spec.Package.PackageRef = fission.PackageRef{

@@ -23,7 +23,7 @@ def loadv2():
     body = request.get_json()
     filepath = body['filepath']
     functionName = body['functionName']
-    # add filepath into sysoath for module import
+    # add filepath into syspath for module import
     sys.path.append(filepath)
     fn, path, desc = imp.find_module('user', [filepath])
     mod = imp.load_module('user', fn, path, desc)
