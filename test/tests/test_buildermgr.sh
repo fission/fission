@@ -13,6 +13,7 @@ checkFunctionResponse() {
     response=$(curl http://$FISSION_ROUTER/$1)
 
     echo "Checking for valid response"
+    echo $response
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}"
 }
 
