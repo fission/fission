@@ -81,13 +81,13 @@ func makeEnvironmentWatcher(fissionClient *tpr.FissionClient,
 		fetcherImage = "fission/fetcher"
 	}
 
-	fetcherImagePullPolicyS := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicyS) == 0 {
-		fetcherImagePullPolicyS = "IfNotPresent"
+	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
+	if len(fetcherImagePullPolicy) == 0 {
+		fetcherImagePullPolicy = "IfNotPresent"
 	}
 
 	var pullPolicy v1.PullPolicy
-	switch fetcherImagePullPolicyS {
+	switch fetcherImagePullPolicy {
 	case "Always":
 		pullPolicy = v1.PullAlways
 	case "Never":

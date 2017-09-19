@@ -270,6 +270,8 @@ spec:
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: RUNTIME_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
       serviceAccount: fission-svc
 
 ---

@@ -51,6 +51,8 @@ response=$(curl -X POST $FISSION_URL/proxy/buildermgr/v1/build \
 echo "Waiting for builder manager to finish the build triggered by http request"
 sleep 30
 
+checkFunctionResponse $fn
+
 # for ci debug
 
 kubectl get svc --all-namespaces
@@ -66,7 +68,9 @@ kubectl --namespace fission-builder get pod $envpod -o yaml
 kubectl --namespace fission-builder logs $envpod -c fetcher
 kubectl --namespace fission-builder logs $envpod -c builder
 
-checkFunctionResponse $fn
+envpod=$(kubectl --namespace fission-function get pod|grep python|awk '{print $1}')
+kubectl --namespace fission-function logs $envpod -c fetcher
+kubectl --namespace fission-function logs $envpod -c python
 
 echo "Updating function " $fn
 fission fn update --name $fn --srcpkg demo-src-pkg.zip
