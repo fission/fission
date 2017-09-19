@@ -71,6 +71,7 @@ checkFunctionResponse $fn
 echo "Updating function " $fn
 fission fn update --name $fn --srcpkg demo-src-pkg.zip
 trap "fission fn delete --name $fn" EXIT
+fission fn update --name $fn --src demo-src-pkg.zip
 
 echo "Waiting for builder manager to finish the build triggered by packageWatcher"
 sleep 30
