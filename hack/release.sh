@@ -106,7 +106,9 @@ build_and_push_env_image() {
        ./build.sh
     fi
     docker build -t fission/$imgname:$version .
+    docker tag  fission/$imgname:$version fission/$imgname:latest
     docker push fission/$imgname:$version
+    docker push fission/$imgname:latest
     popd
 }
 
