@@ -92,6 +92,8 @@ func (gpm *GenericPoolManager) service() {
 				case fission.AllowedFunctionsPerContainerInfinite:
 					poolSize = 1
 				}
+				log.Println("poolsize: ", poolSize)
+				log.Println("setting: ", req.env.Spec.AllowedFunctionsPerContainer)
 
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolSize,
