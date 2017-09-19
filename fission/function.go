@@ -140,7 +140,7 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
 	}
 
-	codepath := c.String("codepath")
+	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
 	if len(buildcmd) == 0 {
 		buildcmd = "build"
@@ -159,7 +159,7 @@ func fnCreate(c *cli.Context) error {
 				Namespace: api.NamespaceDefault,
 			},
 			Package: fission.FunctionPackageRef{
-				FunctionName: codepath,
+				FunctionName: entrypoint,
 				PackageRef: fission.PackageRef{
 					Namespace:       pkgMetadata.Namespace,
 					Name:            pkgMetadata.Name,

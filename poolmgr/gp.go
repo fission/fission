@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -66,6 +67,7 @@ type (
 		instanceId             string // poolmgr instance id
 		labelsForPool          map[string]string
 		requestChannel         chan *choosePodRequest
+		sharedMountPath        string
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -119,6 +121,7 @@ func MakeGenericPool(
 		instanceId:       instanceId,
 		fetcherImage:     fetcherImage,
 		useSvc:           false, // defaults off -- svc takes a second or more to become routable, slowing cold start
+		sharedMountPath:  "/userfunc",
 	}
 
 	switch fetcherImagePullPolicyS {
@@ -283,12 +286,12 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	return fmt.Sprintf("http://%v:8000/", podIP)
 }
 
-func (gp *GenericPool) getSpecializeUrl(podIP string) string {
+func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	u := os.Getenv("TEST_SPECIALIZE_URL")
 	if len(u) != 0 {
 		return u
 	}
-	return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
 }
 
 // specializePod chooses a pod, copies the required user-defined function to that pod
@@ -332,7 +335,6 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata.Name)
-	specializeUrl := gp.getSpecializeUrl(podIP)
 
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
@@ -342,18 +344,26 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 		return err
 	}
 
-	codepath := functionCodepath{
-		Codepath: fn.Spec.Package.FunctionName,
+	loadReq := fission.FunctionLoadRequest{
+		FilePath:     filepath.Join(gp.sharedMountPath, "user"),
+		FunctionName: fn.Spec.Package.FunctionName,
 	}
 
-	body, err := json.Marshal(codepath)
+	body, err := json.Marshal(loadReq)
 	if err != nil {
 		return err
 	}
 
 	for i := 0; i < maxRetries; i++ {
-		resp2, err := http.Post(specializeUrl,
-			"application/json", bytes.NewReader(body))
+		var resp2 *http.Response
+		// if functionName is empty, assume its environment v1
+		if len(loadReq.FunctionName) == 0 {
+			specializeUrl := gp.getSpecializeUrl(podIP, 1)
+			resp2, err = http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
+		} else {
+			specializeUrl := gp.getSpecializeUrl(podIP, 2)
+			resp2, err = http.Post(specializeUrl, "application/json", bytes.NewReader(body))
+		}
 		if err == nil && resp2.StatusCode < 300 {
 			// Success
 			resp2.Body.Close()
@@ -389,7 +399,6 @@ func (gp *GenericPool) createPool() error {
 	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
 		gp.env.Metadata.Name, gp.env.Metadata.UID, strings.ToLower(gp.poolInstanceId))
 
-	sharedMountPath := "/userfunc"
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
 			Name:   poolDeploymentName,
@@ -422,7 +431,7 @@ func (gp *GenericPool) createPool() error {
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: sharedMountPath,
+									MountPath: gp.sharedMountPath,
 								},
 							},
 						},
@@ -434,10 +443,10 @@ func (gp *GenericPool) createPool() error {
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: sharedMountPath,
+									MountPath: gp.sharedMountPath,
 								},
 							},
-							Command: []string{"/fetcher", sharedMountPath},
+							Command: []string{"/fetcher", gp.sharedMountPath},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",

@@ -9,19 +9,25 @@ from flask import Flask, request, abort, g
 
 app = Flask(__name__)
 
-codepath = '/userfunc/user'
-
 userfunc = None
 
 @app.route('/specialize', methods=['POST'])
 def load():
     global userfunc
-    body = request.get_json()
-    loadpath = body['codepath']
-    if loadpath != '':
-        sys.path.append(os.path.dirname(loadpath))
-        codepath = loadpath
     userfunc = (imp.load_source('user', codepath)).main
+    return ""
+
+@app.route('/v2/specialize', methods=['POST'])
+def loadv2():
+    global userfunc
+    body = request.get_json()
+    filepath = body['filepath']
+    functionName = body['functionName']
+    # add filepath into sysoath for module import
+    sys.path.append(filepath)
+    fn, path, desc = imp.find_module('user', [filepath])
+    mod = imp.load_module('user', fn, path, desc)
+    userfunc = getattr(mod, functionName)
     return ""
 
 @app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])
