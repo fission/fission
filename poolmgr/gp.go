@@ -62,6 +62,7 @@ type (
 		poolInstanceId         string                // small random string to uniquify pod names
 		fetcherImage           string
 		fetcherImagePullPolicy v1.PullPolicy
+		runtimeImagePullPolicy v1.PullPolicy
 		kubernetesClient       *kubernetes.Clientset
 		fissionClient          *tpr.FissionClient
 		instanceId             string // poolmgr instance id
@@ -81,6 +82,17 @@ type (
 	}
 )
 
+func getImagePullPolicy(policy string) v1.PullPolicy {
+	switch policy {
+	case "Always":
+		return v1.PullAlways
+	case "Never":
+		return v1.PullNever
+	default:
+		return v1.PullIfNotPresent
+	}
+}
+
 func MakeGenericPool(
 	fissionClient *tpr.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
@@ -96,9 +108,13 @@ func MakeGenericPool(
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
 	}
-	fetcherImagePullPolicyS := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicyS) == 0 {
-		fetcherImagePullPolicyS = "IfNotPresent"
+	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
+	if len(fetcherImagePullPolicy) == 0 {
+		fetcherImagePullPolicy = "IfNotPresent"
+	}
+	runtimeImagePullPolicy := os.Getenv("RUNTIME_IMAGE_PULL_POLICY")
+	if len(runtimeImagePullPolicy) == 0 {
+		runtimeImagePullPolicy = "IfNotPresent"
 	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
@@ -120,15 +136,9 @@ func MakeGenericPool(
 		sharedMountPath:  "/userfunc",
 	}
 
-	switch fetcherImagePullPolicyS {
-	case "Always":
-		gp.fetcherImagePullPolicy = v1.PullAlways
-	case "Never":
-		gp.fetcherImagePullPolicy = v1.PullNever
-	default:
-		gp.fetcherImagePullPolicy = v1.PullIfNotPresent
-	}
+	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
 
+	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
 
 	// Labels for generic deployment/RS/pods.
@@ -425,7 +435,7 @@ func (gp *GenericPool) createPool() error {
 						{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.Spec.Runtime.Image,
-							ImagePullPolicy:        v1.PullIfNotPresent,
+							ImagePullPolicy:        gp.runtimeImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
 								{
