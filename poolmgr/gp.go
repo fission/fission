@@ -79,10 +79,6 @@ type (
 		pod *v1.Pod
 		error
 	}
-
-	functionCodepath struct {
-		Codepath string `json:"codepath"`
-	}
 )
 
 func MakeGenericPool(
