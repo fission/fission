@@ -287,6 +287,9 @@ func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	if len(u) != 0 {
 		return u
 	}
+	if version == 1 {
+		return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	}
 	return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
 }
 
