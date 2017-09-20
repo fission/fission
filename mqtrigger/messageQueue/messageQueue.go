@@ -28,6 +28,7 @@ import (
 
 const (
 	NATS string = "nats-streaming"
+	ASQ  string = "azure-storage-queue"
 )
 
 const (
@@ -87,6 +88,8 @@ func MakeMessageQueueTriggerManager(fissionClient *crd.FissionClient, routerUrl 
 	switch mqConfig.MQType {
 	case NATS:
 		messageQueue, err = makeNatsMessageQueue(routerUrl, mqConfig)
+	case ASQ:
+		messageQueue, err = makeAsqMessageQueue(routerUrl, mqConfig)
 	default:
 		err = errors.New("No matched message queue type found")
 	}
@@ -222,6 +225,8 @@ func IsTopicValid(mqType string, topic string) bool {
 	switch mqType {
 	case NATS:
 		return isTopicValidForNats(topic)
+	case ASQ:
+		return isTopicValidForAzure(topic)
 	}
 	return false
 }

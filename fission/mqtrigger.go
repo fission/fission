@@ -48,8 +48,10 @@ func mqtCreate(c *cli.Context) error {
 		mqType = messageQueue.NATS
 	case messageQueue.NATS:
 		mqType = messageQueue.NATS
+	case messageQueue.ASQ:
+		mqType = messageQueue.ASQ
 	default:
-		fatal("Unknown message queue type, currently only \"nats-streaming\" is supported")
+		fatal("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue \" is supported")
 	}
 
 	// TODO: check topic availability

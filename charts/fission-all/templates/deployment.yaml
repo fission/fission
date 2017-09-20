@@ -444,6 +444,7 @@ spec:
 #      serviceAccount: fission-svc
 
 ---
+{{- if eq .Values.messageQueue.type "nats-streaming" }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -469,6 +470,7 @@ spec:
         - containerPort: 4222
           hostPort: 4222
           protocol: TCP
+{{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -492,9 +494,19 @@ spec:
         args: ["--mqt"]
         env:
         - name: MESSAGE_QUEUE_TYPE
-          value: nats-streaming
+          value: {{ .Values.messageQueue.type }}
+        {{- if eq .Values.messageQueue.type "nats-streaming" }}
         - name: MESSAGE_QUEUE_URL
           value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
+        {{- else if eq .Values.messageQueue.type "azure-storage-queue" }}
+        - name: AZURE_STORAGE_ACCOUNT_NAME
+          value: {{ required "An Azure storage account name is required." .Values.azureStorageQueue.accountName }}
+        - name: AZURE_STORAGE_ACCOUNT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: azure-storage-account-key
+              key: key
+        {{- end }}
       serviceAccount: fission-svc
 
 ---

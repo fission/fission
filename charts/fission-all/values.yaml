@@ -44,12 +44,21 @@ logger:
   fluentdImage: fission/fluentd
   fluentdImageTag: 0.5.0
 
+## Type of Queue you would like to use
+## currently supports nats-streaming, azure-storage-queue
+messageQueue:
+  type: nats-streaming
+
 ## Message queue trigger config
 ### NATS Streaming
 nats:
   authToken: "defaultFissionAuthToken"
   clusterID: "fissionMQTrigger"
 
+## Required if messageQueue type is azure-storage-queue
+azureStorageQueue:
+  key: ""
+  accountName: ""
 
 ## Persist data to a persistent volume.
 persistence:
