@@ -166,7 +166,7 @@ type (
 
 		// Optional
 		// Defaults to 'Single'
-		AllowedFunctionsPerContainer AllowedFunctionsPerContainer
+		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
 	}
 
 	AllowedFunctionsPerContainer string
