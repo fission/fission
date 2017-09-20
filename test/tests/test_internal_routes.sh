@@ -1,11 +1,14 @@
 #!/bin/bash
 
+#
+# Create two functions, make sure their internal http triggers invoke
+# them correctly.
+#
+
 set -euo pipefail
 
 ROOT=$(dirname $0)/../..
 
-
-# Create a hello world function in nodejs, test it with an http trigger
 echo "Pre-test cleanup"
 fission env delete --name nodejs || true
 
