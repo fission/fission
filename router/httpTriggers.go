@@ -115,9 +115,10 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	// Internal triggers for each function by name. Non-http
 	// triggers route into these.
 	for _, function := range ts.functions {
+		m := function.Metadata
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			function: &function.Metadata,
+			function: &m,
 			poolmgr:  ts.poolmgr,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name), fh.handler)
