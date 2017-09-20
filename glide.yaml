@@ -50,4 +50,7 @@ import:
 - package: github.com/mholt/archiver
 - package: github.com/pkg/errors
 - package: github.com/fsnotify/fsnotify
-
+- package: github.com/Azure/azure-sdk-for-go
+  version: ~12.4.0-beta
+- package: github.com/Azure/go-autorest
+  version: ~9.9.0
