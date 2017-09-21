@@ -324,18 +324,15 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 		return err
 	}
 
-	pkg, err := gp.fissionClient.
-		Packages(fn.Spec.Package.PackageRef.Namespace).
-		Get(fn.Spec.Package.PackageRef.Name)
-	if err != nil {
-		return err
-	}
 	targetFilename := "user"
 
 	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Package:   pkg.Metadata,
-		Filename:  targetFilename, // XXX use function id instead
+		Package: api.ObjectMeta{
+			Namespace: fn.Spec.Package.PackageRef.Namespace,
+			Name:      fn.Spec.Package.PackageRef.Name,
+		},
+		Filename: targetFilename, // XXX use function id instead
 	})
 	if err != nil {
 		return err
