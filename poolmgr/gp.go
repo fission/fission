@@ -318,7 +318,8 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	log.Printf("[%v] calling fetcher to copy function", metadata.Name)
 
 	fn, err := gp.fissionClient.
-		Functions(metadata.Namespace).Get(metadata.Name)
+		Functions(metadata.Namespace).
+		Get(metadata.Name)
 	if err != nil {
 		return err
 	}
@@ -356,11 +357,6 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
-
-	fn, err = gp.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
-	if err != nil {
-		return err
-	}
 
 	loadReq := fission.FunctionLoadRequest{
 		FilePath:     filepath.Join(gp.sharedMountPath, targetFilename),
