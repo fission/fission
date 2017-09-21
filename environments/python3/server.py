@@ -14,6 +14,8 @@ userfunc = None
 @app.route('/specialize', methods=['POST'])
 def load():
     global userfunc
+    # load user function from codepath
+    codepath = '/userfunc/user'
     userfunc = (imp.load_source('user', codepath)).main
     return ""
 
