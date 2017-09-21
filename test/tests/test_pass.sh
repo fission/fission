@@ -8,6 +8,6 @@ set -euo pipefail
 log "Test test, please ignore."
 
 log $FISSION_URL
-log $FISSION_NATS_URL
+log $FISSION_NATS_STREAMING_URL
 log $FISSION_ROUTER
 which fission
