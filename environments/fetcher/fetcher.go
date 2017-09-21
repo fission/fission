@@ -131,7 +131,7 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "", 405)
+		http.Error(w, "only POST is supported on this endpoint", 405)
 		return
 	}
 
@@ -246,7 +246,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "", 405)
+		http.Error(w, "only POST is supported on this endpoint", 405)
 		return
 	}
 
