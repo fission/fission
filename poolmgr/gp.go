@@ -62,7 +62,7 @@ type (
 		poolInstanceId         string                // small random string to uniquify pod names
 		fetcherImage           string
 		fetcherImagePullPolicy v1.PullPolicy
-		runtimeImagePullPolicy v1.PullPolicy
+		runtimeImagePullPolicy v1.PullPolicy // pull policy for generic pool to created env deployment
 		kubernetesClient       *kubernetes.Clientset
 		fissionClient          *tpr.FissionClient
 		instanceId             string // poolmgr instance id
@@ -132,8 +132,8 @@ func MakeGenericPool(
 		poolInstanceId:   uniuri.NewLen(8),
 		instanceId:       instanceId,
 		fetcherImage:     fetcherImage,
-		useSvc:           false, // defaults off -- svc takes a second or more to become routable, slowing cold start
-		sharedMountPath:  "/userfunc",
+		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		sharedMountPath:  "/userfunc", // used by generic pool when creating env deployment to specify the share volume path for fetcher & env
 	}
 
 	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
