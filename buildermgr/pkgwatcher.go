@@ -83,7 +83,7 @@ func (pkgw *packageWatcher) watchPackages() {
 			rv = pkg.Metadata.ResourceVersion
 
 			// only do build for packages in pending state
-			if pkg.Spec.Status.BuildStatus == fission.BuildStatusPending {
+			if pkg.Status.BuildStatus == fission.BuildStatusPending {
 				go pkgw.build(pkg.Metadata)
 			}
 		}

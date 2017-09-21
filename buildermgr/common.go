@@ -46,7 +46,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	}
 
 	// Only do build for pending packages
-	if pkg.Spec.Status.BuildStatus != fission.BuildStatusPending {
+	if pkg.Status.BuildStatus != fission.BuildStatusPending {
 		e := errors.New("package is not in pending state")
 		log.Println(e.Error())
 		return 400, "", e
@@ -171,7 +171,7 @@ func updatePackage(fissionClient *tpr.FissionClient,
 	// string to skip resource version check.
 	pkg.Metadata.ResourceVersion = ""
 
-	pkg.Spec.Status = fission.PackageStatus{
+	pkg.Status = fission.PackageStatus{
 		BuildStatus: status,
 		BuildLog:    buildLogs,
 	}

@@ -86,10 +86,6 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 		pkgStatus = fission.BuildStatusPending
 	}
 
-	pkgSpec.Status = fission.PackageStatus{
-		BuildStatus: pkgStatus,
-	}
-
 	if len(buildcmd) > 0 {
 		pkgSpec.BuildCommand = buildcmd
 	}
@@ -101,6 +97,9 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 			Namespace: api.NamespaceDefault,
 		},
 		Spec: pkgSpec,
+		Status: fission.PackageStatus{
+			BuildStatus: pkgStatus,
+		},
 	}
 	pkgMetadata, err := client.PackageCreate(pkg)
 	checkErr(err, "create package")
