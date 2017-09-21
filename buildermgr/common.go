@@ -51,6 +51,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error getting function TPR info: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -61,24 +62,13 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return e, fission.MakeError(400, e)
 	}
 
-	// use defer to check the return http code
-	// and update package status accordingly
-	defer func() {
-		if err.(fission.Error).Code != 200 {
-			// set failed status for package
-			_, err = updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
-			if err != nil {
-				log.Printf("Error setting package failed state: %v", err)
-			}
-		}
-	}()
-
 	// update package status to running state, so that
 	// we can know what status a package is through cli.
 	_, err = updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
 	if err != nil {
 		e := fmt.Sprintf("Error setting package pending state: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -86,6 +76,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -95,6 +86,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error getting builder service info %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 	svcIP := svc.Spec.ClusterIP
@@ -112,6 +104,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error fetching source package: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -125,6 +118,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -138,6 +132,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -147,6 +142,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error creating deployment package TPR resource: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -155,6 +151,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error getting function list: %v", err)
 		log.Println(e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -169,6 +166,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 			if err != nil {
 				e := fmt.Sprintf("Error updating function package resource version: %v", err)
 				log.Println(e)
+				updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
 				return e, fission.MakeError(500, e)
 			}
 		}
