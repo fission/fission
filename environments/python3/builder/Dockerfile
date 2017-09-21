@@ -1,4 +1,4 @@
-FROM alpine:3.4
+FROM alpine:3.5
 
 RUN apk update
 RUN apk add --no-cache python3 python3-dev build-base
