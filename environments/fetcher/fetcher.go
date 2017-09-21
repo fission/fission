@@ -35,11 +35,15 @@ type (
 		Filename      string           `json:"filename"`
 	}
 
+	// UploadRequest send from builder manager describes which
+	// deployment package should be upload to storage service.
 	UploadRequest struct {
 		DeployPkgFilename string `json:"deployPkgFilename"`
 		StorageSvcUrl     string `json:"storagesvcurl"`
 	}
 
+	// UploadResponse defines the download url of an archive and
+	// its checksum.
 	UploadResponse struct {
 		ArchiveDownloadUrl string           `json:"archiveDownloadUrl"`
 		Checksum           fission.Checksum `json:"checksum"`
