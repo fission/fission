@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+# Create a function with source package in python 
+# to test builder manger functionality. 
+# There are two ways to trigger the build
+# 1. manually trigger by http post 
+# 2. package watcher triggers the build if any changes to packages
+
 ROOT=$(dirname $0)/../..
 PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
 PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
@@ -16,8 +22,6 @@ checkFunctionResponse() {
     echo $response
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}"
 }
-
-# Create a function with source package in python to test builder manger functionality
 
 echo "Pre-test cleanup"
 fission env delete --name python || true
