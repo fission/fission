@@ -160,6 +160,8 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
+	log.Printf("Start downloading...")
+
 	if req.FetchType == FETCH_URL {
 		// fetch the file and save it to the tmp path
 		err := downloadUrl(req.Url, tmpPath)
@@ -215,7 +217,6 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-
 	}
 
 	// check file type here, if the file is a zip file unarchive it.
@@ -250,6 +251,12 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Now().Sub(startTime)
+		log.Printf("elapsed time in upload request = %v", elapsed)
+	}()
+
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -257,6 +264,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
 	var req UploadRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
@@ -278,6 +286,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Start uploading...")
 	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
 
 	fileID, err := ssClient.Upload(dstFilepath, nil)
@@ -309,6 +318,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Completed upload request")
 	w.Header().Add("Content-Type", "application/json")
 	w.Write(rBody)
 	w.WriteHeader(http.StatusOK)
