@@ -69,8 +69,8 @@ func runStorageSvc(port int, filePath string) {
 		filePath, subdir, port)
 }
 
-func runBuilderMgr(port int, storageSvcUrl string) {
-	err := buildermgr.Start(port, storageSvcUrl)
+func runBuilderMgr(port int, storageSvcUrl string, envBuilderNamespace string) {
+	err := buildermgr.Start(port, storageSvcUrl, envBuilderNamespace)
 	if err != nil {
 		log.Fatalf("Error starting buildermgr: %v", err)
 	}
@@ -121,7 +121,7 @@ Usage:
   fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
-  fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<storageSvcUrl>]
+  fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
   fission-bundle --logger
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
@@ -134,7 +134,7 @@ Options:
   --poolmgrUrl=<url>              Poolmgr URL. Not required if --poolmgrPort is specified.
   --routerUrl=<url>               Router URL.
   --etcdUrl=<etcdUrl>             Etcd URL.
-  --storageSvcUrl=<storageSvcUrl> StorageService URL.
+  --storageSvcUrl=<url>           StorageService URL.
   --filePath=<filePath>           Directory to store functions in.
   --namespace=<namespace>         Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
   --kubewatcher                   Start Kubernetes events watcher.
@@ -149,6 +149,7 @@ Options:
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
 	fissionNs := getStringArgWithDefault(arguments["--fission-namespace"], "fission")
+	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
@@ -193,7 +194,7 @@ Options:
 
 	if arguments["--builderMgrPort"] != nil {
 		port := getPort(arguments["--builderMgrPort"])
-		runBuilderMgr(port, storageSvcUrl)
+		runBuilderMgr(port, storageSvcUrl, envBuilderNs)
 	}
 
 	select {}

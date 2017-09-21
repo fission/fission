@@ -32,10 +32,6 @@ import (
 	"github.com/fission/fission/tpr"
 )
 
-const (
-	EnvBuilderNamespace = "fission-builder"
-)
-
 type (
 	BuildRequest struct {
 		Package api.ObjectMeta `json:"package"`
@@ -50,19 +46,20 @@ type (
 )
 
 func MakeBuilderMgr(fissionClient *tpr.FissionClient,
-	kubernetesClient *kubernetes.Clientset, storageSvcUrl string) *BuilderMgr {
+	kubernetesClient *kubernetes.Clientset, storageSvcUrl string,
+	envBuilderNamespace string) *BuilderMgr {
 
-	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, EnvBuilderNamespace)
+	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
-	pkgWatcher := makePackageWatcher(fissionClient, kubernetesClient, EnvBuilderNamespace, storageSvcUrl)
+	pkgWatcher := makePackageWatcher(fissionClient, kubernetesClient, envBuilderNamespace, storageSvcUrl)
 	go pkgWatcher.watchPackages()
 
 	return &BuilderMgr{
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		storageSvcUrl:    storageSvcUrl,
-		namespace:        EnvBuilderNamespace,
+		namespace:        envBuilderNamespace,
 	}
 }
 
