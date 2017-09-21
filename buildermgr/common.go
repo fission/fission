@@ -34,6 +34,16 @@ import (
 	"github.com/fission/fission/tpr"
 )
 
+// buildPackage helps to build source package into deployment package.
+// Following is steps buildPackage takes to complete the build process.
+// 1. Check package status
+// 2. Update package status to running state
+// 3. Send fetch request to fetcher to fetch source package.
+// 4. Send build request to builder to start a build.
+// 5. Send upload request to fetcher to upload deployment package.
+// 6. Update package status to succeed state
+// 7. Update package resource in package ref of functions that share the same package
+// *. Update package status to failed state,if any one of steps above failed
 func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes.Clientset,
 	builderNamespace string, storageSvcUrl string, buildReq BuildRequest) (httpCode int, buildLogs string, err error) {
 
@@ -52,6 +62,8 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return 400, "", e
 	}
 
+	// use defer to check the return http code
+	// and update package status accordingly
 	defer func() {
 		if httpCode != 200 {
 			// set failed status for package
@@ -62,6 +74,8 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		}
 	}()
 
+	// update package status to running state, so that
+	// we can know what status a package is through cli.
 	_, err = updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
 	if err != nil {
 		e := fmt.Errorf("Error setting package pending state: %v", err)
@@ -94,6 +108,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		Filename:  srcPkgFilename,
 	}
 
+	// send fetch request to fetcher
 	err = fetcherC.Fetch(fetchReq)
 	if err != nil {
 		e := fmt.Errorf("Error fetching source package: %v", err)
@@ -106,6 +121,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		BuildCommand:   pkg.Spec.BuildCommand,
 	}
 
+	// send build request to builder
 	buildResp, err := builderC.Build(pkgBuildReq)
 	if err != nil {
 		e := fmt.Errorf("Error building deployment package: %v", err)
@@ -118,6 +134,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		StorageSvcUrl:     storageSvcUrl,
 	}
 
+	// ask fetcher to upload the deployment package
 	uploadResp, err := fetcherC.Upload(uploadReq)
 	if err != nil {
 		e := fmt.Errorf("Error uploading deployment package: %v", err)
@@ -125,6 +142,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return 500, e.Error(), e
 	}
 
+	// update package status and also build logs
 	newPkgRV, err := updatePackage(fissionClient, pkg,
 		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
 	if err != nil {
