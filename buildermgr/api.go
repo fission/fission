@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
@@ -81,10 +82,11 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpCode, buildLogs, err := buildPackage(builderMgr.fissionClient, builderMgr.kubernetesClient,
+	buildLogs, err := buildPackage(builderMgr.fissionClient, builderMgr.kubernetesClient,
 		builderMgr.namespace, builderMgr.storageSvcUrl, buildReq)
 	if err != nil {
-		http.Error(w, err.Error(), httpCode)
+		code, e := fission.GetHTTPError(err)
+		http.Error(w, e, code)
 		return
 	}
 

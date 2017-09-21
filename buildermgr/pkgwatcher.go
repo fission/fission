@@ -52,7 +52,7 @@ func (pkgw *packageWatcher) build(pkgMetadata api.ObjectMeta) {
 	buildReq := BuildRequest{
 		Package: pkgMetadata,
 	}
-	_, _, err := buildPackage(pkgw.fissionClient,
+	_, err := buildPackage(pkgw.fissionClient,
 		pkgw.kubernetesClient, pkgw.builderNamespace, pkgw.storageSvcUrl, buildReq)
 	if err != nil {
 		log.Printf("Error building package %v: %v", buildReq.Package.Name, err)

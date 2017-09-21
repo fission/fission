@@ -17,7 +17,6 @@ limitations under the License.
 package buildermgr
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -45,27 +44,27 @@ import (
 // 7. Update package resource in package ref of functions that share the same package
 // *. Update package status to failed state,if any one of steps above failed
 func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes.Clientset,
-	builderNamespace string, storageSvcUrl string, buildReq BuildRequest) (httpCode int, buildLogs string, err error) {
+	builderNamespace string, storageSvcUrl string, buildReq BuildRequest) (buildLogs string, err error) {
 
 	pkg, err := fissionClient.Packages(
 		buildReq.Package.Namespace).Get(buildReq.Package.Name)
 	if err != nil {
-		e := fmt.Errorf("Error getting function TPR info: %v", err)
-		log.Println(e.Error())
-		return 500, "", e
+		e := fmt.Sprintf("Error getting function TPR info: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	// Only do build for pending packages
 	if pkg.Status.BuildStatus != fission.BuildStatusPending {
-		e := errors.New("package is not in pending state")
-		log.Println(e.Error())
-		return 400, "", e
+		e := "package is not in pending state"
+		log.Println(e)
+		return e, fission.MakeError(400, e)
 	}
 
 	// use defer to check the return http code
 	// and update package status accordingly
 	defer func() {
-		if httpCode != 200 {
+		if err.(fission.Error).Code != 200 {
 			// set failed status for package
 			_, err = updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 			if err != nil {
@@ -78,25 +77,25 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	// we can know what status a package is through cli.
 	_, err = updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
 	if err != nil {
-		e := fmt.Errorf("Error setting package pending state: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error setting package pending state: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	env, err := fissionClient.Environments(api.NamespaceDefault).Get(pkg.Spec.Environment.Name)
 	if err != nil {
-		e := fmt.Errorf("Error getting environment TPR info: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
 	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
 	svc, err := kubernetesClient.Services(builderNamespace).Get(svcName)
 	if err != nil {
-		e := fmt.Errorf("Error getting builder service info %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error getting builder service info %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 	svcIP := svc.Spec.ClusterIP
 	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcIP))
@@ -111,9 +110,9 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	// send fetch request to fetcher
 	err = fetcherC.Fetch(fetchReq)
 	if err != nil {
-		e := fmt.Errorf("Error fetching source package: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error fetching source package: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	pkgBuildReq := &builder.PackageBuildRequest{
@@ -124,9 +123,9 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	// send build request to builder
 	buildResp, err := builderC.Build(pkgBuildReq)
 	if err != nil {
-		e := fmt.Errorf("Error building deployment package: %v", err)
-		log.Println(e.Error())
-		return 500, buildResp.BuildLogs, e
+		e := fmt.Sprintf("Error building deployment package: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	uploadReq := &fetcher.UploadRequest{
@@ -137,26 +136,26 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	// ask fetcher to upload the deployment package
 	uploadResp, err := fetcherC.Upload(uploadReq)
 	if err != nil {
-		e := fmt.Errorf("Error uploading deployment package: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error uploading deployment package: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	// update package status and also build logs
 	newPkgRV, err := updatePackage(fissionClient, pkg,
 		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
 	if err != nil {
-		e := fmt.Errorf("Error creating deployment package TPR resource: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error creating deployment package TPR resource: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	fnList, err := fissionClient.
 		Functions(api.NamespaceDefault).List(api.ListOptions{})
 	if err != nil {
-		e := fmt.Errorf("Error getting function list: %v", err)
-		log.Println(e.Error())
-		return 500, e.Error(), e
+		e := fmt.Sprintf("Error getting function list: %v", err)
+		log.Println(e)
+		return e, fission.MakeError(500, e)
 	}
 
 	// A package may be used by multiple functions. Update
@@ -168,14 +167,14 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 			// update TPR
 			_, err = fissionClient.Functions(fn.Metadata.Namespace).Update(&fn)
 			if err != nil {
-				e := fmt.Errorf("Error updating function package resource version: %v", err)
-				log.Println(e.Error())
-				return 500, e.Error(), e
+				e := fmt.Sprintf("Error updating function package resource version: %v", err)
+				log.Println(e)
+				return e, fission.MakeError(500, e)
 			}
 		}
 	}
 
-	return 200, buildResp.BuildLogs, nil
+	return buildResp.BuildLogs, nil
 }
 
 func updatePackage(fissionClient *tpr.FissionClient,
