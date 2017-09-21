@@ -173,7 +173,9 @@ func (envw *environmentWatcher) sync() {
 	// Create environment builders for all environments
 	for i := range envList.Items {
 		env := envList.Items[i]
-		if len(env.Spec.Builder.Image) == 0 {
+
+		if env.Spec.Version == 1 || // builder is not supported with v1 interface
+			len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
 			continue
 		}
 		_, err := envw.getEnvBuilder(&env)

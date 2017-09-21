@@ -330,14 +330,6 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	if err != nil {
 		return err
 	}
-
-	env, err := gp.fissionClient.
-		Environments(pkg.Spec.Environment.Namespace).
-		Get(pkg.Spec.Environment.Name)
-	if err != nil {
-		return err
-	}
-
 	targetFilename := "user"
 
 	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
@@ -370,7 +362,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 
 	for i := 0; i < maxRetries; i++ {
 		var resp2 *http.Response
-		if env.Spec.Version == 2 {
+		if gp.env.Spec.Version == 2 {
 			specializeUrl := gp.getSpecializeUrl(podIP, 2)
 			resp2, err = http.Post(specializeUrl, "application/json", bytes.NewReader(body))
 		} else {

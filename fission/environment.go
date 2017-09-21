@@ -42,12 +42,23 @@ func envCreate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
+	envVersion := c.Int("version")
 	envBuilderImg := c.String("builder")
-
 	envBuildCmd := c.String("buildcmd")
-	if len(envBuilderImg) > 0 && len(envBuildCmd) == 0 {
-		log.Printf("No build command is specified, use the default build command.")
-		envBuildCmd = "build"
+
+	if len(envBuilderImg) > 0 {
+		envVersion = 2
+		if len(envBuildCmd) == 0 {
+			log.Println("No build command is specified, use the default build command.")
+			envBuildCmd = "build"
+		}
+	}
+
+	// Environment API interface version is not specified and
+	// builder image is empty, set default interface version
+	if envVersion == 0 {
+		log.Println("Use default environment v1 API interface")
+		envVersion = 1
 	}
 
 	env := &tpr.Environment{
@@ -56,7 +67,7 @@ func envCreate(c *cli.Context) error {
 			Namespace: api.NamespaceDefault,
 		},
 		Spec: fission.EnvironmentSpec{
-			Version: 1,
+			Version: envVersion,
 			Runtime: fission.Runtime{
 				Image: envImg,
 			},
@@ -121,6 +132,11 @@ func envUpdate(c *cli.Context) error {
 	if len(envImg) > 0 {
 		env.Spec.Runtime.Image = envImg
 	}
+
+	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
+		fatal("Environment v1 API interface doesn't supported environment builder.")
+	}
+
 	if len(envBuilderImg) > 0 {
 		env.Spec.Builder.Image = envBuilderImg
 	}
