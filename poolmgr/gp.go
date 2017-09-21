@@ -330,10 +330,12 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 		return err
 	}
 
+	targetFilename := "user"
+
 	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Package:   pkg.Metadata,
-		Filename:  "user", // XXX use function id instead
+		Filename:  targetFilename, // XXX use function id instead
 	})
 	if err != nil {
 		return err
@@ -354,7 +356,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	}
 
 	loadReq := fission.FunctionLoadRequest{
-		FilePath:     filepath.Join(gp.sharedMountPath, "user"),
+		FilePath:     filepath.Join(gp.sharedMountPath, targetFilename),
 		FunctionName: fn.Spec.Package.FunctionName,
 	}
 
