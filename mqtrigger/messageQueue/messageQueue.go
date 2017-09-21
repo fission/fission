@@ -165,8 +165,9 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 			log.Fatalf("Failed to read message queue trigger list: %v", err)
 		}
 		newTriggerMap := make(map[string]*tpr.Messagequeuetrigger)
-		for _, trigger := range newTriggers.Items {
-			newTriggerMap[tpr.CacheKey(&trigger.Metadata)] = &trigger
+		for index := range newTriggers.Items {
+			newTrigger := &newTriggers.Items[index]
+			newTriggerMap[tpr.CacheKey(&newTrigger.Metadata)] = newTrigger
 		}
 
 		// get current set of triggers
