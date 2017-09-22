@@ -243,13 +243,13 @@ attach_github_release_charts() {
 
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
-check_branch
-check_clean
+#check_branch
+#check_clean
 version=$1
 
 build_all $version
 push_all $version
-build_and_push_all_envs $version 
+#build_and_push_all_envs $version 
 build_charts $version
 
 tag_and_release $version
