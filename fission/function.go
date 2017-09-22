@@ -18,7 +18,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -62,6 +65,22 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 
 		archive.Type = fission.ArchiveTypeUrl
 		archive.URL = archiveUrl
+
+		f, err := os.Open(fileName)
+		if err != nil {
+			fatal(fmt.Sprintf("Error finding file %v: %v", fileName, err))
+		}
+		defer f.Close()
+
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			fatal(fmt.Sprintf("Error calculating checksum for file %v: %v", fileName, err))
+		}
+
+		archive.Checksum = fission.Checksum{
+			Type: fission.ChecksumTypeSHA256,
+			Sum:  hex.EncodeToString(h.Sum(nil)),
+		}
 	}
 	return &archive
 }
