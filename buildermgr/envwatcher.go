@@ -116,22 +116,9 @@ func (envw *environmentWatcher) getCacheKey(envName string, envResourceVersion s
 }
 
 func (envw *environmentWatcher) getLabels(envName string, envResourceVersion string) map[string]string {
-	sel := make(map[string]string)
-	sel[LABEL_ENV_NAME] = envName
-	sel[LABEL_ENV_RESOURCEVERSION] = envResourceVersion
-	return sel
-}
-
-func (envw *environmentWatcher) getLabelValue(labels map[string]string, key string) string {
-	return labels[key]
-}
-
-func (envw *environmentWatcher) getDelOption() *api.DeleteOptions {
-	// cascading deletion
-	// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/
-	falseVal := false
-	return &api.DeleteOptions{
-		OrphanDependents: &falseVal,
+	return map[string]string{
+		LABEL_ENV_NAME:            envName,
+		LABEL_ENV_RESOURCEVERSION: envResourceVersion,
 	}
 }
 
@@ -222,8 +209,8 @@ func (envw *environmentWatcher) service() {
 				log.Println(err.Error())
 			}
 			for _, svc := range svcList {
-				envName := envw.getLabelValue(svc.ObjectMeta.Labels, LABEL_ENV_NAME)
-				envResourceVersion := envw.getLabelValue(svc.ObjectMeta.Labels, LABEL_ENV_RESOURCEVERSION)
+				envName := svc.ObjectMeta.Labels[LABEL_ENV_NAME]
+				envResourceVersion := svc.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
 				key := envw.getCacheKey(envName, envResourceVersion)
 				if _, ok := latestEnvList[key]; !ok {
 					err := envw.deleteBuilderService(svc.ObjectMeta.Labels)
@@ -239,8 +226,8 @@ func (envw *environmentWatcher) service() {
 				log.Printf(err.Error())
 			}
 			for _, deploy := range deployList {
-				envName := envw.getLabelValue(deploy.ObjectMeta.Labels, LABEL_ENV_NAME)
-				envResourceVersion := envw.getLabelValue(deploy.ObjectMeta.Labels, LABEL_ENV_RESOURCEVERSION)
+				envName := deploy.ObjectMeta.Labels[LABEL_ENV_NAME]
+				envResourceVersion := deploy.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
 				key := envw.getCacheKey(envName, envResourceVersion)
 				if _, ok := latestEnvList[key]; !ok {
 					err := envw.deleteBuilderDeployment(deploy.ObjectMeta.Labels)
@@ -314,9 +301,17 @@ func (envw *environmentWatcher) deleteBuilderService(sel map[string]string) erro
 	}
 	for _, svc := range svcList {
 		log.Printf("Removing builder service: %v", svc.ObjectMeta.Name)
+
+		// cascading deletion
+		// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/
+		falseVal := false
+		delOpt := &api.DeleteOptions{
+			OrphanDependents: &falseVal,
+		}
+
 		err = envw.kubernetesClient.
 			Services(envw.builderNamespace).
-			Delete(svc.ObjectMeta.Name, envw.getDelOption())
+			Delete(svc.ObjectMeta.Name, delOpt)
 		if err != nil {
 			return fmt.Errorf("Error deleting builder service: %v", err)
 		}
@@ -331,9 +326,15 @@ func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string) e
 	}
 	for _, deploy := range deployList {
 		log.Printf("Removing builder deployment: %v", deploy.ObjectMeta.Name)
+
+		falseVal := false
+		delOpt := &api.DeleteOptions{
+			OrphanDependents: &falseVal,
+		}
+
 		err = envw.kubernetesClient.
 			Deployments(envw.builderNamespace).
-			Delete(deploy.ObjectMeta.Name, envw.getDelOption())
+			Delete(deploy.ObjectMeta.Name, delOpt)
 		if err != nil {
 			return fmt.Errorf("Error deleteing builder deployment: %v", err)
 		}
