@@ -101,7 +101,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	buildCmd := req.BuildCommand
 	if len(buildCmd) == 0 {
 		// use default build command
-		buildCmd = "build"
+		buildCmd = "/build"
 	}
 	buildLogs, err := builder.build(buildCmd, srcPkgPath, deployPkgPath)
 	if err != nil {
