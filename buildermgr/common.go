@@ -80,18 +80,10 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return e, fission.MakeError(500, e)
 	}
 
-	svcName := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
+	svcName := fmt.Sprintf("%v-%v.%v", env.Metadata.Name, env.Metadata.ResourceVersion, builderNamespace)
 	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
-	svc, err := kubernetesClient.Services(builderNamespace).Get(svcName)
-	if err != nil {
-		e := fmt.Sprintf("Error getting builder service info %v", err)
-		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(500, e)
-	}
-	svcIP := svc.Spec.ClusterIP
-	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcIP))
-	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcIP))
+	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcName))
+	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcName))
 
 	fetchReq := &fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_SOURCE,
