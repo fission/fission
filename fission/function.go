@@ -68,13 +68,13 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 
 		f, err := os.Open(fileName)
 		if err != nil {
-			fatal(fmt.Sprintf("Error finding file %v: %v", fileName, err))
+			checkErr(err, fmt.Sprintf("find file %v", fileName))
 		}
 		defer f.Close()
 
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
-			fatal(fmt.Sprintf("Error calculating checksum for file %v: %v", fileName, err))
+			checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
 		}
 
 		archive.Checksum = fission.Checksum{
