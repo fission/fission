@@ -365,6 +365,8 @@ dump_logs() {
     dump_fission_logs $ns $fns buildermgr
     dump_fission_logs $ns $fns executor
     dump_fission_logs $ns $fns storagesvc
+    dump_fission_logs $ns $fns mqtrigger
+    dump_fission_logs $ns $fns nats-streaming
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
