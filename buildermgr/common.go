@@ -115,8 +115,8 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	}
 
 	uploadReq := &fetcher.UploadRequest{
-		DeployPkgFilename: buildResp.ArtifactFilename,
-		StorageSvcUrl:     storageSvcUrl,
+		Filename:      buildResp.ArtifactFilename,
+		StorageSvcUrl: storageSvcUrl,
 	}
 
 	// ask fetcher to upload the deployment package

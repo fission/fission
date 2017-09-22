@@ -38,8 +38,8 @@ type (
 	// UploadRequest send from builder manager describes which
 	// deployment package should be upload to storage service.
 	UploadRequest struct {
-		DeployPkgFilename string `json:"deployPkgFilename"`
-		StorageSvcUrl     string `json:"storagesvcurl"`
+		Filename      string `json:"filename"`
+		StorageSvcUrl string `json:"storagesvcurl"`
 	}
 
 	// UploadResponse defines the download url of an archive and
@@ -274,8 +274,8 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("fetcher received upload request: %v", req)
 
-	zipFilename := req.DeployPkgFilename + ".zip"
-	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.DeployPkgFilename)
+	zipFilename := req.Filename + ".zip"
+	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
 	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
 
 	err = fetcher.archive(srcFilepath, dstFilepath)
