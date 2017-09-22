@@ -151,6 +151,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	// functions with old package resource version
 	for _, fn := range fnList.Items {
 		if fn.Spec.Package.PackageRef.Name == pkg.Metadata.Name &&
+			fn.Spec.Package.PackageRef.Namespace == pkg.Metadata.Namespace &&
 			fn.Spec.Package.PackageRef.ResourceVersion != pkg.Metadata.ResourceVersion {
 			fn.Spec.Package.PackageRef.ResourceVersion = newPkgRV
 			// update TPR
