@@ -65,11 +65,11 @@ build_and_push_python_env_runtime() {
 build_and_push_python_env_builder() {
     image_tag=$1
 
-    builderDir=$ROOT/builder/cmd
-    pushd ${builderDir}
+    pushd $ROOT/builder/cmd
     ./build.sh
     popd
     pushd $ROOT/environments/python3/builder
+    builderDir=${GOPATH}/src/github.com/fission/fission/builder/cmd
     cp ${builderDir}/builder .
 
     docker build -t $image_tag .
