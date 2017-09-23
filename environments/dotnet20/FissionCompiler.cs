@@ -64,7 +64,7 @@ namespace Fission.DotNetCore.Compiler
                     ms.Seek(0, SeekOrigin.Begin);
 
                     Assembly assembly = AssemblyLoadContext.Default.LoadFromStream(ms);
-                    var type = assembly.GetType("FissionFunction");
+                    var type = assembly.GetTypes().FirstOrDefault(x => x.Name.Equals("FissionFunction"));
                     var info = type.GetMember("Execute").First() as MethodInfo;
                     return new Function(assembly, type, info);
                 }
