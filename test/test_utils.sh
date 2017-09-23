@@ -65,8 +65,13 @@ build_and_push_python_env_runtime() {
 build_and_push_python_env_builder() {
     image_tag=$1
 
-    pushd $ROOT/environments/python3/builder
+    builderDir=$ROOT/builder/cmd
+    pushd ${builderDir}
     ./build.sh
+    popd
+    pushd $ROOT/environments/python3/builder
+    cp ${builderDir}/builder .
+
     docker build -t $image_tag .
 
     gcloud_login
