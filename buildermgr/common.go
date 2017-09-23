@@ -105,6 +105,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		BuildCommand:   pkg.Spec.BuildCommand,
 	}
 
+	log.Printf("Start building with source package: %v", srcPkgFilename)
 	// send build request to builder
 	buildResp, err := builderC.Build(pkgBuildReq)
 	if err != nil {
@@ -114,11 +115,14 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return e, fission.MakeError(500, e)
 	}
 
+	log.Printf("Build succeed, source package: %v, deployment package: %v", srcPkgFilename, buildResp.ArtifactFilename)
+
 	uploadReq := &fetcher.UploadRequest{
 		Filename:      buildResp.ArtifactFilename,
 		StorageSvcUrl: storageSvcUrl,
 	}
 
+	log.Printf("Start uploading deployment package: %v", buildResp.ArtifactFilename)
 	// ask fetcher to upload the deployment package
 	uploadResp, err := fetcherC.Upload(uploadReq)
 	if err != nil {
@@ -128,6 +132,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return e, fission.MakeError(500, e)
 	}
 
+	log.Printf("Start updating info of package: %v", pkg.Metadata.Name)
 	// update package status and also build logs
 	newPkgRV, err := updatePackage(fissionClient, pkg,
 		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
@@ -164,6 +169,8 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 			}
 		}
 	}
+
+	log.Printf("Completed build request for package: %v", pkg.Metadata.Name)
 
 	return buildResp.BuildLogs, nil
 }

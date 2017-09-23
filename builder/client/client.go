@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
 
@@ -59,8 +58,6 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	if err != nil {
 		return nil, err
 	}
-
-	log.Printf("Received pkg build response: %v", rBody)
 
 	pkgBuildResp := builder.PackageBuildResponse{}
 	err = json.Unmarshal([]byte(rBody), &pkgBuildResp)
