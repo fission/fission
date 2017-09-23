@@ -99,7 +99,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	}
 
 	// System Params
-	err := MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
+	err := metadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 	if err != nil {
 		responseWriter.Write([]byte("Failed to add metadata to request: " + err.Error()))
 		responseWriter.WriteHeader(500)

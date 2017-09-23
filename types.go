@@ -202,7 +202,7 @@ type (
 	// TimeTrigger invokes the specific function at a time or
 	// times specified by a cron string.
 	TimeTriggerSpec struct {
-		Cron string       `json:"cron"`
+		Cron              string `json:"cron"`
 		FunctionReference `json:"functionref"`
 	}
 

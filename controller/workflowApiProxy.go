@@ -1,10 +1,10 @@
 package controller
 
 import (
-	"net/http"
-	"net/url"
 	"fmt"
+	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strings"
 )
 

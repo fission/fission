@@ -313,7 +313,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
-		return errors.New("pod has no IP")
+		return errors.New("Pod has no IP")
 	}
 
 	// tell fetcher to get the function.

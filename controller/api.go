@@ -39,6 +39,7 @@ type (
 		storageServiceUrl string
 		builderManagerUrl string
 		WorkflowApiUrl    string
+		workflowApiUrl    string
 	}
 
 	logDBConfig struct {
@@ -67,9 +68,9 @@ func MakeAPI() (*API, error) {
 
 	wfEnv := os.Getenv("WORKFLOW_API_URL")
 	if len(u) > 0 {
-		api.WorkflowApiUrl = strings.TrimSuffix(wfEnv, "/")
+		api.workflowApiUrl = strings.TrimSuffix(wfEnv, "/")
 	} else {
-		api.WorkflowApiUrl= "http://workflow-apiserver"
+		api.workflowApiUrl = "http://workflow-apiserver"
 	}
 
 	return api, err

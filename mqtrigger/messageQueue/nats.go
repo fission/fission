@@ -88,7 +88,7 @@ func (nats Nats) unsubscribe(subscription messageQueueSubscription) error {
 
 func isTopicValidForNats(topic string) bool {
 	// nats-streaming does not support wildcard channel.
-	return nsUtil.IsSubjectValid(topic, false)
+	return nsUtil.IsSubjectValid(topic)
 }
 
 func msgHandler(nats *Nats, trigger *tpr.Messagequeuetrigger) func(*ns.Msg) {
