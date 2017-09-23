@@ -18,7 +18,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"text/tabwriter"
 
@@ -49,7 +48,6 @@ func envCreate(c *cli.Context) error {
 	if len(envBuilderImg) > 0 {
 		envVersion = 2
 		if len(envBuildCmd) == 0 {
-			log.Println("No build command is specified, use the default build command.")
 			envBuildCmd = "build"
 		}
 	}
@@ -57,7 +55,7 @@ func envCreate(c *cli.Context) error {
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
 	if envVersion == 0 {
-		log.Println("Use default environment v1 API interface")
+		fmt.Println("Use default environment v1 API interface")
 		envVersion = 1
 	}
 
