@@ -205,7 +205,7 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 		var cons []stow.Container
 		var cursor string
 
-		// user location.Containers to find containers that match the prefix (container name)
+		// use location.Containers to find containers that match the prefix (container name)
 		cons, cursor, err = loc.Containers(sc.containerName, stow.CursorStart, 1)
 		if err == nil {
 			if !stow.IsCursorEnd(cursor) {
