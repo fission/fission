@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -149,7 +148,7 @@ func configureClient(config *rest.Config) {
 			)
 			return nil
 		})
-	schemeBuilder.AddToScheme(scheme.Scheme)
+	schemeBuilder.AddToScheme(api.Scheme)
 }
 
 func waitForTPRs(tprClient *rest.RESTClient) error {

@@ -19,6 +19,7 @@ package tpr
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/rest"
 )
 
@@ -100,7 +101,7 @@ func (fc *messagequeuetriggerClient) List(opts metav1.ListOptions) (*Messagequeu
 	err := fc.client.Get().
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
-		VersionedParams(&opts, metav1.ParameterCodec).
+		VersionedParams(&opts, api.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -114,6 +115,6 @@ func (fc *messagequeuetriggerClient) Watch(opts metav1.ListOptions) (watch.Inter
 		Prefix("watch").
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
-		VersionedParams(&opts, metav1.ParameterCodec).
+		VersionedParams(&opts, api.ParameterCodec).
 		Watch()
 }
