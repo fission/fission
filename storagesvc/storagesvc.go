@@ -24,7 +24,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/gorilla/handlers"
@@ -203,8 +202,19 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 
 	con, err := loc.CreateContainer(sc.containerName)
 	if os.IsExist(err) {
-		id := filepath.Join(sc.localPath, sc.containerName)
-		con, err = loc.Container(id)
+		var cons []stow.Container
+		var cursor string
+
+		// user location.Containers to find containers that match the prefix (container name)
+		cons, cursor, err = loc.Containers(sc.containerName, stow.CursorStart, 1)
+		if err == nil {
+			if !stow.IsCursorEnd(cursor) {
+				// Should only have one storage container
+				err = errors.New("Found more than one matched storage containers")
+			} else {
+				con = cons[0]
+			}
+		}
 	}
 	if err != nil {
 		log.Printf("Error initializing storage: %v", err)
