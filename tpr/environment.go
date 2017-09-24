@@ -19,7 +19,7 @@ package tpr
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 )
 
@@ -101,7 +101,7 @@ func (ec *environmentClient) List(opts metav1.ListOptions) (*EnvironmentList, er
 	err := ec.client.Get().
 		Namespace(ec.namespace).
 		Resource("environments").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Do().
 		Into(&result)
 	if err != nil {
@@ -115,6 +115,6 @@ func (ec *environmentClient) Watch(opts metav1.ListOptions) (watch.Interface, er
 		Prefix("watch").
 		Namespace(ec.namespace).
 		Resource("environments").
-		VersionedParams(&opts, api.ParameterCodec).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Watch()
 }
