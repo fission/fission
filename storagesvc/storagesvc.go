@@ -24,6 +24,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gorilla/handlers"
@@ -201,6 +202,10 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 	ss.location = loc
 
 	con, err := loc.CreateContainer(sc.containerName)
+	if os.IsExist(err) {
+		id := filepath.Join(sc.localPath, sc.containerName)
+		con, err = loc.Container(id)
+	}
 	if err != nil {
 		log.Printf("Error initializing storage: %v", err)
 		return nil, err
