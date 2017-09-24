@@ -45,7 +45,13 @@ go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientP
 # Wait for message on response topic 
 #
 echo "Waiting for response"
-response=$(go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
+TIMEOUT=timeout
+if [ $(uname -s) == 'Darwin' ]
+then
+    # If this fails on mac os, do "brew install coreutils".
+    TIMEOUT=gtimeout 
+fi
+response=$($TIMEOUT 60s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
