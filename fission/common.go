@@ -29,6 +29,10 @@ func fatal(msg string) {
 	os.Exit(1)
 }
 
+func warn(msg string) {
+	os.Stderr.WriteString(msg + "\n")
+}
+
 func getClient(serverUrl string) *client.Client {
 
 	if len(serverUrl) == 0 {
