@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
@@ -53,4 +54,37 @@ func checkErr(err error, msg string) {
 	if err != nil {
 		fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
 	}
+}
+
+func httpRequest(method, url, body string, headers []string) *http.Response {
+	if method != http.MethodGet &&
+		method != http.MethodDelete &&
+		method != http.MethodPost &&
+		method != http.MethodPut {
+		// Fatal causes some stale data for the calling function, needs improvement
+		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", method))
+	}
+
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		fatal("Failed to create request.")
+		panic(err)
+	}
+
+	for _, header := range headers {
+		headerKeyValue := strings.SplitN(header, ":", 2)
+		if len(headerKeyValue) != 2 {
+			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue))
+			continue
+		}
+		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fatal("Request failed.")
+	}
+
+	return resp
 }

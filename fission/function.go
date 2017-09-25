@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -435,8 +436,8 @@ func fnPods(c *cli.Context) error {
 
 func fnInvoke(c *cli.Context) error {
 	// Temporary, switch once internal function routes are extracted to separate internal router.
-	routerUrl := os.Getenv("FISSION_ROUTER")
-	if len(routerUrl) == 0 {
+	routerURL := os.Getenv("FISSION_ROUTER")
+	if len(routerURL) == 0 {
 		fatal("Need FISSION_ROUTER set to your fission router.")
 	}
 
@@ -445,42 +446,56 @@ func fnInvoke(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	httpMethod := c.String("method")
-	if httpMethod != http.MethodGet &&
-		httpMethod != http.MethodDelete &&
-		httpMethod != http.MethodPost &&
-		httpMethod != http.MethodPut {
-		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", httpMethod))
-	}
+	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
-	input := c.String("body")
-	headers := c.StringSlice("header")
-	url := fmt.Sprintf("http://%s/fission-function/%s", routerUrl, fnName)
-
-	req, err := http.NewRequest(httpMethod, url, strings.NewReader(input))
-	if err != nil {
-		panic(err)
-		fatal("Failed to create request.")
-	}
-
-	for _, header := range headers {
-		headerKeyValue := strings.SplitN(header, ":", 2)
-		if len(headerKeyValue) != 2 {
-			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue));
-			continue
-		}
-		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fatal("Request failed.")
-	}
-	defer resp.Body.Close()
+	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	fmt.Print(string(body))
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func fnTest(c *cli.Context) error {
+	//client := getClient(c.GlobalString("server"))
+	fnName := c.String("name")
+
+	fnCreate(c)
+
+	routerURL := os.Getenv("FISSION_ROUTER")
+	if len(routerURL) == 0 {
+		fatal("Need FISSION_ROUTER set to your fission router.")
+	}
+
+	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
+
+	maxRetries := 3
+	retryDelay := 100 * time.Millisecond
+	var resp *http.Response
+	fnReachable := false
+
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(retryDelay)
+		resp = httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
+		if resp.StatusCode < 300 {
+			body, _ := ioutil.ReadAll(resp.Body)
+			fmt.Print(string(body))
+			defer resp.Body.Close()
+			fnReachable = true
+			break
+		}
+	}
+
+	if !fnReachable {
+		fmt.Print("Function not reachable \n")
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Print(string(body))
+		defer resp.Body.Close()
+		fnLogs(c)
+	}
+
+	fnDelete(c)
 
 	return nil
 }

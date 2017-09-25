@@ -59,6 +59,7 @@ func main() {
 		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag}, Action: fnLogs},
 		{Name: "pods", Usage: "Display function pods", Flags: []cli.Flag{fnNameFlag, fnLogDBTypeFlag}, Action: fnPods},
 		{Name: "invoke", Usage: "Invoke a function", Flags: []cli.Flag{fnNameFlag, fnMethodFlag, fnBodyFlag, fnHeaderFlag}, Action: fnInvoke},
+		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcPackageFlag, htMethodFlag}, Action: fnTest},
 	}
 
 	// httptriggers
