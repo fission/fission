@@ -83,6 +83,15 @@ metadata:
 
 ---
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.builderNamespace }}
+  labels:
+    name: fission-builder
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: fission-svc
@@ -148,6 +157,27 @@ subjects:
 - kind: ServiceAccount
   name: fission-fetcher
   namespace: {{ .Values.functionNamespace }}
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-builder
+  namespace: {{ .Values.builderNamespace }}
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-builder-tpr
+subjects:
+- kind: ServiceAccount
+  name: fission-builder
+  namespace: {{ .Values.builderNamespace }}
 roleRef:
   kind: ClusterRole
   name: cluster-admin
@@ -235,6 +265,49 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--poolmgrPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
+        env:
+        - name: FETCHER_IMAGE
+          value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
+        - name: FETCHER_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
+      serviceAccount: fission-svc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildermgr
+  labels:
+    svc: buildermgr
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8889
+  selector:
+    svc: buildermgr
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: buildermgr
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: buildermgr
+    spec:
+      containers:
+      - name: buildermgr
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--builderMgrPort", "8889", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"

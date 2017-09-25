@@ -65,9 +65,10 @@ type (
 	BuildStatus string
 
 	PackageSpec struct {
-		Environment EnvironmentReference `json:"environment"`
-		Source      Archive              `json:"source"`
-		Deployment  Archive              `json:"deployment"`
+		Environment  EnvironmentReference `json:"environment"`
+		Source       Archive              `json:"source"`
+		Deployment   Archive              `json:"deployment"`
+		BuildCommand string               `json:"buildcmd"`
 		// In the future, we can have a debug build here too
 	}
 	PackageStatus struct {
@@ -220,11 +221,11 @@ type (
 		// env-specific. Optional.
 		FilePath string `json:"filepath"`
 
-		// Entrypoint has an environment-specific meaning;
+		// FunctionName has an environment-specific meaning;
 		// usually, it defines a function within a module
 		// containing multiple functions. Optional; default is
 		// environment-specific.
-		EntryPoint string `json:"entrypoint"`
+		FunctionName string `json:"functionName"`
 
 		// URL to expose this function at. Optional; defaults
 		// to "/".

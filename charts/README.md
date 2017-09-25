@@ -47,6 +47,7 @@ The following table lists the configurable parameters of the Fission chart and t
 | `controllerPort`    | Fission Controller Service Port            | `31313`                  |
 | `routerPort`        | Fission Router Service Port                | `31314`                  |
 | `functionNamespace` | Namespace for Fission functions            | `fission-function`       |
+| `builderNamespace`  | Namespace for Fission environment builders | `fission-builder`        |
 | `openshift`         | RBAC for openshift                         | `false`                  |
 
 

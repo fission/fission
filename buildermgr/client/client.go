@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2017 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/fission/fission"
-	builder "github.com/fission/fission/builder"
+	"github.com/fission/fission/buildermgr"
 )
 
 type (
@@ -35,35 +35,27 @@ type (
 
 func MakeClient(builderUrl string) *Client {
 	return &Client{
-		url: strings.TrimSuffix(builderUrl, "/"),
+		url: strings.TrimSuffix(builderUrl, "/") + "/v1",
 	}
 }
 
-func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
+func (c *Client) PackageBuild(req *buildermgr.BuildRequest) ([]byte, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(c.url+"/build", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return c.handleResponse(resp)
+}
 
+func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, fission.MakeErrorFromHTTP(resp)
 	}
-
-	rBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	pkgBuildResp := builder.PackageBuildResponse{}
-	err = json.Unmarshal([]byte(rBody), &pkgBuildResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pkgBuildResp, nil
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	return body, err
 }

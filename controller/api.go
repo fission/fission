@@ -37,6 +37,7 @@ type (
 	API struct {
 		fissionClient     *tpr.FissionClient
 		storageServiceUrl string
+		builderManagerUrl string
 	}
 
 	logDBConfig struct {
@@ -54,6 +55,13 @@ func MakeAPI() (*API, error) {
 		api.storageServiceUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.storageServiceUrl = "http://storagesvc"
+	}
+
+	u = os.Getenv("BUILDER_MANAGER_URL")
+	if len(u) > 0 {
+		api.builderManagerUrl = strings.TrimSuffix(u, "/")
+	} else {
+		api.builderManagerUrl = "http://buildermgr"
 	}
 
 	return api, err
@@ -160,6 +168,8 @@ func (api *API) Serve(port int) {
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
+	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
+	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
 
 	address := fmt.Sprintf(":%v", port)
 

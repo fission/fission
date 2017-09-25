@@ -14,29 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package buildermgr
 
 import (
 	"log"
-	"net/http"
-	"os"
 
-	builder "github.com/fission/fission/builder"
+	"github.com/fission/fission/tpr"
 )
 
-// Usage: builder <shared volume path>
-func main() {
-	dir := os.Args[1]
-	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			err = os.MkdirAll(dir, os.ModeDir|0700)
-			if err != nil {
-				log.Fatalf("Error creating directory: %v", err)
-			}
-		}
+// Start the buildermgr service.
+func Start(port int, storageSvcUrl string, envBuilderNamespace string) error {
+	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
+	if err != nil {
+		log.Printf("Failed to get kubernetes client: %v", err)
+		return err
 	}
-	builder := builder.MakeBuilder(dir)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", builder.Handler)
-	http.ListenAndServe(":8001", mux)
+
+	api := MakeBuilderMgr(fissionClient, kubernetesClient,
+		storageSvcUrl, envBuilderNamespace)
+
+	go api.Serve(port)
+
+	return nil
 }
