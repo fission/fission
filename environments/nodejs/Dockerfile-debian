@@ -1,0 +1,8 @@
+# A docker image for the func container.
+
+# debian variant is the official standard node image (larger than the alpine image)
+FROM node:8
+
+ADD server.js /usr/src/app/server.js
+
+EXPOSE 8888
