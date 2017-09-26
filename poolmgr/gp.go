@@ -351,8 +351,9 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	maxRetries := 20
 
 	loadReq := fission.FunctionLoadRequest{
-		FilePath:     filepath.Join(gp.sharedMountPath, targetFilename),
-		FunctionName: fn.Spec.Package.FunctionName,
+		FilePath:         filepath.Join(gp.sharedMountPath, targetFilename),
+		FunctionName:     fn.Spec.Package.FunctionName,
+		FunctionMetadata: metadata,
 	}
 
 	body, err := json.Marshal(loadReq)

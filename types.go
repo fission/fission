@@ -16,6 +16,8 @@ limitations under the License.
 
 package fission
 
+import "k8s.io/client-go/1.5/pkg/api"
+
 type (
 	//
 	// Functions and packages
@@ -236,6 +238,9 @@ type (
 		// URL to expose this function at. Optional; defaults
 		// to "/".
 		URL string `json:"url"`
+
+		// Metatdata
+		FunctionMetadata *api.ObjectMeta
 	}
 )
 
