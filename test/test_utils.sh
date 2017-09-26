@@ -201,6 +201,7 @@ dump_fission_tpr() {
 
 dump_fission_tprs() {
     dump_fission_tpr function.fission.io    
+    dump_fission_tpr package.fission.io    
     dump_fission_tpr httptrigger.fission.io    
     dump_fission_tpr environment.fission.io    
 }
