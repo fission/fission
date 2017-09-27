@@ -26,7 +26,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = "0.2.1"
+	app.Version = "0.3.0-rc"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Usage: "Fission server URL", EnvVar: "FISSION_URL"},
@@ -129,7 +129,7 @@ func main() {
 	upgradeFileFlag := cli.StringFlag{Name: "file", Usage: "JSON file containing all fission state"}
 	upgradeSubCommands := []cli.Command{
 		{Name: "dump", Usage: "Dump all state from a v0.1 fission installation", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeDumpState},
-		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2 install", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeRestoreState},
+		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2+ install", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeRestoreState},
 	}
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
