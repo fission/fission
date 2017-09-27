@@ -127,7 +127,7 @@ func createPackage(client *client.Client, fnName, envName, srcArchiveName, deplo
 		"usedByFunctions": string(fnList),
 	}
 
-	pkgName := fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6))
+	pkgName := strings.ToLower(fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6)))
 	pkg := &crd.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:        pkgName,
