@@ -16,6 +16,8 @@ limitations under the License.
 
 package fission
 
+import "k8s.io/client-go/1.5/pkg/api"
+
 type (
 	//
 	// Functions and packages
@@ -163,7 +165,13 @@ type (
 		// Optional, but strongly encouraged. Used to populate
 		// links from UI, CLI, etc.
 		DocumentationURL string `json:"documentationurl"`
+
+		// Optional
+		// Defaults to 'Single'
+		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
 	}
+
+	AllowedFunctionsPerContainer string
 
 	//
 	// Triggers
@@ -230,6 +238,9 @@ type (
 		// URL to expose this function at. Optional; defaults
 		// to "/".
 		URL string `json:"url"`
+
+		// Metatdata
+		FunctionMetadata *api.ObjectMeta
 	}
 )
 
@@ -251,6 +262,11 @@ const (
 	BuildStatusRunning   = "running"
 	BuildStatusSucceeded = "succeeded"
 	BuildStatusFailed    = "failed"
+)
+
+const (
+	AllowedFunctionsPerContainerSingle   = "single"
+	AllowedFunctionsPerContainerInfinite = "infinite"
 )
 
 const (

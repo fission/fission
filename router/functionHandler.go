@@ -98,6 +98,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
+	// System Params
+	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
+
 	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(fh.function)
 	if err != nil {

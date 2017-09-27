@@ -38,6 +38,7 @@ type (
 		fissionClient     *tpr.FissionClient
 		storageServiceUrl string
 		builderManagerUrl string
+		workflowApiUrl    string
 	}
 
 	logDBConfig struct {
@@ -62,6 +63,13 @@ func MakeAPI() (*API, error) {
 		api.builderManagerUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.builderManagerUrl = "http://buildermgr"
+	}
+
+	wfEnv := os.Getenv("WORKFLOW_API_URL")
+	if len(u) > 0 {
+		api.workflowApiUrl = strings.TrimSuffix(wfEnv, "/")
+	} else {
+		api.workflowApiUrl = "http://workflow-apiserver"
 	}
 
 	return api, err
@@ -170,6 +178,7 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
+	r.HandleFunc("/proxy/workflow", api.WorkflowApiProxy)
 
 	address := fmt.Sprintf(":%v", port)
 
