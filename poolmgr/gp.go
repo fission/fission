@@ -353,7 +353,7 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	loadReq := fission.FunctionLoadRequest{
 		FilePath:         filepath.Join(gp.sharedMountPath, targetFilename),
 		FunctionName:     fn.Spec.Package.FunctionName,
-		FunctionMetadata: metadata,
+		FunctionMetadata: &fn.Metadata,
 	}
 
 	body, err := json.Marshal(loadReq)

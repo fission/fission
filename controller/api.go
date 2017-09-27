@@ -38,7 +38,6 @@ type (
 		fissionClient     *tpr.FissionClient
 		storageServiceUrl string
 		builderManagerUrl string
-		WorkflowApiUrl    string
 		workflowApiUrl    string
 	}
 

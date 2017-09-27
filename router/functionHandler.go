@@ -99,12 +99,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	}
 
 	// System Params
-	err := metadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
-	if err != nil {
-		responseWriter.Write([]byte("Failed to add metadata to request: " + err.Error()))
-		responseWriter.WriteHeader(500)
-		return
-	}
+	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
 	// cache lookup
 	serviceUrl, err := fh.fmap.lookup(fh.function)
