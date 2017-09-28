@@ -22,13 +22,13 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/v1"
-	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/1.5/pkg/labels"
-	"k8s.io/client-go/1.5/pkg/util/intstr"
-	"k8s.io/client-go/1.5/pkg/watch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
 	"github.com/fission/fission/tpr"
 )
@@ -45,9 +45,9 @@ const (
 
 type (
 	builderInfo struct {
-		envMetadata *api.ObjectMeta
+		envMetadata *metav1.ObjectMeta
 		deployment  *v1beta1.Deployment
-		service     *v1.Service
+		service     *apiv1.Service
 	}
 
 	envwRequest struct {
@@ -69,7 +69,7 @@ type (
 		fissionClient          *tpr.FissionClient
 		kubernetesClient       *kubernetes.Clientset
 		fetcherImage           string
-		fetcherImagePullPolicy v1.PullPolicy
+		fetcherImagePullPolicy apiv1.PullPolicy
 	}
 )
 
@@ -86,14 +86,14 @@ func makeEnvironmentWatcher(fissionClient *tpr.FissionClient,
 		fetcherImagePullPolicy = "IfNotPresent"
 	}
 
-	var pullPolicy v1.PullPolicy
+	var pullPolicy apiv1.PullPolicy
 	switch fetcherImagePullPolicy {
 	case "Always":
-		pullPolicy = v1.PullAlways
+		pullPolicy = apiv1.PullAlways
 	case "Never":
-		pullPolicy = v1.PullNever
+		pullPolicy = apiv1.PullNever
 	default:
-		pullPolicy = v1.PullIfNotPresent
+		pullPolicy = apiv1.PullIfNotPresent
 	}
 
 	envWatcher := &environmentWatcher{
@@ -125,7 +125,7 @@ func (envw *environmentWatcher) getLabels(envName string, envResourceVersion str
 func (envw *environmentWatcher) watchEnvironments() {
 	rv := ""
 	for {
-		wi, err := envw.fissionClient.Environments(api.NamespaceAll).Watch(api.ListOptions{
+		wi, err := envw.fissionClient.Environments(metav1.NamespaceAll).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {
@@ -152,7 +152,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 }
 
 func (envw *environmentWatcher) sync() {
-	envList, err := envw.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
+	envList, err := envw.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Error syncing environment TPR resources: %v", err)
 	}
@@ -260,7 +260,7 @@ func (envw *environmentWatcher) cleanupEnvBuilders(envs []tpr.Environment) {
 }
 
 func (envw *environmentWatcher) createBuilder(env *tpr.Environment) (*builderInfo, error) {
-	var svc *v1.Service
+	var svc *apiv1.Service
 	var deploy *v1beta1.Deployment
 
 	sel := envw.getLabels(env.Metadata.Name, env.Metadata.ResourceVersion)
@@ -305,7 +305,7 @@ func (envw *environmentWatcher) deleteBuilderService(sel map[string]string) erro
 		// cascading deletion
 		// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/
 		falseVal := false
-		delOpt := &api.DeleteOptions{
+		delOpt := &metav1.DeleteOptions{
 			OrphanDependents: &falseVal,
 		}
 
@@ -328,11 +328,11 @@ func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string) e
 		log.Printf("Removing builder deployment: %v", deploy.ObjectMeta.Name)
 
 		falseVal := false
-		delOpt := &api.DeleteOptions{
+		delOpt := &metav1.DeleteOptions{
 			OrphanDependents: &falseVal,
 		}
 
-		err = envw.kubernetesClient.
+		err = envw.kubernetesClient.ExtensionsV1beta1().
 			Deployments(envw.builderNamespace).
 			Delete(deploy.ObjectMeta.Name, delOpt)
 		if err != nil {
@@ -342,10 +342,10 @@ func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string) e
 	return nil
 }
 
-func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string) ([]v1.Service, error) {
+func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string) ([]apiv1.Service, error) {
 	svcList, err := envw.kubernetesClient.Services(envw.builderNamespace).List(
-		api.ListOptions{
-			LabelSelector: labels.Set(sel).AsSelector(),
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("Error getting builder service list: %v", err)
@@ -353,22 +353,22 @@ func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string) ([]
 	return svcList.Items, nil
 }
 
-func (envw *environmentWatcher) createBuilderService(env *tpr.Environment) (*v1.Service, error) {
+func (envw *environmentWatcher) createBuilderService(env *tpr.Environment) (*apiv1.Service, error) {
 	name := envw.getCacheKey(env.Metadata.Name, env.Metadata.ResourceVersion)
 	sel := envw.getLabels(env.Metadata.Name, env.Metadata.ResourceVersion)
-	service := v1.Service{
-		ObjectMeta: v1.ObjectMeta{
+	service := apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
 			Namespace: envw.builderNamespace,
 			Name:      name,
 			Labels:    sel,
 		},
-		Spec: v1.ServiceSpec{
+		Spec: apiv1.ServiceSpec{
 			Selector: sel,
-			Type:     v1.ServiceTypeClusterIP,
-			Ports: []v1.ServicePort{
+			Type:     apiv1.ServiceTypeClusterIP,
+			Ports: []apiv1.ServicePort{
 				{
 					Name:     "fetcher-port",
-					Protocol: v1.ProtocolTCP,
+					Protocol: apiv1.ProtocolTCP,
 					Port:     8000,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
@@ -377,7 +377,7 @@ func (envw *environmentWatcher) createBuilderService(env *tpr.Environment) (*v1.
 				},
 				{
 					Name:     "builder-port",
-					Protocol: v1.ProtocolTCP,
+					Protocol: apiv1.ProtocolTCP,
 					Port:     8001,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
@@ -396,9 +396,9 @@ func (envw *environmentWatcher) createBuilderService(env *tpr.Environment) (*v1.
 }
 
 func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string) ([]v1beta1.Deployment, error) {
-	deployList, err := envw.kubernetesClient.Deployments(envw.builderNamespace).List(
-		api.ListOptions{
-			LabelSelector: labels.Set(sel).AsSelector(),
+	deployList, err := envw.kubernetesClient.ExtensionsV1beta1().Deployments(envw.builderNamespace).List(
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("Error getting builder deployment list: %v", err)
@@ -412,36 +412,36 @@ func (envw *environmentWatcher) createBuilderDeployment(env *tpr.Environment) (*
 	sel := envw.getLabels(env.Metadata.Name, env.Metadata.ResourceVersion)
 	var replicas int32 = 1
 	deployment := &v1beta1.Deployment{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Namespace: envw.builderNamespace,
 			Name:      name,
 			Labels:    sel,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &v1beta1.LabelSelector{
+			Selector: &metav1.LabelSelector{
 				MatchLabels: sel,
 			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: v1.ObjectMeta{
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
 					Labels: sel,
 				},
-				Spec: v1.PodSpec{
-					Volumes: []v1.Volume{
+				Spec: apiv1.PodSpec{
+					Volumes: []apiv1.Volume{
 						{
 							Name: "package",
-							VolumeSource: v1.VolumeSource{
-								EmptyDir: &v1.EmptyDirVolumeSource{},
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
 						},
 					},
-					Containers: []v1.Container{
+					Containers: []apiv1.Container{
 						{
 							Name:                   "builder",
 							Image:                  env.Spec.Builder.Image,
-							ImagePullPolicy:        v1.PullAlways,
+							ImagePullPolicy:        apiv1.PullAlways,
 							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []v1.VolumeMount{
+							VolumeMounts: []apiv1.VolumeMount{
 								{
 									Name:      "package",
 									MountPath: sharedMountPath,
@@ -454,7 +454,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *tpr.Environment) (*
 							Image:                  envw.fetcherImage,
 							ImagePullPolicy:        envw.fetcherImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []v1.VolumeMount{
+							VolumeMounts: []apiv1.VolumeMount{
 								{
 									Name:      "package",
 									MountPath: sharedMountPath,
@@ -469,7 +469,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *tpr.Environment) (*
 		},
 	}
 	log.Printf("Creating builder deployment: %v", envw.getCacheKey(env.Metadata.Name, env.Metadata.ResourceVersion))
-	_, err := envw.kubernetesClient.Deployments(envw.builderNamespace).Create(deployment)
+	_, err := envw.kubernetesClient.ExtensionsV1beta1().Deployments(envw.builderNamespace).Create(deployment)
 	if err != nil {
 		return nil, err
 	}

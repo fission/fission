@@ -21,8 +21,8 @@ import (
 	"log"
 	"strings"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission"
@@ -72,7 +72,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 		return e, fission.MakeError(500, e)
 	}
 
-	env, err := fissionClient.Environments(api.NamespaceDefault).Get(pkg.Spec.Environment.Name)
+	env, err := fissionClient.Environments(metav1.NamespaceDefault).Get(pkg.Spec.Environment.Name)
 	if err != nil {
 		e := fmt.Sprintf("Error getting environment TPR info: %v", err)
 		log.Println(e)
@@ -144,7 +144,7 @@ func buildPackage(fissionClient *tpr.FissionClient, kubernetesClient *kubernetes
 	}
 
 	fnList, err := fissionClient.
-		Functions(api.NamespaceDefault).List(api.ListOptions{})
+		Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
 	if err != nil {
 		e := fmt.Sprintf("Error getting function list: %v", err)
 		log.Println(e)
@@ -200,7 +200,7 @@ func updatePackage(fissionClient *tpr.FissionClient,
 	}
 
 	// update package spec
-	pkg, err := fissionClient.Packages(api.NamespaceDefault).Update(pkg)
+	pkg, err := fissionClient.Packages(metav1.NamespaceDefault).Update(pkg)
 	if err != nil {
 		log.Printf("Error updating package: %v", err)
 		return "", err
