@@ -63,7 +63,7 @@ Move to the build directory inside the container and restore the packages:
 
 ```
 cd /build 
-dotnet restore
+dotnet restore fission-dotnet20.csproj
 log  : Restoring packages for /source/project.json...
 log  : Installing System.Net.WebSockets 4.0.0.
 log  : Installing runtime.native.System.IO.Compression 4.1.0.
