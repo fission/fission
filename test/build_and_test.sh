@@ -14,7 +14,7 @@ IMAGE=gcr.io/fission-ci/fission-bundle
 FETCHER_IMAGE=gcr.io/fission-ci/fetcher
 PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env
 PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder
-TAG=test-$(date +%s)
+TAG=test
 
 build_and_push_fission_bundle $IMAGE:$TAG
 
