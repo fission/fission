@@ -43,6 +43,8 @@ type (
 		unversioned.TypeMeta `json:",inline"`
 		Metadata             api.ObjectMeta      `json:"metadata"`
 		Spec                 fission.PackageSpec `json:"spec"`
+
+		Status fission.PackageStatus `json:"status"`
 	}
 	PackageList struct {
 		unversioned.TypeMeta `json:",inline"`

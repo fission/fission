@@ -21,6 +21,7 @@ func main() {
 	}
 	fetcher := fetcher.MakeFetcher(dir)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", fetcher.Handler)
+	mux.HandleFunc("/", fetcher.FetchHandler)
+	mux.HandleFunc("/upload", fetcher.UploadHandler)
 	http.ListenAndServe(":8000", mux)
 }

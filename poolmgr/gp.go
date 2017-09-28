@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,10 +62,13 @@ type (
 		poolInstanceId         string                // small random string to uniquify pod names
 		fetcherImage           string
 		fetcherImagePullPolicy v1.PullPolicy
+		runtimeImagePullPolicy v1.PullPolicy // pull policy for generic pool to created env deployment
 		kubernetesClient       *kubernetes.Clientset
+		fissionClient          *tpr.FissionClient
 		instanceId             string // poolmgr instance id
 		labelsForPool          map[string]string
 		requestChannel         chan *choosePodRequest
+		sharedMountPath        string
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -78,7 +82,19 @@ type (
 	}
 )
 
+func getImagePullPolicy(policy string) v1.PullPolicy {
+	switch policy {
+	case "Always":
+		return v1.PullAlways
+	case "Never":
+		return v1.PullNever
+	default:
+		return v1.PullIfNotPresent
+	}
+}
+
 func MakeGenericPool(
+	fissionClient *tpr.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
 	env *tpr.Environment,
 	initialReplicas int32,
@@ -92,9 +108,13 @@ func MakeGenericPool(
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
 	}
-	fetcherImagePullPolicyS := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicyS) == 0 {
-		fetcherImagePullPolicyS = "IfNotPresent"
+	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
+	if len(fetcherImagePullPolicy) == 0 {
+		fetcherImagePullPolicy = "IfNotPresent"
+	}
+	runtimeImagePullPolicy := os.Getenv("RUNTIME_IMAGE_PULL_POLICY")
+	if len(runtimeImagePullPolicy) == 0 {
+		runtimeImagePullPolicy = "IfNotPresent"
 	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
@@ -103,6 +123,7 @@ func MakeGenericPool(
 		env:              env,
 		replicas:         initialReplicas, // TODO make this an env param instead?
 		requestChannel:   make(chan *choosePodRequest),
+		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		namespace:        namespace,
 		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
@@ -111,18 +132,13 @@ func MakeGenericPool(
 		poolInstanceId:   uniuri.NewLen(8),
 		instanceId:       instanceId,
 		fetcherImage:     fetcherImage,
-		useSvc:           false, // defaults off -- svc takes a second or more to become routable, slowing cold start
+		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		sharedMountPath:  "/userfunc", // used by generic pool when creating env deployment to specify the share volume path for fetcher & env
 	}
 
-	switch fetcherImagePullPolicyS {
-	case "Always":
-		gp.fetcherImagePullPolicy = v1.PullAlways
-	case "Never":
-		gp.fetcherImagePullPolicy = v1.PullNever
-	default:
-		gp.fetcherImagePullPolicy = v1.PullIfNotPresent
-	}
+	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
 
+	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
 
 	// Labels for generic deployment/RS/pods.
@@ -141,7 +157,10 @@ func MakeGenericPool(
 
 	go gp.choosePodService()
 
-	go gp.idlePodReaper()
+	// Unless specified otherwise, periodically cleanup inactive pods.
+	if env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
+		go gp.idlePodReaper()
+	}
 
 	return gp, nil
 }
@@ -186,8 +205,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		// Get pods; filter the ones that are ready
 		podList, err := gp.kubernetesClient.Core().Pods(gp.namespace).List(
 			api.ListOptions{
-				LabelSelector: labels.Set(
-					gp.deployment.Spec.Selector.MatchLabels).AsSelector(),
+				LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector(),
 			})
 		if err != nil {
 			return nil, err
@@ -212,8 +230,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 				readyPods = append(readyPods, &pod)
 			}
 		}
-		log.Printf("[%v] found %v ready pods of %v total",
-			newLabels, len(readyPods), len(podList.Items))
+		log.Printf("[%v] found %v ready pods of %v total", newLabels, len(readyPods), len(podList.Items))
 
 		// If there are no ready pods, wait and retry.
 		if len(readyPods) == 0 {
@@ -229,15 +246,17 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*v1.Pod, error) 
 		// and make a good scheduling decision.
 		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
-		// Relabel.  If the pod already got picked and
-		// modified, this should fail; in that case just
-		// retry.
-		chosenPod.ObjectMeta.Labels = newLabels
-		log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
-		_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
-		if err != nil {
-			log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
-			continue
+		if gp.env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
+			// Relabel.  If the pod already got picked and
+			// modified, this should fail; in that case just
+			// retry.
+			chosenPod.ObjectMeta.Labels = newLabels
+			log.Printf("relabeling pod: [%v]", chosenPod.ObjectMeta.Name)
+			_, err = gp.kubernetesClient.Core().Pods(gp.namespace).Update(chosenPod)
+			if err != nil {
+				log.Printf("failed to relabel pod [%v]: %v", chosenPod.ObjectMeta.Name, err)
+				continue
+			}
 		}
 		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Now().Sub(startTime))
 		return chosenPod, nil
@@ -276,12 +295,15 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	return fmt.Sprintf("http://%v:8000/", podIP)
 }
 
-func (gp *GenericPool) getSpecializeUrl(podIP string) string {
+func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	u := os.Getenv("TEST_SPECIALIZE_URL")
 	if len(u) != 0 {
 		return u
 	}
-	return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	if version == 1 {
+		return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	}
+	return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
 }
 
 // specializePod chooses a pod, copies the required user-defined function to that pod
@@ -297,10 +319,23 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 	// tell fetcher to get the function.
 	fetcherUrl := gp.getFetcherUrl(podIP)
 	log.Printf("[%v] calling fetcher to copy function", metadata.Name)
-	err := fetcherClient.DoFetchRequest(fetcherUrl, &fetcher.FetchRequest{
+
+	fn, err := gp.fissionClient.
+		Functions(metadata.Namespace).
+		Get(metadata.Name)
+	if err != nil {
+		return err
+	}
+
+	targetFilename := "user"
+
+	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Function:  *metadata,
-		Filename:  "user", // XXX use function id instead
+		Package: api.ObjectMeta{
+			Namespace: fn.Spec.Package.PackageRef.Namespace,
+			Name:      fn.Spec.Package.PackageRef.Name,
+		},
+		Filename: targetFilename, // XXX use function id instead
 	})
 	if err != nil {
 		return err
@@ -311,12 +346,30 @@ func (gp *GenericPool) specializePod(pod *v1.Pod, metadata *api.ObjectMeta) erro
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata.Name)
-	specializeUrl := gp.getSpecializeUrl(podIP)
 
 	// retry the specialize call a few times in case the env server hasn't come up yet
 	maxRetries := 20
+
+	loadReq := fission.FunctionLoadRequest{
+		FilePath:         filepath.Join(gp.sharedMountPath, targetFilename),
+		FunctionName:     fn.Spec.Package.FunctionName,
+		FunctionMetadata: &fn.Metadata,
+	}
+
+	body, err := json.Marshal(loadReq)
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i < maxRetries; i++ {
-		resp2, err := http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
+		var resp2 *http.Response
+		if gp.env.Spec.Version == 2 {
+			specializeUrl := gp.getSpecializeUrl(podIP, 2)
+			resp2, err = http.Post(specializeUrl, "application/json", bytes.NewReader(body))
+		} else {
+			specializeUrl := gp.getSpecializeUrl(podIP, 1)
+			resp2, err = http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
+		}
 		if err == nil && resp2.StatusCode < 300 {
 			// Success
 			resp2.Body.Close()
@@ -352,7 +405,6 @@ func (gp *GenericPool) createPool() error {
 	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
 		gp.env.Metadata.Name, gp.env.Metadata.UID, strings.ToLower(gp.poolInstanceId))
 
-	sharedMountPath := "/userfunc"
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
 			Name:   poolDeploymentName,
@@ -380,12 +432,12 @@ func (gp *GenericPool) createPool() error {
 						{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.Spec.Runtime.Image,
-							ImagePullPolicy:        v1.PullIfNotPresent,
+							ImagePullPolicy:        gp.runtimeImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: sharedMountPath,
+									MountPath: gp.sharedMountPath,
 								},
 							},
 						},
@@ -397,10 +449,10 @@ func (gp *GenericPool) createPool() error {
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "userfunc",
-									MountPath: sharedMountPath,
+									MountPath: gp.sharedMountPath,
 								},
 							},
-							Command: []string{"/fetcher", sharedMountPath},
+							Command: []string{"/fetcher", gp.sharedMountPath},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",
@@ -478,7 +530,7 @@ func (gp *GenericPool) GetFuncSvc(m *api.ObjectMeta) (*funcSvc, error) {
 	if gp.useSvc {
 		svcName := fmt.Sprintf("svc-%v", m.Name)
 		if len(m.UID) > 0 {
-			svcName += ("-" + string(m.UID))
+			svcName = fmt.Sprintf("%s-%v", svcName, m.UID)
 		}
 
 		labels := gp.labelsForFunction(m)

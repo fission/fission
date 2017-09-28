@@ -139,6 +139,7 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 		a.respondWithError(w, err)
 		return
 	}
+
 	a.respondWithSuccess(w, resp)
 }
 

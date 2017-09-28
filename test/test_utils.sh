@@ -50,6 +50,36 @@ build_and_push_fetcher() {
     popd
 }
 
+build_and_push_python_env_runtime() {
+    image_tag=$1
+
+    pushd $ROOT/environments/python3/
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
+build_and_push_python_env_builder() {
+    image_tag=$1
+
+    pushd $ROOT/builder/cmd
+    ./build.sh
+    popd
+    pushd $ROOT/environments/python3/builder
+    builderDir=${GOPATH}/src/github.com/fission/fission/builder/cmd
+    cp ${builderDir}/builder .
+
+    docker build -t $image_tag .
+
+    gcloud_login
+    
+    gcloud docker -- push $image_tag
+    popd
+}
+
 
 build_fission_cli() {
     pushd $ROOT/fission
@@ -171,6 +201,7 @@ dump_fission_tpr() {
 
 dump_fission_tprs() {
     dump_fission_tpr function.fission.io    
+    dump_fission_tpr package.fission.io    
     dump_fission_tpr httptrigger.fission.io    
     dump_fission_tpr environment.fission.io    
 }

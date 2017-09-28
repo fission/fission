@@ -6,6 +6,6 @@ RUN pip3 install --upgrade pip
 RUN rm -r /root/.cache
 
 ADD defaultBuildCmd /usr/local/bin/build
-ADD builder /
+ADD builder /builder
 
-EXPOSE 8000
+EXPOSE 8001

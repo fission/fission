@@ -201,6 +201,21 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 	ss.location = loc
 
 	con, err := loc.CreateContainer(sc.containerName)
+	if os.IsExist(err) {
+		var cons []stow.Container
+		var cursor string
+
+		// use location.Containers to find containers that match the prefix (container name)
+		cons, cursor, err = loc.Containers(sc.containerName, stow.CursorStart, 1)
+		if err == nil {
+			if !stow.IsCursorEnd(cursor) {
+				// Should only have one storage container
+				err = errors.New("Found more than one matched storage containers")
+			} else {
+				con = cons[0]
+			}
+		}
+	}
 	if err != nil {
 		log.Printf("Error initializing storage: %v", err)
 		return nil, err
