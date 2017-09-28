@@ -59,6 +59,7 @@ type (
 		address         string
 		podName         string
 		age             time.Duration
+		env             *api.ObjectMeta // used for ListOld
 		responseChannel chan *fscResponse
 	}
 	fscResponse struct {
@@ -98,7 +99,9 @@ func (fsc *functionServiceCache) service() {
 					resp.error = err
 				} else {
 					fsvc := fsvcI.(*funcSvc)
-					if time.Now().Sub(fsvc.atime) > req.age {
+					if fsvc.environment.Metadata.UID == req.env.UID &&
+						time.Now().Sub(fsvc.atime) > req.age {
+
 						podName := podNameI.(string)
 						pods = append(pods, podName)
 					}
@@ -241,11 +244,12 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	return true, nil
 }
 
-func (fsc *functionServiceCache) ListOld(age time.Duration) ([]string, error) {
+func (fsc *functionServiceCache) ListOld(env *api.ObjectMeta, age time.Duration) ([]string, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
 		age:             age,
+		env:             env,
 		responseChannel: responseChannel,
 	}
 	resp := <-responseChannel
