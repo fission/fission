@@ -57,6 +57,10 @@ func checkErr(err error, msg string) {
 }
 
 func httpRequest(method, url, body string, headers []string) *http.Response {
+	if method == "" {
+		method = "GET"
+	}
+
 	if method != http.MethodGet &&
 		method != http.MethodDelete &&
 		method != http.MethodPost &&
@@ -66,10 +70,7 @@ func httpRequest(method, url, body string, headers []string) *http.Response {
 	}
 
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
-	if err != nil {
-		fatal("Failed to create request.")
-		panic(err)
-	}
+	checkErr(err, "Error creating reuquest to function")
 
 	for _, header := range headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)

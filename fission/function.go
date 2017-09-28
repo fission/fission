@@ -434,34 +434,8 @@ func fnPods(c *cli.Context) error {
 	return err
 }
 
-func fnInvoke(c *cli.Context) error {
-	// Temporary, switch once internal function routes are extracted to separate internal router.
-	routerURL := os.Getenv("FISSION_ROUTER")
-	if len(routerURL) == 0 {
-		fatal("Need FISSION_ROUTER set to your fission router.")
-	}
-
-	fnName := c.String("name")
-	if len(fnName) == 0 {
-		fatal("Need name of function, use --name")
-	}
-
-	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
-
-	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Print(string(body))
-	defer resp.Body.Close()
-
-	return nil
-}
-
 func fnTest(c *cli.Context) error {
-	//client := getClient(c.GlobalString("server"))
 	fnName := c.String("name")
-
-	fnCreate(c)
 
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
@@ -476,26 +450,25 @@ func fnTest(c *cli.Context) error {
 	fnReachable := false
 
 	for i := 0; i < maxRetries; i++ {
-		time.Sleep(retryDelay)
 		resp = httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
 		if resp.StatusCode < 300 {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, err := ioutil.ReadAll(resp.Body)
+			checkErr(err, "Function test")
 			fmt.Print(string(body))
 			defer resp.Body.Close()
 			fnReachable = true
 			break
 		}
+		time.Sleep(retryDelay)
 	}
 
 	if !fnReachable {
-		fmt.Print("Function not reachable \n")
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Print(string(body))
+		body, err := ioutil.ReadAll(resp.Body)
+		checkErr(err, "Function test failed")
+		fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
 		defer resp.Body.Close()
 		fnLogs(c)
 	}
-
-	fnDelete(c)
 
 	return nil
 }

@@ -46,7 +46,6 @@ func main() {
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
 	fnDetailFlag := cli.BoolFlag{Name: "detail, d", Usage: "display detailed information"}
 	fnLogDBTypeFlag := cli.StringFlag{Name: "dbtype", Usage: "log database type, e.g. influxdb (currently only influxdb is supported)"}
-	fnMethodFlag := cli.StringFlag{Name: "method, m", Usage: "HTTP method (GET|POST|PUT|DELETE)", Value: "GET"}
 	fnBodyFlag := cli.StringFlag{Name: "body, b", Usage: "request body"}
 	fnHeaderFlag := cli.StringSliceFlag{Name: "header, H", Usage: "request headers"}
 	fnSubcommands := []cli.Command{
@@ -58,8 +57,7 @@ func main() {
 		{Name: "list", Usage: "List all functions", Flags: []cli.Flag{}, Action: fnList},
 		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag}, Action: fnLogs},
 		{Name: "pods", Usage: "Display function pods", Flags: []cli.Flag{fnNameFlag, fnLogDBTypeFlag}, Action: fnPods},
-		{Name: "invoke", Usage: "Invoke a function", Flags: []cli.Flag{fnNameFlag, fnMethodFlag, fnBodyFlag, fnHeaderFlag}, Action: fnInvoke},
-		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcPackageFlag, htMethodFlag}, Action: fnTest},
+		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcPackageFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag}, Action: fnTest},
 	}
 
 	// httptriggers
