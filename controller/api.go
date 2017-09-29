@@ -69,7 +69,7 @@ func MakeAPI() (*API, error) {
 	if len(u) > 0 {
 		api.workflowApiUrl = strings.TrimSuffix(wfEnv, "/")
 	} else {
-		api.workflowApiUrl = "http://workflow-apiserver"
+		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
 	return api, err
@@ -178,7 +178,7 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
-	r.HandleFunc("/proxy/workflow", api.WorkflowApiProxy)
+	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 
 	address := fmt.Sprintf(":%v", port)
 
