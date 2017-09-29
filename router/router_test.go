@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -29,7 +29,7 @@ import (
 
 func TestRouter(t *testing.T) {
 	// metadata for a fake function
-	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
+	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 
 	// and a reference to it
 	fr := fission.FunctionReference{
@@ -48,7 +48,7 @@ func TestRouter(t *testing.T) {
 	// set up the resolver's cache for this function
 	frr := makeFunctionReferenceResolver(nil)
 	nfr := namespacedFunctionReference{
-		namespace:         api.NamespaceDefault,
+		namespace:         metav1.NamespaceDefault,
 		functionReference: fr,
 	}
 	rr := resolveResult{
@@ -62,9 +62,9 @@ func TestRouter(t *testing.T) {
 	triggerUrl := "/foo"
 	triggers.triggers = append(triggers.triggers,
 		tpr.Httptrigger{
-			Metadata: api.ObjectMeta{
+			Metadata: metav1.ObjectMeta{
 				Name:      "xxx",
-				Namespace: api.NamespaceDefault,
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: fission.HTTPTriggerSpec{
 				RelativeURL:       triggerUrl,

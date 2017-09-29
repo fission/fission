@@ -23,7 +23,7 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -46,9 +46,9 @@ func ttCreate(c *cli.Context) error {
 	}
 
 	tt := &tpr.Timetrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.TimeTriggerSpec{
 			Cron: cron,
@@ -77,9 +77,9 @@ func ttUpdate(c *cli.Context) error {
 		fatal("Need name of trigger, use --name")
 	}
 
-	tt, err := client.TimeTriggerGet(&api.ObjectMeta{
+	tt, err := client.TimeTriggerGet(&metav1.ObjectMeta{
 		Name:      ttName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "get time trigger")
 
@@ -113,9 +113,9 @@ func ttDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.TimeTriggerDelete(&api.ObjectMeta{
+	err := client.TimeTriggerDelete(&metav1.ObjectMeta{
 		Name:      ttName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "delete trigger")
 

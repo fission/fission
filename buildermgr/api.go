@@ -26,8 +26,8 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -35,7 +35,7 @@ import (
 
 type (
 	BuildRequest struct {
-		Package api.ObjectMeta `json:"package"`
+		Package metav1.ObjectMeta `json:"package"`
 	}
 
 	BuilderMgr struct {

@@ -22,7 +22,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -60,9 +60,9 @@ func envCreate(c *cli.Context) error {
 	}
 
 	env := &tpr.Environment{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      envName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.EnvironmentSpec{
 			Version: envVersion,
@@ -91,9 +91,9 @@ func envGet(c *cli.Context) error {
 		fatal("Need a name, use --name.")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
@@ -121,9 +121,9 @@ func envUpdate(c *cli.Context) error {
 		fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
-	env, err := client.EnvironmentGet(&api.ObjectMeta{
+	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "find environment")
 
@@ -157,9 +157,9 @@ func envDelete(c *cli.Context) error {
 		fatal("Need a name , use --name.")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")

@@ -20,8 +20,8 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // cleanupOldPoolmgrResources looks for resources created by an old
@@ -74,7 +74,7 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 }
 
 func cleanupDeployments(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	deploymentList, err := client.Extensions().Deployments(namespace).List(api.ListOptions{})
+	deploymentList, err := client.ExtensionsV1beta1().Deployments(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		id, ok := dep.ObjectMeta.Labels[POOLMGR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
-			err := client.Extensions().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
+			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
 			logErr("cleaning up deployment", err)
 			// ignore err
 		}
@@ -91,7 +91,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 }
 
 func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	rsList, err := client.Extensions().ReplicaSets(namespace).List(api.ListOptions{})
+	rsList, err := client.ExtensionsV1beta1().ReplicaSets(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instance
 		id, ok := rs.ObjectMeta.Labels[POOLMGR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
-			err := client.Extensions().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
+			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
 			logErr("cleaning up replicaset", err)
 		}
 	}
@@ -107,7 +107,7 @@ func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instance
 }
 
 func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	podList, err := client.Core().Pods(namespace).List(api.ListOptions{})
+	podList, err := client.CoreV1().Pods(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 		id, ok := pod.ObjectMeta.Labels[POOLMGR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
-			err := client.Core().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
+			err := client.CoreV1().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
 			logErr("cleaning up pod", err)
 			// ignore err
 		}
@@ -124,7 +124,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 }
 
 func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	svcList, err := client.Core().Services(namespace).List(api.ListOptions{})
+	svcList, err := client.CoreV1().Services(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 		id, ok := svc.ObjectMeta.Labels[POOLMGR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up svc %v", svc.ObjectMeta.Name)
-			err := client.Core().Services(namespace).Delete(svc.ObjectMeta.Name, nil)
+			err := client.CoreV1().Services(namespace).Delete(svc.ObjectMeta.Name, nil)
 			logErr("cleaning up svc", err)
 			// ignore err
 		}

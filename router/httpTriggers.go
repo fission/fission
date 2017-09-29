@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/fission/fission"
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
@@ -138,7 +138,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 	// Watch controller for updates to triggers and update the router accordingly.
 	rv := ""
 	for {
-		wi, err := ts.fissionClient.Httptriggers(api.NamespaceAll).Watch(api.ListOptions{
+		wi, err := ts.fissionClient.Httptriggers(metav1.NamespaceAll).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {
@@ -167,7 +167,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 func (ts *HTTPTriggerSet) watchFunctions() {
 	rv := ""
 	for {
-		wi, err := ts.fissionClient.Functions(api.NamespaceAll).Watch(api.ListOptions{
+		wi, err := ts.fissionClient.Functions(metav1.NamespaceAll).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {
@@ -210,14 +210,14 @@ func (ts *HTTPTriggerSet) syncTriggers() {
 	log.Printf("Syncing http triggers")
 
 	// get triggers
-	triggers, err := ts.fissionClient.Httptriggers(api.NamespaceAll).List(api.ListOptions{})
+	triggers, err := ts.fissionClient.Httptriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get http trigger list: %v", err)
 	}
 	ts.triggers = triggers.Items
 
 	// get functions
-	functions, err := ts.fissionClient.Functions(api.NamespaceAll).List(api.ListOptions{})
+	functions, err := ts.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get function list: %v", err)
 	}

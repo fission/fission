@@ -22,14 +22,14 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
 func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
-	watches, err := a.fissionClient.Kuberneteswatchtriggers(api.NamespaceAll).List(api.ListOptions{})
+	watches, err := a.fissionClient.Kuberneteswatchtriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -87,7 +87,7 @@ func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 	name := vars["watch"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
 	watch, err := a.fissionClient.Kuberneteswatchtriggers(ns).Get(name)
@@ -115,10 +115,10 @@ func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 	name := vars["watch"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Kuberneteswatchtriggers(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Kuberneteswatchtriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

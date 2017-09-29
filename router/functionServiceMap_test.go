@@ -20,12 +20,12 @@ import (
 	"net/url"
 	"testing"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestFunctionServiceMap(t *testing.T) {
 	m := makeFunctionServiceMap(0)
-	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
+	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 	u, err := url.Parse("/foo012")
 	if err != nil {
 		t.Errorf("can't parse url")

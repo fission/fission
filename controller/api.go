@@ -26,7 +26,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	kerrors "k8s.io/client-go/1.5/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"

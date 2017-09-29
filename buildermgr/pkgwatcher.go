@@ -20,9 +20,9 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/watch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -48,7 +48,7 @@ func makePackageWatcher(fissionClient *tpr.FissionClient,
 	return pkgw
 }
 
-func (pkgw *packageWatcher) build(pkgMetadata api.ObjectMeta) {
+func (pkgw *packageWatcher) build(pkgMetadata metav1.ObjectMeta) {
 	buildReq := BuildRequest{
 		Package: pkgMetadata,
 	}
@@ -62,7 +62,7 @@ func (pkgw *packageWatcher) build(pkgMetadata api.ObjectMeta) {
 func (pkgw *packageWatcher) watchPackages() {
 	rv := ""
 	for {
-		wi, err := pkgw.fissionClient.Packages(api.NamespaceDefault).Watch(api.ListOptions{
+		wi, err := pkgw.fissionClient.Packages(metav1.NamespaceDefault).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {

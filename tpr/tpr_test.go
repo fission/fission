@@ -22,9 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/unversioned"
-	"k8s.io/client-go/1.5/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 
 	"github.com/fission/fission"
 )
@@ -38,11 +37,11 @@ func panicIf(err error) {
 func functionTests(tprClient *rest.RESTClient) {
 	// sample function object
 	function := &Function{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Function",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name: "hello",
 		},
 		Spec: fission.FunctionSpec{
@@ -60,7 +59,7 @@ func functionTests(tprClient *rest.RESTClient) {
 	}
 
 	// Test function CRUD
-	fi := MakeFunctionInterface(tprClient, api.NamespaceDefault)
+	fi := MakeFunctionInterface(tprClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	fi.Delete(function.Metadata.Name, nil)
@@ -89,7 +88,7 @@ func functionTests(tprClient *rest.RESTClient) {
 	log.Printf("f.Metadata = %#v", f.Metadata)
 
 	// list
-	fl, err := fi.List(api.ListOptions{})
+	fl, err := fi.List(metav1.ListOptions{})
 	panicIf(err)
 	if len(fl.Items) != 1 {
 		log.Panicf("wrong count from list: %v", fl)
@@ -103,7 +102,7 @@ func functionTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// start a watch
-	wi, err := fi.Watch(api.ListOptions{})
+	wi, err := fi.Watch(metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
@@ -135,11 +134,11 @@ func functionTests(tprClient *rest.RESTClient) {
 func environmentTests(tprClient *rest.RESTClient) {
 	// sample environment object
 	environment := &Environment{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Environment",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name: "hello",
 		},
 		Spec: fission.EnvironmentSpec{
@@ -154,7 +153,7 @@ func environmentTests(tprClient *rest.RESTClient) {
 	}
 
 	// Test environment CRUD
-	ei := MakeEnvironmentInterface(tprClient, api.NamespaceDefault)
+	ei := MakeEnvironmentInterface(tprClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	ei.Delete(environment.Metadata.Name, nil)
@@ -179,7 +178,7 @@ func environmentTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// list
-	el, err := ei.List(api.ListOptions{})
+	el, err := ei.List(metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from list: %v", len(el.Items))
@@ -193,7 +192,7 @@ func environmentTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(api.ListOptions{})
+	wi, err := ei.Watch(metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
@@ -225,11 +224,11 @@ func environmentTests(tprClient *rest.RESTClient) {
 func httpTriggerTests(tprClient *rest.RESTClient) {
 	// sample httpTrigger object
 	httpTrigger := &Httptrigger{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Httptrigger",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name: "hello",
 		},
 		Spec: fission.HTTPTriggerSpec{
@@ -243,7 +242,7 @@ func httpTriggerTests(tprClient *rest.RESTClient) {
 	}
 
 	// Test httpTrigger CRUD
-	ei := MakeHttptriggerInterface(tprClient, api.NamespaceDefault)
+	ei := MakeHttptriggerInterface(tprClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	ei.Delete(httpTrigger.Metadata.Name, nil)
@@ -268,7 +267,7 @@ func httpTriggerTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// list
-	el, err := ei.List(api.ListOptions{})
+	el, err := ei.List(metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from list: %v", el)
@@ -282,7 +281,7 @@ func httpTriggerTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(api.ListOptions{})
+	wi, err := ei.Watch(metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
@@ -314,11 +313,11 @@ func httpTriggerTests(tprClient *rest.RESTClient) {
 func kubernetesWatchTriggerTests(tprClient *rest.RESTClient) {
 	// sample kubernetesWatchTrigger object
 	kubernetesWatchTrigger := &Kuberneteswatchtrigger{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Kuberneteswatchtrigger",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name: "hello",
 		},
 		Spec: fission.KubernetesWatchTriggerSpec{
@@ -335,7 +334,7 @@ func kubernetesWatchTriggerTests(tprClient *rest.RESTClient) {
 	}
 
 	// Test kubernetesWatchTrigger CRUD
-	ei := MakeKuberneteswatchtriggerInterface(tprClient, api.NamespaceDefault)
+	ei := MakeKuberneteswatchtriggerInterface(tprClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	ei.Delete(kubernetesWatchTrigger.Metadata.Name, nil)
@@ -360,7 +359,7 @@ func kubernetesWatchTriggerTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// list
-	el, err := ei.List(api.ListOptions{})
+	el, err := ei.List(metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from list: %v", el)
@@ -374,7 +373,7 @@ func kubernetesWatchTriggerTests(tprClient *rest.RESTClient) {
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(api.ListOptions{})
+	wi, err := ei.Watch(metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
