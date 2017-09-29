@@ -118,7 +118,7 @@ build_and_push_all_envs() {
     build_and_push_env_image $version nodejs node-env
     build_and_push_env_image $version binary binary-env
     build_and_push_env_image $version dotnet dotnet-env
-    # (See #359) build_and_push_env_image $version dotnet20 dotnet20-env
+    build_and_push_env_image $version dotnet20 dotnet20-env
     build_and_push_env_image $version go go-env
     build_and_push_env_image $version perl perl-env
     build_and_push_env_image $version php7 php-env
