@@ -1,4 +1,6 @@
 #!/bin/sh
-dotnet restore
-dotnet publish -c Release -o out
-docker build -t fission/dotnet20-env .
+
+THIS_DIR=$(realpath $(dirname $0))
+
+docker run -v $THIS_DIR:/proj microsoft/dotnet:2.0.0-sdk sh -c "cd /proj && ./project-build.sh"
+
