@@ -11,9 +11,7 @@ WORKDIR /usr/src/app
 
 COPY package.json /usr/src/app/
 RUN npm install && npm cache clean --force
-COPY . /usr/src/app
-
-# ADD server.js /usr/src/app/server.js
+COPY server.js /usr/src/app/server.js
 
 CMD [ "npm", "start" ]
 
