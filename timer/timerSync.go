@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/tpr"
 )
@@ -43,7 +43,7 @@ func MakeTimerSync(fissionClient *tpr.FissionClient, timer *Timer) *TimerSync {
 
 func (ws *TimerSync) syncSvc() {
 	for {
-		triggers, err := ws.fissionClient.Timetriggers(api.NamespaceAll).List(api.ListOptions{})
+		triggers, err := ws.fissionClient.Timetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed get time trigger list: %v", err)
 		}

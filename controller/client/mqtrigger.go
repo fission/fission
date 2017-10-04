@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) MessageQueueTriggerCreate(t *tpr.Messagequeuetrigger) (*api.ObjectMeta, error) {
+func (c *Client) MessageQueueTriggerCreate(t *tpr.Messagequeuetrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (c *Client) MessageQueueTriggerCreate(t *tpr.Messagequeuetrigger) (*api.Obj
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) MessageQueueTriggerCreate(t *tpr.Messagequeuetrigger) (*api.Obj
 	return &m, nil
 }
 
-func (c *Client) MessageQueueTriggerGet(m *api.ObjectMeta) (*tpr.Messagequeuetrigger, error) {
+func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*tpr.Messagequeuetrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -77,7 +77,7 @@ func (c *Client) MessageQueueTriggerGet(m *api.ObjectMeta) (*tpr.Messagequeuetri
 	return &t, nil
 }
 
-func (c *Client) MessageQueueTriggerUpdate(mqTrigger *tpr.Messagequeuetrigger) (*api.ObjectMeta, error) {
+func (c *Client) MessageQueueTriggerUpdate(mqTrigger *tpr.Messagequeuetrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(mqTrigger)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (c *Client) MessageQueueTriggerUpdate(mqTrigger *tpr.Messagequeuetrigger) (
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (c *Client) MessageQueueTriggerUpdate(mqTrigger *tpr.Messagequeuetrigger) (
 	return &m, nil
 }
 
-func (c *Client) MessageQueueTriggerDelete(m *api.ObjectMeta) error {
+func (c *Client) MessageQueueTriggerDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)

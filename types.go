@@ -16,6 +16,10 @@ limitations under the License.
 
 package fission
 
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 type (
 	//
 	// Functions and packages
@@ -65,9 +69,10 @@ type (
 	BuildStatus string
 
 	PackageSpec struct {
-		Environment EnvironmentReference `json:"environment"`
-		Source      Archive              `json:"source"`
-		Deployment  Archive              `json:"deployment"`
+		Environment  EnvironmentReference `json:"environment"`
+		Source       Archive              `json:"source"`
+		Deployment   Archive              `json:"deployment"`
+		BuildCommand string               `json:"buildcmd"`
 		// In the future, we can have a debug build here too
 	}
 	PackageStatus struct {
@@ -162,7 +167,13 @@ type (
 		// Optional, but strongly encouraged. Used to populate
 		// links from UI, CLI, etc.
 		DocumentationURL string `json:"documentationurl"`
+
+		// Optional
+		// Defaults to 'Single'
+		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
 	}
+
+	AllowedFunctionsPerContainer string
 
 	//
 	// Triggers
@@ -220,15 +231,18 @@ type (
 		// env-specific. Optional.
 		FilePath string `json:"filepath"`
 
-		// Entrypoint has an environment-specific meaning;
+		// FunctionName has an environment-specific meaning;
 		// usually, it defines a function within a module
 		// containing multiple functions. Optional; default is
 		// environment-specific.
-		EntryPoint string `json:"entrypoint"`
+		FunctionName string `json:"functionName"`
 
 		// URL to expose this function at. Optional; defaults
 		// to "/".
 		URL string `json:"url"`
+
+		// Metatdata
+		FunctionMetadata *metav1.ObjectMeta
 	}
 )
 
@@ -250,6 +264,11 @@ const (
 	BuildStatusRunning   = "running"
 	BuildStatusSucceeded = "succeeded"
 	BuildStatusFailed    = "failed"
+)
+
+const (
+	AllowedFunctionsPerContainerSingle   = "single"
+	AllowedFunctionsPerContainerInfinite = "infinite"
 )
 
 const (

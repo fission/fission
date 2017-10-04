@@ -22,13 +22,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) WatchCreate(w *tpr.Kuberneteswatchtrigger) (*api.ObjectMeta, error) {
+func (c *Client) WatchCreate(w *tpr.Kuberneteswatchtrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(w)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (c *Client) WatchCreate(w *tpr.Kuberneteswatchtrigger) (*api.ObjectMeta, er
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (c *Client) WatchCreate(w *tpr.Kuberneteswatchtrigger) (*api.ObjectMeta, er
 	return &m, nil
 }
 
-func (c *Client) WatchGet(m *api.ObjectMeta) (*tpr.Kuberneteswatchtrigger, error) {
+func (c *Client) WatchGet(m *metav1.ObjectMeta) (*tpr.Kuberneteswatchtrigger, error) {
 	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -78,12 +78,12 @@ func (c *Client) WatchGet(m *api.ObjectMeta) (*tpr.Kuberneteswatchtrigger, error
 	return &w, nil
 }
 
-func (c *Client) WatchUpdate(w *tpr.Kuberneteswatchtrigger) (*api.ObjectMeta, error) {
+func (c *Client) WatchUpdate(w *tpr.Kuberneteswatchtrigger) (*metav1.ObjectMeta, error) {
 	return nil, fission.MakeError(fission.ErrorNotImplmented,
 		"watch update not implemented")
 }
 
-func (c *Client) WatchDelete(m *api.ObjectMeta) error {
+func (c *Client) WatchDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)

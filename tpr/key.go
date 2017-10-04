@@ -19,7 +19,7 @@ package tpr
 import (
 	"fmt"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Given metadata, create a key that uniquely identifies the contents
@@ -28,6 +28,6 @@ import (
 // content. (ResourceVersion may also update on status updates, so
 // this will result in some unnecessary cache misses. That should be
 // ok.)
-func CacheKey(metadata *api.ObjectMeta) string {
+func CacheKey(metadata *metav1.ObjectMeta) string {
 	return fmt.Sprintf("%v_%v", metadata.UID, metadata.ResourceVersion)
 }

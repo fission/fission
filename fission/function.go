@@ -28,10 +28,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/dchest/uniuri"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
@@ -85,6 +84,47 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
+func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
+	pkgSpec := fission.PackageSpec{
+		Environment: fission.EnvironmentReference{
+			Namespace: metav1.NamespaceDefault,
+			Name:      envName,
+		},
+	}
+	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
+
+	if len(deployArchiveName) > 0 {
+		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
+		if len(srcArchiveName) > 0 {
+			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
+		}
+	}
+	if len(srcArchiveName) > 0 {
+		pkgSpec.Source = *createArchive(client, srcArchiveName)
+		// set pending status to package
+		pkgStatus = fission.BuildStatusPending
+	}
+
+	if len(buildcmd) > 0 {
+		pkgSpec.BuildCommand = buildcmd
+	}
+
+	pkgName := strings.ToLower(uuid.NewV4().String())
+	pkg := &tpr.Package{
+		Metadata: metav1.ObjectMeta{
+			Name:      pkgName,
+			Namespace: metav1.NamespaceDefault,
+		},
+		Spec: pkgSpec,
+		Status: fission.PackageStatus{
+			BuildStatus: pkgStatus,
+		},
+	}
+	pkgMetadata, err := client.PackageCreate(pkg)
+	checkErr(err, "create package")
+	return pkgMetadata
+}
+
 func getContents(filePath string) []byte {
 	var code []byte
 	var err error
@@ -97,6 +137,10 @@ func getContents(filePath string) []byte {
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	if len(c.String("package")) > 0 {
+		fatal("--package is deprecated, please use --deploy instead.")
+	}
+
 	fnName := c.String("name")
 	if len(fnName) == 0 {
 		fatal("Need --name argument.")
@@ -107,56 +151,46 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --env argument.")
 	}
 
-	srcPkgName := c.String("srcpkg")
-
-	deployPkgName := c.String("code")
-	if len(deployPkgName) == 0 {
-		deployPkgName = c.String("package")
+	srcArchiveName := c.String("src")
+	deployArchiveName := c.String("code")
+	if len(deployArchiveName) == 0 {
+		deployArchiveName = c.String("deploy")
 	}
 
-	if len(srcPkgName) == 0 && len(deployPkgName) == 0 {
-		fatal("Need --code or --package to specify deployment package, or use --srcpkg to specify source package.")
+	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
+		fatal("Need --code or --deploy to specify deployment archive, or use --src to specify source archive.")
 	}
+
+	entrypoint := c.String("entrypoint")
+	buildcmd := c.String("buildcmd")
+	if len(buildcmd) == 0 {
+		buildcmd = "/builder"
+	}
+
+	pkgMetadata := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 
 	function := &tpr.Function{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.FunctionSpec{
 			Environment: fission.EnvironmentReference{
 				Name:      envName,
-				Namespace: api.NamespaceDefault,
+				Namespace: metav1.NamespaceDefault,
+			},
+			Package: fission.FunctionPackageRef{
+				FunctionName: entrypoint,
+				PackageRef: fission.PackageRef{
+					Namespace:       pkgMetadata.Namespace,
+					Name:            pkgMetadata.Name,
+					ResourceVersion: pkgMetadata.ResourceVersion,
+				},
 			},
 		},
 	}
 
-	var pkgSpec fission.PackageSpec
-	if len(srcPkgName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcPkgName)
-	}
-	if len(deployPkgName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployPkgName)
-	}
-	pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-	pkg := &tpr.Package{
-		Metadata: api.ObjectMeta{
-			Name:      pkgName,
-			Namespace: api.NamespaceDefault,
-		},
-		Spec: pkgSpec,
-	}
-	newpkg, err := client.PackageCreate(pkg)
-	checkErr(err, "create package")
-
-	function.Spec.Package = fission.FunctionPackageRef{
-		PackageRef: fission.PackageRef{
-			Name:            newpkg.Name,
-			Namespace:       newpkg.Namespace,
-			ResourceVersion: newpkg.ResourceVersion,
-		},
-	}
-	_, err = client.FunctionCreate(function)
+	_, err := client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -172,9 +206,9 @@ func fnCreate(c *cli.Context) error {
 	}
 	triggerName := uuid.NewV4().String()
 	ht := &tpr.Httptrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
@@ -199,14 +233,14 @@ func fnGet(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 	fn, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
-	pkg, err := client.PackageGet(&api.ObjectMeta{
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Name:      fn.Spec.Package.PackageRef.Name,
 		Namespace: fn.Spec.Package.PackageRef.Namespace,
 	})
@@ -224,9 +258,9 @@ func fnGetMeta(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	f, err := client.FunctionGet(m)
@@ -248,47 +282,59 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	function, err := client.FunctionGet(&api.ObjectMeta{
+	if len(c.String("package")) > 0 {
+		fatal("--package is deprecated, please use --deploy instead.")
+	}
+
+	function, err := client.FunctionGet(&metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
 	envName := c.String("env")
-	deployPkgName := c.String("code")
-	if len(deployPkgName) == 0 {
-		deployPkgName = c.String("package")
+	deployArchiveName := c.String("code")
+	if len(deployArchiveName) == 0 {
+		deployArchiveName = c.String("deploy")
 	}
-	srcPkgName := c.String("srcpkg")
+	srcArchiveName := c.String("src")
 
-	if len(envName) == 0 && len(deployPkgName) == 0 && len(srcPkgName) == 0 {
-		fatal("Need --env or --code or --package or --srcpkg argument.")
-	}
-
-	if len(deployPkgName) != 0 || len(srcPkgName) != 0 {
-		// get existing package
-		pkg, err := client.PackageGet(&api.ObjectMeta{
-			Name:      function.Spec.Package.PackageRef.Name,
-			Namespace: function.Spec.Package.PackageRef.Namespace,
-		})
-		// update package spec
-		if len(srcPkgName) > 0 {
-			archive := createArchive(client, srcPkgName)
-			pkg.Spec.Source = *archive
-		}
-		if len(deployPkgName) > 0 {
-			archive := createArchive(client, deployPkgName)
-			pkg.Spec.Deployment = *archive
-		}
-		// updage package object
-		newpkg, err := client.PackageUpdate(pkg)
-		checkErr(err, "update package")
-		// update function spec with resource version
-		function.Spec.Package.PackageRef.ResourceVersion = newpkg.ResourceVersion
+	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 {
+		fatal("Need --env or --code or --package or --deploy argument.")
 	}
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
+	}
+
+	entrypoint := c.String("entrypoint")
+	if len(entrypoint) > 0 {
+		function.Spec.Package.FunctionName = entrypoint
+	}
+
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Name:      function.Spec.Package.PackageRef.Name,
+		Namespace: function.Spec.Package.PackageRef.Namespace,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", function.Spec.Package.PackageRef.Name))
+
+	buildcmd := c.String("buildcmd")
+	if len(buildcmd) == 0 {
+		// use previous build command if not specified.
+		buildcmd = pkg.Spec.BuildCommand
+	}
+
+	if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
+		// create a new package for function
+		pkgMetadata := createPackage(client,
+			function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
+
+		// update function spec with resource version
+		function.Spec.Package.PackageRef = fission.PackageRef{
+			Namespace:       pkgMetadata.Namespace,
+			Name:            pkgMetadata.Name,
+			ResourceVersion: pkgMetadata.ResourceVersion,
+		}
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -306,9 +352,9 @@ func fnDelete(c *cli.Context) error {
 		fatal("Need name of function, use --name")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	err := client.FunctionDelete(m)
@@ -350,9 +396,9 @@ func fnLogs(c *cli.Context) error {
 	}
 
 	fnPod := c.String("pod")
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	f, err := client.FunctionGet(m)
@@ -423,7 +469,7 @@ func fnPods(c *cli.Context) error {
 		dbType = logdb.INFLUXDB
 	}
 
-	m := &api.ObjectMeta{Name: fnName}
+	m := &metav1.ObjectMeta{Name: fnName}
 
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")

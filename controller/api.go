@@ -26,7 +26,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	kerrors "k8s.io/client-go/1.5/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"
@@ -37,6 +37,8 @@ type (
 	API struct {
 		fissionClient     *tpr.FissionClient
 		storageServiceUrl string
+		builderManagerUrl string
+		workflowApiUrl    string
 	}
 
 	logDBConfig struct {
@@ -54,6 +56,20 @@ func MakeAPI() (*API, error) {
 		api.storageServiceUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.storageServiceUrl = "http://storagesvc"
+	}
+
+	u = os.Getenv("BUILDER_MANAGER_URL")
+	if len(u) > 0 {
+		api.builderManagerUrl = strings.TrimSuffix(u, "/")
+	} else {
+		api.builderManagerUrl = "http://buildermgr"
+	}
+
+	wfEnv := os.Getenv("WORKFLOW_API_URL")
+	if len(u) > 0 {
+		api.workflowApiUrl = strings.TrimSuffix(wfEnv, "/")
+	} else {
+		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
 	return api, err
@@ -102,7 +118,7 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.2.1\"}\n")
+	fmt.Fprintf(w, "{\"message\": \"Fission API\", \"version\": \"0.3.0\"}\n")
 }
 
 func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +176,9 @@ func (api *API) Serve(port int) {
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
+	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
+	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
+	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 
 	address := fmt.Sprintf(":%v", port)
 

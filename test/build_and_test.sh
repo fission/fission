@@ -12,11 +12,17 @@ source $(dirname $0)/test_utils.sh
 
 IMAGE=gcr.io/fission-ci/fission-bundle
 FETCHER_IMAGE=gcr.io/fission-ci/fetcher
+PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env
+PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder
 TAG=test
 
 build_and_push_fission_bundle $IMAGE:$TAG
 
 build_and_push_fetcher $FETCHER_IMAGE:$TAG
+
+build_and_push_python_env_runtime $PYTHON_RUNTIME_IMAGE:$TAG
+
+build_and_push_python_env_builder $PYTHON_BUILDER_IMAGE:$TAG
 
 build_fission_cli
 

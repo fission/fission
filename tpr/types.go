@@ -17,9 +17,8 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/pkg/api"
-	"k8s.io/client-go/1.5/pkg/api/meta"
-	"k8s.io/client-go/1.5/pkg/api/unversioned"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/fission/fission"
 )
@@ -40,39 +39,41 @@ import (
 type (
 	// Packages. Think of these as function-level images.
 	Package struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta      `json:"metadata"`
-		Spec                 fission.PackageSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta   `json:"metadata"`
+		Spec            fission.PackageSpec `json:"spec"`
+
+		Status fission.PackageStatus `json:"status"`
 	}
 	PackageList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Package `json:"items"`
 	}
 
 	// Functions.
 	Function struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta       `json:"metadata"`
-		Spec                 fission.FunctionSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta    `json:"metadata"`
+		Spec            fission.FunctionSpec `json:"spec"`
 	}
 	FunctionList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Function `json:"items"`
 	}
 
 	// Environments.
 	Environment struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta          `json:"metadata"`
-		Spec                 fission.EnvironmentSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta       `json:"metadata"`
+		Spec            fission.EnvironmentSpec `json:"spec"`
 	}
 	EnvironmentList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Environment `json:"items"`
 	}
@@ -81,52 +82,52 @@ type (
 	// it to be spelled "Httptrigger" not "HTTPTrigger" or even
 	// "HttpTrigger".  Bleh.)
 	Httptrigger struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta          `json:"metadata"`
-		Spec                 fission.HTTPTriggerSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta       `json:"metadata"`
+		Spec            fission.HTTPTriggerSpec `json:"spec"`
 	}
 	HttptriggerList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Httptrigger `json:"items"`
 	}
 
 	// Kubernetes Watches as triggers
 	Kuberneteswatchtrigger struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta                     `json:"metadata"`
-		Spec                 fission.KubernetesWatchTriggerSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta                  `json:"metadata"`
+		Spec            fission.KubernetesWatchTriggerSpec `json:"spec"`
 	}
 	KuberneteswatchtriggerList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Kuberneteswatchtrigger `json:"items"`
 	}
 
 	// Time triggers
 	Timetrigger struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta          `json:"metadata"`
-		Spec                 fission.TimeTriggerSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta       `json:"metadata"`
+		Spec            fission.TimeTriggerSpec `json:"spec"`
 	}
 	TimetriggerList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Timetrigger `json:"items"`
 	}
 
 	// Message Queue triggers
 	Messagequeuetrigger struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             api.ObjectMeta                  `json:"metadata"`
-		Spec                 fission.MessageQueueTriggerSpec `json:"spec"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta               `json:"metadata"`
+		Spec            fission.MessageQueueTriggerSpec `json:"spec"`
 	}
 	MessagequeuetriggerList struct {
-		unversioned.TypeMeta `json:",inline"`
-		Metadata             unversioned.ListMeta `json:"metadata"`
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
 
 		Items []Messagequeuetrigger `json:"items"`
 	}
@@ -141,90 +142,90 @@ type (
 // And each list TPR type needs:
 //   GetListMeta (to satisfy the ListMetaAccessor interface)
 
-func (f *Function) GetObjectKind() unversioned.ObjectKind {
+func (f *Function) GetObjectKind() schema.ObjectKind {
 	return &f.TypeMeta
 }
-func (e *Environment) GetObjectKind() unversioned.ObjectKind {
+func (e *Environment) GetObjectKind() schema.ObjectKind {
 	return &e.TypeMeta
 }
-func (ht *Httptrigger) GetObjectKind() unversioned.ObjectKind {
+func (ht *Httptrigger) GetObjectKind() schema.ObjectKind {
 	return &ht.TypeMeta
 }
-func (w *Kuberneteswatchtrigger) GetObjectKind() unversioned.ObjectKind {
+func (w *Kuberneteswatchtrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Timetrigger) GetObjectKind() unversioned.ObjectKind {
+func (w *Timetrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Messagequeuetrigger) GetObjectKind() unversioned.ObjectKind {
+func (w *Messagequeuetrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Package) GetObjectKind() unversioned.ObjectKind {
+func (w *Package) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
 
-func (f *Function) GetObjectMeta() meta.Object {
+func (f *Function) GetObjectMeta() metav1.Object {
 	return &f.Metadata
 }
-func (e *Environment) GetObjectMeta() meta.Object {
+func (e *Environment) GetObjectMeta() metav1.Object {
 	return &e.Metadata
 }
-func (ht *Httptrigger) GetObjectMeta() meta.Object {
+func (ht *Httptrigger) GetObjectMeta() metav1.Object {
 	return &ht.Metadata
 }
-func (w *Kuberneteswatchtrigger) GetObjectMeta() meta.Object {
+func (w *Kuberneteswatchtrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Timetrigger) GetObjectMeta() meta.Object {
+func (w *Timetrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Messagequeuetrigger) GetObjectMeta() meta.Object {
+func (w *Messagequeuetrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Package) GetObjectMeta() meta.Object {
+func (w *Package) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
 
-func (fl *FunctionList) GetObjectKind() unversioned.ObjectKind {
+func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
 	return &fl.TypeMeta
 }
-func (el *EnvironmentList) GetObjectKind() unversioned.ObjectKind {
+func (el *EnvironmentList) GetObjectKind() schema.ObjectKind {
 	return &el.TypeMeta
 }
-func (hl *HttptriggerList) GetObjectKind() unversioned.ObjectKind {
+func (hl *HttptriggerList) GetObjectKind() schema.ObjectKind {
 	return &hl.TypeMeta
 }
-func (wl *KuberneteswatchtriggerList) GetObjectKind() unversioned.ObjectKind {
+func (wl *KuberneteswatchtriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *TimetriggerList) GetObjectKind() unversioned.ObjectKind {
+func (wl *TimetriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *MessagequeuetriggerList) GetObjectKind() unversioned.ObjectKind {
+func (wl *MessagequeuetriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *PackageList) GetObjectKind() unversioned.ObjectKind {
+func (wl *PackageList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
 
-func (fl *FunctionList) GetListMeta() unversioned.List {
+func (fl *FunctionList) GetListMeta() metav1.List {
 	return &fl.Metadata
 }
-func (el *EnvironmentList) GetListMeta() unversioned.List {
+func (el *EnvironmentList) GetListMeta() metav1.List {
 	return &el.Metadata
 }
-func (hl *HttptriggerList) GetListMeta() unversioned.List {
+func (hl *HttptriggerList) GetListMeta() metav1.List {
 	return &hl.Metadata
 }
-func (wl *KuberneteswatchtriggerList) GetListMeta() unversioned.List {
+func (wl *KuberneteswatchtriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *TimetriggerList) GetListMeta() unversioned.List {
+func (wl *TimetriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *MessagequeuetriggerList) GetListMeta() unversioned.List {
+func (wl *MessagequeuetriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *PackageList) GetListMeta() unversioned.List {
+func (wl *PackageList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }

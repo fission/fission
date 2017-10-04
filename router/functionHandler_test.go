@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"testing"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func createBackendService(testResponseString string) *url.URL {
@@ -49,7 +49,7 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &api.ObjectMeta{Name: "foo", Namespace: api.NamespaceDefault}
+	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 
 	fmap := makeFunctionServiceMap(0)
 	fmap.assign(fn, backendURL)

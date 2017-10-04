@@ -18,12 +18,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -42,21 +41,31 @@ func envCreate(c *cli.Context) error {
 		fatal("Need an image, use --image.")
 	}
 
+	envVersion := c.Int("version")
 	envBuilderImg := c.String("builder")
-
 	envBuildCmd := c.String("buildcmd")
-	if len(envBuilderImg) > 0 && len(envBuildCmd) == 0 {
-		log.Printf("No build command is specified, use the default build command.")
-		envBuildCmd = "build"
+
+	if len(envBuilderImg) > 0 {
+		envVersion = 2
+		if len(envBuildCmd) == 0 {
+			envBuildCmd = "build"
+		}
+	}
+
+	// Environment API interface version is not specified and
+	// builder image is empty, set default interface version
+	if envVersion == 0 {
+		fmt.Println("Use default environment v1 API interface")
+		envVersion = 1
 	}
 
 	env := &tpr.Environment{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      envName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.EnvironmentSpec{
-			Version: 1,
+			Version: envVersion,
 			Runtime: fission.Runtime{
 				Image: envImg,
 			},
@@ -82,9 +91,9 @@ func envGet(c *cli.Context) error {
 		fatal("Need a name, use --name.")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
@@ -112,15 +121,20 @@ func envUpdate(c *cli.Context) error {
 		fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
-	env, err := client.EnvironmentGet(&api.ObjectMeta{
+	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "find environment")
 
 	if len(envImg) > 0 {
 		env.Spec.Runtime.Image = envImg
 	}
+
+	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
+		fatal("Environment v1 API interface doesn't supported environment builder.")
+	}
+
 	if len(envBuilderImg) > 0 {
 		env.Spec.Builder.Image = envBuilderImg
 	}
@@ -143,9 +157,9 @@ func envDelete(c *cli.Context) error {
 		fatal("Need a name , use --name.")
 	}
 
-	m := &api.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")

@@ -25,7 +25,7 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -77,9 +77,9 @@ func htCreate(c *cli.Context) error {
 	triggerName := uuid.NewV4().String()
 
 	ht := &tpr.Httptrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
@@ -115,9 +115,9 @@ func htUpdate(c *cli.Context) error {
 		fatal("Nothing to update. Use --function to specify a new function.")
 	}
 
-	ht, err := client.HTTPTriggerGet(&api.ObjectMeta{
+	ht, err := client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      htName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "get HTTP trigger")
 
@@ -139,9 +139,9 @@ func htDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.HTTPTriggerDelete(&api.ObjectMeta{
+	err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
 		Name:      htName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "delete trigger")
 

@@ -19,6 +19,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -32,25 +33,37 @@ type (
 	}
 )
 
-func MakeClient(serverUrl string) *Client {
+func MakeClient(builderUrl string) *Client {
 	return &Client{
-		url: strings.TrimSuffix(serverUrl, "/"),
+		url: strings.TrimSuffix(builderUrl, "/"),
 	}
 }
 
-func (c *Client) Build(req *builder.PackageBuildRequest) error {
+func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return fission.MakeErrorFromHTTP(resp)
+		return nil, fission.MakeErrorFromHTTP(resp)
 	}
-	return nil
+
+	rBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	pkgBuildResp := builder.PackageBuildResponse{}
+	err = json.Unmarshal([]byte(rBody), &pkgBuildResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pkgBuildResp, nil
 }

@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) TimeTriggerCreate(t *tpr.Timetrigger) (*api.ObjectMeta, error) {
+func (c *Client) TimeTriggerCreate(t *tpr.Timetrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (c *Client) TimeTriggerCreate(t *tpr.Timetrigger) (*api.ObjectMeta, error) 
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) TimeTriggerCreate(t *tpr.Timetrigger) (*api.ObjectMeta, error) 
 	return &m, nil
 }
 
-func (c *Client) TimeTriggerGet(m *api.ObjectMeta) (*tpr.Timetrigger, error) {
+func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*tpr.Timetrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -77,7 +77,7 @@ func (c *Client) TimeTriggerGet(m *api.ObjectMeta) (*tpr.Timetrigger, error) {
 	return &t, nil
 }
 
-func (c *Client) TimeTriggerUpdate(t *tpr.Timetrigger) (*api.ObjectMeta, error) {
+func (c *Client) TimeTriggerUpdate(t *tpr.Timetrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (c *Client) TimeTriggerUpdate(t *tpr.Timetrigger) (*api.ObjectMeta, error) 
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (c *Client) TimeTriggerUpdate(t *tpr.Timetrigger) (*api.ObjectMeta, error) 
 	return &m, nil
 }
 
-func (c *Client) TimeTriggerDelete(m *api.ObjectMeta) error {
+func (c *Client) TimeTriggerDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)

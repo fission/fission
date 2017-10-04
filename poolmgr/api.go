@@ -29,7 +29,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
@@ -38,7 +38,7 @@ import (
 
 type (
 	createFuncServiceRequest struct {
-		funcMeta *api.ObjectMeta
+		funcMeta *metav1.ObjectMeta
 		respChan chan *createFuncServiceResponse
 	}
 
@@ -131,7 +131,7 @@ func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.
 	}
 
 	// get function metadata
-	m := api.ObjectMeta{}
+	m := metav1.ObjectMeta{}
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		http.Error(w, "Failed to parse request", 400)
@@ -149,7 +149,7 @@ func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.
 	w.Write([]byte(serviceName))
 }
 
-func (poolMgr *Poolmgr) getFunctionEnv(m *api.ObjectMeta) (*tpr.Environment, error) {
+func (poolMgr *Poolmgr) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment, error) {
 	var env *tpr.Environment
 
 	// Cached ?
@@ -178,7 +178,7 @@ func (poolMgr *Poolmgr) getFunctionEnv(m *api.ObjectMeta) (*tpr.Environment, err
 	return env, nil
 }
 
-func (poolMgr *Poolmgr) getServiceForFunction(m *api.ObjectMeta) (string, error) {
+func (poolMgr *Poolmgr) getServiceForFunction(m *metav1.ObjectMeta) (string, error) {
 	// Check function -> svc cache
 	log.Printf("[%v] Checking for cached function service", m.Name)
 	fsvc, err := poolMgr.fsCache.GetByFunction(m)
@@ -196,7 +196,7 @@ func (poolMgr *Poolmgr) getServiceForFunction(m *api.ObjectMeta) (string, error)
 	return resp.address, resp.err
 }
 
-func (poolMgr *Poolmgr) createServiceForFunction(m *api.ObjectMeta) (string, error) {
+func (poolMgr *Poolmgr) createServiceForFunction(m *metav1.ObjectMeta) (string, error) {
 	// None exists, so create a new funcSvc:
 	log.Printf("[%v] No cached function service found, creating one", m.Name)
 

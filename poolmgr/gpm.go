@@ -20,9 +20,10 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
 )
 
@@ -86,9 +87,14 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[tpr.CacheKey(&req.env.Metadata)]
 			if !ok {
+				var poolSize int32 = 3 // TODO configurable/autoscalable
+				switch req.env.Spec.AllowedFunctionsPerContainer {
+				case fission.AllowedFunctionsPerContainerInfinite:
+					poolSize = 1
+				}
+
 				pool, err = MakeGenericPool(
-					gpm.kubernetesClient, req.env,
-					3, // TODO configurable/autoscalable
+					gpm.fissionClient, gpm.kubernetesClient, req.env, poolSize,
 					gpm.namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
@@ -142,7 +148,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		time.Sleep(pollSleep)
 
 		// get list of envs from controller
-		envs, err := gpm.fissionClient.Environments(api.NamespaceAll).List(api.ListOptions{})
+		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed to get environment list: %v", err)
 		}

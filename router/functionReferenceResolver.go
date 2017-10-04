@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
@@ -44,7 +44,7 @@ type (
 	// a distribution of requests across two functions.
 	resolveResult struct {
 		resolveResultType
-		functionMetadata *api.ObjectMeta
+		functionMetadata *metav1.ObjectMeta
 	}
 
 	// namespacedFunctionReference is just a function reference plus a
