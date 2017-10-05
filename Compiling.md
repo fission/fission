@@ -38,13 +38,10 @@ minikube and its built-in docker daemon:
   $ docker build -t minikube/fission-bundle .
 ```
 
-Next, install fission on your kubernetes cluster:
+Next, install fission with this image on your kubernetes cluster using the helm chart:
 
 ```
-  # To install, update fission.yaml to point to the image you just made: "minikube/fission-bundle"
-  $ $EDITOR fission.yaml
-  $ kubectl create -f fission.yaml
-  $ kubectl create -f fission-nodeport.yaml
+  $ helm install --set "image=minikube/fission-bundle,pullPolicy=Always,analytics=false" charts/fission-all
 ```
 
 And if you're changing the CLI too, you can build it with:
