@@ -45,8 +45,24 @@ A _function_ is a piece of code that follows the fission function
 interface.
 
 An _environment_ contains the language- and runtime-specific parts of
-running a function.  Fission comes with NodeJS and Python
-environments; you can also extend environments or create entirely new
+running a function.  
+
+The following environments are currently available:
+ 
+ | Environment                          | Image                     |
+ | ------------------------------------ | ------------------------- |
+ | Binary (for executables or scripts)  | `fission/binary-env`      |
+ | Go                                   | `fission/go-env`          |
+ | .NET                                 | `fission/dotnet-env`      |
+ | .NET 2.0                             | `fission/dotnet20-env`    |
+ | NodeJS (Alpine)                      | `fission/node-env`        |
+ | NodeJS (Debian)                      | `fission/node-env-debian` |
+ | Perl                                 | `fission/perl-env`        |
+ | PHP 7                                | `fission/php-env`         |
+ | Python 3                             | `fission/python-env`      |
+ | Ruby                                 | `fission/ruby-env`        |
+
+You can also extend environments or create entirely new
 ones if you want.  (An environment is essentially just a container
 with a webserver and dynamic loader.)
 

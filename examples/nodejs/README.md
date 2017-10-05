@@ -2,11 +2,18 @@
 
 This directory contains several examples to get you started using Node.js with Fission.
 
+## Environment
+
 Before running any of these functions, make sure you have created a `nodejs` Fission environment:
 
 ```
 $ fission env create --name nodejs --image fission/node-env
 ```
+
+Note: The default `fission/node-env` image is based on Alpine, which is much smaller than the main Debian Node image (65MB vs 680MB) while still being suitable for most use cases.
+If you need to use the full Debian image use the `fission/node-env-debian` image instead.
+See the [official Node docker hub repo](https://hub.docker.com/_/node/) for considerations 
+relating to this choice.
 
 ## Function signature
 
