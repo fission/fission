@@ -1,5 +1,5 @@
-hash: c3353dd05f6e05394d9ebe2225cd9217e37573462ed430401aeed12c9536d13e
-updated: 2018-02-08T21:22:29.935216575-08:00
+hash: 03ac7555eb1f5745e82abe42a07828ffcaac3785a77e7f37a596f30db8189e7f
+updated: 2018-02-08T22:40:25.586979477-08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -8,6 +8,8 @@ imports:
   - internal
 - name: github.com/Azure/azure-sdk-for-go
   version: f111fc2fa3861c5fdced76cae4c9c71821969577
+  subpackages:
+  - storage
 - name: github.com/Azure/go-autorest
   version: d4e6b95c12a08b4de2d48b45d5b4d594e5d32fab
   subpackages:
@@ -20,7 +22,7 @@ imports:
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
-  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
   - spew
 - name: github.com/dchest/uniuri
@@ -113,6 +115,8 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/marstr/guid
+  version: 8bdf7d1a087ccc975cf37dd6507da50698fd19ca
 - name: github.com/mholt/archiver
   version: 26cf5bb32d07aa4e8d0de15f56ce516f4641d7df
 - name: github.com/nats-io/go-nats
@@ -153,6 +157,12 @@ imports:
   version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
+- name: github.com/stretchr/testify
+  version: 12b6f73e6084dad08a7c6e575284b177ecafbc71
+  subpackages:
+  - assert
+  - mock
+  - require
 - name: github.com/ugorji/go
   version: ded73eae5db7e7a0ef6f55aace87a2873c5d2b74
   subpackages:
@@ -363,4 +373,10 @@ imports:
   - util/homedir
   - util/integer
   - util/jsonpath
-testImports: []
+testImports:
+- name: github.com/pmezard/go-difflib
+  version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
+  subpackages:
+  - difflib
+- name: github.com/stretchr/objx
+  version: 8a3f7159479fbc75b30357fbc48f380b7320f08e

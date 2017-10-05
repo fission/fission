@@ -26,6 +26,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fission/fission"
@@ -48,12 +49,15 @@ const (
 	AzureMessageVisibilityTimeout = time.Minute
 	// AzurePoisonQueueSuffix is the suffix used for posion queues.
 	AzurePoisonQueueSuffix = "-poison"
+	// AzureFunctionInvocationTimeout is the amount of time to wait for a triggered function to execute.
+	AzureFunctionInvocationTimeout = 10 * time.Minute
 )
 
 // AzureStorageConnection represents an Azure storage connection.
 type AzureStorageConnection struct {
-	routerURL string
-	service   AzureQueueService
+	routerURL  string
+	service    AzureQueueService
+	httpClient AzureHTTPClient
 }
 
 // AzureQueueSubscription represents an Azure storage message queue subscription.
@@ -63,6 +67,7 @@ type AzureQueueSubscription struct {
 	outputQueueName string
 	functionURL     string
 	contentType     string
+	unsubscribe     chan bool
 	done            chan bool
 }
 
@@ -86,6 +91,12 @@ type AzureMessage interface {
 	Bytes() []byte
 	Put(options *storage.PutMessageOptions) error
 	Delete(options *storage.QueueServiceOptions) error
+}
+
+// AzureHTTPClient is the interface that abstract HTTP requests made by the trigger.
+// This exists to enable unit testing.
+type AzureHTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 type azureQueueService struct {
@@ -182,6 +193,9 @@ func newAzureStorageConnection(routerURL string, config MessageQueueConfig) (Mes
 	return &AzureStorageConnection{
 		routerURL: routerURL,
 		service:   newAzureQueueService(client),
+		httpClient: &http.Client{
+			Timeout: AzureFunctionInvocationTimeout,
+		},
 	}, nil
 }
 
@@ -198,6 +212,7 @@ func (asc AzureStorageConnection) subscribe(trigger *crd.MessageQueueTrigger) (m
 		outputQueueName: trigger.Spec.ResponseTopic,
 		functionURL:     asc.routerURL + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name), "/"),
 		contentType:     trigger.Spec.ContentType,
+		unsubscribe:     make(chan bool),
 		done:            make(chan bool),
 	}
 
@@ -207,32 +222,42 @@ func (asc AzureStorageConnection) subscribe(trigger *crd.MessageQueueTrigger) (m
 
 func (asc AzureStorageConnection) unsubscribe(subscription messageQueueSubscription) error {
 	sub := subscription.(*AzureQueueSubscription)
-	defer close(sub.done)
 
 	log.Infof("Unsubscribing from Azure storage queue '%s'.", sub.queueName)
+
+	// Let the worker know we've unsubscribed
+	sub.unsubscribe <- true
+
+	// Wait until the subscription is done
+	<-sub.done
 	return nil
 }
 
 func runAzureQueueSubscription(conn AzureStorageConnection, sub *AzureQueueSubscription) {
+	var wg sync.WaitGroup
+
 	// Process the queue before waiting
-	pollAzureQueueSubscription(conn, sub)
+	pollAzureQueueSubscription(conn, sub, &wg)
 
 	timer := time.NewTimer(AzureQueuePollingInterval)
 
 	for {
 		log.Infof("Waiting for %v before polling Azure storage queue '%s'.", AzureQueuePollingInterval, sub.queueName)
 		select {
-		case <-sub.done:
+		case <-sub.unsubscribe:
+			timer.Stop()
+			wg.Wait()
+			sub.done <- true
 			return
 		case <-timer.C:
-			pollAzureQueueSubscription(conn, sub)
+			pollAzureQueueSubscription(conn, sub, &wg)
 			timer.Reset(AzureQueuePollingInterval)
 			continue
 		}
 	}
 }
 
-func pollAzureQueueSubscription(conn AzureStorageConnection, sub *AzureQueueSubscription) {
+func pollAzureQueueSubscription(conn AzureStorageConnection, sub *AzureQueueSubscription, wg *sync.WaitGroup) {
 	log.Infof("Polling messages for Azure storage queue '%s'.", sub.queueName)
 
 	err := sub.queue.Create(nil)
@@ -260,8 +285,12 @@ func pollAzureQueueSubscription(conn AzureStorageConnection, sub *AzureQueueSubs
 			break
 		}
 
+		wg.Add(len(messages))
 		for _, msg := range messages {
-			go invokeTriggeredFunction(conn, sub, msg)
+			go func(conn AzureStorageConnection, sub *AzureQueueSubscription, msg AzureMessage) {
+				defer wg.Done()
+				invokeTriggeredFunction(conn, sub, msg)
+			}(conn, sub, msg)
 		}
 	}
 }
@@ -290,7 +319,7 @@ func invokeTriggeredFunction(conn AzureStorageConnection, sub *AzureQueueSubscri
 		}
 		request.Header.Add("Content-Type", sub.contentType)
 
-		response, err := http.DefaultClient.Do(request)
+		response, err := conn.httpClient.Do(request)
 		if err != nil {
 			log.Errorf("Request to %s failed: %v", sub.functionURL, err)
 			continue

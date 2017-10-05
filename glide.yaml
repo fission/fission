@@ -54,3 +54,7 @@ import:
   version: ~12.4.0-beta
 - package: github.com/Azure/go-autorest
   version: ~9.9.0
+- package: github.com/stretchr/testify
+  version: ~1.2.1
+- package: github.com/davecgh/go-spew
+  version: ~1.1.0
