@@ -116,15 +116,12 @@ func createPackage(client *client.Client, fnName, envName, srcArchiveName, deplo
 		pkgSpec.BuildCommand = buildcmd
 	}
 
-	label := map[string]string{
-		"createdForFunction": fnName,
-	}
-
 	fnList, err := json.Marshal([]string{fnName})
 	checkErr(err, "encode json")
 
 	annotation := map[string]string{
-		"usedByFunctions": string(fnList),
+		"createdForFunction": fnName,
+		"usedByFunctions":    string(fnList),
 	}
 
 	pkgName := strings.ToLower(fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6)))
@@ -132,7 +129,6 @@ func createPackage(client *client.Client, fnName, envName, srcArchiveName, deplo
 		Metadata: metav1.ObjectMeta{
 			Name:        pkgName,
 			Namespace:   metav1.NamespaceDefault,
-			Labels:      label,
 			Annotations: annotation,
 		},
 		Spec: pkgSpec,
