@@ -179,6 +179,7 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
 	r.HandleFunc("/proxy/workflow", api.WorkflowApiProxy)
+	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
 
 	address := fmt.Sprintf(":%v", port)
 

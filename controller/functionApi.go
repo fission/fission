@@ -22,10 +22,17 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
+	"k8s.io/client-go/1.5/pkg/api/v1"
+	"k8s.io/client-go/1.5/pkg/labels"
+	"k8s.io/client-go/1.5/pkg/selection"
+	"k8s.io/client-go/1.5/pkg/util/sets"
+	"k8s.io/client-go/1.5/rest"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -187,4 +194,71 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		Director: director,
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+// FunctionPodLogs : Get logs for a function directly from pod
+func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fnName := vars["function"]
+	ns := vars["namespace"]
+
+	if len(ns) == 0 {
+		ns = "fission-function"
+	}
+
+	f, err := a.fissionClient.Functions(api.NamespaceDefault).Get(fnName)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	envName := f.Spec.Environment.Name
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	// Get Unmanaged Pods first
+	nameFilter, _ := labels.NewRequirement("functionName", selection.Equals, sets.NewString(fnName))
+	unmanagedFilter, _ := labels.NewRequirement("unmanaged", selection.Equals, sets.NewString("true"))
+	selector := labels.NewSelector().Add(*nameFilter).Add(*unmanagedFilter)
+	podList, err := clientset.Core().Pods(ns).List(api.ListOptions{LabelSelector: selector})
+
+	// Get the logs for last Pod executed
+	pods := podList.Items
+	sort.Slice(pods, func(i, j int) bool {
+		itime := pods[i].ObjectMeta.CreationTimestamp.Time
+		jtime := pods[j].ObjectMeta.CreationTimestamp.Time
+		return itime.After(jtime)
+	})
+
+	podLogOpts := v1.PodLogOptions{Container: envName} // Only the env container, not fetcher
+	podLogsReq := clientset.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
+	podLogs, err := podLogsReq.Stream()
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	log, err := ioutil.ReadAll(podLogs)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	defer podLogs.Close()
+
+	resp, err := json.Marshal(&log)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	a.respondWithSuccess(w, resp)
 }

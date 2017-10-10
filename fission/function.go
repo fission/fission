@@ -19,11 +19,14 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -133,6 +136,41 @@ func getContents(filePath string) []byte {
 	code, err = ioutil.ReadFile(filePath)
 	checkErr(err, fmt.Sprintf("read %v", filePath))
 	return code
+}
+
+func getPodLogs(c *cli.Context) bool {
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need --name argument.")
+	}
+
+	queryURL, err := url.Parse(c.GlobalString("server"))
+	checkErr(err, "Error parsing the base URL")
+	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	checkErr(err, "Error creating logs request")
+
+	httpClient := http.Client{Timeout: 5 * time.Second}
+	resp, err := httpClient.Do(req)
+	checkErr(err, "Get Logs request failed")
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Error in getting logs from POD directly, will check logstore, StatusCode:", resp.StatusCode)
+		return false
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	var data interface{}
+	json.Unmarshal(body, &data)
+	ldata, err := base64.StdEncoding.DecodeString(data.(string))
+
+	if ldata == nil {
+		return false
+	}
+	fmt.Println("Data=", string(ldata))
+	return true
 }
 
 func fnCreate(c *cli.Context) error {
@@ -501,7 +539,6 @@ func fnPods(c *cli.Context) error {
 
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
-
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
 		fatal("Need FISSION_ROUTER set to your fission router.")
@@ -532,8 +569,10 @@ func fnTest(c *cli.Context) error {
 		checkErr(err, "Function test failed")
 		fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
 		defer resp.Body.Close()
-		fnLogs(c)
+		flag := getPodLogs(c)
+		if !flag {
+			fnLogs(c)
+		}
 	}
-
 	return nil
 }
