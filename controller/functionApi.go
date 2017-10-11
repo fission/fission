@@ -26,13 +26,11 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/1.5/kubernetes"
 	"k8s.io/client-go/1.5/pkg/api"
 	"k8s.io/client-go/1.5/pkg/api/v1"
 	"k8s.io/client-go/1.5/pkg/labels"
 	"k8s.io/client-go/1.5/pkg/selection"
 	"k8s.io/client-go/1.5/pkg/util/sets"
-	"k8s.io/client-go/1.5/rest"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -213,13 +211,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	envName := f.Spec.Environment.Name
 
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
+	_, clientset, err := tpr.GetKubernetesClient()
 	if err != nil {
 		a.respondWithError(w, err)
 		return
