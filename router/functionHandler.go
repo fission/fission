@@ -28,18 +28,18 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	poolmgrClient "github.com/fission/fission/poolmgr/client"
+	executorClient "github.com/fission/fission/executor/client"
 )
 
 type functionHandler struct {
 	fmap     *functionServiceMap
-	poolmgr  *poolmgrClient.Client
+	executor *executorClient.Client
 	function *metav1.ObjectMeta
 }
 
 func (fh *functionHandler) getServiceForFunction() (*url.URL, error) {
-	// call poolmgr, get a url for a function
-	svcName, err := fh.poolmgr.GetServiceForFunction(fh.function)
+	// call executor, get a url for a function
+	svcName, err := fh.executor.GetServiceForFunction(fh.function)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +83,10 @@ func (rrt RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 func (fh *functionHandler) tapService(serviceUrl *url.URL) {
-	if fh.poolmgr == nil {
+	if fh.executor == nil {
 		return
 	}
-	fh.poolmgr.TapService(serviceUrl)
+	fh.executor.TapService(serviceUrl.String())
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
