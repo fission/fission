@@ -17,82 +17,65 @@ limitations under the License.
 package executor
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
-	"strings"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/fission/fission"
 )
 
+type (
+	Executor struct {
+		poolmgrUrl string
+	}
+)
+
+func MakeExecutor(url string) *Executor {
+	executor := &Executor{
+		poolmgrUrl: url,
+	}
+	return executor
+}
+
 func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	svcUrl, err := url.Parse(executor.poolmgrUrl + "/v2/getServiceForFunction")
 	if err != nil {
+		log.Printf("Failed to establish proxy server for PoolMgr: %v", err)
 		http.Error(w, "Failed to read request", 500)
 		return
 	}
-
-	// get function metadata
-	m := metav1.ObjectMeta{}
-	err = json.Unmarshal(body, &m)
-	if err != nil {
-		http.Error(w, "Failed to parse request", 400)
-		return
+	director := func(req *http.Request) {
+		req.URL.Scheme = svcUrl.Scheme
+		req.URL.Host = svcUrl.Host
+		req.URL.Path = svcUrl.Path
 	}
-
-	serviceName, err := executor.getServiceForFunction(&m)
-	if err != nil {
-		code, msg := fission.GetHTTPError(err)
-		log.Printf("Error: %v: %v", code, msg)
-		http.Error(w, msg, code)
-		return
+	proxy := &httputil.ReverseProxy{
+		Director: director,
 	}
-
-	w.Write([]byte(serviceName))
+	proxy.ServeHTTP(w, r)
 }
 
-func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, error) {
-	// Check function -> svc cache
-	log.Printf("[%v] Checking for cached function service", m.Name)
-	fsvc, err := executor.fsCache.GetByFunction(m)
-	if err == nil {
-		// Cached, return svc address
-		return fsvc.Address, nil
-	}
-
-	respChan := make(chan *createFuncServiceResponse)
-	executor.requestChan <- &createFuncServiceRequest{
-		funcMeta: m,
-		respChan: respChan,
-	}
-	resp := <-respChan
-	return resp.address, resp.err
-}
-
-// find funcSvc and update its atime
 func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	//http.Redirect(w, r, executor.poolmgrUrl+"/v2/tapService", 301)
+	svcUrl, err := url.Parse(executor.poolmgrUrl + "/v2/tapService")
 	if err != nil {
+		log.Printf("Failed to establish proxy server for PoolMgr: %v", err)
 		http.Error(w, "Failed to read request", 500)
 		return
 	}
-	svcName := string(body)
-	svcHost := strings.TrimPrefix(svcName, "http://")
-
-	err = executor.fsCache.TouchByAddress(svcHost)
-	if err != nil {
-		log.Printf("funcSvc tap error: %v", err)
-		http.Error(w, "Not found", 404)
-		return
+	director := func(req *http.Request) {
+		req.URL.Scheme = svcUrl.Scheme
+		req.URL.Host = svcUrl.Host
+		req.URL.Path = svcUrl.Path
 	}
-	w.WriteHeader(http.StatusOK)
+	proxy := &httputil.ReverseProxy{
+		Director: director,
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 func (executor *Executor) Serve(port int) {
