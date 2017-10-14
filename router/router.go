@@ -79,7 +79,8 @@ func Start(port int, poolmgrUrl string) {
 	}
 	restClient := fissionClient.GetTprClient()
 	poolmgr := poolmgrClient.MakeClient(poolmgrUrl)
-	resolver := makeFunctionReferenceResolver(fissionClient, restClient)
+	resolver := makeFunctionReferenceResolver(fissionClient)
+	resolver.Sync(restClient)
 	defer func() {
 		resolver.Stop()
 	}()

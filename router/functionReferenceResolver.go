@@ -68,24 +68,29 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient, tprClient *rest.RESTClient) *functionReferenceResolver {
-	stopCh := make(chan struct{})
-	store, controller := MakeInformerCache(tprClient)
+func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		fissionClient: fissionClient,
 		refCache:      cache.MakeCache(time.Minute, 0),
-		stopCh:        stopCh,
-		store:         store,
 	}
-	go controller.Run(stopCh)
 	return frr
 }
 
+// Sync starts syncing tpr function resources from k8s api server
+func (frr *functionReferenceResolver) Sync(tprClient *rest.RESTClient) {
+	stopCh := make(chan struct{})
+	store, controller := makeK8SCache(tprClient)
+	frr.stopCh = stopCh
+	frr.store = store
+	go controller.Run(stopCh)
+}
+
+// Stop stops tpr resources syncing
 func (frr *functionReferenceResolver) Stop() {
 	frr.stopCh <- struct{}{}
 }
 
-func MakeInformerCache(tprClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
+func makeK8SCache(tprClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
 	watchlist := k8sCache.NewListWatchFromClient(tprClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	listWatch := &k8sCache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
