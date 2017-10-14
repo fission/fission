@@ -21,6 +21,11 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
@@ -35,6 +40,9 @@ type (
 
 		// FunctionReference -> function metadata
 		refCache *cache.Cache
+
+		stopCh chan struct{}
+		store  k8sCache.Store
 	}
 
 	resolveResultType int
@@ -60,11 +68,36 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient) *functionReferenceResolver {
-	return &functionReferenceResolver{
+func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient, tprClient *rest.RESTClient) *functionReferenceResolver {
+	stopCh := make(chan struct{})
+	store, controller := MakeInformerCache(tprClient)
+	frr := &functionReferenceResolver{
 		fissionClient: fissionClient,
 		refCache:      cache.MakeCache(time.Minute, 0),
+		stopCh:        stopCh,
+		store:         store,
 	}
+	go controller.Run(stopCh)
+	return frr
+}
+
+func (frr *functionReferenceResolver) Stop() {
+	frr.stopCh <- struct{}{}
+}
+
+func MakeInformerCache(tprClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
+	watchlist := k8sCache.NewListWatchFromClient(tprClient, "functions", metav1.NamespaceDefault, fields.Everything())
+	listWatch := &k8sCache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return watchlist.List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return watchlist.Watch(options)
+		},
+	}
+	resyncPeriod := 30 * time.Second
+	return k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
+		k8sCache.ResourceEventHandlerFuncs{})
 }
 
 // resolve translates a namespace and a function reference to resolveResult.
@@ -106,10 +139,21 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
-	f, err := frr.fissionClient.Functions(namespace).Get(name)
+	// get function from cache
+	obj, isExist, err := frr.store.Get(&tpr.Function{
+		Metadata: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
+	if !isExist {
+		return nil, fmt.Errorf("function %v does not exist", name)
+	}
+
+	f := obj.(*tpr.Function)
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
 		functionMetadata:  &f.Metadata,

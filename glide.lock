@@ -1,5 +1,5 @@
-hash: b73c8c15207c8906bdc2c2713da03353d7c7ab78649f222b067e805b6f4c03dd
-updated: 2017-09-29T00:30:00.245121189+08:00
+hash: 285f5f29e18f61b5b834a48ce815fd40e023aa55d51acbc2ac8033cd8267635d
+updated: 2017-10-14T14:54:26.384349074+08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -87,6 +87,10 @@ imports:
   version: da285caa6daa337ae04a9ac603dbaf9009ffe687
   subpackages:
   - local
+- name: github.com/hashicorp/golang-lru
+  version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
+  subpackages:
+  - simplelru
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
@@ -207,6 +211,10 @@ imports:
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
+- name: k8s.io/api
+  version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
+  subpackages:
+  - core/v1
 - name: k8s.io/apimachinery
   version: 1fd2e63a9a370677308a42f24fd40c86438afddf
   subpackages:
@@ -236,6 +244,7 @@ imports:
   - pkg/runtime/serializer/versioning
   - pkg/selection
   - pkg/types
+  - pkg/util/cache
   - pkg/util/clock
   - pkg/util/diff
   - pkg/util/errors
@@ -327,6 +336,7 @@ imports:
   - rest/watch
   - third_party/forked/golang/template
   - tools/auth
+  - tools/cache
   - tools/clientcmd
   - tools/clientcmd/api
   - tools/clientcmd/api/latest

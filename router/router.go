@@ -78,7 +78,10 @@ func Start(port int, poolmgrUrl string) {
 		log.Fatalf("Error connecting to kubernetes API: %v", err)
 	}
 	poolmgr := poolmgrClient.MakeClient(poolmgrUrl)
-	resolver := makeFunctionReferenceResolver(fissionClient)
+	resolver := makeFunctionReferenceResolver(fissionClient, fissionClient.GetTprClient())
+	defer func() {
+		resolver.Stop()
+	}()
 	triggers := makeHTTPTriggerSet(fmap, fissionClient, poolmgr, resolver)
 	log.Printf("Starting router at port %v\n", port)
 	serve(port, triggers)
