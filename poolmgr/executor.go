@@ -40,7 +40,8 @@ func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) e
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, instanceId)
 
-	api := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
+	pm := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
+	api := MakeExecutor(pm)
 	go api.Serve(port)
 
 	return nil

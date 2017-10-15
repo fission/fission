@@ -28,7 +28,7 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	executorClient "github.com/fission/fission/executor/client"
+	executorClient "github.com/fission/fission/poolmgr/client"
 )
 
 type functionHandler struct {
@@ -86,7 +86,7 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 	if fh.executor == nil {
 		return
 	}
-	fh.executor.TapService(serviceUrl.String())
+	fh.executor.TapService(serviceUrl)
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
