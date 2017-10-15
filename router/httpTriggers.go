@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/fission/fission"
-	executorClient "github.com/fission/fission/executor/client"
+	executorClient "github.com/fission/fission/poolmgr/client"
 	"github.com/fission/fission/tpr"
 )
 

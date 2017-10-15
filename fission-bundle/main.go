@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/fission/fission/executor"
-
 	"github.com/docopt/docopt-go"
 	"github.com/fission/fission/buildermgr"
 	"github.com/fission/fission/controller"
@@ -24,20 +22,13 @@ func runController(port int) {
 	log.Fatalf("Error: Controller exited.")
 }
 
-func runRouter(port int, executorUrl string) {
-	router.Start(port, executorUrl)
+func runRouter(port int, poolmgrUrl string) {
+	router.Start(port, poolmgrUrl)
 	log.Fatalf("Error: Router exited.")
 }
 
-func runExecutor(port int, poolmgrUrl string) {
-	err := executor.StartExecutor(poolmgrUrl, port)
-	if err != nil {
-		log.Fatalf("Error starting executor: %v", err)
-	}
-}
-
 func runPoolmgr(port int, fissionNamespace, functionNamespace string) {
-	err := poolmgr.StartPoolmgr(fissionNamespace, functionNamespace, port)
+	err := poolmgr.StartExecutor(fissionNamespace, functionNamespace, port)
 	if err != nil {
 		log.Fatalf("Error starting poolmgr: %v", err)
 	}
@@ -126,8 +117,7 @@ Use it to start one or more of the fission servers:
 
 Usage:
   fission-bundle --controllerPort=<port>
-  fission-bundle --routerPort=<port> [--executorUrl=<url>]
-  fission-bundle --executorPort=<port> [--poolmgrUrl=<url>]
+  fission-bundle --routerPort=<port> [--poolmgrUrl=<url>]
   fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
@@ -139,11 +129,9 @@ Options:
   --controllerPort=<port>         Port that the controller should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --poolmgrPort=<port>            Port that the poolmgr should listen on.
-  --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
   --builderMgrPort=<port>         Port that the buildermgr should listen on.
   --poolmgrUrl=<url>              Poolmgr URL. Not required if --poolmgrPort is specified.
-  --executorUrl=<url>             Executor URL. Not required if --executorPort is specified.
   --routerUrl=<url>               Router URL.
   --etcdUrl=<etcdUrl>             Etcd URL.
   --storageSvcUrl=<url>           StorageService URL.
@@ -163,7 +151,6 @@ Options:
 	fissionNs := getStringArgWithDefault(arguments["--fission-namespace"], "fission")
 	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
-	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
@@ -175,12 +162,7 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(arguments["--routerPort"])
-		runRouter(port, executorUrl)
-	}
-
-	if arguments["--executorPort"] != nil {
-		port := getPort(arguments["--executorPort"])
-		runExecutor(port, poolmgrUrl)
+		runRouter(port, poolmgrUrl)
 	}
 
 	if arguments["--poolmgrPort"] != nil {
