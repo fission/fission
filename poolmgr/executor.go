@@ -20,13 +20,10 @@ import (
 	"log"
 
 	"github.com/dchest/uniuri"
-
-	"github.com/fission/fission/crd"
 )
 
-// Start the poolmgr service.
-func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
-	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
+	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
@@ -40,7 +37,8 @@ func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) e
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, instanceId)
 
-	api := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
+	pm := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
+	api := MakeExecutor(pm)
 	go api.Serve(port)
 
 	return nil

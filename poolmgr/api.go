@@ -243,10 +243,18 @@ func (poolMgr *Poolmgr) tapService(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (poolMgr *Poolmgr) Serve(port int) {
+func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
+	executor.pm.getServiceForFunctionApi(w, r)
+}
+
+func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
+	executor.pm.tapService(w, r)
+}
+
+func (executor *Executor) Serve(port int) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v2/getServiceForFunction", poolMgr.getServiceForFunctionApi).Methods("POST")
-	r.HandleFunc("/v2/tapService", poolMgr.tapService).Methods("POST")
+	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
+	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting poolmgr at port %v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
