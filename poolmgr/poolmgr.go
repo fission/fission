@@ -23,7 +23,7 @@ import (
 	"github.com/fission/fission/tpr"
 )
 
-func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
+func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
 	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)

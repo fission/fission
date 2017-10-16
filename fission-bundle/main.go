@@ -28,7 +28,7 @@ func runRouter(port int, poolmgrUrl string) {
 }
 
 func runPoolmgr(port int, fissionNamespace, functionNamespace string) {
-	err := poolmgr.StartExecutor(fissionNamespace, functionNamespace, port)
+	err := poolmgr.StartPoolmgr(fissionNamespace, functionNamespace, port)
 	if err != nil {
 		log.Fatalf("Error starting poolmgr: %v", err)
 	}

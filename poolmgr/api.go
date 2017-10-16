@@ -56,9 +56,6 @@ type (
 		fsCreateChannels map[string]*sync.WaitGroup // xxx no channels here, rename this
 		requestChan      chan *createFuncServiceRequest
 	}
-)
-
-type (
 	Executor struct {
 		pm *Poolmgr
 	}
