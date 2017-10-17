@@ -24,7 +24,7 @@ Language-neutral components:
 
 Language-specific components:
 
- * Environment container
+ * Environment container(s)
 
 
 Controller
@@ -112,13 +112,13 @@ Environment Container
 ---------------------
 
 Environment containers run user-defined functions.  Environment
-containers are language specific.  They must contain an HTTP server
-and a loader for functions.
+containers are language specific. Each environment container must 
+contain an HTTP server and a loader for functions.
 
 Poolmgr deploys the environment container into a pod with fetcher
 (fetcher is a simple utility that can fetch an HTTP url to a file at a
 configured location).  This pod forms a "generic pod", because it can
-be loaded with any function.
+be loaded with any function in that language.
 
 When poolmgr needs to create a service for a function, it calls
 fetcher to fetch the function.  Fetcher downloads the function into a
@@ -134,7 +134,7 @@ Following is a diagram describe how log service works:
 
 ![Logger Diagram](https://cloud.githubusercontent.com/assets/202578/23100399/b0e3ea00-f6ba-11e6-8f2f-6588cfef2e84.png)
 
-1. Pool manager choose a pod from pool to execute user function
+1. Pool manager chooses a pod from the pool to execute user function
 2. Pool manager makes a HTTP POST to logger helper, once helper receives 
 the request it creates a symlink to container log for fluentd.
 3. Fluentd reads log from symlink and pipes to influxdb

@@ -12,7 +12,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -235,10 +235,10 @@ func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fis
 	}
 }
 
-func tprMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *api.ObjectMeta {
-	return &api.ObjectMeta{
+func tprMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *metav1.ObjectMeta {
+	return &metav1.ObjectMeta{
 		Name:      nameRemap[m.Name],
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	}
 }
 
@@ -298,14 +298,14 @@ func upgradeRestoreState(c *cli.Context) error {
 		pkgSpec := fission.PackageSpec{
 			Environment: fission.EnvironmentReference{
 				Name:      v1state.NameChanges[f.Environment.Name],
-				Namespace: api.NamespaceDefault,
+				Namespace: metav1.NamespaceDefault,
 			},
 			Deployment: *archive,
 		}
 		pkg, err := client.PackageCreate(&tpr.Package{
-			Metadata: api.ObjectMeta{
+			Metadata: metav1.ObjectMeta{
 				Name:      pkgName,
-				Namespace: api.NamespaceDefault,
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: pkgSpec,
 		})

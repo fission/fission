@@ -22,7 +22,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -30,7 +30,7 @@ import (
 
 func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	//mqType := r.FormValue("mqtype") // ignored for now
-	triggers, err := a.fissionClient.Messagequeuetriggers(api.NamespaceAll).List(api.ListOptions{})
+	triggers, err := a.fissionClient.Messagequeuetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -83,7 +83,7 @@ func (a *API) MessageQueueTriggerApiGet(w http.ResponseWriter, r *http.Request) 
 	name := vars["mqTrigger"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
 	mqTrigger, err := a.fissionClient.Messagequeuetriggers(ns).Get(name)
@@ -141,10 +141,10 @@ func (a *API) MessageQueueTriggerApiDelete(w http.ResponseWriter, r *http.Reques
 	name := vars["mqTrigger"]
 	ns := vars["namespace"]
 	if len(ns) == 0 {
-		ns = api.NamespaceDefault
+		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Messagequeuetriggers(ns).Delete(name, &api.DeleteOptions{})
+	err := a.fissionClient.Messagequeuetriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

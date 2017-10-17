@@ -16,7 +16,9 @@ limitations under the License.
 
 package fission
 
-import "k8s.io/client-go/1.5/pkg/api"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 type (
 	//
@@ -240,7 +242,7 @@ type (
 		URL string `json:"url"`
 
 		// Metatdata
-		FunctionMetadata *api.ObjectMeta
+		FunctionMetadata *metav1.ObjectMeta
 	}
 )
 

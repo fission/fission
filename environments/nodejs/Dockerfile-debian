@@ -1,7 +1,7 @@
 # A docker image for the func container.
 
-# default variant is the official alpine node image (much smaller than the standard image)
-FROM node:8-alpine
+# debian variant is the official standard node image (larger than the alpine image)
+FROM node:8
 
 ARG NODE_ENV
 ENV NODE_ENV $NODE_ENV

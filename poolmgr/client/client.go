@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 )
@@ -47,7 +47,7 @@ func MakeClient(poolmgrUrl string) *Client {
 	return c
 }
 
-func (c *Client) GetServiceForFunction(metadata *api.ObjectMeta) (string, error) {
+func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, error) {
 	poolmgrUrl := c.poolmgrUrl + "/v2/getServiceForFunction"
 
 	body, err := json.Marshal(metadata)

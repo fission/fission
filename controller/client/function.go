@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/tpr"
 )
 
-func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
+func (c *Client) FunctionCreate(f *tpr.Function) (*metav1.ObjectMeta, error) {
 
 	reqbody, err := json.Marshal(f)
 	if err != nil {
@@ -45,7 +45,7 @@ func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (c *Client) FunctionCreate(f *tpr.Function) (*api.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) FunctionGet(m *api.ObjectMeta) (*tpr.Function, error) {
+func (c *Client) FunctionGet(m *metav1.ObjectMeta) (*tpr.Function, error) {
 	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -78,7 +78,7 @@ func (c *Client) FunctionGet(m *api.ObjectMeta) (*tpr.Function, error) {
 	return &f, nil
 }
 
-func (c *Client) FunctionGetRawDeployment(m *api.ObjectMeta) ([]byte, error) {
+func (c *Client) FunctionGetRawDeployment(m *metav1.ObjectMeta) ([]byte, error) {
 	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	relativeUrl += fmt.Sprintf("&deploymentraw=1")
@@ -92,7 +92,7 @@ func (c *Client) FunctionGetRawDeployment(m *api.ObjectMeta) ([]byte, error) {
 	return c.handleResponse(resp)
 }
 
-func (c *Client) FunctionUpdate(f *tpr.Function) (*api.ObjectMeta, error) {
+func (c *Client) FunctionUpdate(f *tpr.Function) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (c *Client) FunctionUpdate(f *tpr.Function) (*api.ObjectMeta, error) {
 		return nil, err
 	}
 
-	var m api.ObjectMeta
+	var m metav1.ObjectMeta
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (c *Client) FunctionUpdate(f *tpr.Function) (*api.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) FunctionDelete(m *api.ObjectMeta) error {
+func (c *Client) FunctionDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)

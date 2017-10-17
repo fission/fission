@@ -96,17 +96,29 @@ push_fetcher_image() {
 build_and_push_env_image() {
     version=$1
     envdir=$2
-    imgname=$3
+    imgnamebase=$3
+    imgvariant=$4
 
-    echo "Building $envdir -> $imgname:$version"
+    if [ -z "$imgvariant" ]
+    then 
+        # no variant specified, just use the base name
+        imgname=$imgnamebase
+        dockerfile="Dockerfile"
+    else 
+        # variant specified - append variant to image name and assume dockerfile 
+        # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
+        imgname="$imgname-$imgvariant"
+        dockerfile="Dockerfile-$imgvariant"
+    fi
+    echo "Building $envdir -> $imgname:$version using $dockerfile"
     
     pushd $DIR/environments/$envdir
     if [ -f build.sh ]
     then
        ./build.sh
-    fi
-    docker build -t fission/$imgname:$version .
-    docker tag  fission/$imgname:$version fission/$imgname:latest
+    fi  
+    docker build -t fission/$imgname:$version -f $dockerfile .
+    docker tag fission/$imgname:$version fission/$imgname:latest
     docker push fission/$imgname:$version
     docker push fission/$imgname:latest
     popd
@@ -115,15 +127,17 @@ build_and_push_env_image() {
 build_and_push_all_envs() {
     version=$1
 
-    build_and_push_env_image $version nodejs node-env
-    build_and_push_env_image $version binary binary-env
-    build_and_push_env_image $version dotnet dotnet-env
-    # (See #359) build_and_push_env_image $version dotnet20 dotnet20-env
-    build_and_push_env_image $version go go-env
-    build_and_push_env_image $version perl perl-env
-    build_and_push_env_image $version php7 php-env
-    build_and_push_env_image $version python3 python-env
-    build_and_push_env_image $version ruby ruby-env  
+    # call with version, env dir, image name base, image name variant
+    build_and_push_env_image "$version" "nodejs" "node-env" ""
+    build_and_push_env_image "$version" "nodejs" "node-env" "debian"
+    build_and_push_env_image "$version" "binary" "binary-env" ""
+    build_and_push_env_image "$version" "dotnet" "dotnet-env" ""
+    build_and_push_env_image "$version" "dotnet20" "dotnet20-env" ""    
+    build_and_push_env_image "$version" "go" "go-env" ""
+    build_and_push_env_image "$version" "perl" "perl-env" ""
+    build_and_push_env_image "$version" "php7" "php-env" ""
+    build_and_push_env_image "$version" "python3" "python-env" ""
+    build_and_push_env_image "$version" "ruby" "ruby-env" ""
 }
 
 build_charts() {

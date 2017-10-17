@@ -1,6 +1,5 @@
 ## Fission Documentation
 
+ * [Installation guide](install)
 
-
-[Installation guide](install)
-[Upgrade guide](upgrade-from-v0.1)
+ * [Upgrade guide](upgrade-from-v0.1)

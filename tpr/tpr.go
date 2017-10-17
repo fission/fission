@@ -17,17 +17,17 @@ limitations under the License.
 package tpr
 
 import (
-	"k8s.io/client-go/1.5/kubernetes"
-	"k8s.io/client-go/1.5/pkg/api/errors"
-	"k8s.io/client-go/1.5/pkg/api/v1"
-	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 // ensureTPR checks if the given TPR type exists, and creates it if
 // needed. (Note that this creates the TPR type; it doesn't create any
 // _instances_ of that type.)
 func ensureTPR(clientset *kubernetes.Clientset, tpr *v1beta1.ThirdPartyResource) error {
-	_, err := clientset.Extensions().ThirdPartyResources().Get(tpr.ObjectMeta.Name)
+	_, err := clientset.Extensions().ThirdPartyResources().Get(tpr.ObjectMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err := clientset.Extensions().ThirdPartyResources().Create(tpr)
@@ -42,7 +42,7 @@ func ensureTPR(clientset *kubernetes.Clientset, tpr *v1beta1.ThirdPartyResource)
 func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 	tprs := []v1beta1.ThirdPartyResource{
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "function.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -51,7 +51,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "Functions",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "environment.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -60,7 +60,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "Environments (function containers)",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "httptrigger.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -69,7 +69,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "HTTP triggers for functions",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kuberneteswatchtrigger.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -78,7 +78,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "Kubernetes watch triggers for functions",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "timetrigger.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -87,7 +87,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "Time-based triggers for functions",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "messagequeuetrigger.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{
@@ -96,7 +96,7 @@ func EnsureFissionTPRs(clientset *kubernetes.Clientset) error {
 			Description: "Message queue triggers for functions",
 		},
 		{
-			ObjectMeta: v1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "package.fission.io",
 			},
 			Versions: []v1beta1.APIVersion{

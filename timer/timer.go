@@ -20,7 +20,6 @@ import (
 	"log"
 
 	"github.com/robfig/cron"
-	//	"k8s.io/client-go/1.5/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/publisher"

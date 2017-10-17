@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
@@ -38,10 +38,10 @@ const (
 
 type (
 	funcSvc struct {
-		function    *api.ObjectMeta  // function this pod/service is for
-		environment *tpr.Environment // function's environment
-		address     string           // Host:Port or IP:Port that the function's service can be reached at.
-		podName     string           // pod name (within the function namespace)
+		function    *metav1.ObjectMeta // function this pod/service is for
+		environment *tpr.Environment   // function's environment
+		address     string             // Host:Port or IP:Port that the function's service can be reached at.
+		podName     string             // pod name (within the function namespace)
 
 		ctime time.Time
 		atime time.Time
@@ -49,8 +49,8 @@ type (
 
 	functionServiceCache struct {
 		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress  *cache.Cache // address      -> function : map[string]api.ObjectMeta
-		byPod      *cache.Cache // podname      -> function : map[string]api.ObjectMeta
+		byAddress  *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
+		byPod      *cache.Cache // podname      -> function : map[string]metav1.ObjectMeta
 
 		requestChannel chan *fscRequest
 	}
@@ -59,6 +59,7 @@ type (
 		address         string
 		podName         string
 		age             time.Duration
+		env             *metav1.ObjectMeta // used for ListOld
 		responseChannel chan *fscResponse
 	}
 	fscResponse struct {
@@ -92,13 +93,15 @@ func (fsc *functionServiceCache) service() {
 			byPodCopy := fsc.byPod.Copy()
 			pods := make([]string, 0)
 			for podNameI, mI := range byPodCopy {
-				m := mI.(api.ObjectMeta)
+				m := mI.(metav1.ObjectMeta)
 				fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 				if err != nil {
 					resp.error = err
 				} else {
 					fsvc := fsvcI.(*funcSvc)
-					if time.Now().Sub(fsvc.atime) > req.age {
+					if fsvc.environment.Metadata.UID == req.env.UID &&
+						time.Now().Sub(fsvc.atime) > req.age {
+
 						podName := podNameI.(string)
 						pods = append(pods, podName)
 					}
@@ -119,7 +122,7 @@ func (fsc *functionServiceCache) service() {
 	}
 }
 
-func (fsc *functionServiceCache) GetByFunction(m *api.ObjectMeta) (*funcSvc, error) {
+func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*funcSvc, error) {
 	key := tpr.CacheKey(m)
 
 	fsvcI, err := fsc.byFunction.Get(key)
@@ -195,7 +198,7 @@ func (fsc *functionServiceCache) _touchByAddress(address string) error {
 	if err != nil {
 		return err
 	}
-	m := mI.(api.ObjectMeta)
+	m := mI.(metav1.ObjectMeta)
 	fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 	if err != nil {
 		return err
@@ -224,7 +227,7 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	if err != nil {
 		return false, err
 	}
-	m := mI.(api.ObjectMeta)
+	m := mI.(metav1.ObjectMeta)
 	fsvcI, err := fsc.byFunction.Get(tpr.CacheKey(&m))
 	if err != nil {
 		return false, err
@@ -241,11 +244,12 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	return true, nil
 }
 
-func (fsc *functionServiceCache) ListOld(age time.Duration) ([]string, error) {
+func (fsc *functionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]string, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
 		age:             age,
+		env:             env,
 		responseChannel: responseChannel,
 	}
 	resp := <-responseChannel

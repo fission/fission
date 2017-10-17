@@ -23,7 +23,7 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	"k8s.io/client-go/1.5/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/mqtrigger/messageQueue"
@@ -73,9 +73,9 @@ func mqtCreate(c *cli.Context) error {
 	checkMQTopicAvailability(mqType, topic, respTopic)
 
 	mqt := tpr.Messagequeuetrigger{
-		Metadata: api.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      mqtName,
-			Namespace: api.NamespaceDefault,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.MessageQueueTriggerSpec{
 			FunctionReference: fission.FunctionReference{
@@ -111,9 +111,9 @@ func mqtUpdate(c *cli.Context) error {
 	fnName := c.String("function")
 	contentType := c.String("contenttype")
 
-	mqt, err := client.MessageQueueTriggerGet(&api.ObjectMeta{
+	mqt, err := client.MessageQueueTriggerGet(&metav1.ObjectMeta{
 		Name:      mqtName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "get Time trigger")
 
@@ -155,9 +155,9 @@ func mqtDelete(c *cli.Context) error {
 		fatal("Need name of trigger to delete, use --name")
 	}
 
-	err := client.MessageQueueTriggerDelete(&api.ObjectMeta{
+	err := client.MessageQueueTriggerDelete(&metav1.ObjectMeta{
 		Name:      mqtName,
-		Namespace: api.NamespaceDefault,
+		Namespace: metav1.NamespaceDefault,
 	})
 	checkErr(err, "delete trigger")
 
