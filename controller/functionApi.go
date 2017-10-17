@@ -218,9 +218,6 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get Unmanaged Pods first
-	//nameFilter, _ := labels.NewRequirement("functionName", selection.Equals, []string{fnName})
-	//unmanagedFilter, _ := labels.NewRequirement("unmanaged", selection.Equals, []string{"true"})
-	//selector := labels.NewSelector().Add(*nameFilter).Add(*unmanagedFilter)
 	selector := "unmanaged=true,functionName=" + fnName
 	podList, err := clientset.Core().Pods(ns).List(metav1.ListOptions{LabelSelector: selector})
 
