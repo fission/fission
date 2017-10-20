@@ -30,13 +30,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/logdb"
-	"github.com/fission/fission/tpr"
 )
 
 type (
 	API struct {
-		fissionClient     *tpr.FissionClient
+		fissionClient     *crd.FissionClient
 		kubernetesClient  *kubernetes.Clientset
 		storageServiceUrl string
 		builderManagerUrl string
@@ -51,7 +51,7 @@ type (
 )
 
 func MakeAPI() (*API, error) {
-	api, err := makeTPRBackedAPI()
+	api, err := makeCRDBackedAPI()
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
 	if len(u) > 0 {

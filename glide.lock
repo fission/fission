@@ -1,5 +1,5 @@
-hash: 285f5f29e18f61b5b834a48ce815fd40e023aa55d51acbc2ac8033cd8267635d
-updated: 2017-10-14T14:54:26.384349074+08:00
+hash: 7c938e591b0602b9fd3412aeffd3f1438fc77eaea80c8d9dd03431adb0e1e1c9
+updated: 2017-11-01T16:18:51.144141389+08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -14,7 +14,7 @@ imports:
   - autorest/azure
   - autorest/date
 - name: github.com/coreos/etcd
-  version: 952eb4fadeef3f840bd7557544338c985d4ed0ef
+  version: 3ac54be402ffe4e6df505814456d4931508aaf21
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
@@ -33,7 +33,7 @@ imports:
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
 - name: github.com/dsnet/compress
-  version: 0ae8e136a5df9e3caf6c0f69983608b07438411b
+  version: c4dbed65594871659ea7347a85e1b8dcd97b9990
   subpackages:
   - bzip2
   - bzip2/internal/sais
@@ -84,7 +84,7 @@ imports:
 - name: github.com/gorilla/mux
   version: 24fca303ac6da784b9e8269f724ddeb0b2eea5e7
 - name: github.com/graymeta/stow
-  version: da285caa6daa337ae04a9ac603dbaf9009ffe687
+  version: 1c51f76db54d79c9db24cb131011632eb586196c
   subpackages:
   - local
 - name: github.com/hashicorp/golang-lru
@@ -110,9 +110,9 @@ imports:
   - jlexer
   - jwriter
 - name: github.com/mholt/archiver
-  version: fe92d3d85a514d2752ad3b61ec412b598a2754f9
+  version: 26cf5bb32d07aa4e8d0de15f56ce516f4641d7df
 - name: github.com/nats-io/go-nats
-  version: 9147cfac69833916f9c73353ba43f939815c330a
+  version: 6f06d34c19fc8607adf14668b5bb2c9465d78348
   subpackages:
   - encoders/builtin
   - util
@@ -121,15 +121,15 @@ imports:
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
-  version: 9ebc07951af540e177f6a5bb0424f716fd867074
+  version: f9638df9ef7ee548313eeb5a9dda9c888dc769a0
   subpackages:
   - util
 - name: github.com/nats-io/nuid
-  version: 289cccf02c178dc782430d534e3c1f5b72af807f
+  version: 33c603157d6fd1b0ac2599bcc4a286b36479a06d
 - name: github.com/nwaples/rardecode
-  version: f22b7ef81a0afac9ce1447d37e5ab8e99fbd2f73
+  version: e06696f847aeda6f39a8f0b7cdff193b7690aef6
 - name: github.com/pierrec/lz4
-  version: 5a3d2245f97fc249850e7802e3c01fad02a1c316
+  version: 08c27939df1bd95e881e2c2367a749964ad1fceb
 - name: github.com/pierrec/xxHash
   version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
   subpackages:
@@ -139,7 +139,7 @@ imports:
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
 - name: github.com/robfig/cron
-  version: df38d32658d8788cd446ba74db4bb5375c4b0cb3
+  version: 736158dc09e10f1911ca3a1e1b01f11b566ce5db
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sirupsen/logrus
@@ -213,10 +213,16 @@ imports:
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
   version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
+- name: k8s.io/apiextensions-apiserver
+  version: fcd622fe88a4a6efcb5aea9e94ee87324ac1b036
   subpackages:
-  - core/v1
+  - pkg/apis/apiextensions
+  - pkg/apis/apiextensions/v1beta1
+  - pkg/client/clientset/clientset
+  - pkg/client/clientset/clientset/scheme
+  - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-  version: 1fd2e63a9a370677308a42f24fd40c86438afddf
+  version: 8ab5f3d8a330c2e9baaf84e39042db8d49034ae2
   subpackages:
   - pkg/api/equality
   - pkg/api/errors

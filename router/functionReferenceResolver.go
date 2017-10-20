@@ -29,14 +29,14 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 type (
 	// functionReferenceResolver provides a resolver to turn a function
 	// reference into a resolveResult
 	functionReferenceResolver struct {
-		fissionClient *tpr.FissionClient
+		fissionClient *crd.FissionClient
 
 		// FunctionReference -> function metadata
 		refCache *cache.Cache
@@ -68,7 +68,7 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient) *functionReferenceResolver {
+func makeFunctionReferenceResolver(fissionClient *crd.FissionClient) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		fissionClient: fissionClient,
 		refCache:      cache.MakeCache(time.Minute, 0),
