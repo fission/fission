@@ -17,7 +17,8 @@ limitations under the License.
 package poolmgr
 
 import (
-	"log"
+	"sync"
+	"time"
 
 	"github.com/dchest/uniuri"
 
@@ -32,17 +33,26 @@ func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) e
 		return err
 	}
 
-	instanceId := uniuri.NewLen(8)
-	cleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceId)
+		fsCreateChannels map[string]*sync.WaitGroup // xxx no channels here, rename this
+		requestChan      chan *createFuncServiceRequest
+	}
+)
 
-	fsCache := MakeFunctionServiceCache()
-	gpm := MakeGenericPoolManager(
-		fissionClient, kubernetesClient, fissionNamespace,
-		functionNamespace, fsCache, instanceId)
+func MakePoolmgr(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fissionNs string, fsCache *functionServiceCache) *Poolmgr {
+	poolMgr := &Poolmgr{
+		gpm:              gpm,
+		functionEnv:      cache.MakeCache(10*time.Second, 0),
+		fsCache:          fsCache,
+		fissionClient:    fissionClient,
+		fsCreateChannels: make(map[string]*sync.WaitGroup),
+		requestChan:      make(chan *createFuncServiceRequest),
+	}
+	go poolMgr.serveCreateFuncServices()
+	return poolMgr
+}
 
-	pm := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
-	api := MakeExecutor(pm)
-	go api.Serve(port)
+func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
+	//TBD To be removed
 
 	return nil
 }
