@@ -17,29 +17,40 @@ limitations under the License.
 package poolmgr
 
 import (
-	"log"
+	"sync"
+	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/fission/fission/cache"
 )
 
-func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
-	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
-	if err != nil {
-		log.Printf("Failed to get kubernetes client: %v", err)
-		return err
+type (
+	Poolmgr struct {
+		gpm           *GenericPoolManager
+		functionEnv   *cache.Cache // map[string]tpr.Environment
+		fsCache       *functionServiceCache
+		fissionClient *tpr.FissionClient
+
+		fsCreateChannels map[string]*sync.WaitGroup // xxx no channels here, rename this
+		requestChan      chan *createFuncServiceRequest
 	}
+)
 
-	instanceId := uniuri.NewLen(8)
-	cleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceId)
+func MakePoolmgr(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fissionNs string, fsCache *functionServiceCache) *Poolmgr {
+	poolMgr := &Poolmgr{
+		gpm:              gpm,
+		functionEnv:      cache.MakeCache(10*time.Second, 0),
+		fsCache:          fsCache,
+		fissionClient:    fissionClient,
+		fsCreateChannels: make(map[string]*sync.WaitGroup),
+		requestChan:      make(chan *createFuncServiceRequest),
+	}
+	go poolMgr.serveCreateFuncServices()
+	return poolMgr
+}
 
-	fsCache := MakeFunctionServiceCache()
-	gpm := MakeGenericPoolManager(
-		fissionClient, kubernetesClient, fissionNamespace,
-		functionNamespace, fsCache, instanceId)
-
-	pm := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
-	api := MakeExecutor(pm)
-	go api.Serve(port)
+func StartPoolmgr(fissionNamespace string, functionNamespace string, port int) error {
+	//TBD To be removed
 
 	return nil
 }
