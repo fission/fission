@@ -25,14 +25,12 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/cache"
 	"github.com/fission/fission/tpr"
 )
 
@@ -46,41 +44,9 @@ type (
 		address string
 		err     error
 	}
-
-	Poolmgr struct {
-		gpm           *GenericPoolManager
-		functionEnv   *cache.Cache // map[string]tpr.Environment
-		fsCache       *functionServiceCache
-		fissionClient *tpr.FissionClient
-
-		fsCreateChannels map[string]*sync.WaitGroup // xxx no channels here, rename this
-		requestChan      chan *createFuncServiceRequest
-	}
-	Executor struct {
-		pm *Poolmgr
-	}
 )
 
-func MakeExecutor(pm *Poolmgr) *Executor {
-	executor := &Executor{
-		pm: pm,
-	}
-	return executor
-}
-
-func MakePoolmgr(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fissionNs string, fsCache *functionServiceCache) *Poolmgr {
-	poolMgr := &Poolmgr{
-		gpm:              gpm,
-		functionEnv:      cache.MakeCache(10*time.Second, 0),
-		fsCache:          fsCache,
-		fissionClient:    fissionClient,
-		fsCreateChannels: make(map[string]*sync.WaitGroup),
-		requestChan:      make(chan *createFuncServiceRequest),
-	}
-	go poolMgr.serveCreateFuncServices()
-	return poolMgr
-}
-
+// TBTA
 // All non-cached function service requests go through this goroutine
 // serially. It parallelizes requests for different functions, and
 // ensures that for a given function, only one request causes a pod to
@@ -159,6 +125,7 @@ func (poolMgr *Poolmgr) getServiceForFunctionApi(w http.ResponseWriter, r *http.
 	w.Write([]byte(serviceName))
 }
 
+// TBTA
 func (poolMgr *Poolmgr) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment, error) {
 	var env *tpr.Environment
 
