@@ -551,7 +551,7 @@ func fnTest(c *cli.Context) error {
 
 	if !fnReachable {
 		body, err := ioutil.ReadAll(resp.Body)
-		checkErr(err, "Function test failed")
+		checkErr(err, "read log response from pod")
 		fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
 		defer resp.Body.Close()
 		err = printPodLogs(c)
