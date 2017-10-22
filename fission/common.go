@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -65,27 +66,23 @@ func httpRequest(method, url, body string, headers []string) *http.Response {
 		method != http.MethodDelete &&
 		method != http.MethodPost &&
 		method != http.MethodPut {
-		// Fatal causes some stale data for the calling function, needs improvement
 		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", method))
 	}
 
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
-	checkErr(err, "Error creating reuquest to function")
+	checkErr(err, "create HTTP request")
 
 	for _, header := range headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)
 		if len(headerKeyValue) != 2 {
-			warn(fmt.Sprintf("Invalid header '%s'. Skipping...", headerKeyValue))
-			continue
+			checkErr(errors.New(""), "create request without appropriate headers")
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	if err != nil {
-		fatal("Request failed.")
-	}
+	checkErr(err, "execute HTTP request")
 
 	return resp
 }

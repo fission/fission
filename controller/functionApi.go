@@ -18,6 +18,8 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
@@ -26,11 +28,10 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
-	//"k8s.io/client-go/pkg/labels"
+	restclient "k8s.io/client-go/rest"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -218,8 +219,12 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get Unmanaged Pods first
-	selector := "unmanaged=true,functionName=" + fnName
+	selector := "functionName=" + fnName
 	podList, err := clientset.Core().Pods(ns).List(metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
 
 	// Get the logs for last Pod executed
 	pods := podList.Items
@@ -230,25 +235,25 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	})
 
 	podLogOpts := v1.PodLogOptions{Container: envName} // Only the env container, not fetcher
-	podLogsReq := clientset.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
+	var podLogsReq *restclient.Request
+	if len(pods) > 0 {
+		podLogsReq = clientset.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
+	} else {
+		a.respondWithError(w, errors.New("No active pods found"))
+		return
+	}
+
 	podLogs, err := podLogsReq.Stream()
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	log, err := ioutil.ReadAll(podLogs)
+	_, err = io.Copy(w, podLogs)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 	defer podLogs.Close()
-
-	resp, err := json.Marshal(&log)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-
-	a.respondWithSuccess(w, resp)
+	return
 }

@@ -19,9 +19,8 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -138,39 +137,32 @@ func getContents(filePath string) []byte {
 	return code
 }
 
-func getPodLogs(c *cli.Context) bool {
+func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
 		fatal("Need --name argument.")
 	}
 
 	queryURL, err := url.Parse(c.GlobalString("server"))
-	checkErr(err, "Error parsing the base URL")
+	checkErr(err, "parse the base URL")
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	checkErr(err, "Error creating logs request")
+	checkErr(err, "create logs request")
 
-	httpClient := http.Client{Timeout: 5 * time.Second}
+	httpClient := http.Client{}
 	resp, err := httpClient.Do(req)
-	checkErr(err, "Get Logs request failed")
+	checkErr(err, "execute get logs request")
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Error in getting logs from POD directly, will check logstore, StatusCode:", resp.StatusCode)
-		return false
+		return errors.New("get logs from POD directly")
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	var data interface{}
-	json.Unmarshal(body, &data)
-	ldata, err := base64.StdEncoding.DecodeString(data.(string))
-
-	if ldata == nil {
-		return false
-	}
-	fmt.Println("Data=", string(ldata))
-	return true
+	checkErr(err, "read the response body")
+	fmt.Println(string(body))
+	return nil
 }
 
 func fnCreate(c *cli.Context) error {
@@ -546,22 +538,15 @@ func fnTest(c *cli.Context) error {
 
 	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
-	maxRetries := 3
-	retryDelay := 100 * time.Millisecond
-	var resp *http.Response
 	fnReachable := false
 
-	for i := 0; i < maxRetries; i++ {
-		resp = httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
-		if resp.StatusCode < 300 {
-			body, err := ioutil.ReadAll(resp.Body)
-			checkErr(err, "Function test")
-			fmt.Print(string(body))
-			defer resp.Body.Close()
-			fnReachable = true
-			break
-		}
-		time.Sleep(retryDelay)
+	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
+	if resp.StatusCode < 300 {
+		body, err := ioutil.ReadAll(resp.Body)
+		checkErr(err, "Function test")
+		fmt.Print(string(body))
+		defer resp.Body.Close()
+		fnReachable = true
 	}
 
 	if !fnReachable {
@@ -569,8 +554,8 @@ func fnTest(c *cli.Context) error {
 		checkErr(err, "Function test failed")
 		fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
 		defer resp.Body.Close()
-		flag := getPodLogs(c)
-		if !flag {
+		err = printPodLogs(c)
+		if err != nil {
 			fnLogs(c)
 		}
 	}
