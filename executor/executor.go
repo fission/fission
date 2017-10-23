@@ -14,20 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package poolmgr
+package executor
 
 import (
 	"log"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/dchest/uniuri"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/tpr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type (
 	Executor struct {
+		gpm           *GenericPoolManager
 		functionEnv   *cache.Cache
 		fissionClient *tpr.FissionClient
 		fsCache       *functionServiceCache
@@ -35,10 +39,28 @@ type (
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  map[string]*sync.WaitGroup // xxx no channels here, rename this
 	}
+	createFuncServiceRequest struct {
+		funcMeta *metav1.ObjectMeta
+		respChan chan *createFuncServiceResponse
+	}
+
+	createFuncServiceResponse struct {
+		address string
+		err     error
+	}
 )
 
-func MakeExecutor(pm *Poolmgr) *Executor {
-	executor := &Executor{}
+func MakeExecutor(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fsCache *functionServiceCache) *Executor {
+	executor := &Executor{
+		gpm:           gpm,
+		functionEnv:   cache.MakeCache(10*time.Second, 0),
+		fissionClient: fissionClient,
+		fsCache:       fsCache,
+
+		requestChan: make(chan *createFuncServiceRequest),
+		fsCreateWg:  make(map[string]*sync.WaitGroup),
+	}
+	go executor.serveCreateFuncServices()
 	return executor
 }
 
@@ -95,7 +117,33 @@ func (executor *Executor) serveCreateFuncServices() {
 }
 
 func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (string, error) {
-	return "nil", nil
+	log.Printf("[%v] No cached function service found, creating one", m.Name)
+
+	// from Func -> get Env
+	log.Printf("[%v] getting environment for function", m.Name)
+	env, err := executor.getFunctionEnv(m)
+	if err != nil {
+		return "", err
+	}
+	// Appropriate backend handles the service creation
+	backend := os.Getenv("BACKEND")
+	switch backend {
+	case "DEPLOY":
+		return "", nil
+	default:
+		pool, err := executor.gpm.GetPool(env)
+		if err != nil {
+			return "", err
+		}
+		// from GenericPool -> get one function container
+		// (this also adds to the cache)
+		log.Printf("[%v] getting function service from pool", m.Name)
+		fsvc, err := pool.GetFuncSvc(m)
+		if err != nil {
+			return "", err
+		}
+		return fsvc.address, nil
+	}
 }
 
 func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment, error) {
@@ -144,8 +192,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, instanceID)
 
-	pm := MakePoolmgr(gpm, fissionClient, fissionNamespace, fsCache)
-	api := MakeExecutor(pm)
+	api := MakeExecutor(gpm, fissionClient, fsCache)
 	go api.Serve(port)
 
 	return nil

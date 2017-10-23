@@ -20,7 +20,7 @@
 // Here's how I run this on my setup, with minikube:
 // TEST_SPECIALIZE_URL=http://192.168.99.100:30002/specialize TEST_FETCHER_URL=http://192.168.99.100:30001 FETCHER_IMAGE=minikube/fetcher:testing KUBECONFIG=/Users/soam/.kube/config go test -v .
 
-package poolmgr
+package executor
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/poolmgr/client"
+	"github.com/fission/fission/executor/client"
 	"github.com/fission/fission/tpr"
 )
 
