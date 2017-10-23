@@ -104,7 +104,7 @@ func httpGet(url string) string {
 	return string(body)
 }
 
-func TestPoolmgr(t *testing.T) {
+func TestExecutor(t *testing.T) {
 	// run in a random namespace so we can have concurrent tests
 	// on a given cluster
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -160,7 +160,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create poolmgr
 	port := 9999
-	err = StartPoolmgr(fissionNs, functionNs, port)
+	err = StartExecutor(fissionNs, functionNs, port)
 	if err != nil {
 		log.Panicf("failed to start poolmgr: %v", err)
 	}
