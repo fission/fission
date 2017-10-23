@@ -104,7 +104,7 @@ func httpGet(url string) string {
 	return string(body)
 }
 
-func TestPoolmgr(t *testing.T) {
+func TestExecutor(t *testing.T) {
 	// run in a random namespace so we can have concurrent tests
 	// on a given cluster
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -160,7 +160,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create poolmgr
 	port := 9999
-	err = StartPoolmgr(fissionNs, functionNs, port)
+	err = StartExecutor(fissionNs, functionNs, port)
 	if err != nil {
 		log.Panicf("failed to start poolmgr: %v", err)
 	}
@@ -184,7 +184,11 @@ func TestPoolmgr(t *testing.T) {
 	}
 
 	// create a package
+<<<<<<< HEAD:executor/poolmgr_test.go
 	p := &crd.Package{
+=======
+	p := &tpr.Package{
+>>>>>>> Changed references to poolmgr in tests:executor/executor_test.go
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
@@ -200,7 +204,11 @@ func TestPoolmgr(t *testing.T) {
 	}
 
 	// create a function
+<<<<<<< HEAD:executor/poolmgr_test.go
 	f := &crd.Function{
+=======
+	f := &tpr.Function{
+>>>>>>> Changed references to poolmgr in tests:executor/executor_test.go
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
