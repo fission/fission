@@ -28,7 +28,7 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	executorClient "github.com/fission/fission/poolmgr/client"
+	executorClient "github.com/fission/fission/executor/client"
 )
 
 type functionHandler struct {
@@ -121,7 +121,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		fh.fmap.assign(fh.function, serviceUrl)
 	} else {
 		// if we're using our cache, asynchronously tell
-		// poolmgr we're using this service
+		// executor we're using this service
 		go fh.tapService(serviceUrl)
 	}
 

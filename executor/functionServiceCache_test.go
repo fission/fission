@@ -1,4 +1,4 @@
-package poolmgr
+package executor
 
 import (
 	"log"

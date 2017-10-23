@@ -32,14 +32,14 @@ import (
 )
 
 type Client struct {
-	poolmgrUrl  string
+	executorUrl string
 	tappedByUrl map[string]bool
 	requestChan chan string
 }
 
-func MakeClient(poolmgrUrl string) *Client {
+func MakeClient(executorUrl string) *Client {
 	c := &Client{
-		poolmgrUrl:  strings.TrimSuffix(poolmgrUrl, "/"),
+		executorUrl: strings.TrimSuffix(executorUrl, "/"),
 		tappedByUrl: make(map[string]bool),
 		requestChan: make(chan string),
 	}
@@ -48,14 +48,14 @@ func MakeClient(poolmgrUrl string) *Client {
 }
 
 func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, error) {
-	poolmgrUrl := c.poolmgrUrl + "/v2/getServiceForFunction"
+	executorUrl := c.executorUrl + "/v2/getServiceForFunction"
 
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := http.Post(poolmgrUrl, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(executorUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -100,9 +100,9 @@ func (c *Client) TapService(serviceUrl *url.URL) {
 }
 
 func (c *Client) _tapService(serviceUrlStr string) error {
-	poolmgrUrl := c.poolmgrUrl + "/v2/tapService"
+	executorUrl := c.executorUrl + "/v2/tapService"
 
-	resp, err := http.Post(poolmgrUrl, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
+	resp, err := http.Post(executorUrl, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
 	if err != nil {
 		return err
 	}
