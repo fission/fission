@@ -17,6 +17,7 @@ limitations under the License.
 package executor
 
 import (
+<<<<<<< HEAD
 	"fmt"
 	"log"
 	"net/http"
@@ -76,6 +77,84 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 		Director: director,
 	}
 	proxy.ServeHTTP(w, r)
+=======
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission"
+)
+
+func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", 500)
+		return
+	}
+
+	// get function metadata
+	m := metav1.ObjectMeta{}
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		http.Error(w, "Failed to parse request", 400)
+		return
+	}
+
+	serviceName, err := executor.getServiceForFunction(&m)
+	if err != nil {
+		code, msg := fission.GetHTTPError(err)
+		log.Printf("Error: %v: %v", code, msg)
+		http.Error(w, msg, code)
+		return
+	}
+
+	w.Write([]byte(serviceName))
+}
+
+func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, error) {
+	// Check function -> svc cache
+	log.Printf("[%v] Checking for cached function service", m.Name)
+	fsvc, err := executor.fsCache.GetByFunction(m)
+	if err == nil {
+		// Cached, return svc address
+		return fsvc.address, nil
+	}
+
+	respChan := make(chan *createFuncServiceResponse)
+	executor.requestChan <- &createFuncServiceRequest{
+		funcMeta: m,
+		respChan: respChan,
+	}
+	resp := <-respChan
+	return resp.address, resp.err
+}
+
+// find funcSvc and update its atime
+func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", 500)
+		return
+	}
+	svcName := string(body)
+	svcHost := strings.TrimPrefix(svcName, "http://")
+
+	err = executor.fsCache.TouchByAddress(svcHost)
+	if err != nil {
+		log.Printf("funcSvc tap error: %v", err)
+		http.Error(w, "Not found", 404)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+>>>>>>> Executor logic separated from Poolmgr backend completely, placeholder for new backend
 }
 
 func (executor *Executor) Serve(port int) {
