@@ -30,7 +30,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	executorClient "github.com/fission/fission/poolmgr/client"
+	executorClient "github.com/fission/fission/executor/client"
 )
 
 type HTTPTriggerSet struct {

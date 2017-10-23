@@ -20,7 +20,7 @@
 // Here's how I run this on my setup, with minikube:
 // TEST_SPECIALIZE_URL=http://192.168.99.100:30002/specialize TEST_FETCHER_URL=http://192.168.99.100:30001 FETCHER_IMAGE=minikube/fetcher:testing KUBECONFIG=/Users/soam/.kube/config go test -v .
 
-package poolmgr
+package executor
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/poolmgr/client"
+	"github.com/fission/fission/executor/client"
 )
 
 // return the number of pods in the given namespace matching the given labels
