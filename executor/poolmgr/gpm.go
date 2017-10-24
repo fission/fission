@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package executor
+package poolmgr
 
 import (
 	"log"
@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/executor/fcache"
 )
 
 type requestType int
@@ -40,7 +41,7 @@ type (
 		kubernetesClient *kubernetes.Clientset
 		namespace        string
 		fissionClient    *crd.FissionClient
-		fsCache          *functionServiceCache
+		fsCache          *fcache.FunctionServiceCache
 		instanceId       string
 		requestChannel   chan *request
 	}
@@ -61,7 +62,7 @@ func MakeGenericPoolManager(
 	kubernetesClient *kubernetes.Clientset,
 	fissionNamespace string,
 	functionNamespace string,
-	fsCache *functionServiceCache,
+	fsCache *fcache.FunctionServiceCache,
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{

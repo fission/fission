@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package executor
+package fcache
 
 import (
 	"log"
@@ -51,8 +51,8 @@ type (
 		kubernetesObject api.ObjectReference // Kubernetes Object (within the function namespace)
 		backend          backendType
 
-		ctime time.Time
-		atime time.Time
+		Ctime time.Time
+		Atime time.Time
 	}
 
 	functionServiceCache struct {
@@ -77,8 +77,8 @@ type (
 	}
 )
 
-func MakeFunctionServiceCache() *functionServiceCache {
-	fsc := &functionServiceCache{
+func MakeFunctionServiceCache() *FunctionServiceCache {
+	fsc := &FunctionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
 		byAddress:      cache.MakeCache(0, 0),
 		byKubeObject:   cache.MakeCache(0, 0),
@@ -88,7 +88,7 @@ func MakeFunctionServiceCache() *functionServiceCache {
 	return fsc
 }
 
-func (fsc *functionServiceCache) service() {
+func (fsc *FunctionServiceCache) service() {
 	for {
 		req := <-fsc.requestChannel
 		resp := &fscResponse{}
@@ -106,9 +106,9 @@ func (fsc *functionServiceCache) service() {
 				if err != nil {
 					resp.error = err
 				} else {
-					fsvc := fsvcI.(*funcSvc)
-					if fsvc.environment.Metadata.UID == req.env.UID &&
-						time.Now().Sub(fsvc.atime) > req.age {
+					fsvc := fsvcI.(*FuncSvc)
+					if fsvc.Environment.Metadata.UID == req.env.UID &&
+						time.Now().Sub(fsvc.Atime) > req.age {
 
 						obj := objI.(api.ObjectReference)
 						kubeObjects = append(kubeObjects, obj)
@@ -130,7 +130,7 @@ func (fsc *functionServiceCache) service() {
 	}
 }
 
-func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*funcSvc, error) {
+func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
 	fsvcI, err := fsc.byFunction.Get(key)
@@ -139,20 +139,20 @@ func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*funcSvc, 
 	}
 
 	// update atime
-	fsvc := fsvcI.(*funcSvc)
-	fsvc.atime = time.Now()
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
 	return &fsvcCopy, nil
 }
 
 // TODO: error should be second return
-func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
+func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.function), &fsvc)
 	if err != nil {
 		if existing != nil {
-			f := existing.(*funcSvc)
-			err2 := fsc.TouchByAddress(f.address)
+			f := existing.(*FuncSvc)
+			err2 := fsc.TouchByAddress(f.Address)
 			if err2 != nil {
 				return err2, nil
 			}
@@ -162,12 +162,12 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 		return err, nil
 	}
 	now := time.Now()
-	fsvc.ctime = now
-	fsvc.atime = now
+	fsvc.Ctime = now
+	fsvc.Atime = now
 
 	// Add to byAddress and byKubernetesObject caches. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	err, _ = fsc.byAddress.Set(fsvc.address, *fsvc.function)
+	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
 		if fe, ok := err.(fission.Error); ok {
 			if fe.Code == fission.ErrorNameExists {
@@ -190,7 +190,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	return nil, nil
 }
 
-func (fsc *functionServiceCache) TouchByAddress(address string) error {
+func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     TOUCH,
@@ -201,7 +201,7 @@ func (fsc *functionServiceCache) TouchByAddress(address string) error {
 	return resp.error
 }
 
-func (fsc *functionServiceCache) _touchByAddress(address string) error {
+func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 	mI, err := fsc.byAddress.Get(address)
 	if err != nil {
 		return err
@@ -211,8 +211,8 @@ func (fsc *functionServiceCache) _touchByAddress(address string) error {
 	if err != nil {
 		return err
 	}
-	fsvc := fsvcI.(*funcSvc)
-	fsvc.atime = time.Now()
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
 	return nil
 }
 
@@ -240,9 +240,9 @@ func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, mi
 	if err != nil {
 		return false, err
 	}
-	fsvc := fsvcI.(*funcSvc)
+	fsvc := fsvcI.(*FuncSvc)
 
-	if time.Now().Sub(fsvc.atime) < minAge {
+	if time.Now().Sub(fsvc.Atime) < minAge {
 		return false, nil
 	}
 
@@ -264,7 +264,7 @@ func (fsc *functionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Durati
 	return resp.objects, resp.error
 }
 
-func (fsc *functionServiceCache) Log() {
+func (fsc *FunctionServiceCache) Log() {
 	log.Printf("--- FunctionService Cache Contents")
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
