@@ -130,7 +130,7 @@ func (fsc *FunctionServiceCache) service() {
 	}
 }
 
-func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
+func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
 	fsvcI, err := fsc.byFunction.Get(key)
@@ -147,8 +147,8 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // TODO: error should be second return
-func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
-	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
+func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *FuncSvc) {
+	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*FuncSvc)

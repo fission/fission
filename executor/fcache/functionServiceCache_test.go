@@ -74,6 +74,7 @@ func TestFunctionServiceCache(t *testing.T) {
 	}
 
 	deleted, err := fsc.DeleteByKubeObject(fsvc.kubernetesObject, 0)
+
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)
