@@ -64,7 +64,7 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 	fsvc, err := executor.fsCache.GetByFunction(m)
 	if err == nil {
 		// Cached, return svc address
-		return fsvc.address, nil
+		return fsvc.Address, nil
 	}
 
 	respChan := make(chan *createFuncServiceResponse)

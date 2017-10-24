@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package executor
+package fcache
 
 import (
 	"log"
@@ -37,18 +37,18 @@ const (
 )
 
 type (
-	funcSvc struct {
-		function    *metav1.ObjectMeta // function this pod/service is for
-		environment *tpr.Environment   // function's environment
-		address     string             // Host:Port or IP:Port that the function's service can be reached at.
-		podName     string             // pod name (within the function namespace)
+	FuncSvc struct {
+		Function    *metav1.ObjectMeta // function this pod/service is for
+		Environment *tpr.Environment   // function's environment
+		Address     string             // Host:Port or IP:Port that the function's service can be reached at.
+		PodName     string             // pod name (within the function namespace)
 
-		ctime time.Time
-		atime time.Time
+		Ctime time.Time
+		Atime time.Time
 	}
 
-	functionServiceCache struct {
-		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+	FunctionServiceCache struct {
+		byFunction *cache.Cache // function-key -> FuncSvc  : map[string]*FuncSvc
 		byAddress  *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
 		byPod      *cache.Cache // podname      -> function : map[string]metav1.ObjectMeta
 
@@ -69,8 +69,8 @@ type (
 	}
 )
 
-func MakeFunctionServiceCache() *functionServiceCache {
-	fsc := &functionServiceCache{
+func MakeFunctionServiceCache() *FunctionServiceCache {
+	fsc := &FunctionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
 		byAddress:      cache.MakeCache(0, 0),
 		byPod:          cache.MakeCache(0, 0),
@@ -80,7 +80,7 @@ func MakeFunctionServiceCache() *functionServiceCache {
 	return fsc
 }
 
-func (fsc *functionServiceCache) service() {
+func (fsc *FunctionServiceCache) service() {
 	for {
 		req := <-fsc.requestChannel
 		resp := &fscResponse{}
@@ -98,9 +98,9 @@ func (fsc *functionServiceCache) service() {
 				if err != nil {
 					resp.error = err
 				} else {
-					fsvc := fsvcI.(*funcSvc)
-					if fsvc.environment.Metadata.UID == req.env.UID &&
-						time.Now().Sub(fsvc.atime) > req.age {
+					fsvc := fsvcI.(*FuncSvc)
+					if fsvc.Environment.Metadata.UID == req.env.UID &&
+						time.Now().Sub(fsvc.Atime) > req.age {
 
 						podName := podNameI.(string)
 						pods = append(pods, podName)
@@ -112,8 +112,8 @@ func (fsc *functionServiceCache) service() {
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
 			for key, fsvcI := range funcCopy {
-				fsvc := fsvcI.(*funcSvc)
-				log.Printf("%v\t%v", key, fsvc.podName)
+				fsvc := fsvcI.(*FuncSvc)
+				log.Printf("%v\t%v", key, fsvc.PodName)
 			}
 		case DELETE_BY_POD:
 			resp.deleted, resp.error = fsc._deleteByPod(req.podName, req.age)
@@ -122,7 +122,7 @@ func (fsc *functionServiceCache) service() {
 	}
 }
 
-func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*funcSvc, error) {
+func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := tpr.CacheKey(m)
 
 	fsvcI, err := fsc.byFunction.Get(key)
@@ -131,20 +131,20 @@ func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*funcSvc, 
 	}
 
 	// update atime
-	fsvc := fsvcI.(*funcSvc)
-	fsvc.atime = time.Now()
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
 	return &fsvcCopy, nil
 }
 
 // TODO: error should be second return
-func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
-	err, existing := fsc.byFunction.Set(tpr.CacheKey(fsvc.function), &fsvc)
+func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
+	err, existing := fsc.byFunction.Set(tpr.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if existing != nil {
-			f := existing.(*funcSvc)
-			err2 := fsc.TouchByAddress(f.address)
+			f := existing.(*FuncSvc)
+			err2 := fsc.TouchByAddress(f.Address)
 			if err2 != nil {
 				return err2, nil
 			}
@@ -154,12 +154,12 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 		return err, nil
 	}
 	now := time.Now()
-	fsvc.ctime = now
-	fsvc.atime = now
+	fsvc.Ctime = now
+	fsvc.Atime = now
 
 	// Add to byAddress and byPod caches. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	err, _ = fsc.byAddress.Set(fsvc.address, *fsvc.function)
+	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
 		if fe, ok := err.(fission.Error); ok {
 			if fe.Code == fission.ErrorNameExists {
@@ -169,7 +169,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
-	err, _ = fsc.byPod.Set(fsvc.podName, *fsvc.function)
+	err, _ = fsc.byPod.Set(fsvc.PodName, *fsvc.Function)
 	if err != nil {
 		if fe, ok := err.(fission.Error); ok {
 			if fe.Code == fission.ErrorNameExists {
@@ -182,7 +182,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	return nil, nil
 }
 
-func (fsc *functionServiceCache) TouchByAddress(address string) error {
+func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     TOUCH,
@@ -193,7 +193,7 @@ func (fsc *functionServiceCache) TouchByAddress(address string) error {
 	return resp.error
 }
 
-func (fsc *functionServiceCache) _touchByAddress(address string) error {
+func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 	mI, err := fsc.byAddress.Get(address)
 	if err != nil {
 		return err
@@ -203,12 +203,12 @@ func (fsc *functionServiceCache) _touchByAddress(address string) error {
 	if err != nil {
 		return err
 	}
-	fsvc := fsvcI.(*funcSvc)
-	fsvc.atime = time.Now()
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
 	return nil
 }
 
-func (fsc *functionServiceCache) DeleteByPod(podName string, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) DeleteByPod(podName string, minAge time.Duration) (bool, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     DELETE_BY_POD,
@@ -222,7 +222,7 @@ func (fsc *functionServiceCache) DeleteByPod(podName string, minAge time.Duratio
 
 // _deleteByPod deletes the entry keyed by podName, but only if it is
 // at least minAge old.
-func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) _deleteByPod(podName string, minAge time.Duration) (bool, error) {
 	mI, err := fsc.byPod.Get(podName)
 	if err != nil {
 		return false, err
@@ -232,19 +232,19 @@ func (fsc *functionServiceCache) _deleteByPod(podName string, minAge time.Durati
 	if err != nil {
 		return false, err
 	}
-	fsvc := fsvcI.(*funcSvc)
+	fsvc := fsvcI.(*FuncSvc)
 
-	if time.Now().Sub(fsvc.atime) < minAge {
+	if time.Now().Sub(fsvc.Atime) < minAge {
 		return false, nil
 	}
 
 	fsc.byFunction.Delete(tpr.CacheKey(&m))
-	fsc.byAddress.Delete(fsvc.address)
+	fsc.byAddress.Delete(fsvc.Address)
 	fsc.byPod.Delete(podName)
 	return true, nil
 }
 
-func (fsc *functionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]string, error) {
+func (fsc *FunctionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]string, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
@@ -256,7 +256,7 @@ func (fsc *functionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Durati
 	return resp.podNames, resp.error
 }
 
-func (fsc *functionServiceCache) Log() {
+func (fsc *FunctionServiceCache) Log() {
 	log.Printf("--- FunctionService Cache Contents")
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
