@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package executor
+package poolmgr
 
 import (
 	"bytes"
@@ -44,6 +44,7 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
+	"github.com/fission/fission/executor/fcache"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -52,14 +53,14 @@ const POD_PHASE_RUNNING string = "Running"
 type (
 	GenericPool struct {
 		env                    *crd.Environment
-		replicas               int32                 // num idle pods
-		deployment             *v1beta1.Deployment   // kubernetes deployment
-		namespace              string                // namespace to keep our resources
-		podReadyTimeout        time.Duration         // timeout for generic pods to become ready
-		idlePodReapTime        time.Duration         // pods unused for idlePodReapTime are deleted
-		fsCache                *functionServiceCache // cache funcSvc's by function, address and podname
-		useSvc                 bool                  // create k8s service for specialized pods
-		poolInstanceId         string                // small random string to uniquify pod names
+		replicas               int32                        // num idle pods
+		deployment             *v1beta1.Deployment          // kubernetes deployment
+		namespace              string                       // namespace to keep our resources
+		podReadyTimeout        time.Duration                // timeout for generic pods to become ready
+		idlePodReapTime        time.Duration                // pods unused for idlePodReapTime are deleted
+		fsCache                *fcache.FunctionServiceCache // cache funcSvc's by function, address and podname
+		useSvc                 bool                         // create k8s service for specialized pods
+		poolInstanceId         string                       // small random string to uniquify pod names
 		fetcherImage           string
 		fetcherImagePullPolicy apiv1.PullPolicy
 		runtimeImagePullPolicy apiv1.PullPolicy // pull policy for generic pool to created env deployment
@@ -99,7 +100,7 @@ func MakeGenericPool(
 	env *crd.Environment,
 	initialReplicas int32,
 	namespace string,
-	fsCache *functionServiceCache,
+	fsCache *fcache.FunctionServiceCache,
 	instanceId string) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
@@ -515,7 +516,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 	return svc, err
 }
 
-func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
+func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fcache.FuncSvc, error) {
 
 	log.Printf("[%v] Choosing pod from pool", m.Name)
 	newLabels := gp.labelsForFunction(m)

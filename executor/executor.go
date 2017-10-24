@@ -26,15 +26,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cache"
+	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/executor/poolmgr"
 	"github.com/fission/fission/tpr"
 )
 
 type (
 	Executor struct {
-		gpm           *GenericPoolManager
+		gpm           *poolmgr.GenericPoolManager
 		functionEnv   *cache.Cache
 		fissionClient *tpr.FissionClient
-		fsCache       *functionServiceCache
+		fsCache       *fcache.FunctionServiceCache
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  map[string]*sync.WaitGroup // xxx no channels here, rename this
@@ -50,7 +52,7 @@ type (
 	}
 )
 
-func MakeExecutor(gpm *GenericPoolManager, fissionClient *tpr.FissionClient, fsCache *functionServiceCache) *Executor {
+func MakeExecutor(gpm *poolmgr.GenericPoolManager, fissionClient *tpr.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		gpm:           gpm,
 		functionEnv:   cache.MakeCache(10*time.Second, 0),
@@ -105,7 +107,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				fsvc, err := executor.fsCache.GetByFunction(m)
 				address := ""
 				if err == nil {
-					address = fsvc.address
+					address = fsvc.Address
 				}
 				req.respChan <- &createFuncServiceResponse{
 					address: address,
@@ -142,7 +144,7 @@ func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (string
 		if err != nil {
 			return "", err
 		}
-		return fsvc.address, nil
+		return fsvc.Address, nil
 	}
 }
 
@@ -185,10 +187,10 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	}
 
 	instanceID := uniuri.NewLen(8)
-	cleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceID)
+	poolmgr.CleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceID)
 
-	fsCache := MakeFunctionServiceCache()
-	gpm := MakeGenericPoolManager(
+	fsCache := fcache.MakeFunctionServiceCache()
+	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, instanceID)
 
