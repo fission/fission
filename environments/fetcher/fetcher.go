@@ -154,6 +154,17 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("fetcher received fetch request and started downloading: %v", req)
 
+	err, code := fetcher.Fetch(req)
+	if err != nil {
+		http.Error(w, err.Error(), code)
+	}
+
+	log.Printf("Completed fetch request")
+	// all done
+	w.WriteHeader(http.StatusOK)
+}
+
+func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
@@ -163,8 +174,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 			log.Printf(e)
-			http.Error(w, e, 400)
-			return
+			return errors.New(e), 400
 		}
 	} else {
 		// get pkg
@@ -172,8 +182,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
-			http.Error(w, e, 500)
-			return
+			return errors.New(e), 500
 		}
 
 		var archive *fission.Archive
@@ -182,7 +191,6 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		} else if req.FetchType == FETCH_DEPLOYMENT {
 			archive = &pkg.Spec.Deployment
 		}
-
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
@@ -190,26 +198,22 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
-				http.Error(w, e, 500)
-				return
+				return errors.New(e), 500
 			}
 		} else {
 			// download and verify
-
 			err = downloadUrl(archive.URL, tmpPath)
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
-				http.Error(w, e, 400)
-				return
+				return errors.New(e), 400
 			}
 
 			err = verifyChecksum(tmpPath, &archive.Checksum)
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)
-				http.Error(w, e, 400)
-				return
+				return errors.New(e), 400
 			}
 		}
 	}
@@ -218,26 +222,22 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	if archiver.Zip.Match(tmpPath) {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
-		err = fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			log.Println(err.Error())
-			http.Error(w, err.Error(), 500)
-			return
+			return err, 500
 		}
 		tmpPath = tmpUnarchivePath
 	}
 
 	// move tmp file to requested filename
-	err = fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	err := fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	log.Printf("Successfully placed at %v", filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, err.Error(), 500)
-		return
+		return err, 500
 	}
-
-	log.Printf("Completed fetch request")
-	// all done
-	w.WriteHeader(http.StatusOK)
+	return nil, 200
 }
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {

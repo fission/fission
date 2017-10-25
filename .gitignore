@@ -9,5 +9,6 @@ environments/php7/vendor/
 *.tmp
 *~
 
+.DS_Store
 vendor/
 local/
