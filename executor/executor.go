@@ -17,6 +17,7 @@ limitations under the License.
 package executor
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/executor/newdeploy"
 	"github.com/fission/fission/executor/poolmgr"
 	"github.com/fission/fission/tpr"
 )
@@ -118,20 +120,28 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
-func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (string, error) {
-	log.Printf("[%v] No cached function service found, creating one", m.Name)
+func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (string, error) {
+	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
 	// from Func -> get Env
-	log.Printf("[%v] getting environment for function", m.Name)
-	env, err := executor.getFunctionEnv(m)
+	log.Printf("[%v] getting environment for function", meta.Name)
+	env, err := executor.getFunctionEnv(meta)
 	if err != nil {
 		return "", err
 	}
 	// Appropriate backend handles the service creation
-	backend := os.Getenv("BACKEND")
+	backend := os.Getenv("EXECUTOR_BACKEND")
 	switch backend {
-	case "DEPLOY":
-		return "", nil
+	case "NEWDEPLOY":
+		// First few lines are temporary, need to clean it up
+		_, kubernetesClient, err := tpr.MakeFissionClient()
+		ndm, err := newdeploy.MakeNewDeploy(env, executor.fissionClient, kubernetesClient, 2, "fission-function")
+		fs, err := ndm.GetFuncSvc(meta)
+		if err != nil {
+			return "", err
+		}
+		fmt.Println("fs=", fs)
+		return fs.Address, nil
 	default:
 		pool, err := executor.gpm.GetPool(env)
 		if err != nil {
@@ -139,8 +149,8 @@ func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (string
 		}
 		// from GenericPool -> get one function container
 		// (this also adds to the cache)
-		log.Printf("[%v] getting function service from pool", m.Name)
-		fsvc, err := pool.GetFuncSvc(m)
+		log.Printf("[%v] getting function service from pool", meta.Name)
+		fsvc, err := pool.GetFuncSvc(meta)
 		if err != nil {
 			return "", err
 		}
