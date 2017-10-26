@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +29,7 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 	"github.com/fission/fission/executor/fcache"
 	"github.com/fission/fission/tpr"
@@ -91,10 +93,28 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fcache.FuncSvc
 		return nil, err
 	}
 
+	set := depl.Spec.Selector.String()
+	fmt.Println("The lables from deployment are:", set)
+	_, kubernetesClient, err := tpr.MakeFissionClient()
+	if err != nil {
+		return nil, err
+	}
+	pods, err := kubernetesClient.CoreV1().Pods(metadata.Namespace).List(
+		metav1.ListOptions{
+			LabelSelector: set,
+		})
+
+	fmt.Println("PODs:", pods)
+	var pod apiv1.Pod
+	if len(pods.Items) > 0 {
+		pod = pods.Items[0]
+	}
+	fmt.Println("Pod selected for service:", pod.Status.PodIP)
+
 	fsvc := &fcache.FuncSvc{
 		Function:    metadata,
 		Environment: deploy.env,
-		Address:     "",
+		Address:     pod.Status.PodIP,
 		PodName:     depl.ObjectMeta.Name,
 		Ctime:       time.Now(),
 		Atime:       time.Now(),
@@ -116,7 +136,7 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 	}
 
 	targetFilename := "user"
-	req := &fetcher.FetchRequest{
+	fetchReq := &fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Package: metav1.ObjectMeta{
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
@@ -125,7 +145,14 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 		Filename: targetFilename,
 	}
 
-	payload, err := json.Marshal(req)
+	loadReq := fission.FunctionLoadRequest{
+		FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
+		FunctionName:     fn.Spec.Package.FunctionName,
+		FunctionMetadata: &fn.Metadata,
+	}
+
+	fetchPayload, err := json.Marshal(fetchReq)
+	loadPayload, err := json.Marshal(loadReq)
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -173,9 +200,23 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 									Name:      "userfunc",
 									MountPath: deploy.sharedMountPath,
 								},
-							},
+							}, /*
+								ReadinessProbe: &apiv1.Probe{
+									Handler: apiv1.Handler{
+										HTTPGet: &apiv1.HTTPGetAction{
+											Path: "/specialize",
+											Port: intstr.FromInt(8888),
+										},
+									},
+									InitialDelaySeconds: 1,
+									TimeoutSeconds:      1,
+									PeriodSeconds:       3,
+									SuccessThreshold:    1,
+									FailureThreshold:    2,
+								},*/
 							Command: []string{"/fetcher", "-specialize-on-startup",
-								"-fetch-request", string(payload),
+								"-fetch-request", string(fetchPayload),
+								"-load-request", string(loadPayload),
 								deploy.sharedMountPath},
 						},
 					},
