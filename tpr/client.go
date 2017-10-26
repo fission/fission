@@ -209,3 +209,6 @@ func (fc *FissionClient) Packages(ns string) PackageInterface {
 func (fc *FissionClient) WaitForTPRs() {
 	waitForTPRs(fc.tprClient)
 }
+func (fc *FissionClient) GetTprClient() *rest.RESTClient {
+	return fc.tprClient
+}

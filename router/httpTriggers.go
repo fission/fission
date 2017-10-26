@@ -23,7 +23,11 @@ import (
 
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
 	executorClient "github.com/fission/fission/executor/client"
@@ -38,9 +42,11 @@ type HTTPTriggerSet struct {
 	resolver      *functionReferenceResolver
 	triggers      []tpr.Httptrigger
 	functions     []tpr.Function
+	tprClient     *rest.RESTClient
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClient, executor *executorClient.Client, resolver *functionReferenceResolver) *HTTPTriggerSet {
+func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClient,
+	executor *executorClient.Client, resolver *functionReferenceResolver, tprClient *rest.RESTClient) *HTTPTriggerSet {
 	triggers := make([]tpr.Httptrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
@@ -48,6 +54,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClie
 		fissionClient:      fissionClient,
 		executor:           executor,
 		resolver:           resolver,
+		tprClient:          tprClient,
 	}
 }
 
@@ -135,75 +142,77 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 	// sync all http triggers
 	ts.syncTriggers()
 
-	// Watch controller for updates to triggers and update the router accordingly.
-	rv := ""
-	for {
-		wi, err := ts.fissionClient.Httptriggers(metav1.NamespaceAll).Watch(metav1.ListOptions{
-			ResourceVersion: rv,
-		})
-		if err != nil {
-			log.Fatalf("Failed to watch http trigger list: %v", err)
-		}
-
-		for {
-			ev, more := <-wi.ResultChan()
-			if !more {
-				// restart watch from last rv
-				break
-			}
-			if ev.Type == watch.Error {
-				// restart watch from the start
-				rv = ""
-				time.Sleep(time.Second)
-				break
-			}
-			ht := ev.Object.(*tpr.Httptrigger)
-			rv = ht.Metadata.ResourceVersion
-			ts.syncTriggers()
-		}
+	watchlist := k8sCache.NewListWatchFromClient(ts.tprClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
+	listWatch := &k8sCache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return watchlist.List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return watchlist.Watch(options)
+		},
 	}
+	resyncPeriod := 30 * time.Second
+	_, controller := k8sCache.NewInformer(listWatch, &tpr.Httptrigger{}, resyncPeriod,
+		k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				ts.syncTriggers()
+			},
+			DeleteFunc: func(obj interface{}) {
+				ts.syncTriggers()
+			},
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				ts.syncTriggers()
+			},
+		})
+	stop := make(chan struct{})
+	defer func() {
+		stop <- struct{}{}
+	}()
+	controller.Run(stop)
 }
 
 func (ts *HTTPTriggerSet) watchFunctions() {
-	rv := ""
-	for {
-		wi, err := ts.fissionClient.Functions(metav1.NamespaceAll).Watch(metav1.ListOptions{
-			ResourceVersion: rv,
-		})
-		if err != nil {
-			log.Fatalf("Failed to watch function list: %v", err)
-		}
+	ts.syncTriggers()
 
-		for {
-			ev, more := <-wi.ResultChan()
-			if !more {
-				// restart watch from last rv
-				break
-			}
-			if ev.Type == watch.Error {
-				// restart watch from the start
-				rv = ""
-				time.Sleep(time.Second)
-				break
-			}
-			fn := ev.Object.(*tpr.Function)
-			rv = fn.Metadata.ResourceVersion
-
-			// update resolver function reference cache
-			for key, rr := range ts.resolver.copy() {
-				if key.functionReference.Name == fn.Metadata.Name &&
-					rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
-					err := ts.resolver.delete(key.namespace, &key.functionReference)
-					if err != nil {
-						log.Printf("Error deleting functionReferenceResolver cache: %v", err)
-					}
-					break
-				}
-			}
-
-			ts.syncTriggers()
-		}
+	watchlist := k8sCache.NewListWatchFromClient(ts.tprClient, "functions", metav1.NamespaceDefault, fields.Everything())
+	listWatch := &k8sCache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return watchlist.List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return watchlist.Watch(options)
+		},
 	}
+	resyncPeriod := 30 * time.Second
+	_, controller := k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
+		k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				ts.syncTriggers()
+			},
+			DeleteFunc: func(obj interface{}) {
+				ts.syncTriggers()
+			},
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				fn := newObj.(*tpr.Function)
+				// update resolver function reference cache
+				for key, rr := range ts.resolver.copy() {
+					if key.functionReference.Name == fn.Metadata.Name &&
+						rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
+						err := ts.resolver.delete(key.namespace, &key.functionReference)
+						if err != nil {
+							log.Printf("Error deleting functionReferenceResolver cache: %v", err)
+						}
+						break
+					}
+				}
+				ts.syncTriggers()
+			},
+		})
+	stop := make(chan struct{})
+	defer func() {
+		stop <- struct{}{}
+	}()
+	controller.Run(stop)
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {
