@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,7 +15,8 @@ import (
 // Usage: fetcher <shared volume path>
 func main() {
 	flag.Usage = fetcherUsage
-	reqPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
+	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
+	loadPayload := flag.String("load-request", "", "JSON payload for Load request")
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
 	flag.Parse()
 	if flag.NArg() == 0 {
@@ -35,14 +37,25 @@ func main() {
 	_fetcher := fetcher.MakeFetcher(dir)
 
 	if *specializeOnStart {
-		var req fetcher.FetchRequest
-		err := json.Unmarshal([]byte(*reqPayload), &req)
+		// Fetch code
+		var fetchReq fetcher.FetchRequest
+		err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
 		if err != nil {
-			log.Fatalf("Error parsing request: %v", err)
+			log.Fatalf("Error parsing fetch request: %v", err)
 		}
-		err, _ = _fetcher.Fetch(req)
+		err, _ = _fetcher.Fetch(fetchReq)
 		if err != nil {
 			log.Fatalf("Error fetching: %v", err)
+		}
+		// Specialize the pod
+		resp, err := http.Post("http://localhost:8888/specialize", "application/json", bytes.NewReader([]byte(*loadPayload)))
+		if err != nil {
+			log.Fatalf("Error specializing pod: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			log.Fatalf("Specializing pod failed: %v", resp)
 		}
 	}
 

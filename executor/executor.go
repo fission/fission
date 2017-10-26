@@ -131,17 +131,19 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 	}
 	// Appropriate backend handles the service creation
 	backend := os.Getenv("EXECUTOR_BACKEND")
+
 	switch backend {
 	case "NEWDEPLOY":
 		// First few lines are temporary, need to clean it up
 		_, kubernetesClient, err := tpr.MakeFissionClient()
-		ndm, err := newdeploy.MakeNewDeploy(env, executor.fissionClient, kubernetesClient, 2, "fission-function")
+		ndm, err := newdeploy.MakeNewDeploy(env, executor.fissionClient, kubernetesClient, 1, "fission-function")
 		fs, err := ndm.GetFuncSvc(meta)
 		if err != nil {
 			return "", err
 		}
 		fmt.Println("fs=", fs)
 		return fs.Address, nil
+
 	default:
 		pool, err := executor.gpm.GetPool(env)
 		if err != nil {
