@@ -20,7 +20,7 @@
 // Here's how I run this on my setup, with minikube:
 // TEST_SPECIALIZE_URL=http://192.168.99.100:30002/specialize TEST_FETCHER_URL=http://192.168.99.100:30001 FETCHER_IMAGE=minikube/fetcher:testing KUBECONFIG=/Users/soam/.kube/config go test -v .
 
-package poolmgr
+package executor
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/poolmgr/client"
+	"github.com/fission/fission/executor/client"
 	"github.com/fission/fission/tpr"
 )
 
@@ -104,7 +104,7 @@ func httpGet(url string) string {
 	return string(body)
 }
 
-func TestPoolmgr(t *testing.T) {
+func TestExecutor(t *testing.T) {
 	// run in a random namespace so we can have concurrent tests
 	// on a given cluster
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -142,7 +142,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create an env on the cluster
 	env, err := fissionClient.Environments(fissionNs).Create(&tpr.Environment{
-		Metadata: metametav1.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
 		},
@@ -160,7 +160,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create poolmgr
 	port := 9999
-	err = StartPoolmgr(fissionNs, functionNs, port)
+	err = StartExecutor(fissionNs, functionNs, port)
 	if err != nil {
 		log.Panicf("failed to start poolmgr: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create a package
 	p := &tpr.Package{
-		Metadata: metametav1.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
@@ -191,7 +191,7 @@ func TestPoolmgr(t *testing.T) {
 
 	// create a function
 	f := &tpr.Function{
-		Metadata: metametav1.ObjectMeta{
+		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},

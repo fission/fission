@@ -8,10 +8,10 @@ import (
 	"github.com/docopt/docopt-go"
 	"github.com/fission/fission/buildermgr"
 	"github.com/fission/fission/controller"
+	"github.com/fission/fission/executor"
 	"github.com/fission/fission/kubewatcher"
 	"github.com/fission/fission/logger"
 	"github.com/fission/fission/mqtrigger"
-	"github.com/fission/fission/poolmgr"
 	"github.com/fission/fission/router"
 	"github.com/fission/fission/storagesvc"
 	"github.com/fission/fission/timer"
@@ -22,15 +22,15 @@ func runController(port int) {
 	log.Fatalf("Error: Controller exited.")
 }
 
-func runRouter(port int, poolmgrUrl string) {
-	router.Start(port, poolmgrUrl)
+func runRouter(port int, executorUrl string) {
+	router.Start(port, executorUrl)
 	log.Fatalf("Error: Router exited.")
 }
 
-func runPoolmgr(port int, fissionNamespace, functionNamespace string) {
-	err := poolmgr.StartPoolmgr(fissionNamespace, functionNamespace, port)
+func runExecutor(port int, fissionNamespace, functionNamespace string) {
+	err := executor.StartExecutor(fissionNamespace, functionNamespace, port)
 	if err != nil {
-		log.Fatalf("Error starting poolmgr: %v", err)
+		log.Fatalf("Error starting executor: %v", err)
 	}
 }
 
@@ -94,18 +94,18 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 }
 
 func main() {
-	usage := `fission-bundle: Package of all fission microservices: controller, router, poolmgr.
+	usage := `fission-bundle: Package of all fission microservices: controller, router, executor.
 
 Use it to start one or more of the fission servers:
 
  Controller is a stateless API frontend for fission resources.
 
  Pool manager maintains a pool of generalized function containers, and
- specializes them on-demand. Poolmgr must be run from a pod in a
+ specializes them on-demand. Executor must be run from a pod in a
  Kubernetes cluster.
 
  Router implements HTTP triggers: it routes to running instances,
- working with the controller and poolmgr.
+ working with the controller and executor.
 
  Kubewatcher implements Kubernetes Watch triggers: it watches
  Kubernetes resources and invokes functions described in the
@@ -117,8 +117,8 @@ Use it to start one or more of the fission servers:
 
 Usage:
   fission-bundle --controllerPort=<port>
-  fission-bundle --routerPort=<port> [--poolmgrUrl=<url>]
-  fission-bundle --poolmgrPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
+  fission-bundle --routerPort=<port> [--executorUrl=<url>]
+  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
   fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
@@ -128,10 +128,10 @@ Usage:
 Options:
   --controllerPort=<port>         Port that the controller should listen on.
   --routerPort=<port>             Port that the router should listen on.
-  --poolmgrPort=<port>            Port that the poolmgr should listen on.
+  --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
   --builderMgrPort=<port>         Port that the buildermgr should listen on.
-  --poolmgrUrl=<url>              Poolmgr URL. Not required if --poolmgrPort is specified.
+  --executorUrl=<url>             Executor URL. Not required if --executorPort is specified.
   --routerUrl=<url>               Router URL.
   --etcdUrl=<etcdUrl>             Etcd URL.
   --storageSvcUrl=<url>           StorageService URL.
@@ -151,7 +151,7 @@ Options:
 	fissionNs := getStringArgWithDefault(arguments["--fission-namespace"], "fission")
 	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
-	poolmgrUrl := getStringArgWithDefault(arguments["--poolmgrUrl"], "http://poolmgr.fission")
+	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
 
@@ -162,12 +162,12 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(arguments["--routerPort"])
-		runRouter(port, poolmgrUrl)
+		runRouter(port, executorUrl)
 	}
 
-	if arguments["--poolmgrPort"] != nil {
-		port := getPort(arguments["--poolmgrPort"])
-		runPoolmgr(port, fissionNs, functionNs)
+	if arguments["--executorPort"] != nil {
+		port := getPort(arguments["--executorPort"])
+		runExecutor(port, fissionNs, functionNs)
 	}
 
 	if arguments["--kubewatcher"] == true {

@@ -30,7 +30,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
-	poolmgrClient "github.com/fission/fission/poolmgr/client"
+	executorClient "github.com/fission/fission/executor/client"
 	"github.com/fission/fission/tpr"
 )
 
@@ -38,7 +38,7 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 	fissionClient *tpr.FissionClient
-	poolmgr       *poolmgrClient.Client
+	executor      *executorClient.Client
 	resolver      *functionReferenceResolver
 	triggers      []tpr.Httptrigger
 	functions     []tpr.Function
@@ -46,13 +46,13 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClient,
-	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, tprClient *rest.RESTClient) *HTTPTriggerSet {
+	executor *executorClient.Client, resolver *functionReferenceResolver, tprClient *rest.RESTClient) *HTTPTriggerSet {
 	triggers := make([]tpr.Httptrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
 		fissionClient:      fissionClient,
-		poolmgr:            poolmgr,
+		executor:           executor,
 		resolver:           resolver,
 		tprClient:          tprClient,
 	}
@@ -101,7 +101,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
 			function: rr.functionMetadata,
-			poolmgr:  ts.poolmgr,
+			executor: ts.executor,
 		}
 		muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler).Methods(trigger.Spec.Method)
 		if trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
@@ -126,7 +126,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
 			function: &m,
-			poolmgr:  ts.poolmgr,
+			executor: ts.executor,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name), fh.handler)
 	}
