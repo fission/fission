@@ -212,15 +212,14 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	envName := f.Spec.Environment.Name
 
-	_, clientset, err := tpr.GetKubernetesClient()
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	// Get Unmanaged Pods first
+	// Get function Pods first
 	selector := "functionName=" + fnName
-	podList, err := clientset.Core().Pods(ns).List(metav1.ListOptions{LabelSelector: selector})
+	podList, err := a.kubernetesClient.Core().Pods(ns).List(metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -237,7 +236,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	podLogOpts := v1.PodLogOptions{Container: envName} // Only the env container, not fetcher
 	var podLogsReq *restclient.Request
 	if len(pods) > 0 {
-		podLogsReq = clientset.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
+		podLogsReq = a.kubernetesClient.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
 	} else {
 		a.respondWithError(w, errors.New("No active pods found"))
 		return
@@ -248,12 +247,12 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		a.respondWithError(w, err)
 		return
 	}
+	defer podLogs.Close()
 
 	_, err = io.Copy(w, podLogs)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
-	defer podLogs.Close()
 	return
 }

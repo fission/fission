@@ -156,7 +156,7 @@ func printPodLogs(c *cli.Context) error {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("get logs from POD directly")
+		return errors.New("get logs from pod directly")
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -414,6 +414,7 @@ func fnList(c *cli.Context) error {
 }
 
 func fnLogs(c *cli.Context) error {
+
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
@@ -538,26 +539,23 @@ func fnTest(c *cli.Context) error {
 
 	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
-	fnReachable := false
-
 	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
-	if resp.StatusCode < 300 {
+	if resp.StatusCode < 400 {
 		body, err := ioutil.ReadAll(resp.Body)
 		checkErr(err, "Function test")
 		fmt.Print(string(body))
 		defer resp.Body.Close()
-		fnReachable = true
+		return nil
 	}
 
-	if !fnReachable {
-		body, err := ioutil.ReadAll(resp.Body)
-		checkErr(err, "read log response from pod")
-		fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
-		defer resp.Body.Close()
-		err = printPodLogs(c)
-		if err != nil {
-			fnLogs(c)
-		}
+	body, err := ioutil.ReadAll(resp.Body)
+	checkErr(err, "read log response from pod")
+	fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
+	defer resp.Body.Close()
+	err = printPodLogs(c)
+	if err != nil {
+		fnLogs(c)
 	}
+
 	return nil
 }
