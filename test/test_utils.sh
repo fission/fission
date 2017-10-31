@@ -56,6 +56,19 @@ build_builder() {
     popd
 }
 
+build_and_push_fluentd(){
+    image_tag=$1
+
+    pushd $ROOT/logger/fluentd
+    docker build -t $image_tag .
+
+    gcloud_login
+
+    gcloud docker -- push $image_tag
+    popd
+
+}
+
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
@@ -110,11 +123,12 @@ helm_install_fission() {
     fetcherImageTag=$5
     controllerNodeport=$6
     routerNodeport=$7
+    fluentdImage=$8
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage
 
     helm_setup
 
@@ -280,6 +294,8 @@ install_and_test() {
     imageTag=$2
     fetcherImage=$3
     fetcherImageTag=$4
+    fluentdImage=$5
+    fluentdImageTag=$6
 
     controllerPort=31234
     routerPort=31235
@@ -288,7 +304,7 @@ install_and_test() {
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort
+    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage:$fluentdImageTag
     then
 	dump_logs $id
 	exit 1
