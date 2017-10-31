@@ -18,13 +18,17 @@ package newdeploy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
@@ -37,26 +41,28 @@ import (
 
 type (
 	NewDeploy struct {
-		env                    *tpr.Environment
 		kubernetesClient       *kubernetes.Clientset
 		fissionClient          *tpr.FissionClient
 		fetcherImg             string
 		fetcherImagePullPolicy apiv1.PullPolicy
-		sharedMountPath        string
-		initialReplicas        int32
 		namespace              string
+		sharedMountPath        string
+		fsCache                *fcache.FunctionServiceCache
 	}
 )
 
+const (
+	envVersion = "ENV_VERSION"
+)
+
 func MakeNewDeploy(
-	env *tpr.Environment,
 	fissionClient *tpr.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
-	initialReplicas int32,
 	namespace string,
-) (*NewDeploy, error) {
+	fsCache *fcache.FunctionServiceCache,
+) *NewDeploy {
 
-	log.Printf("Creating deployment for environment %v", env.Metadata)
+	log.Printf("Creating NewDeploy")
 
 	fetcherImg := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImg) == 0 {
@@ -68,53 +74,60 @@ func MakeNewDeploy(
 	}
 
 	nd := &NewDeploy{
-		env:                    env,
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
-		initialReplicas:        initialReplicas,
 		namespace:              namespace,
 		fetcherImg:             fetcherImg,
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
 		sharedMountPath:        "/userfunc",
+		fsCache:                fsCache,
 	}
 
-	return nd, nil
+	return nd
 }
 
-func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fcache.FuncSvc, error) {
+func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *tpr.Environment) (*fcache.FuncSvc, error) {
 	fn, err := deploy.fissionClient.
 		Functions(metadata.Namespace).
 		Get(metadata.Name)
 	if err != nil {
 		return nil, err
 	}
-	depl, err := deploy.createNewDeployment(fn)
+
+	deployName := fmt.Sprintf("%v-%v",
+		env.Metadata.Name,
+		env.Metadata.UID)
+	deplName := fmt.Sprintf("deploy-%v", deployName)
+
+	deployLables := map[string]string{
+		"environmentName": env.Metadata.Name,
+		"environmentUid":  string(env.Metadata.UID),
+		"type":            "newdeploy",
+	}
+
+	depl, err := deploy.createNewDeployment(fn, env, deplName, deployLables)
 	if err != nil {
 		return nil, err
 	}
 
-	set := depl.Spec.Selector.String()
-	fmt.Println("The lables from deployment are:", set)
-	_, kubernetesClient, err := tpr.MakeFissionClient()
-	if err != nil {
-		return nil, err
-	}
-	pods, err := kubernetesClient.CoreV1().Pods(metadata.Namespace).List(
+	pods, err := deploy.kubernetesClient.CoreV1().Pods(deploy.namespace).List(
 		metav1.ListOptions{
-			LabelSelector: set,
+			LabelSelector: labels.Set(deployLables).AsSelector().String(),
 		})
-
-	fmt.Println("PODs:", pods)
-	var pod apiv1.Pod
-	if len(pods.Items) > 0 {
-		pod = pods.Items[0]
+	if err != nil {
+		return nil, err
 	}
-	fmt.Println("Pod selected for service:", pod.Status.PodIP)
+
+	if len(pods.Items) <= 0 {
+		return nil, errors.New("Failed to get a pod from deployment")
+	}
+	pod := pods.Items[0]
+	svcHost := fmt.Sprintf("%v:8888", pod.Status.PodIP)
 
 	fsvc := &fcache.FuncSvc{
 		Function:    metadata,
-		Environment: deploy.env,
-		Address:     pod.Status.PodIP,
+		Environment: env,
+		Address:     svcHost,
 		PodName:     depl.ObjectMeta.Name,
 		Ctime:       time.Now(),
 		Atime:       time.Now(),
@@ -123,19 +136,16 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fcache.FuncSvc
 	return fsvc, nil
 }
 
-func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployment, error) {
+func (deploy NewDeploy) createNewDeployment(fn *tpr.Function, env *tpr.Environment,
+	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
+	replicas := int32(1)
+	targetFilename := "user"
 
-	poolDeploymentName := fmt.Sprintf("%v-%v",
-		deploy.env.Metadata.Name,
-		deploy.env.Metadata.UID)
-
-	deployLables := map[string]string{
-		"environmentName": deploy.env.Metadata.Name,
-		"environmentUid":  string(deploy.env.Metadata.UID),
-		"newDeploy":       "true",
+	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
+	if err == nil && existingDepl.Status.ReadyReplicas >= replicas {
+		return existingDepl, err
 	}
 
-	targetFilename := "user"
 	fetchReq := &fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Package: metav1.ObjectMeta{
@@ -156,11 +166,11 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   poolDeploymentName,
+			Name:   deployName,
 			Labels: deployLables,
 		},
 		Spec: v1beta1.DeploymentSpec{
-			Replicas: &deploy.initialReplicas,
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: deployLables,
 			},
@@ -180,7 +190,7 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 					Containers: []apiv1.Container{
 						{
 							Name:                   fn.Metadata.Name,
-							Image:                  deploy.env.Spec.Runtime.Image,
+							Image:                  env.Spec.Runtime.Image,
 							ImagePullPolicy:        apiv1.PullIfNotPresent,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
@@ -200,24 +210,17 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 									Name:      "userfunc",
 									MountPath: deploy.sharedMountPath,
 								},
-							}, /*
-								ReadinessProbe: &apiv1.Probe{
-									Handler: apiv1.Handler{
-										HTTPGet: &apiv1.HTTPGetAction{
-											Path: "/specialize",
-											Port: intstr.FromInt(8888),
-										},
-									},
-									InitialDelaySeconds: 1,
-									TimeoutSeconds:      1,
-									PeriodSeconds:       3,
-									SuccessThreshold:    1,
-									FailureThreshold:    2,
-								},*/
+							},
 							Command: []string{"/fetcher", "-specialize-on-startup",
 								"-fetch-request", string(fetchPayload),
 								"-load-request", string(loadPayload),
 								deploy.sharedMountPath},
+							Env: []apiv1.EnvVar{
+								apiv1.EnvVar{
+									Name:  envVersion,
+									Value: strconv.Itoa(env.Spec.Version),
+								},
+							},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",
@@ -230,7 +233,46 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function) (*v1beta1.Deployme
 		return nil, err
 	}
 
-	fmt.Println("Deployment=", depl.String())
-	return depl, err
+	for i := 0; i < 20; i++ {
+		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, errors.New("Failed to get deployment")
+		}
+		if latestDepl.Status.ReadyReplicas >= replicas {
+			return latestDepl, err
+		}
+		time.Sleep(time.Second)
+	}
+	return nil, errors.New("Deployment failed to create replicas")
 
+}
+
+func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
+
+	service := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: svcName,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		Spec: apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				apiv1.ServicePort{
+					Name:       "",
+					Port:       int32(80),
+					TargetPort: intstr.FromInt(8888)},
+			},
+			Selector: deployLables,
+			Type:     apiv1.ServiceTypeClusterIP,
+		},
+	}
+
+	svc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Create(service)
+	if err != nil {
+		return nil, err
+	}
+
+	return svc, nil
 }

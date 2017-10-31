@@ -6,9 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"time"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
 
@@ -37,26 +42,7 @@ func main() {
 	_fetcher := fetcher.MakeFetcher(dir)
 
 	if *specializeOnStart {
-		// Fetch code
-		var fetchReq fetcher.FetchRequest
-		err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
-		if err != nil {
-			log.Fatalf("Error parsing fetch request: %v", err)
-		}
-		err, _ = _fetcher.Fetch(fetchReq)
-		if err != nil {
-			log.Fatalf("Error fetching: %v", err)
-		}
-		// Specialize the pod
-		resp, err := http.Post("http://localhost:8888/specialize", "application/json", bytes.NewReader([]byte(*loadPayload)))
-		if err != nil {
-			log.Fatalf("Error specializing pod: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			log.Fatalf("Specializing pod failed: %v", resp)
-		}
+		specializePod(_fetcher, fetchPayload, loadPayload)
 	}
 
 	mux := http.NewServeMux()
@@ -67,4 +53,60 @@ func main() {
 
 func fetcherUsage() {
 	fmt.Printf("Usage: fetcher [OPTIONAL] -specialize-on-startup [OPTIONAL] -fetch-request <json> <shared volume path> \n")
+}
+
+func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
+	// Fetch code
+	var fetchReq fetcher.FetchRequest
+	err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
+	if err != nil {
+		log.Fatalf("Error parsing fetch request: %v", err)
+	}
+	err, _ = _fetcher.Fetch(fetchReq)
+	if err != nil {
+		log.Fatalf("Error fetching: %v", err)
+	}
+
+	// Specialize the pod
+	fmt.Println("EnvVersion:", os.Getenv("ENV_VERSION"))
+	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
+	if err != nil {
+		log.Fatalf("Error parsing environment version %v", err)
+	}
+	fmt.Println("Specialize Payload:", loadPayload)
+	maxRetries := 30
+	for i := 0; i < maxRetries; i++ {
+		var resp2 *http.Response
+		if envVersion == 2 {
+			resp2, err = http.Post("http://localhost:8888/v2/specialize", "application/json", bytes.NewReader([]byte{}))
+		} else {
+			resp2, err = http.Post("http://localhost:8888/specialize", "application/json", bytes.NewReader([]byte{}))
+		}
+		log.Printf("Failed to specialize pod: %v", err)
+		if err == nil && resp2.StatusCode < 300 {
+			// Success
+			resp2.Body.Close()
+			fmt.Println("Pod Specialization worked in #", i)
+			break
+		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						continue
+					}
+				}
+			}
+		}
+
+		if err == nil {
+			err = fission.MakeErrorFromHTTP(resp2)
+		}
+		log.Printf("Failed to specialize pod: %v", err)
+	}
+
 }

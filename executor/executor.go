@@ -36,12 +36,13 @@ import (
 type (
 	Executor struct {
 		gpm           *poolmgr.GenericPoolManager
+		ndm           *newdeploy.NewDeploy
 		functionEnv   *cache.Cache
 		fissionClient *tpr.FissionClient
 		fsCache       *fcache.FunctionServiceCache
 
 		requestChan chan *createFuncServiceRequest
-		fsCreateWg  map[string]*sync.WaitGroup // xxx no channels here, rename this
+		fsCreateWg  map[string]*sync.WaitGroup
 	}
 	createFuncServiceRequest struct {
 		funcMeta *metav1.ObjectMeta
@@ -54,9 +55,10 @@ type (
 	}
 )
 
-func MakeExecutor(gpm *poolmgr.GenericPoolManager, fissionClient *tpr.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
+func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *tpr.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		gpm:           gpm,
+		ndm:           ndm,
 		functionEnv:   cache.MakeCache(10*time.Second, 0),
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
@@ -134,14 +136,10 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 
 	switch backend {
 	case "NEWDEPLOY":
-		// First few lines are temporary, need to clean it up
-		_, kubernetesClient, err := tpr.MakeFissionClient()
-		ndm, err := newdeploy.MakeNewDeploy(env, executor.fissionClient, kubernetesClient, 1, "fission-function")
-		fs, err := ndm.GetFuncSvc(meta)
+		fs, err := executor.ndm.GetFuncSvc(meta, env)
 		if err != nil {
 			return "", err
 		}
-		fmt.Println("fs=", fs)
 		return fs.Address, nil
 
 	default:
@@ -156,6 +154,7 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 		if err != nil {
 			return "", err
 		}
+		fmt.Println("Returning address of service:", fsvc.Address)
 		return fsvc.Address, nil
 	}
 }
@@ -197,16 +196,19 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
-
-	instanceID := uniuri.NewLen(8)
-	poolmgr.CleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceID)
-
 	fsCache := fcache.MakeFunctionServiceCache()
+
+	poolID := uniuri.NewLen(8)
+	poolmgr.CleanupOldPoolmgrResources(kubernetesClient, functionNamespace, poolID)
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
-		functionNamespace, fsCache, instanceID)
+		functionNamespace, fsCache, poolID)
 
-	api := MakeExecutor(gpm, fissionClient, fsCache)
+	ndm := newdeploy.MakeNewDeploy(
+		fissionClient, kubernetesClient,
+		functionNamespace, fsCache)
+
+	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 	go api.Serve(port)
 
 	return nil
