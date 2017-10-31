@@ -27,6 +27,7 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/logdb"
@@ -36,6 +37,7 @@ import (
 type (
 	API struct {
 		fissionClient     *tpr.FissionClient
+		kubernetesClient  *kubernetes.Clientset
 		storageServiceUrl string
 		builderManagerUrl string
 		workflowApiUrl    string
@@ -178,6 +180,7 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
 	r.HandleFunc("/proxy/buildermgr/v1/builder", api.BuilderManagerEnvBuilderProxy)
+	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 
 	address := fmt.Sprintf(":%v", port)

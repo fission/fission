@@ -18,14 +18,20 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/v1"
+	restclient "k8s.io/client-go/rest"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/tpr"
@@ -187,4 +193,66 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		Director: director,
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+// FunctionPodLogs : Get logs for a function directly from pod
+func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fnName := vars["function"]
+	ns := vars["namespace"]
+
+	if len(ns) == 0 {
+		ns = "fission-function"
+	}
+
+	f, err := a.fissionClient.Functions(api.NamespaceDefault).Get(fnName)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	envName := f.Spec.Environment.Name
+
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	// Get function Pods first
+	selector := "functionName=" + fnName
+	podList, err := a.kubernetesClient.Core().Pods(ns).List(metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	// Get the logs for last Pod executed
+	pods := podList.Items
+	sort.Slice(pods, func(i, j int) bool {
+		itime := pods[i].ObjectMeta.CreationTimestamp.Time
+		jtime := pods[j].ObjectMeta.CreationTimestamp.Time
+		return itime.After(jtime)
+	})
+
+	podLogOpts := v1.PodLogOptions{Container: envName} // Only the env container, not fetcher
+	var podLogsReq *restclient.Request
+	if len(pods) > 0 {
+		podLogsReq = a.kubernetesClient.Core().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
+	} else {
+		a.respondWithError(w, errors.New("No active pods found"))
+		return
+	}
+
+	podLogs, err := podLogsReq.Stream()
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	defer podLogs.Close()
+
+	_, err = io.Copy(w, podLogs)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+	return
 }

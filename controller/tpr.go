@@ -24,11 +24,11 @@ import (
 )
 
 func makeTPRBackedAPI() (*API, error) {
-	fissionClient, _, err := tpr.MakeFissionClient()
+	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
 	if err != nil {
 		return nil, err
 	}
-	return &API{fissionClient: fissionClient}, nil
+	return &API{fissionClient: fissionClient, kubernetesClient: kubernetesClient}, nil
 }
 
 func validateResourceName(name string) error {

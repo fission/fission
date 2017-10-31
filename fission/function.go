@@ -20,9 +20,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -132,6 +135,34 @@ func getContents(filePath string) []byte {
 	code, err = ioutil.ReadFile(filePath)
 	checkErr(err, fmt.Sprintf("read %v", filePath))
 	return code
+}
+
+func printPodLogs(c *cli.Context) error {
+	fnName := c.String("name")
+	if len(fnName) == 0 {
+		fatal("Need --name argument.")
+	}
+
+	queryURL, err := url.Parse(c.GlobalString("server"))
+	checkErr(err, "parse the base URL")
+	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	checkErr(err, "create logs request")
+
+	httpClient := http.Client{}
+	resp, err := httpClient.Do(req)
+	checkErr(err, "execute get logs request")
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("get logs from pod directly")
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	checkErr(err, "read the response body")
+	fmt.Println(string(body))
+	return nil
 }
 
 func fnCreate(c *cli.Context) error {
@@ -383,6 +414,7 @@ func fnList(c *cli.Context) error {
 }
 
 func fnLogs(c *cli.Context) error {
+
 	client := getClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
@@ -496,4 +528,34 @@ func fnPods(c *cli.Context) error {
 	}
 
 	return err
+}
+
+func fnTest(c *cli.Context) error {
+	fnName := c.String("name")
+	routerURL := os.Getenv("FISSION_ROUTER")
+	if len(routerURL) == 0 {
+		fatal("Need FISSION_ROUTER set to your fission router.")
+	}
+
+	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
+
+	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
+	if resp.StatusCode < 400 {
+		body, err := ioutil.ReadAll(resp.Body)
+		checkErr(err, "Function test")
+		fmt.Print(string(body))
+		defer resp.Body.Close()
+		return nil
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	checkErr(err, "read log response from pod")
+	fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
+	defer resp.Body.Close()
+	err = printPodLogs(c)
+	if err != nil {
+		fnLogs(c)
+	}
+
+	return nil
 }

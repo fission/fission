@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
@@ -27,6 +29,10 @@ import (
 func fatal(msg string) {
 	os.Stderr.WriteString(msg + "\n")
 	os.Exit(1)
+}
+
+func warn(msg string) {
+	os.Stderr.WriteString(msg + "\n")
 }
 
 func getClient(serverUrl string) *client.Client {
@@ -49,4 +55,34 @@ func checkErr(err error, msg string) {
 	if err != nil {
 		fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
 	}
+}
+
+func httpRequest(method, url, body string, headers []string) *http.Response {
+	if method == "" {
+		method = "GET"
+	}
+
+	if method != http.MethodGet &&
+		method != http.MethodDelete &&
+		method != http.MethodPost &&
+		method != http.MethodPut {
+		fatal(fmt.Sprintf("Invalid HTTP method '%s'.", method))
+	}
+
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	checkErr(err, "create HTTP request")
+
+	for _, header := range headers {
+		headerKeyValue := strings.SplitN(header, ":", 2)
+		if len(headerKeyValue) != 2 {
+			checkErr(errors.New(""), "create request without appropriate headers")
+		}
+		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	checkErr(err, "execute HTTP request")
+
+	return resp
 }
