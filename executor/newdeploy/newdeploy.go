@@ -27,7 +27,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
@@ -110,24 +109,17 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *tpr.Environ
 		return nil, err
 	}
 
-	pods, err := deploy.kubernetesClient.CoreV1().Pods(deploy.namespace).List(
-		metav1.ListOptions{
-			LabelSelector: labels.Set(deployLables).AsSelector().String(),
-		})
+	svcName := fmt.Sprintf("svc-%v", deployName)
+	_, err = deploy.createNewService(deployLables, svcName)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(pods.Items) <= 0 {
-		return nil, errors.New("Failed to get a pod from deployment")
-	}
-	pod := pods.Items[0]
-	svcHost := fmt.Sprintf("%v:8888", pod.Status.PodIP)
+	svcAddress := fmt.Sprintf("%v.%v.svc.cluster.local", svcName, deploy.namespace)
 
 	fsvc := &fcache.FuncSvc{
 		Function:    metadata,
 		Environment: env,
-		Address:     svcHost,
+		Address:     svcAddress,
 		PodName:     depl.ObjectMeta.Name,
 		Ctime:       time.Now(),
 		Atime:       time.Now(),
@@ -248,6 +240,11 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function, env *tpr.Environme
 }
 
 func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
+
+	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
+	if err == nil {
+		return existingSvc, err
+	}
 
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
