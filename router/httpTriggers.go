@@ -151,7 +151,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 			return watchlist.Watch(options)
 		},
 	}
-	resyncPeriod := 30 * time.Second
+	resyncPeriod := 5 * time.Second
 	_, controller := k8sCache.NewInformer(listWatch, &tpr.Httptrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -183,7 +183,7 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 			return watchlist.Watch(options)
 		},
 	}
-	resyncPeriod := 30 * time.Second
+	resyncPeriod := 5 * time.Second
 	_, controller := k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
