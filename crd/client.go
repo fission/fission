@@ -215,6 +215,6 @@ func (fc *FissionClient) Packages(ns string) PackageInterface {
 func (fc *FissionClient) WaitForCRDs() {
 	waitForCRDs(fc.crdClient)
 }
-func (fc *FissionClient) GetTprClient() *rest.RESTClient {
-	return fc.tprClient
+func (fc *FissionClient) GetCrdClient() *rest.RESTClient {
+	return fc.crdClient
 }

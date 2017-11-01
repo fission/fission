@@ -24,7 +24,7 @@ import (
 )
 
 func makeCRDBackedAPI() (*API, error) {
-	fissionClient, _, _, err := crd.MakeFissionClient()
+	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil, err
 	}

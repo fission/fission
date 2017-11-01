@@ -45,9 +45,9 @@ type HTTPTriggerSet struct {
 	crdClient     *rest.RESTClient
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClient,
+func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, crdClient *rest.RESTClient) *HTTPTriggerSet {
-	triggers := make([]tpr.Httptrigger, 1)
+	triggers := make([]crd.Httptrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
@@ -152,7 +152,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	_, controller := k8sCache.NewInformer(listWatch, &tpr.Httptrigger{}, resyncPeriod,
+	_, controller := k8sCache.NewInformer(listWatch, &crd.Httptrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
@@ -184,7 +184,7 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	_, controller := k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
+	_, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
@@ -193,7 +193,7 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 				ts.syncTriggers()
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-				fn := newObj.(*tpr.Function)
+				fn := newObj.(*crd.Function)
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					if key.functionReference.Name == fn.Metadata.Name &&
