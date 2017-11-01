@@ -208,7 +208,7 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function, env *tpr.Environme
 								"-load-request", string(loadPayload),
 								deploy.sharedMountPath},
 							Env: []apiv1.EnvVar{
-								apiv1.EnvVar{
+								{
 									Name:  envVersion,
 									Value: strconv.Itoa(env.Spec.Version),
 								},
@@ -256,7 +256,7 @@ func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
-				apiv1.ServicePort{
+				{
 					Name:       "",
 					Port:       int32(80),
 					TargetPort: intstr.FromInt(8888)},
