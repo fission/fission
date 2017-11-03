@@ -25,7 +25,7 @@ type (
 		Environments []v1.Environment         `json:"environments"`
 		HttpTriggers []v1.HTTPTrigger         `json:"httptriggers"`
 		Mqtriggers   []v1.MessageQueueTrigger `json:"mqtriggers"`
-		Timetriggers []v1.TimeTrigger         `json:"timetriggers"`
+		TimeTriggers []v1.TimeTrigger         `json:"timetriggers"`
 		Watches      []v1.Watch               `json:"watches"`
 		NameChanges  map[string]string        `json:"namechanges"`
 	}
@@ -143,7 +143,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 
 	fmt.Println("Getting time triggers")
 	resp = get(v1url + "/triggers/time")
-	err = json.Unmarshal(resp, &v1state.Timetriggers)
+	err = json.Unmarshal(resp, &v1state.TimeTriggers)
 	checkErr(err, "parse server response")
 
 	fmt.Println("Getting function list")
@@ -175,7 +175,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
-	for _, t := range v1state.Timetriggers {
+	for _, t := range v1state.TimeTriggers {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
@@ -225,7 +225,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 	checkErr(err, "write file")
 
 	fmt.Printf("Done: Saved %v functions, %v HTTP triggers, %v watches, %v message queue triggers, %v time triggers.\n",
-		len(v1state.Functions), len(v1state.HttpTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.Timetriggers))
+		len(v1state.Functions), len(v1state.HttpTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.TimeTriggers))
 }
 
 func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fission.FunctionReference {
@@ -369,8 +369,8 @@ func upgradeRestoreState(c *cli.Context) error {
 	}
 
 	// create time triggers
-	for _, t := range v1state.Timetriggers {
-		_, err = client.TimeTriggerCreate(&crd.Timetrigger{
+	for _, t := range v1state.TimeTriggers {
+		_, err = client.TimeTriggerCreate(&crd.TimeTrigger{
 			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.TimeTriggerSpec{
 				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),

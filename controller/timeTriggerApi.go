@@ -30,7 +30,7 @@ import (
 )
 
 func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := a.fissionClient.Timetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.TimeTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -52,7 +52,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t crd.Timetrigger
+	var t crd.TimeTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -73,7 +73,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.Timetriggers(t.Metadata.Namespace).Create(&t)
+	tnew, err := a.fissionClient.TimeTriggers(t.Metadata.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -97,7 +97,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.Timetriggers(ns).Get(name)
+	t, err := a.fissionClient.TimeTriggers(ns).Get(name)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -122,7 +122,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t crd.Timetrigger
+	var t crd.TimeTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -142,7 +142,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.Timetriggers(t.Metadata.Namespace).Update(&t)
+	tnew, err := a.fissionClient.TimeTriggers(t.Metadata.Namespace).Update(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -164,7 +164,7 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Timetriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.TimeTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -37,7 +37,7 @@ type (
 		Environments []crd.Environment            `json:"environments"`
 		HttpTriggers []crd.HttpTrigger            `json:"httptriggers"`
 		Mqtriggers   []crd.Messagequeuetrigger    `json:"mqtriggers"`
-		Timetriggers []crd.Timetrigger            `json:"timetriggers"`
+		TimeTriggers []crd.TimeTrigger            `json:"timetriggers"`
 		Watches      []crd.KubernetesWatchTrigger `json:"watches"`
 	}
 )
@@ -64,7 +64,7 @@ func migrateDumpTPRResource(client *client.Client, filename string) {
 		HttpTriggers: httpTriggers,
 		Environments: envs,
 		Watches:      watches,
-		Timetriggers: timeTriggers,
+		TimeTriggers: timeTriggers,
 		Mqtriggers:   mqTriggers,
 	}
 
@@ -81,7 +81,7 @@ func migrateDumpTPRResource(client *client.Client, filename string) {
 
 	fmt.Printf("Done: Saved %v packages, %v functions, %v HTTP triggers, %v watches, %v message queue triggers, %v time triggers.\n",
 		len(tprResource.Packages), len(tprResource.Functions), len(tprResource.HttpTriggers), len(tprResource.Watches), len(tprResource.Mqtriggers),
-		len(tprResource.Timetriggers))
+		len(tprResource.TimeTriggers))
 }
 
 func migrateDumpTPR(c *cli.Context) error {
@@ -161,8 +161,8 @@ func migrateRestoreCRD(c *cli.Context) error {
 	}
 
 	// create time triggers
-	for _, t := range tprResource.Timetriggers {
-		_, err = client.TimeTriggerCreate(&crd.Timetrigger{
+	for _, t := range tprResource.TimeTriggers {
+		_, err = client.TimeTriggerCreate(&crd.TimeTrigger{
 			Metadata: metav1.ObjectMeta{
 				Name:      t.Metadata.Name,
 				Namespace: t.Metadata.Namespace,

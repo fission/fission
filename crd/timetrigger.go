@@ -24,30 +24,30 @@ import (
 )
 
 type (
-	TimetriggerInterface interface {
-		Create(*Timetrigger) (*Timetrigger, error)
-		Get(name string) (*Timetrigger, error)
-		Update(*Timetrigger) (*Timetrigger, error)
+	TimeTriggerInterface interface {
+		Create(*TimeTrigger) (*TimeTrigger, error)
+		Get(name string) (*TimeTrigger, error)
+		Update(*TimeTrigger) (*TimeTrigger, error)
 		Delete(name string, options *metav1.DeleteOptions) error
-		List(opts metav1.ListOptions) (*TimetriggerList, error)
+		List(opts metav1.ListOptions) (*TimeTriggerList, error)
 		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
-	timetriggerClient struct {
+	timeTriggerClient struct {
 		client    *rest.RESTClient
 		namespace string
 	}
 )
 
-func MakeTimetriggerInterface(crdClient *rest.RESTClient, namespace string) TimetriggerInterface {
-	return &timetriggerClient{
+func MakeTimeTriggerInterface(crdClient *rest.RESTClient, namespace string) TimeTriggerInterface {
+	return &timeTriggerClient{
 		client:    crdClient,
 		namespace: namespace,
 	}
 }
 
-func (fc *timetriggerClient) Create(f *Timetrigger) (*Timetrigger, error) {
-	var result Timetrigger
+func (fc *timeTriggerClient) Create(f *TimeTrigger) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Post().
 		Resource("timetriggers").
 		Namespace(fc.namespace).
@@ -59,8 +59,8 @@ func (fc *timetriggerClient) Create(f *Timetrigger) (*Timetrigger, error) {
 	return &result, nil
 }
 
-func (fc *timetriggerClient) Get(name string) (*Timetrigger, error) {
-	var result Timetrigger
+func (fc *timeTriggerClient) Get(name string) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Get().
 		Resource("timetriggers").
 		Namespace(fc.namespace).
@@ -72,8 +72,8 @@ func (fc *timetriggerClient) Get(name string) (*Timetrigger, error) {
 	return &result, nil
 }
 
-func (fc *timetriggerClient) Update(f *Timetrigger) (*Timetrigger, error) {
-	var result Timetrigger
+func (fc *timeTriggerClient) Update(f *TimeTrigger) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Put().
 		Resource("timetriggers").
 		Namespace(fc.namespace).
@@ -86,7 +86,7 @@ func (fc *timetriggerClient) Update(f *Timetrigger) (*Timetrigger, error) {
 	return &result, nil
 }
 
-func (fc *timetriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
+func (fc *timeTriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return fc.client.Delete().
 		Namespace(fc.namespace).
 		Resource("timetriggers").
@@ -96,8 +96,8 @@ func (fc *timetriggerClient) Delete(name string, opts *metav1.DeleteOptions) err
 		Error()
 }
 
-func (fc *timetriggerClient) List(opts metav1.ListOptions) (*TimetriggerList, error) {
-	var result TimetriggerList
+func (fc *timeTriggerClient) List(opts metav1.ListOptions) (*TimeTriggerList, error) {
+	var result TimeTriggerList
 	err := fc.client.Get().
 		Namespace(fc.namespace).
 		Resource("timetriggers").
@@ -110,7 +110,7 @@ func (fc *timetriggerClient) List(opts metav1.ListOptions) (*TimetriggerList, er
 	return &result, nil
 }
 
-func (fc *timetriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (fc *timeTriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return fc.client.Get().
 		Prefix("watch").
 		Namespace(fc.namespace).

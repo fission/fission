@@ -107,16 +107,16 @@ type (
 	}
 
 	// Time triggers
-	Timetrigger struct {
+	TimeTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta       `json:"metadata"`
 		Spec            fission.TimeTriggerSpec `json:"spec"`
 	}
-	TimetriggerList struct {
+	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Timetrigger `json:"items"`
+		Items []TimeTrigger `json:"items"`
 	}
 
 	// Message Queue triggers
@@ -154,7 +154,7 @@ func (ht *HttpTrigger) GetObjectKind() schema.ObjectKind {
 func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Timetrigger) GetObjectKind() schema.ObjectKind {
+func (w *TimeTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
 func (w *Messagequeuetrigger) GetObjectKind() schema.ObjectKind {
@@ -176,7 +176,7 @@ func (ht *HttpTrigger) GetObjectMeta() metav1.Object {
 func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Timetrigger) GetObjectMeta() metav1.Object {
+func (w *TimeTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
 func (w *Messagequeuetrigger) GetObjectMeta() metav1.Object {
@@ -198,7 +198,7 @@ func (hl *HttpTriggerList) GetObjectKind() schema.ObjectKind {
 func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *TimetriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *TimeTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
 func (wl *MessagequeuetriggerList) GetObjectKind() schema.ObjectKind {
@@ -220,7 +220,7 @@ func (hl *HttpTriggerList) GetListMeta() metav1.List {
 func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *TimetriggerList) GetListMeta() metav1.List {
+func (wl *TimeTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
 func (wl *MessagequeuetriggerList) GetListMeta() metav1.List {

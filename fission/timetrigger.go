@@ -45,7 +45,7 @@ func ttCreate(c *cli.Context) error {
 		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	tt := &crd.Timetrigger{
+	tt := &crd.TimeTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: metav1.NamespaceDefault,

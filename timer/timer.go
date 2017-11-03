@@ -41,14 +41,14 @@ type (
 
 	timerRequest struct {
 		requestType
-		triggers        []crd.Timetrigger
+		triggers        []crd.TimeTrigger
 		responseChannel chan *timerResponse
 	}
 	timerResponse struct {
 		error
 	}
 	timerTriggerWithCron struct {
-		trigger crd.Timetrigger
+		trigger crd.TimeTrigger
 		cron    *cron.Cron
 	}
 )
@@ -63,7 +63,7 @@ func MakeTimer(publisher publisher.Publisher) *Timer {
 	return timer
 }
 
-func (timer *Timer) Sync(triggers []crd.Timetrigger) error {
+func (timer *Timer) Sync(triggers []crd.TimeTrigger) error {
 	req := &timerRequest{
 		requestType:     SYNC,
 		triggers:        triggers,
@@ -85,7 +85,7 @@ func (timer *Timer) svc() {
 	}
 }
 
-func (timer *Timer) syncCron(triggers []crd.Timetrigger) error {
+func (timer *Timer) syncCron(triggers []crd.TimeTrigger) error {
 	// add new triggers or update existing ones
 	for _, t := range triggers {
 		if item, ok := timer.triggers[t.Metadata.Name]; ok {
@@ -137,7 +137,7 @@ func (timer *Timer) syncCron(triggers []crd.Timetrigger) error {
 	return nil
 }
 
-func (timer *Timer) newCron(t crd.Timetrigger) *cron.Cron {
+func (timer *Timer) newCron(t crd.TimeTrigger) *cron.Cron {
 	c := cron.New()
 	c.AddFunc(t.Spec.Cron, func() {
 		headers := map[string]string{

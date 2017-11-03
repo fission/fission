@@ -43,7 +43,7 @@ func MakeTimerSync(fissionClient *crd.FissionClient, timer *Timer) *TimerSync {
 
 func (ws *TimerSync) syncSvc() {
 	for {
-		triggers, err := ws.fissionClient.Timetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		triggers, err := ws.fissionClient.TimeTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed get time trigger list: %v", err)
 		}

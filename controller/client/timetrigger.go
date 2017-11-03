@@ -27,7 +27,7 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-func (c *Client) TimeTriggerCreate(t *crd.Timetrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) TimeTriggerCreate(t *crd.TimeTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) TimeTriggerCreate(t *crd.Timetrigger) (*metav1.ObjectMeta, erro
 	return &m, nil
 }
 
-func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*crd.Timetrigger, error) {
+func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*crd.TimeTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -68,7 +68,7 @@ func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*crd.Timetrigger, error) 
 		return nil, err
 	}
 
-	var t crd.Timetrigger
+	var t crd.TimeTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*crd.Timetrigger, error) 
 	return &t, nil
 }
 
-func (c *Client) TimeTriggerUpdate(t *crd.Timetrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) TimeTriggerUpdate(t *crd.TimeTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (c *Client) TimeTriggerDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) TimeTriggerList() ([]crd.Timetrigger, error) {
+func (c *Client) TimeTriggerList() ([]crd.TimeTrigger, error) {
 	resp, err := http.Get(c.url("triggers/time"))
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (c *Client) TimeTriggerList() ([]crd.Timetrigger, error) {
 		return nil, err
 	}
 
-	triggers := make([]crd.Timetrigger, 0)
+	triggers := make([]crd.TimeTrigger, 0)
 	err = json.Unmarshal(body, &triggers)
 	if err != nil {
 		return nil, err

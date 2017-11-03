@@ -274,7 +274,7 @@ func TestWatchApi(t *testing.T) {
 }
 
 func TestTimeTriggerApi(t *testing.T) {
-	testTrigger := &crd.Timetrigger{
+	testTrigger := &crd.TimeTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,
