@@ -64,7 +64,14 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 
 	// update package status to running state, so that
 	// we can know what status a package is through cli.
-	_, err = updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
+	newPkgRV, err := updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
+
+	// Kubernetes checks resource version before applying
+	// new resource config. The update operation will be
+	// rejected if the resource version in metadata is lower
+	// than the latest version. Set resource version with
+	// latest return from updatePackage.
+	pkg.Metadata.ResourceVersion = newPkgRV
 	if err != nil {
 		e := fmt.Sprintf("Error setting package pending state: %v", err)
 		log.Println(e)
@@ -134,8 +141,9 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 
 	log.Printf("Start updating info of package: %v", pkg.Metadata.Name)
 	// update package status and also build logs
-	newPkgRV, err := updatePackage(fissionClient, pkg,
+	newPkgRV, err = updatePackage(fissionClient, pkg,
 		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
+	pkg.Metadata.ResourceVersion = newPkgRV
 	if err != nil {
 		e := fmt.Sprintf("Error creating deployment package CRD resource: %v", err)
 		log.Println(e)
@@ -178,13 +186,6 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 func updatePackage(fissionClient *crd.FissionClient,
 	pkg *crd.Package, status fission.BuildStatus, buildLogs string,
 	uploadResp *fetcher.UploadResponse) (string, error) {
-
-	// Kubernetes checks resource version before applying
-	// new resource config. The update operation will be
-	// rejected if the resource version in metadata is lower
-	// than the latest version. Set resource version empty
-	// string to skip resource version check.
-	pkg.Metadata.ResourceVersion = ""
 
 	pkg.Status = fission.PackageStatus{
 		BuildStatus: status,
