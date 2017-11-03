@@ -95,7 +95,10 @@ func TestFunctionApi(t *testing.T) {
 
 	m, err := g.client.FunctionCreate(testFunc)
 	panicIf(err)
-	defer g.client.FunctionDelete(m)
+	defer func() {
+		err := g.client.FunctionDelete(m)
+		panicIf(err)
+	}()
 
 	_, err = g.client.FunctionCreate(testFunc)
 	assertNameReuseFailure(err, "function")
@@ -113,7 +116,7 @@ func TestFunctionApi(t *testing.T) {
 
 	funcs, err := g.client.FunctionList()
 	panicIf(err)
-	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but find %v", len(funcs)))
+	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but found %v", len(funcs)))
 
 	funcs_url := g.client.Url + "/v2/functions"
 	resp, err := http.Get(funcs_url)
@@ -178,7 +181,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	ts, err := g.client.HTTPTriggerList()
 	panicIf(err)
-	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but find %v", len(ts)))
+	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but found %v", len(ts)))
 }
 
 func TestEnvironmentApi(t *testing.T) {
@@ -223,7 +226,7 @@ func TestEnvironmentApi(t *testing.T) {
 
 	ts, err := g.client.EnvironmentList()
 	panicIf(err)
-	assert(len(ts) == 2, fmt.Sprintf("created two envs, but find %v", len(ts)))
+	assert(len(ts) == 2, fmt.Sprintf("created two envs, but found %v", len(ts)))
 }
 
 func TestWatchApi(t *testing.T) {
@@ -267,7 +270,7 @@ func TestWatchApi(t *testing.T) {
 
 	ws, err := g.client.WatchList()
 	panicIf(err)
-	assert(len(ws) == 2, fmt.Sprintf("created two watches, but find %v", len(ws)))
+	assert(len(ws) == 2, fmt.Sprintf("created two watches, but found %v", len(ws)))
 }
 
 func TestTimeTriggerApi(t *testing.T) {
@@ -311,7 +314,7 @@ func TestTimeTriggerApi(t *testing.T) {
 
 	ts, err := g.client.TimeTriggerList()
 	panicIf(err)
-	assert(len(ts) == 1, fmt.Sprintf("created two time triggers, but find %v", len(ts)))
+	assert(len(ts) == 1, fmt.Sprintf("created two time triggers, but found %v", len(ts)))
 }
 
 func TestMain(m *testing.M) {
