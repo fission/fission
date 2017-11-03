@@ -23,7 +23,6 @@ import (
 	"net/http"
 
 	"github.com/urfave/cli"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
@@ -142,84 +141,70 @@ func migrateRestoreCRD(c *cli.Context) error {
 
 	// create envs
 	for _, e := range tprResource.Environments {
+		e.Metadata.ResourceVersion = ""
 		_, err = client.EnvironmentCreate(&crd.Environment{
-			Metadata: metav1.ObjectMeta{
-				Name:      e.Metadata.Name,
-				Namespace: e.Metadata.Namespace,
-			},
-			Spec: e.Spec,
+			Metadata: e.Metadata,
+			Spec:     e.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
 	}
 
 	// create httptriggers
 	for _, t := range tprResource.HTTPTriggers {
+		t.Metadata.ResourceVersion = ""
 		_, err = client.HTTPTriggerCreate(&crd.HTTPTrigger{
-			Metadata: metav1.ObjectMeta{
-				Name:      t.Metadata.Name,
-				Namespace: t.Metadata.Namespace,
-			},
-			Spec: t.Spec,
+			Metadata: t.Metadata,
+			Spec:     t.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
 	}
 
 	// create mqtriggers
 	for _, t := range tprResource.Mqtriggers {
+		t.Metadata.ResourceVersion = ""
 		_, err = client.MessageQueueTriggerCreate(&crd.MessageQueueTrigger{
-			Metadata: metav1.ObjectMeta{
-				Name:      t.Metadata.Name,
-				Namespace: t.Metadata.Namespace,
-			},
-			Spec: t.Spec,
+			Metadata: t.Metadata,
+			Spec:     t.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
 	}
 
 	// create time triggers
 	for _, t := range tprResource.TimeTriggers {
+		t.Metadata.ResourceVersion = ""
 		_, err = client.TimeTriggerCreate(&crd.TimeTrigger{
-			Metadata: metav1.ObjectMeta{
-				Name:      t.Metadata.Name,
-				Namespace: t.Metadata.Namespace,
-			},
-			Spec: t.Spec,
+			Metadata: t.Metadata,
+			Spec:     t.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
 	}
 
 	// create watches
 	for _, t := range tprResource.Watches {
+		t.Metadata.ResourceVersion = ""
 		_, err = client.WatchCreate(&crd.KubernetesWatchTrigger{
-			Metadata: metav1.ObjectMeta{
-				Name:      t.Metadata.Name,
-				Namespace: t.Metadata.Namespace,
-			},
-			Spec: t.Spec,
+			Metadata: t.Metadata,
+			Spec:     t.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
 	}
 
 	// create packages
 	for _, p := range tprResource.Packages {
+		p.Metadata.ResourceVersion = ""
 		_, err = client.PackageCreate(&crd.Package{
-			Metadata: metav1.ObjectMeta{
-				Name:      p.Metadata.Name,
-				Namespace: p.Metadata.Namespace,
-			},
-			Spec: p.Spec,
+			Metadata: p.Metadata,
+			Spec:     p.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create function %v", p.Metadata.Name))
 	}
 
 	// create functions
 	for _, f := range tprResource.Functions {
+		f.Metadata.ResourceVersion = ""
 		_, err = client.FunctionCreate(&crd.Function{
-			Metadata: metav1.ObjectMeta{
-				Name:      f.Metadata.Name,
-				Namespace: f.Metadata.Namespace,
-			},
-			Spec: f.Spec,
+			Metadata: f.Metadata,
+			Spec:     f.Spec,
 		})
 		checkAlreadyExistsError(err, fmt.Sprintf("create function %v", f.Metadata.Name))
 	}
