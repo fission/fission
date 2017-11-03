@@ -229,9 +229,9 @@ func environmentTests(crdClient *rest.RESTClient) {
 
 func httpTriggerTests(crdClient *rest.RESTClient) {
 	// sample httpTrigger object
-	httpTrigger := &HttpTrigger{
+	httpTrigger := &HTTPTrigger{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "HttpTrigger",
+			Kind:       "HTTPTrigger",
 			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
@@ -249,7 +249,7 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test httpTrigger CRUD
-	ei := MakeHttpTriggerInterface(crdClient, metav1.NamespaceDefault)
+	ei := MakeHTTPTriggerInterface(crdClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	ei.Delete(httpTrigger.Metadata.Name, nil)
@@ -306,9 +306,9 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 			log.Panicf("Didn't get watch event")
 		}
 	case ev := <-wi.ResultChan():
-		obj, ok := ev.Object.(*HttpTrigger)
+		obj, ok := ev.Object.(*HTTPTrigger)
 		if !ok {
-			log.Panicf("Can't cast to HttpTrigger")
+			log.Panicf("Can't cast to HTTPTrigger")
 		}
 		if obj.Spec.Method != httpTrigger.Spec.Method {
 			log.Panicf("Bad object from watch: %#v", obj)

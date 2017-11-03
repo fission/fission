@@ -134,7 +134,7 @@ func TestFunctionApi(t *testing.T) {
 }
 
 func TestHTTPTriggerApi(t *testing.T) {
-	testTrigger := &crd.HttpTrigger{
+	testTrigger := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,

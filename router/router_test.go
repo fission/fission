@@ -61,7 +61,7 @@ func TestRouter(t *testing.T) {
 	triggers := makeHTTPTriggerSet(fmap, nil, nil, frr, nil)
 	triggerUrl := "/foo"
 	triggers.triggers = append(triggers.triggers,
-		crd.HttpTrigger{
+		crd.HTTPTrigger{
 			Metadata: metav1.ObjectMeta{
 				Name:      "xxx",
 				Namespace: metav1.NamespaceDefault,

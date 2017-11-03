@@ -23,7 +23,7 @@ type (
 	V1FissionState struct {
 		Functions    []v1.Function            `json:"functions"`
 		Environments []v1.Environment         `json:"environments"`
-		HttpTriggers []v1.HTTPTrigger         `json:"httptriggers"`
+		HTTPTriggers []v1.HTTPTrigger         `json:"httptriggers"`
 		Mqtriggers   []v1.MessageQueueTrigger `json:"mqtriggers"`
 		TimeTriggers []v1.TimeTrigger         `json:"timetriggers"`
 		Watches      []v1.Watch               `json:"watches"`
@@ -133,7 +133,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 
 	fmt.Println("Getting routes")
 	resp = get(v1url + "/triggers/http")
-	err = json.Unmarshal(resp, &v1state.HttpTriggers)
+	err = json.Unmarshal(resp, &v1state.HTTPTriggers)
 	checkErr(err, "parse server response")
 
 	fmt.Println("Getting message queue triggers")
@@ -163,7 +163,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 		funcMetaSet[f.Metadata] = true
 		nr.trackName(f.Metadata.Name)
 	}
-	for _, t := range v1state.HttpTriggers {
+	for _, t := range v1state.HTTPTriggers {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
@@ -225,7 +225,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 	checkErr(err, "write file")
 
 	fmt.Printf("Done: Saved %v functions, %v HTTP triggers, %v watches, %v message queue triggers, %v time triggers.\n",
-		len(v1state.Functions), len(v1state.HttpTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.TimeTriggers))
+		len(v1state.Functions), len(v1state.HTTPTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.TimeTriggers))
 }
 
 func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fission.FunctionReference {
@@ -342,8 +342,8 @@ func upgradeRestoreState(c *cli.Context) error {
 	}
 
 	// create httptriggers
-	for _, t := range v1state.HttpTriggers {
-		_, err = client.HTTPTriggerCreate(&crd.HttpTrigger{
+	for _, t := range v1state.HTTPTriggers {
+		_, err = client.HTTPTriggerCreate(&crd.HTTPTrigger{
 			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.HTTPTriggerSpec{
 				RelativeURL:       t.UrlPattern,

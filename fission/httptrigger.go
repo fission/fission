@@ -76,7 +76,7 @@ func htCreate(c *cli.Context) error {
 	// just name triggers by uuid.
 	triggerName := uuid.NewV4().String()
 
-	ht := &crd.HttpTrigger{
+	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
 			Namespace: metav1.NamespaceDefault,

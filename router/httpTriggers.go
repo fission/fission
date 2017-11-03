@@ -40,14 +40,14 @@ type HTTPTriggerSet struct {
 	fissionClient *crd.FissionClient
 	poolmgr       *poolmgrClient.Client
 	resolver      *functionReferenceResolver
-	triggers      []crd.HttpTrigger
+	triggers      []crd.HTTPTrigger
 	functions     []crd.Function
 	crdClient     *rest.RESTClient
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, crdClient *rest.RESTClient) *HTTPTriggerSet {
-	triggers := make([]crd.HttpTrigger, 1)
+	triggers := make([]crd.HTTPTrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
@@ -134,7 +134,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	return muxRouter
 }
 
-func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HttpTrigger, err error) {
+func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HTTPTrigger, err error) {
 	// TODO
 }
 
@@ -152,7 +152,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	_, controller := k8sCache.NewInformer(listWatch, &crd.HttpTrigger{}, resyncPeriod,
+	_, controller := k8sCache.NewInformer(listWatch, &crd.HTTPTrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
@@ -219,7 +219,7 @@ func (ts *HTTPTriggerSet) syncTriggers() {
 	log.Printf("Syncing http triggers")
 
 	// get triggers
-	triggers, err := ts.fissionClient.HttpTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := ts.fissionClient.HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get http trigger list: %v", err)
 	}

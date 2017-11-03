@@ -27,7 +27,7 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-func (c *Client) HTTPTriggerCreate(t *crd.HttpTrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) HTTPTriggerCreate(t *crd.HTTPTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) HTTPTriggerCreate(t *crd.HttpTrigger) (*metav1.ObjectMeta, erro
 	return &m, nil
 }
 
-func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*crd.HttpTrigger, error) {
+func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*crd.HTTPTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -68,7 +68,7 @@ func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*crd.HttpTrigger, error) 
 		return nil, err
 	}
 
-	var t crd.HttpTrigger
+	var t crd.HTTPTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*crd.HttpTrigger, error) 
 	return &t, nil
 }
 
-func (c *Client) HTTPTriggerUpdate(t *crd.HttpTrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) HTTPTriggerUpdate(t *crd.HTTPTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (c *Client) HTTPTriggerDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) HTTPTriggerList() ([]crd.HttpTrigger, error) {
+func (c *Client) HTTPTriggerList() ([]crd.HTTPTrigger, error) {
 	resp, err := http.Get(c.url("triggers/http"))
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (c *Client) HTTPTriggerList() ([]crd.HttpTrigger, error) {
 		return nil, err
 	}
 
-	triggers := make([]crd.HttpTrigger, 0)
+	triggers := make([]crd.HTTPTrigger, 0)
 	err = json.Unmarshal(body, &triggers)
 	if err != nil {
 		return nil, err
