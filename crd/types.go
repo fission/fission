@@ -81,16 +81,16 @@ type (
 	// HTTP Triggers.  (Something in the CRD reflection stuff wants
 	// it to be spelled "Httptrigger" not "HTTPTrigger" or even
 	// "HttpTrigger".  Bleh.)
-	Httptrigger struct {
+	HttpTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta       `json:"metadata"`
 		Spec            fission.HTTPTriggerSpec `json:"spec"`
 	}
-	HttptriggerList struct {
+	HttpTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Httptrigger `json:"items"`
+		Items []HttpTrigger `json:"items"`
 	}
 
 	// Kubernetes Watches as triggers
@@ -148,7 +148,7 @@ func (f *Function) GetObjectKind() schema.ObjectKind {
 func (e *Environment) GetObjectKind() schema.ObjectKind {
 	return &e.TypeMeta
 }
-func (ht *Httptrigger) GetObjectKind() schema.ObjectKind {
+func (ht *HttpTrigger) GetObjectKind() schema.ObjectKind {
 	return &ht.TypeMeta
 }
 func (w *Kuberneteswatchtrigger) GetObjectKind() schema.ObjectKind {
@@ -170,7 +170,7 @@ func (f *Function) GetObjectMeta() metav1.Object {
 func (e *Environment) GetObjectMeta() metav1.Object {
 	return &e.Metadata
 }
-func (ht *Httptrigger) GetObjectMeta() metav1.Object {
+func (ht *HttpTrigger) GetObjectMeta() metav1.Object {
 	return &ht.Metadata
 }
 func (w *Kuberneteswatchtrigger) GetObjectMeta() metav1.Object {
@@ -192,7 +192,7 @@ func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
 func (el *EnvironmentList) GetObjectKind() schema.ObjectKind {
 	return &el.TypeMeta
 }
-func (hl *HttptriggerList) GetObjectKind() schema.ObjectKind {
+func (hl *HttpTriggerList) GetObjectKind() schema.ObjectKind {
 	return &hl.TypeMeta
 }
 func (wl *KuberneteswatchtriggerList) GetObjectKind() schema.ObjectKind {
@@ -214,7 +214,7 @@ func (fl *FunctionList) GetListMeta() metav1.List {
 func (el *EnvironmentList) GetListMeta() metav1.List {
 	return &el.Metadata
 }
-func (hl *HttptriggerList) GetListMeta() metav1.List {
+func (hl *HttpTriggerList) GetListMeta() metav1.List {
 	return &hl.Metadata
 }
 func (wl *KuberneteswatchtriggerList) GetListMeta() metav1.List {

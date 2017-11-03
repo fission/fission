@@ -236,7 +236,7 @@ func fnCreate(c *cli.Context) error {
 		method = "GET"
 	}
 	triggerName := uuid.NewV4().String()
-	ht := &crd.Httptrigger{
+	ht := &crd.HttpTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
 			Namespace: metav1.NamespaceDefault,

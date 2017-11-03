@@ -30,7 +30,7 @@ import (
 )
 
 func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := a.fissionClient.Httptriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.HttpTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -45,8 +45,8 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	a.respondWithSuccess(w, resp)
 }
 
-func (a *API) checkHttpTriggerDuplicates(t *crd.Httptrigger) error {
-	triggers, err := a.fissionClient.Httptriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+func (a *API) checkHttpTriggerDuplicates(t *crd.HttpTrigger) error {
+	triggers, err := a.fissionClient.HttpTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t crd.Httptrigger
+	var t crd.HttpTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -87,7 +87,7 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.Httptriggers(t.Metadata.Namespace).Create(&t)
+	tnew, err := a.fissionClient.HttpTriggers(t.Metadata.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -111,7 +111,7 @@ func (a *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.Httptriggers(ns).Get(name)
+	t, err := a.fissionClient.HttpTriggers(ns).Get(name)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -136,7 +136,7 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t crd.Httptrigger
+	var t crd.HttpTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -155,7 +155,7 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.Httptriggers(t.Metadata.Namespace).Update(&t)
+	tnew, err := a.fissionClient.HttpTriggers(t.Metadata.Namespace).Update(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -177,7 +177,7 @@ func (a *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Httptriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.HttpTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

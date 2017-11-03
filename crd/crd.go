@@ -89,7 +89,7 @@ func EnsureFissionCRDs(clientset *apiextensionsclient.Clientset) error {
 				Version: crdVersion,
 				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "Httptrigger",
+					Kind:     "HttpTrigger",
 					Plural:   "httptriggers",
 					Singular: "httptrigger",
 				},

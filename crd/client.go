@@ -120,8 +120,8 @@ func configureClient(config *rest.Config) {
 			)
 			scheme.AddKnownTypes(
 				groupversion,
-				&Httptrigger{},
-				&HttptriggerList{},
+				&HttpTrigger{},
+				&HttpTriggerList{},
 				&metav1.ListOptions{},
 				&metav1.DeleteOptions{},
 			)
@@ -196,8 +196,8 @@ func (fc *FissionClient) Functions(ns string) FunctionInterface {
 func (fc *FissionClient) Environments(ns string) EnvironmentInterface {
 	return MakeEnvironmentInterface(fc.crdClient, ns)
 }
-func (fc *FissionClient) Httptriggers(ns string) HttptriggerInterface {
-	return MakeHttptriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) HttpTriggers(ns string) HttpTriggerInterface {
+	return MakeHttpTriggerInterface(fc.crdClient, ns)
 }
 func (fc *FissionClient) Kuberneteswatchtriggers(ns string) KuberneteswatchtriggerInterface {
 	return MakeKuberneteswatchtriggerInterface(fc.crdClient, ns)
