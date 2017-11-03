@@ -25,6 +25,7 @@ import (
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/mqtrigger/messageQueue"
@@ -109,6 +110,15 @@ func migrateDeleteTPR(c *cli.Context) error {
 	return nil
 }
 
+// checkAlreadyExistsError helps to check whether the error is AlreadyExists error or not.
+func checkAlreadyExistsError(err error, msg string) {
+	fe, ok := err.(fission.Error)
+	// ignore AlreadyExists error, since a resource may exist.
+	if !ok || fe.Code != fission.ErrorNameExists {
+		checkErr(err, msg)
+	}
+}
+
 func migrateRestoreCRD(c *cli.Context) error {
 	filename := c.String("file")
 	if len(filename) == 0 {
@@ -124,6 +134,12 @@ func migrateRestoreCRD(c *cli.Context) error {
 
 	client := getClient(c.GlobalString("server"))
 
+	// Though Kubernetes will migrate TPRs to CRDs automatically when TPR definition is
+	// deleted if the same name CRD exists. We still need to make sure that there is no
+	// resource gets lost during the migration. Also, since we changed the capitalization
+	// of some CRDs to CamelCase (e.g. Httptrigger -> HTTPTrigger), we need to recreate
+	// those resources by ourself.
+
 	// create envs
 	for _, e := range tprResource.Environments {
 		_, err = client.EnvironmentCreate(&crd.Environment{
@@ -133,7 +149,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: e.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
 	}
 
 	// create httptriggers
@@ -145,7 +161,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: t.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
 	}
 
 	// create mqtriggers
@@ -157,7 +173,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: t.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
 	}
 
 	// create time triggers
@@ -169,7 +185,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: t.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
 	}
 
 	// create watches
@@ -181,7 +197,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: t.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
 	}
 
 	// create packages
@@ -193,7 +209,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: p.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create function %v", p.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create function %v", p.Metadata.Name))
 	}
 
 	// create functions
@@ -205,7 +221,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 			},
 			Spec: f.Spec,
 		})
-		checkErr(err, fmt.Sprintf("create function %v", f.Metadata.Name))
+		checkAlreadyExistsError(err, fmt.Sprintf("create function %v", f.Metadata.Name))
 	}
 
 	return nil
