@@ -31,6 +31,16 @@ func (a *API) Tpr2crdApi(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fissionTprs := []string{
+		"function.fission.io",
+		"environment.fission.io",
+		"httptrigger.fission.io",
+		"kuberneteswatchtrigger.fission.io",
+		"timetrigger.fission.io",
+		"messagequeuetrigger.fission.io",
+		"package.fission.io",
+	}
+
 	tprList, err := kubeClient.ThirdPartyResources().List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
@@ -38,10 +48,15 @@ func (a *API) Tpr2crdApi(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, tpr := range tprList.Items {
-		err := kubeClient.ThirdPartyResources().Delete(tpr.Name, &metav1.DeleteOptions{})
-		if err != nil {
-			a.respondWithError(w, err)
-			return
+		for _, tprName := range fissionTprs {
+			if tpr.Name == tprName {
+				err := kubeClient.ThirdPartyResources().Delete(tpr.Name, &metav1.DeleteOptions{})
+				if err != nil {
+					a.respondWithError(w, err)
+					return
+				}
+				break
+			}
 		}
 	}
 
