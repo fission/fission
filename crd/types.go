@@ -94,16 +94,16 @@ type (
 	}
 
 	// Kubernetes Watches as triggers
-	Kuberneteswatchtrigger struct {
+	KubernetesWatchTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta                  `json:"metadata"`
 		Spec            fission.KubernetesWatchTriggerSpec `json:"spec"`
 	}
-	KuberneteswatchtriggerList struct {
+	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Kuberneteswatchtrigger `json:"items"`
+		Items []KubernetesWatchTrigger `json:"items"`
 	}
 
 	// Time triggers
@@ -151,7 +151,7 @@ func (e *Environment) GetObjectKind() schema.ObjectKind {
 func (ht *HttpTrigger) GetObjectKind() schema.ObjectKind {
 	return &ht.TypeMeta
 }
-func (w *Kuberneteswatchtrigger) GetObjectKind() schema.ObjectKind {
+func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
 func (w *Timetrigger) GetObjectKind() schema.ObjectKind {
@@ -173,7 +173,7 @@ func (e *Environment) GetObjectMeta() metav1.Object {
 func (ht *HttpTrigger) GetObjectMeta() metav1.Object {
 	return &ht.Metadata
 }
-func (w *Kuberneteswatchtrigger) GetObjectMeta() metav1.Object {
+func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
 func (w *Timetrigger) GetObjectMeta() metav1.Object {
@@ -195,7 +195,7 @@ func (el *EnvironmentList) GetObjectKind() schema.ObjectKind {
 func (hl *HttpTriggerList) GetObjectKind() schema.ObjectKind {
 	return &hl.TypeMeta
 }
-func (wl *KuberneteswatchtriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
 func (wl *TimetriggerList) GetObjectKind() schema.ObjectKind {
@@ -217,7 +217,7 @@ func (el *EnvironmentList) GetListMeta() metav1.List {
 func (hl *HttpTriggerList) GetListMeta() metav1.List {
 	return &hl.Metadata
 }
-func (wl *KuberneteswatchtriggerList) GetListMeta() metav1.List {
+func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
 func (wl *TimetriggerList) GetListMeta() metav1.List {

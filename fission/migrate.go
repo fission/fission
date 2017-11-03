@@ -38,7 +38,7 @@ type (
 		HttpTriggers []crd.HttpTrigger            `json:"httptriggers"`
 		Mqtriggers   []crd.Messagequeuetrigger    `json:"mqtriggers"`
 		Timetriggers []crd.Timetrigger            `json:"timetriggers"`
-		Watches      []crd.Kuberneteswatchtrigger `json:"watches"`
+		Watches      []crd.KubernetesWatchTrigger `json:"watches"`
 	}
 )
 
@@ -174,7 +174,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 
 	// create watches
 	for _, t := range tprResource.Watches {
-		_, err = client.WatchCreate(&crd.Kuberneteswatchtrigger{
+		_, err = client.WatchCreate(&crd.KubernetesWatchTrigger{
 			Metadata: metav1.ObjectMeta{
 				Name:      t.Metadata.Name,
 				Namespace: t.Metadata.Namespace,

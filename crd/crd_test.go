@@ -321,9 +321,9 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 
 func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	// sample kubernetesWatchTrigger object
-	kubernetesWatchTrigger := &Kuberneteswatchtrigger{
+	kubernetesWatchTrigger := &KubernetesWatchTrigger{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Kuberneteswatchtrigger",
+			Kind:       "KubernetesWatchTrigger",
 			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
@@ -344,7 +344,7 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test kubernetesWatchTrigger CRUD
-	ei := MakeKuberneteswatchtriggerInterface(crdClient, metav1.NamespaceDefault)
+	ei := MakeKubernetesWatchTriggerInterface(crdClient, metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
 	ei.Delete(kubernetesWatchTrigger.Metadata.Name, nil)
@@ -401,9 +401,9 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 			log.Panicf("Didn't get watch event")
 		}
 	case ev := <-wi.ResultChan():
-		obj, ok := ev.Object.(*Kuberneteswatchtrigger)
+		obj, ok := ev.Object.(*KubernetesWatchTrigger)
 		if !ok {
-			log.Panicf("Can't cast to Kuberneteswatchtrigger")
+			log.Panicf("Can't cast to KubernetesWatchTrigger")
 		}
 		if obj.Spec.Type != kubernetesWatchTrigger.Spec.Type {
 			log.Panicf("Bad object from watch: %#v", obj)

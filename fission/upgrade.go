@@ -382,7 +382,7 @@ func upgradeRestoreState(c *cli.Context) error {
 
 	// create watches
 	for _, t := range v1state.Watches {
-		_, err = client.WatchCreate(&crd.Kuberneteswatchtrigger{
+		_, err = client.WatchCreate(&crd.KubernetesWatchTrigger{
 			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.KubernetesWatchTriggerSpec{
 				Namespace:         t.Namespace,

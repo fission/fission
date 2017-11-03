@@ -230,7 +230,7 @@ func TestEnvironmentApi(t *testing.T) {
 }
 
 func TestWatchApi(t *testing.T) {
-	testWatch := &crd.Kuberneteswatchtrigger{
+	testWatch := &crd.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,

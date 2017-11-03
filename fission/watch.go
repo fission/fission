@@ -61,7 +61,7 @@ func wCreate(c *cli.Context) error {
 	// automatically name watches
 	watchName := uuid.NewV4().String()
 
-	w := &crd.Kuberneteswatchtrigger{
+	w := &crd.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      watchName,
 			Namespace: metav1.NamespaceDefault,
