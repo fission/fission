@@ -138,9 +138,9 @@ func main() {
 
 	migrateFileFlag := cli.StringFlag{Name: "file", Usage: "JSON file containing all CRDs"}
 	migrateSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Dump all TPRs into CRDs from a pre-1.8.x Kubernetes cluster", Flags: []cli.Flag{migrateFileFlag}, Action: migrateDumpTPR},
+		{Name: "dump", Usage: "Dump all state from a pre-0.4 Fission installation (which used ThirdPartyResources) into a JSON file", Flags: []cli.Flag{migrateFileFlag}, Action: migrateDumpTPR},
 		{Name: "delete", Usage: "Delete all TPRs", Flags: []cli.Flag{}, Action: migrateDeleteTPR},
-		{Name: "restore", Usage: "Restore all CRDs", Flags: []cli.Flag{migrateFileFlag}, Action: migrateRestoreCRD},
+		{Name: "restore", Usage: "Restore state dumped from a pre-0.4 Fission cluster. Requires Fission 0.4, which uses Kubernetes CustomResources.", Flags: []cli.Flag{migrateFileFlag}, Action: migrateRestoreCRD},
 	}
 
 	app.Commands = []cli.Command{

@@ -102,7 +102,7 @@ func migrateDeleteTPR(c *cli.Context) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
-		msg := fmt.Sprintf("Server %v isn't support deleteTpr method. Use --server to point at a 0.3+ Fission server.", server)
+		msg := fmt.Sprintf("Server %v isn't support deleteTpr method. Use --server to point at a 0.4.0+ Fission server.", server)
 		fatal(msg)
 	}
 
