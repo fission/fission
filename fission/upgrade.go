@@ -356,7 +356,7 @@ func upgradeRestoreState(c *cli.Context) error {
 
 	// create mqtriggers
 	for _, t := range v1state.Mqtriggers {
-		_, err = client.MessageQueueTriggerCreate(&crd.Messagequeuetrigger{
+		_, err = client.MessageQueueTriggerCreate(&crd.MessageQueueTrigger{
 			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.MessageQueueTriggerSpec{
 				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),

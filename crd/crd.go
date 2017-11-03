@@ -137,7 +137,7 @@ func EnsureFissionCRDs(clientset *apiextensionsclient.Clientset) error {
 				Version: crdVersion,
 				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "Messagequeuetrigger",
+					Kind:     "MessageQueueTrigger",
 					Plural:   "messagequeuetriggers",
 					Singular: "messagequeuetrigger",
 				},

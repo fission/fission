@@ -141,8 +141,8 @@ func configureClient(config *rest.Config) {
 			)
 			scheme.AddKnownTypes(
 				groupversion,
-				&Messagequeuetrigger{},
-				&MessagequeuetriggerList{},
+				&MessageQueueTrigger{},
+				&MessageQueueTriggerList{},
 				&metav1.ListOptions{},
 				&metav1.DeleteOptions{},
 			)
@@ -205,8 +205,8 @@ func (fc *FissionClient) KubernetesWatchTriggers(ns string) KubernetesWatchTrigg
 func (fc *FissionClient) TimeTriggers(ns string) TimeTriggerInterface {
 	return MakeTimeTriggerInterface(fc.crdClient, ns)
 }
-func (fc *FissionClient) Messagequeuetriggers(ns string) MessagequeuetriggerInterface {
-	return MakeMessagequeuetriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) MessageQueueTriggers(ns string) MessageQueueTriggerInterface {
+	return MakeMessageQueueTriggerInterface(fc.crdClient, ns)
 }
 func (fc *FissionClient) Packages(ns string) PackageInterface {
 	return MakePackageInterface(fc.crdClient, ns)

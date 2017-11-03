@@ -27,7 +27,7 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-func (c *Client) MessageQueueTriggerCreate(t *crd.Messagequeuetrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) MessageQueueTriggerCreate(t *crd.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) MessageQueueTriggerCreate(t *crd.Messagequeuetrigger) (*metav1.
 	return &m, nil
 }
 
-func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*crd.Messagequeuetrigger, error) {
+func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*crd.MessageQueueTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -68,7 +68,7 @@ func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*crd.Messagequeue
 		return nil, err
 	}
 
-	var t crd.Messagequeuetrigger
+	var t crd.MessageQueueTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*crd.Messagequeue
 	return &t, nil
 }
 
-func (c *Client) MessageQueueTriggerUpdate(mqTrigger *crd.Messagequeuetrigger) (*metav1.ObjectMeta, error) {
+func (c *Client) MessageQueueTriggerUpdate(mqTrigger *crd.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(mqTrigger)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (c *Client) MessageQueueTriggerDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) MessageQueueTriggerList(mqType string) ([]crd.Messagequeuetrigger, error) {
+func (c *Client) MessageQueueTriggerList(mqType string) ([]crd.MessageQueueTrigger, error) {
 	relativeUrl := "triggers/messagequeue"
 	if len(mqType) > 0 {
 		// TODO remove this, replace with field selector
@@ -127,7 +127,7 @@ func (c *Client) MessageQueueTriggerList(mqType string) ([]crd.Messagequeuetrigg
 		return nil, err
 	}
 
-	triggers := make([]crd.Messagequeuetrigger, 0)
+	triggers := make([]crd.MessageQueueTrigger, 0)
 	err = json.Unmarshal(body, &triggers)
 	if err != nil {
 		return nil, err

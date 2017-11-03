@@ -36,7 +36,7 @@ type (
 		Functions    []crd.Function               `json:"functions"`
 		Environments []crd.Environment            `json:"environments"`
 		HttpTriggers []crd.HttpTrigger            `json:"httptriggers"`
-		Mqtriggers   []crd.Messagequeuetrigger    `json:"mqtriggers"`
+		Mqtriggers   []crd.MessageQueueTrigger    `json:"mqtriggers"`
 		TimeTriggers []crd.TimeTrigger            `json:"timetriggers"`
 		Watches      []crd.KubernetesWatchTrigger `json:"watches"`
 	}
@@ -150,7 +150,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 
 	// create mqtriggers
 	for _, t := range tprResource.Mqtriggers {
-		_, err = client.MessageQueueTriggerCreate(&crd.Messagequeuetrigger{
+		_, err = client.MessageQueueTriggerCreate(&crd.MessageQueueTrigger{
 			Metadata: metav1.ObjectMeta{
 				Name:      t.Metadata.Name,
 				Namespace: t.Metadata.Namespace,

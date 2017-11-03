@@ -120,16 +120,16 @@ type (
 	}
 
 	// Message Queue triggers
-	Messagequeuetrigger struct {
+	MessageQueueTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta               `json:"metadata"`
 		Spec            fission.MessageQueueTriggerSpec `json:"spec"`
 	}
-	MessagequeuetriggerList struct {
+	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Messagequeuetrigger `json:"items"`
+		Items []MessageQueueTrigger `json:"items"`
 	}
 )
 
@@ -157,7 +157,7 @@ func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
 func (w *TimeTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Messagequeuetrigger) GetObjectKind() schema.ObjectKind {
+func (w *MessageQueueTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
 func (w *Package) GetObjectKind() schema.ObjectKind {
@@ -179,7 +179,7 @@ func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
 func (w *TimeTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Messagequeuetrigger) GetObjectMeta() metav1.Object {
+func (w *MessageQueueTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
 func (w *Package) GetObjectMeta() metav1.Object {
@@ -201,7 +201,7 @@ func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
 func (wl *TimeTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *MessagequeuetriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
 func (wl *PackageList) GetObjectKind() schema.ObjectKind {
@@ -223,7 +223,7 @@ func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.List {
 func (wl *TimeTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *MessagequeuetriggerList) GetListMeta() metav1.List {
+func (wl *MessageQueueTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
 func (wl *PackageList) GetListMeta() metav1.List {

@@ -72,7 +72,7 @@ func mqtCreate(c *cli.Context) error {
 
 	checkMQTopicAvailability(mqType, topic, respTopic)
 
-	mqt := crd.Messagequeuetrigger{
+	mqt := crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      mqtName,
 			Namespace: metav1.NamespaceDefault,

@@ -58,7 +58,7 @@ func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQu
 	return nats, nil
 }
 
-func (nats Nats) subscribe(trigger *crd.Messagequeuetrigger) (messageQueueSubscription, error) {
+func (nats Nats) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubscription, error) {
 	subj := trigger.Spec.Topic
 
 	if !isTopicValidForNats(subj) {
@@ -91,7 +91,7 @@ func isTopicValidForNats(topic string) bool {
 	return nsUtil.IsSubjectValid(topic, false)
 }
 
-func msgHandler(nats *Nats, trigger *crd.Messagequeuetrigger) func(*ns.Msg) {
+func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 	return func(msg *ns.Msg) {
 
 		// Support other function ref types

@@ -47,7 +47,7 @@ type (
 	}
 
 	MessageQueue interface {
-		subscribe(trigger *crd.Messagequeuetrigger) (messageQueueSubscription, error)
+		subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubscription, error)
 		unsubscribe(triggerSub messageQueueSubscription) error
 	}
 
@@ -60,7 +60,7 @@ type (
 	}
 
 	triggerSubscription struct {
-		trigger      crd.Messagequeuetrigger
+		trigger      crd.MessageQueueTrigger
 		subscription messageQueueSubscription
 	}
 
@@ -149,7 +149,7 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 	mqt.reqChan <- request{
 		requestType: DELETE_TRIGGER,
 		triggerSub: &triggerSubscription{
-			trigger: crd.Messagequeuetrigger{
+			trigger: crd.MessageQueueTrigger{
 				Metadata: *m,
 			},
 		},
@@ -159,11 +159,11 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 func (mqt *MessageQueueTriggerManager) syncTriggers() {
 	for {
 		// get new set of triggers
-		newTriggers, err := mqt.fissionClient.Messagequeuetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		newTriggers, err := mqt.fissionClient.MessageQueueTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed to read message queue trigger list: %v", err)
 		}
-		newTriggerMap := make(map[string]*crd.Messagequeuetrigger)
+		newTriggerMap := make(map[string]*crd.MessageQueueTrigger)
 		for index := range newTriggers.Items {
 			newTrigger := &newTriggers.Items[index]
 			newTriggerMap[crd.CacheKey(&newTrigger.Metadata)] = newTrigger
