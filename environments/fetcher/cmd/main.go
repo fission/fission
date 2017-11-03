@@ -52,7 +52,7 @@ func main() {
 }
 
 func fetcherUsage() {
-	fmt.Printf("Usage: fetcher [OPTIONAL] -specialize-on-startup [OPTIONAL] -fetch-request <json> <shared volume path> \n")
+	fmt.Printf("Usage: fetcher [OPTIONAL] -specialize-on-startup [OPTIONAL] -fetch-request <json> -load-request <json> <shared volume path> \n")
 }
 
 func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
@@ -68,12 +68,10 @@ func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload 
 	}
 
 	// Specialize the pod
-	fmt.Println("EnvVersion:", os.Getenv("ENV_VERSION"))
 	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
 	if err != nil {
 		log.Fatalf("Error parsing environment version %v", err)
 	}
-	fmt.Println("Specialize Payload:", loadPayload)
 	maxRetries := 30
 	for i := 0; i < maxRetries; i++ {
 		var resp2 *http.Response
@@ -82,11 +80,11 @@ func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload 
 		} else {
 			resp2, err = http.Post("http://localhost:8888/specialize", "application/json", bytes.NewReader([]byte{}))
 		}
-		log.Printf("Failed to specialize pod: %v", err)
+
 		if err == nil && resp2.StatusCode < 300 {
 			// Success
 			resp2.Body.Close()
-			fmt.Println("Pod Specialization worked in #", i)
+			os.OpenFile("/tmp/ready", os.O_RDONLY|os.O_CREATE, 0666)
 			break
 		}
 

@@ -17,16 +17,19 @@ limitations under the License.
 package newdeploy
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
@@ -35,6 +38,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/logger"
 	"github.com/fission/fission/tpr"
 )
 
@@ -107,6 +111,18 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *tpr.Environ
 	depl, err := deploy.createNewDeployment(fn, env, deplName, deployLables)
 	if err != nil {
 		return nil, err
+	}
+
+	pods, err := deploy.kubernetesClient.CoreV1().Pods(deploy.namespace).List(
+		metav1.ListOptions{
+			LabelSelector: labels.Set(deployLables).AsSelector().String(),
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pod := range pods.Items {
+		deploy.setupLogging(&pod, metadata, env)
 	}
 
 	svcName := fmt.Sprintf("svc-%v", deployName)
@@ -213,6 +229,15 @@ func (deploy NewDeploy) createNewDeployment(fn *tpr.Function, env *tpr.Environme
 									Value: strconv.Itoa(env.Spec.Version),
 								},
 							},
+							ReadinessProbe: &apiv1.Probe{
+								Handler: apiv1.Handler{
+									Exec: &apiv1.ExecAction{
+										Command: []string{"cat", "/tmp/ready"},
+									},
+								},
+								InitialDelaySeconds: 2,
+								PeriodSeconds:       1,
+							},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",
@@ -272,4 +297,32 @@ func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName
 	}
 
 	return svc, nil
+}
+
+func (deploy NewDeploy) setupLogging(pod *apiv1.Pod, metadata *metav1.ObjectMeta, env *tpr.Environment) {
+
+	logReq := logger.LogRequest{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: env.Metadata.Name,
+		FuncName:  metadata.Name,
+		FuncUid:   string(metadata.UID),
+	}
+	reqbody, err := json.Marshal(logReq)
+	if err != nil {
+		log.Printf("Error creating log request")
+		return
+	}
+	go func() {
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
+		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
+		if err != nil {
+			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
+		} else {
+			if resp.StatusCode != 200 {
+				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
+			}
+			resp.Body.Close()
+		}
+	}()
 }
