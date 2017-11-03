@@ -93,7 +93,7 @@ func migrateDumpTPR(c *cli.Context) error {
 
 func migrateDeleteTPR(c *cli.Context) error {
 	server := c.GlobalString("server")
-	relativeUrl := fmt.Sprintf("%v/%v", server, "deleteTpr")
+	relativeUrl := fmt.Sprintf("%v/%v", server, "v2/deleteTpr")
 	req, err := http.NewRequest("DELETE", relativeUrl, nil)
 	checkErr(err, "connect to fission server")
 
