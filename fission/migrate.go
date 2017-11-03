@@ -137,7 +137,7 @@ func migrateRestoreCRD(c *cli.Context) error {
 	// deleted if the same name CRD exists. We still need to make sure that there is no
 	// resource gets lost during the migration. Also, since we changed the capitalization
 	// of some CRDs to CamelCase (e.g. Httptrigger -> HTTPTrigger), we need to recreate
-	// those resources by ourself.
+	// those resources by ourselves.
 
 	// create envs
 	for _, e := range tprResource.Environments {
