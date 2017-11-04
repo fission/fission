@@ -47,7 +47,11 @@ def loadv2():
         # load module
         # Return module object is the load is successful; otherwise, 
         # an exception is raised.
-        mod = imp.load_module(moduleName, f, path, desc)
+        try:
+            mod = imp.load_module(moduleName, f, path, desc)
+        finally:
+            if f:
+                f.close()
     else:
         # load source from destination python file
         mod = imp.load_source(moduleName, filepath)
