@@ -39,12 +39,15 @@ def loadv2():
         # the package directory. If search is successful, the return 
         # value is a 3-element tuple; otherwise, an exception "ImportError"
         # is raised.
-        fn, path, desc = imp.find_module(moduleName)
+        # Second parameter of find_module enforces python to find same 
+        # name module from the given list of directories to prevent name
+        # confliction with built-in modules.
+        f, path, desc = imp.find_module(moduleName, [filepath])
 
         # load module
         # Return module object is the load is successful; otherwise, 
         # an exception is raised.
-        mod = imp.load_module(moduleName, fn, path, desc)
+        mod = imp.load_module(moduleName, f, path, desc)
     else:
         # load source from destination python file
         mod = imp.load_source(moduleName, filepath)
