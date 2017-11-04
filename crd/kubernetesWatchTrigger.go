@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tpr
+package crd
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,12 +24,12 @@ import (
 )
 
 type (
-	KuberneteswatchtriggerInterface interface {
-		Create(*Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error)
-		Get(name string) (*Kuberneteswatchtrigger, error)
-		Update(*Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error)
+	KubernetesWatchTriggerInterface interface {
+		Create(*KubernetesWatchTrigger) (*KubernetesWatchTrigger, error)
+		Get(name string) (*KubernetesWatchTrigger, error)
+		Update(*KubernetesWatchTrigger) (*KubernetesWatchTrigger, error)
 		Delete(name string, options *metav1.DeleteOptions) error
-		List(opts metav1.ListOptions) (*KuberneteswatchtriggerList, error)
+		List(opts metav1.ListOptions) (*KubernetesWatchTriggerList, error)
 		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
@@ -39,15 +39,15 @@ type (
 	}
 )
 
-func MakeKuberneteswatchtriggerInterface(tprClient *rest.RESTClient, namespace string) KuberneteswatchtriggerInterface {
+func MakeKubernetesWatchTriggerInterface(crdClient *rest.RESTClient, namespace string) KubernetesWatchTriggerInterface {
 	return &kubernetesWatchTriggerClient{
-		client:    tprClient,
+		client:    crdClient,
 		namespace: namespace,
 	}
 }
 
-func (c *kubernetesWatchTriggerClient) Create(obj *Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error) {
-	var result Kuberneteswatchtrigger
+func (c *kubernetesWatchTriggerClient) Create(obj *KubernetesWatchTrigger) (*KubernetesWatchTrigger, error) {
+	var result KubernetesWatchTrigger
 	err := c.client.Post().
 		Resource("kuberneteswatchtriggers").
 		Namespace(c.namespace).
@@ -59,8 +59,8 @@ func (c *kubernetesWatchTriggerClient) Create(obj *Kuberneteswatchtrigger) (*Kub
 	return &result, nil
 }
 
-func (c *kubernetesWatchTriggerClient) Get(name string) (*Kuberneteswatchtrigger, error) {
-	var result Kuberneteswatchtrigger
+func (c *kubernetesWatchTriggerClient) Get(name string) (*KubernetesWatchTrigger, error) {
+	var result KubernetesWatchTrigger
 	err := c.client.Get().
 		Resource("kuberneteswatchtriggers").
 		Namespace(c.namespace).
@@ -72,8 +72,8 @@ func (c *kubernetesWatchTriggerClient) Get(name string) (*Kuberneteswatchtrigger
 	return &result, nil
 }
 
-func (c *kubernetesWatchTriggerClient) Update(obj *Kuberneteswatchtrigger) (*Kuberneteswatchtrigger, error) {
-	var result Kuberneteswatchtrigger
+func (c *kubernetesWatchTriggerClient) Update(obj *KubernetesWatchTrigger) (*KubernetesWatchTrigger, error) {
+	var result KubernetesWatchTrigger
 	err := c.client.Put().
 		Resource("kuberneteswatchtriggers").
 		Namespace(c.namespace).
@@ -96,8 +96,8 @@ func (c *kubernetesWatchTriggerClient) Delete(name string, opts *metav1.DeleteOp
 		Error()
 }
 
-func (c *kubernetesWatchTriggerClient) List(opts metav1.ListOptions) (*KuberneteswatchtriggerList, error) {
-	var result KuberneteswatchtriggerList
+func (c *kubernetesWatchTriggerClient) List(opts metav1.ListOptions) (*KubernetesWatchTriggerList, error) {
+	var result KubernetesWatchTriggerList
 	err := c.client.Get().
 		Namespace(c.namespace).
 		Resource("kuberneteswatchtriggers").

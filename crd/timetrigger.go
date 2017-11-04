@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tpr
+package crd
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,32 +24,32 @@ import (
 )
 
 type (
-	FunctionInterface interface {
-		Create(*Function) (*Function, error)
-		Get(name string) (*Function, error)
-		Update(*Function) (*Function, error)
+	TimeTriggerInterface interface {
+		Create(*TimeTrigger) (*TimeTrigger, error)
+		Get(name string) (*TimeTrigger, error)
+		Update(*TimeTrigger) (*TimeTrigger, error)
 		Delete(name string, options *metav1.DeleteOptions) error
-		List(opts metav1.ListOptions) (*FunctionList, error)
+		List(opts metav1.ListOptions) (*TimeTriggerList, error)
 		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
-	functionClient struct {
+	timeTriggerClient struct {
 		client    *rest.RESTClient
 		namespace string
 	}
 )
 
-func MakeFunctionInterface(tprClient *rest.RESTClient, namespace string) FunctionInterface {
-	return &functionClient{
-		client:    tprClient,
+func MakeTimeTriggerInterface(crdClient *rest.RESTClient, namespace string) TimeTriggerInterface {
+	return &timeTriggerClient{
+		client:    crdClient,
 		namespace: namespace,
 	}
 }
 
-func (fc *functionClient) Create(f *Function) (*Function, error) {
-	var result Function
+func (fc *timeTriggerClient) Create(f *TimeTrigger) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Post().
-		Resource("functions").
+		Resource("timetriggers").
 		Namespace(fc.namespace).
 		Body(f).
 		Do().Into(&result)
@@ -59,10 +59,10 @@ func (fc *functionClient) Create(f *Function) (*Function, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Get(name string) (*Function, error) {
-	var result Function
+func (fc *timeTriggerClient) Get(name string) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Get().
-		Resource("functions").
+		Resource("timetriggers").
 		Namespace(fc.namespace).
 		Name(name).
 		Do().Into(&result)
@@ -72,10 +72,10 @@ func (fc *functionClient) Get(name string) (*Function, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Update(f *Function) (*Function, error) {
-	var result Function
+func (fc *timeTriggerClient) Update(f *TimeTrigger) (*TimeTrigger, error) {
+	var result TimeTrigger
 	err := fc.client.Put().
-		Resource("functions").
+		Resource("timetriggers").
 		Namespace(fc.namespace).
 		Name(f.Metadata.Name).
 		Body(f).
@@ -86,21 +86,21 @@ func (fc *functionClient) Update(f *Function) (*Function, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Delete(name string, opts *metav1.DeleteOptions) error {
+func (fc *timeTriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return fc.client.Delete().
 		Namespace(fc.namespace).
-		Resource("functions").
+		Resource("timetriggers").
 		Name(name).
 		Body(opts).
 		Do().
 		Error()
 }
 
-func (fc *functionClient) List(opts metav1.ListOptions) (*FunctionList, error) {
-	var result FunctionList
+func (fc *timeTriggerClient) List(opts metav1.ListOptions) (*TimeTriggerList, error) {
+	var result TimeTriggerList
 	err := fc.client.Get().
 		Namespace(fc.namespace).
-		Resource("functions").
+		Resource("timetriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Do().
 		Into(&result)
@@ -110,11 +110,11 @@ func (fc *functionClient) List(opts metav1.ListOptions) (*FunctionList, error) {
 	return &result, nil
 }
 
-func (fc *functionClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (fc *timeTriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return fc.client.Get().
 		Prefix("watch").
 		Namespace(fc.namespace).
-		Resource("functions").
+		Resource("timetriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Watch()
 }

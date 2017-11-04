@@ -87,6 +87,13 @@ build_fission_cli() {
     popd
 }
 
+clean_tpr_crd_resources() {
+    # clean tpr & crd resources to avoid testing error (ex. no kind "HttptriggerList" is registered for version "fission.io/v1")
+    # thirdpartyresources part should be removed after kubernetes test cluster is upgrade to 1.8+
+    kubectl --namespace default get thirdpartyresources| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete thirdpartyresources @" || true
+    kubectl --namespace default get crd| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete crd @"  || true
+}
+
 generate_test_id() {
     echo $(date|md5sum|cut -c1-6)
 }
@@ -192,18 +199,18 @@ dump_fission_logs() {
     echo --- end $component logs ---
 }
 
-dump_fission_tpr() {
+dump_fission_crd() {
     type=$1
     echo --- All objects of type $type ---
     kubectl --all-namespaces=true get $type -o yaml
     echo --- End objects of type $type ---
 }
 
-dump_fission_tprs() {
-    dump_fission_tpr function.fission.io    
-    dump_fission_tpr package.fission.io    
-    dump_fission_tpr httptrigger.fission.io    
-    dump_fission_tpr environment.fission.io    
+dump_fission_crds() {
+    dump_fission_crd function.fission.io    
+    dump_fission_crd package.fission.io    
+    dump_fission_crd httptrigger.fission.io    
+    dump_fission_crd environment.fission.io    
 }
 
 dump_env_pods() {
@@ -234,7 +241,7 @@ dump_logs() {
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns poolmgr
     dump_function_pod_logs $ns $fns
-    dump_fission_tprs
+    dump_fission_crds
 }
 
 export FAILURES=0
@@ -266,6 +273,8 @@ install_and_test() {
 
     controllerPort=31234
     routerPort=31235
+
+    clean_tpr_crd_resources
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT

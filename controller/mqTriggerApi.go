@@ -25,12 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	//mqType := r.FormValue("mqtype") // ignored for now
-	triggers, err := a.fissionClient.Messagequeuetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.MessageQueueTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -50,7 +50,7 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var mqTrigger tpr.Messagequeuetrigger
+	var mqTrigger crd.MessageQueueTrigger
 	err = json.Unmarshal(body, &mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -63,7 +63,7 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tnew, err := a.fissionClient.Messagequeuetriggers(mqTrigger.Metadata.Namespace).Create(&mqTrigger)
+	tnew, err := a.fissionClient.MessageQueueTriggers(mqTrigger.Metadata.Namespace).Create(&mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -86,7 +86,7 @@ func (a *API) MessageQueueTriggerApiGet(w http.ResponseWriter, r *http.Request) 
 		ns = metav1.NamespaceDefault
 	}
 
-	mqTrigger, err := a.fissionClient.Messagequeuetriggers(ns).Get(name)
+	mqTrigger, err := a.fissionClient.MessageQueueTriggers(ns).Get(name)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -109,7 +109,7 @@ func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var mqTrigger tpr.Messagequeuetrigger
+	var mqTrigger crd.MessageQueueTrigger
 	err = json.Unmarshal(body, &mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -122,7 +122,7 @@ func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tnew, err := a.fissionClient.Messagequeuetriggers(mqTrigger.Metadata.Namespace).Update(&mqTrigger)
+	tnew, err := a.fissionClient.MessageQueueTriggers(mqTrigger.Metadata.Namespace).Update(&mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -144,7 +144,7 @@ func (a *API) MessageQueueTriggerApiDelete(w http.ResponseWriter, r *http.Reques
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Messagequeuetriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.MessageQueueTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

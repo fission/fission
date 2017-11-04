@@ -34,7 +34,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var f tpr.Function
+	var f crd.Function
 	err = json.Unmarshal(body, &f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -121,7 +121,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var f tpr.Function
+	var f crd.Function
 	err = json.Unmarshal(body, &f)
 	if err != nil {
 		a.respondWithError(w, err)

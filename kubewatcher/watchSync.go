@@ -22,17 +22,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 type (
 	WatchSync struct {
-		client      *tpr.FissionClient
+		client      *crd.FissionClient
 		kubeWatcher *KubeWatcher
 	}
 )
 
-func MakeWatchSync(client *tpr.FissionClient, kubeWatcher *KubeWatcher) *WatchSync {
+func MakeWatchSync(client *crd.FissionClient, kubeWatcher *KubeWatcher) *WatchSync {
 	ws := &WatchSync{
 		client:      client,
 		kubeWatcher: kubeWatcher,
@@ -44,7 +44,7 @@ func MakeWatchSync(client *tpr.FissionClient, kubeWatcher *KubeWatcher) *WatchSy
 func (ws *WatchSync) syncSvc() {
 	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.Kuberneteswatchtriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		watches, err := ws.client.KubernetesWatchTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed to get Kubernetes watch trigger list: %v", err)
 		}

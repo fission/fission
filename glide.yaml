@@ -31,8 +31,12 @@ import:
   - rest
 - package: k8s.io/api
   version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
+- package: k8s.io/apiextensions-apiserver
+  version: release-1.7
+  subpackages:
+  - pkg/apis/apiextensions/v1beta1
 - package: k8s.io/apimachinery
-  version: 1fd2e63a9a370677308a42f24fd40c86438afddf
+  version: release-1.7
 - package: github.com/influxdata/influxdb
   version: v1.2.0
   subpackages:

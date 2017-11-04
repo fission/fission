@@ -30,31 +30,31 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	poolmgrClient "github.com/fission/fission/poolmgr/client"
-	"github.com/fission/fission/tpr"
 )
 
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
-	fissionClient *tpr.FissionClient
+	fissionClient *crd.FissionClient
 	poolmgr       *poolmgrClient.Client
 	resolver      *functionReferenceResolver
-	triggers      []tpr.Httptrigger
-	functions     []tpr.Function
-	tprClient     *rest.RESTClient
+	triggers      []crd.HTTPTrigger
+	functions     []crd.Function
+	crdClient     *rest.RESTClient
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *tpr.FissionClient,
-	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, tprClient *rest.RESTClient) *HTTPTriggerSet {
-	triggers := make([]tpr.Httptrigger, 1)
+func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
+	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, crdClient *rest.RESTClient) *HTTPTriggerSet {
+	triggers := make([]crd.HTTPTrigger, 1)
 	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           triggers,
 		fissionClient:      fissionClient,
 		poolmgr:            poolmgr,
 		resolver:           resolver,
-		tprClient:          tprClient,
+		crdClient:          crdClient,
 	}
 }
 
@@ -134,7 +134,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	return muxRouter
 }
 
-func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *tpr.Httptrigger, err error) {
+func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HTTPTrigger, err error) {
 	// TODO
 }
 
@@ -142,7 +142,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 	// sync all http triggers
 	ts.syncTriggers()
 
-	watchlist := k8sCache.NewListWatchFromClient(ts.tprClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
+	watchlist := k8sCache.NewListWatchFromClient(ts.crdClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
 	listWatch := &k8sCache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			return watchlist.List(options)
@@ -152,7 +152,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	_, controller := k8sCache.NewInformer(listWatch, &tpr.Httptrigger{}, resyncPeriod,
+	_, controller := k8sCache.NewInformer(listWatch, &crd.HTTPTrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
@@ -174,7 +174,7 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 func (ts *HTTPTriggerSet) watchFunctions() {
 	ts.syncTriggers()
 
-	watchlist := k8sCache.NewListWatchFromClient(ts.tprClient, "functions", metav1.NamespaceDefault, fields.Everything())
+	watchlist := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	listWatch := &k8sCache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			return watchlist.List(options)
@@ -184,7 +184,7 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	_, controller := k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
+	_, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
@@ -193,7 +193,7 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 				ts.syncTriggers()
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-				fn := newObj.(*tpr.Function)
+				fn := newObj.(*crd.Function)
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					if key.functionReference.Name == fn.Metadata.Name &&
@@ -219,7 +219,7 @@ func (ts *HTTPTriggerSet) syncTriggers() {
 	log.Printf("Syncing http triggers")
 
 	// get triggers
-	triggers, err := ts.fissionClient.Httptriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := ts.fissionClient.HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get http trigger list: %v", err)
 	}

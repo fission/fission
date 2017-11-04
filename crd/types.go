@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tpr
+package crd
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,14 +24,14 @@ import (
 )
 
 //
-// To add a Fission TPR type:
+// To add a Fission CRD type:
 //   1. Create a "spec" type, for everything in the type except metadata
 //   2. Create the type with metadata + the spec
 //   3. Create a list type (for example see FunctionList and Function, below)
 //   4. Add methods at the bottom of this file for satisfying Object and List interfaces
 //   5. Add the type to configureClient in client.go
-//   6. Add the type to EnsureFissionTPRs in tpr.go
-//   7. Add tests to tpr_test.go
+//   6. Add the type to EnsureFissionCRDs in crd.go
+//   7. Add tests to crd_test.go
 //   8. Add a CRUD Interface type (analogous to FunctionInterface in function.go)
 //   9. Add a getter method for your interface type to FissionClient in client.go
 //
@@ -78,68 +78,65 @@ type (
 		Items []Environment `json:"items"`
 	}
 
-	// HTTP Triggers.  (Something in the TPR reflection stuff wants
-	// it to be spelled "Httptrigger" not "HTTPTrigger" or even
-	// "HttpTrigger".  Bleh.)
-	Httptrigger struct {
+	HTTPTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta       `json:"metadata"`
 		Spec            fission.HTTPTriggerSpec `json:"spec"`
 	}
-	HttptriggerList struct {
+	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Httptrigger `json:"items"`
+		Items []HTTPTrigger `json:"items"`
 	}
 
 	// Kubernetes Watches as triggers
-	Kuberneteswatchtrigger struct {
+	KubernetesWatchTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta                  `json:"metadata"`
 		Spec            fission.KubernetesWatchTriggerSpec `json:"spec"`
 	}
-	KuberneteswatchtriggerList struct {
+	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Kuberneteswatchtrigger `json:"items"`
+		Items []KubernetesWatchTrigger `json:"items"`
 	}
 
 	// Time triggers
-	Timetrigger struct {
+	TimeTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta       `json:"metadata"`
 		Spec            fission.TimeTriggerSpec `json:"spec"`
 	}
-	TimetriggerList struct {
+	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Timetrigger `json:"items"`
+		Items []TimeTrigger `json:"items"`
 	}
 
 	// Message Queue triggers
-	Messagequeuetrigger struct {
+	MessageQueueTrigger struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ObjectMeta               `json:"metadata"`
 		Spec            fission.MessageQueueTriggerSpec `json:"spec"`
 	}
-	MessagequeuetriggerList struct {
+	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
 
-		Items []Messagequeuetrigger `json:"items"`
+		Items []MessageQueueTrigger `json:"items"`
 	}
 )
 
-// Each TPR type needs:
+// Each CRD type needs:
 //   GetObjectKind (to satisfy the Object interface)
 //
-// In addition, each singular TPR type needs:
+// In addition, each singular CRD type needs:
 //   GetObjectMeta (to satisfy the ObjectMetaAccessor interface)
 //
-// And each list TPR type needs:
+// And each list CRD type needs:
 //   GetListMeta (to satisfy the ListMetaAccessor interface)
 
 func (f *Function) GetObjectKind() schema.ObjectKind {
@@ -148,16 +145,16 @@ func (f *Function) GetObjectKind() schema.ObjectKind {
 func (e *Environment) GetObjectKind() schema.ObjectKind {
 	return &e.TypeMeta
 }
-func (ht *Httptrigger) GetObjectKind() schema.ObjectKind {
+func (ht *HTTPTrigger) GetObjectKind() schema.ObjectKind {
 	return &ht.TypeMeta
 }
-func (w *Kuberneteswatchtrigger) GetObjectKind() schema.ObjectKind {
+func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Timetrigger) GetObjectKind() schema.ObjectKind {
+func (w *TimeTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *Messagequeuetrigger) GetObjectKind() schema.ObjectKind {
+func (w *MessageQueueTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
 func (w *Package) GetObjectKind() schema.ObjectKind {
@@ -170,16 +167,16 @@ func (f *Function) GetObjectMeta() metav1.Object {
 func (e *Environment) GetObjectMeta() metav1.Object {
 	return &e.Metadata
 }
-func (ht *Httptrigger) GetObjectMeta() metav1.Object {
+func (ht *HTTPTrigger) GetObjectMeta() metav1.Object {
 	return &ht.Metadata
 }
-func (w *Kuberneteswatchtrigger) GetObjectMeta() metav1.Object {
+func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Timetrigger) GetObjectMeta() metav1.Object {
+func (w *TimeTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *Messagequeuetrigger) GetObjectMeta() metav1.Object {
+func (w *MessageQueueTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
 func (w *Package) GetObjectMeta() metav1.Object {
@@ -192,16 +189,16 @@ func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
 func (el *EnvironmentList) GetObjectKind() schema.ObjectKind {
 	return &el.TypeMeta
 }
-func (hl *HttptriggerList) GetObjectKind() schema.ObjectKind {
+func (hl *HTTPTriggerList) GetObjectKind() schema.ObjectKind {
 	return &hl.TypeMeta
 }
-func (wl *KuberneteswatchtriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *TimetriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *TimeTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *MessagequeuetriggerList) GetObjectKind() schema.ObjectKind {
+func (wl *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
 func (wl *PackageList) GetObjectKind() schema.ObjectKind {
@@ -214,16 +211,16 @@ func (fl *FunctionList) GetListMeta() metav1.List {
 func (el *EnvironmentList) GetListMeta() metav1.List {
 	return &el.Metadata
 }
-func (hl *HttptriggerList) GetListMeta() metav1.List {
+func (hl *HTTPTriggerList) GetListMeta() metav1.List {
 	return &hl.Metadata
 }
-func (wl *KuberneteswatchtriggerList) GetListMeta() metav1.List {
+func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *TimetriggerList) GetListMeta() metav1.List {
+func (wl *TimeTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *MessagequeuetriggerList) GetListMeta() metav1.List {
+func (wl *MessageQueueTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
 func (wl *PackageList) GetListMeta() metav1.List {

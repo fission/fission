@@ -15,7 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 	"github.com/fission/fission/v1"
 )
 
@@ -23,9 +23,9 @@ type (
 	V1FissionState struct {
 		Functions    []v1.Function            `json:"functions"`
 		Environments []v1.Environment         `json:"environments"`
-		Httptriggers []v1.HTTPTrigger         `json:"httptriggers"`
+		HTTPTriggers []v1.HTTPTrigger         `json:"httptriggers"`
 		Mqtriggers   []v1.MessageQueueTrigger `json:"mqtriggers"`
-		Timetriggers []v1.TimeTrigger         `json:"timetriggers"`
+		TimeTriggers []v1.TimeTrigger         `json:"timetriggers"`
 		Watches      []v1.Watch               `json:"watches"`
 		NameChanges  map[string]string        `json:"namechanges"`
 	}
@@ -133,7 +133,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 
 	fmt.Println("Getting routes")
 	resp = get(v1url + "/triggers/http")
-	err = json.Unmarshal(resp, &v1state.Httptriggers)
+	err = json.Unmarshal(resp, &v1state.HTTPTriggers)
 	checkErr(err, "parse server response")
 
 	fmt.Println("Getting message queue triggers")
@@ -143,7 +143,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 
 	fmt.Println("Getting time triggers")
 	resp = get(v1url + "/triggers/time")
-	err = json.Unmarshal(resp, &v1state.Timetriggers)
+	err = json.Unmarshal(resp, &v1state.TimeTriggers)
 	checkErr(err, "parse server response")
 
 	fmt.Println("Getting function list")
@@ -163,7 +163,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 		funcMetaSet[f.Metadata] = true
 		nr.trackName(f.Metadata.Name)
 	}
-	for _, t := range v1state.Httptriggers {
+	for _, t := range v1state.HTTPTriggers {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
@@ -175,7 +175,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
-	for _, t := range v1state.Timetriggers {
+	for _, t := range v1state.TimeTriggers {
 		funcMetaSet[t.Function] = true
 		nr.trackName(t.Metadata.Name)
 	}
@@ -225,7 +225,7 @@ func upgradeDumpV1State(v1url string, filename string) {
 	checkErr(err, "write file")
 
 	fmt.Printf("Done: Saved %v functions, %v HTTP triggers, %v watches, %v message queue triggers, %v time triggers.\n",
-		len(v1state.Functions), len(v1state.Httptriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.Timetriggers))
+		len(v1state.Functions), len(v1state.HTTPTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.TimeTriggers))
 }
 
 func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fission.FunctionReference {
@@ -235,7 +235,7 @@ func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fis
 	}
 }
 
-func tprMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *metav1.ObjectMeta {
+func crdMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *metav1.ObjectMeta {
 	return &metav1.ObjectMeta{
 		Name:      nameRemap[m.Name],
 		Namespace: metav1.NamespaceDefault,
@@ -302,7 +302,7 @@ func upgradeRestoreState(c *cli.Context) error {
 			},
 			Deployment: *archive,
 		}
-		pkg, err := client.PackageCreate(&tpr.Package{
+		pkg, err := client.PackageCreate(&crd.Package{
 			Metadata: metav1.ObjectMeta{
 				Name:      pkgName,
 				Namespace: metav1.NamespaceDefault,
@@ -310,8 +310,8 @@ func upgradeRestoreState(c *cli.Context) error {
 			Spec: pkgSpec,
 		})
 		checkErr(err, fmt.Sprintf("create package %v", pkgName))
-		_, err = client.FunctionCreate(&tpr.Function{
-			Metadata: *tprMetadataFromV1Metadata(&f.Metadata, v1state.NameChanges),
+		_, err = client.FunctionCreate(&crd.Function{
+			Metadata: *crdMetadataFromV1Metadata(&f.Metadata, v1state.NameChanges),
 			Spec: fission.FunctionSpec{
 				Environment: pkgSpec.Environment,
 				Package: fission.FunctionPackageRef{
@@ -329,8 +329,8 @@ func upgradeRestoreState(c *cli.Context) error {
 
 	// create envs
 	for _, e := range v1state.Environments {
-		_, err = client.EnvironmentCreate(&tpr.Environment{
-			Metadata: *tprMetadataFromV1Metadata(&e.Metadata, v1state.NameChanges),
+		_, err = client.EnvironmentCreate(&crd.Environment{
+			Metadata: *crdMetadataFromV1Metadata(&e.Metadata, v1state.NameChanges),
 			Spec: fission.EnvironmentSpec{
 				Version: 1,
 				Runtime: fission.Runtime{
@@ -342,9 +342,9 @@ func upgradeRestoreState(c *cli.Context) error {
 	}
 
 	// create httptriggers
-	for _, t := range v1state.Httptriggers {
-		_, err = client.HTTPTriggerCreate(&tpr.Httptrigger{
-			Metadata: *tprMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
+	for _, t := range v1state.HTTPTriggers {
+		_, err = client.HTTPTriggerCreate(&crd.HTTPTrigger{
+			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.HTTPTriggerSpec{
 				RelativeURL:       t.UrlPattern,
 				Method:            t.Method,
@@ -356,8 +356,8 @@ func upgradeRestoreState(c *cli.Context) error {
 
 	// create mqtriggers
 	for _, t := range v1state.Mqtriggers {
-		_, err = client.MessageQueueTriggerCreate(&tpr.Messagequeuetrigger{
-			Metadata: *tprMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
+		_, err = client.MessageQueueTriggerCreate(&crd.MessageQueueTrigger{
+			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.MessageQueueTriggerSpec{
 				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
 				MessageQueueType:  t.MessageQueueType,
@@ -369,9 +369,9 @@ func upgradeRestoreState(c *cli.Context) error {
 	}
 
 	// create time triggers
-	for _, t := range v1state.Timetriggers {
-		_, err = client.TimeTriggerCreate(&tpr.Timetrigger{
-			Metadata: *tprMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
+	for _, t := range v1state.TimeTriggers {
+		_, err = client.TimeTriggerCreate(&crd.TimeTrigger{
+			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.TimeTriggerSpec{
 				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
 				Cron:              t.Cron,
@@ -382,8 +382,8 @@ func upgradeRestoreState(c *cli.Context) error {
 
 	// create watches
 	for _, t := range v1state.Watches {
-		_, err = client.WatchCreate(&tpr.Kuberneteswatchtrigger{
-			Metadata: *tprMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
+		_, err = client.WatchCreate(&crd.KubernetesWatchTrigger{
+			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
 			Spec: fission.KubernetesWatchTriggerSpec{
 				Namespace:         t.Namespace,
 				Type:              t.ObjType,

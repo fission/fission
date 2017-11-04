@@ -22,17 +22,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 type (
 	TimerSync struct {
-		fissionClient *tpr.FissionClient
+		fissionClient *crd.FissionClient
 		timer         *Timer
 	}
 )
 
-func MakeTimerSync(fissionClient *tpr.FissionClient, timer *Timer) *TimerSync {
+func MakeTimerSync(fissionClient *crd.FissionClient, timer *Timer) *TimerSync {
 	ws := &TimerSync{
 		fissionClient: fissionClient,
 		timer:         timer,
@@ -43,7 +43,7 @@ func MakeTimerSync(fissionClient *tpr.FissionClient, timer *Timer) *TimerSync {
 
 func (ws *TimerSync) syncSvc() {
 	for {
-		triggers, err := ws.fissionClient.Timetriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		triggers, err := ws.fissionClient.TimeTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed get time trigger list: %v", err)
 		}

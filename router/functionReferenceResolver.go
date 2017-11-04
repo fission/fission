@@ -29,14 +29,14 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 type (
 	// functionReferenceResolver provides a resolver to turn a function
 	// reference into a resolveResult
 	functionReferenceResolver struct {
-		fissionClient *tpr.FissionClient
+		fissionClient *crd.FissionClient
 
 		// FunctionReference -> function metadata
 		refCache *cache.Cache
@@ -68,7 +68,7 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient) *functionReferenceResolver {
+func makeFunctionReferenceResolver(fissionClient *crd.FissionClient) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		fissionClient: fissionClient,
 		refCache:      cache.MakeCache(time.Minute, 0),
@@ -76,22 +76,22 @@ func makeFunctionReferenceResolver(fissionClient *tpr.FissionClient) *functionRe
 	return frr
 }
 
-// Sync starts syncing tpr function resources from k8s api server
-func (frr *functionReferenceResolver) Sync(tprClient *rest.RESTClient) {
+// Sync starts syncing crd function resources from k8s api server
+func (frr *functionReferenceResolver) Sync(crdClient *rest.RESTClient) {
 	stopCh := make(chan struct{})
-	store, controller := makeK8SCache(tprClient)
+	store, controller := makeK8SCache(crdClient)
 	frr.stopCh = stopCh
 	frr.store = store
 	go controller.Run(stopCh)
 }
 
-// Stop stops tpr resources syncing
+// Stop stops crd resources syncing
 func (frr *functionReferenceResolver) Stop() {
 	frr.stopCh <- struct{}{}
 }
 
-func makeK8SCache(tprClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
-	watchlist := k8sCache.NewListWatchFromClient(tprClient, "functions", metav1.NamespaceDefault, fields.Everything())
+func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
+	watchlist := k8sCache.NewListWatchFromClient(crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	listWatch := &k8sCache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			return watchlist.List(options)
@@ -101,7 +101,7 @@ func makeK8SCache(tprClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controll
 		},
 	}
 	resyncPeriod := 30 * time.Second
-	return k8sCache.NewInformer(listWatch, &tpr.Function{}, resyncPeriod,
+	return k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{})
 }
 
@@ -145,7 +145,7 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
-	obj, isExist, err := frr.store.Get(&tpr.Function{
+	obj, isExist, err := frr.store.Get(&crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
@@ -158,7 +158,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 		return nil, fmt.Errorf("function %v does not exist", name)
 	}
 
-	f := obj.(*tpr.Function)
+	f := obj.(*crd.Function)
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
 		functionMetadata:  &f.Metadata,

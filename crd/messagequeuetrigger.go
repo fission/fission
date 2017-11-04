@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tpr
+package crd
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,30 +24,30 @@ import (
 )
 
 type (
-	MessagequeuetriggerInterface interface {
-		Create(*Messagequeuetrigger) (*Messagequeuetrigger, error)
-		Get(name string) (*Messagequeuetrigger, error)
-		Update(*Messagequeuetrigger) (*Messagequeuetrigger, error)
+	MessageQueueTriggerInterface interface {
+		Create(*MessageQueueTrigger) (*MessageQueueTrigger, error)
+		Get(name string) (*MessageQueueTrigger, error)
+		Update(*MessageQueueTrigger) (*MessageQueueTrigger, error)
 		Delete(name string, options *metav1.DeleteOptions) error
-		List(opts metav1.ListOptions) (*MessagequeuetriggerList, error)
+		List(opts metav1.ListOptions) (*MessageQueueTriggerList, error)
 		Watch(opts metav1.ListOptions) (watch.Interface, error)
 	}
 
-	messagequeuetriggerClient struct {
+	messageQueueTriggerClient struct {
 		client    *rest.RESTClient
 		namespace string
 	}
 )
 
-func MakeMessagequeuetriggerInterface(tprClient *rest.RESTClient, namespace string) MessagequeuetriggerInterface {
-	return &messagequeuetriggerClient{
-		client:    tprClient,
+func MakeMessageQueueTriggerInterface(crdClient *rest.RESTClient, namespace string) MessageQueueTriggerInterface {
+	return &messageQueueTriggerClient{
+		client:    crdClient,
 		namespace: namespace,
 	}
 }
 
-func (fc *messagequeuetriggerClient) Create(f *Messagequeuetrigger) (*Messagequeuetrigger, error) {
-	var result Messagequeuetrigger
+func (fc *messageQueueTriggerClient) Create(f *MessageQueueTrigger) (*MessageQueueTrigger, error) {
+	var result MessageQueueTrigger
 	err := fc.client.Post().
 		Resource("messagequeuetriggers").
 		Namespace(fc.namespace).
@@ -59,8 +59,8 @@ func (fc *messagequeuetriggerClient) Create(f *Messagequeuetrigger) (*Messageque
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Get(name string) (*Messagequeuetrigger, error) {
-	var result Messagequeuetrigger
+func (fc *messageQueueTriggerClient) Get(name string) (*MessageQueueTrigger, error) {
+	var result MessageQueueTrigger
 	err := fc.client.Get().
 		Resource("messagequeuetriggers").
 		Namespace(fc.namespace).
@@ -72,8 +72,8 @@ func (fc *messagequeuetriggerClient) Get(name string) (*Messagequeuetrigger, err
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Update(f *Messagequeuetrigger) (*Messagequeuetrigger, error) {
-	var result Messagequeuetrigger
+func (fc *messageQueueTriggerClient) Update(f *MessageQueueTrigger) (*MessageQueueTrigger, error) {
+	var result MessageQueueTrigger
 	err := fc.client.Put().
 		Resource("messagequeuetriggers").
 		Namespace(fc.namespace).
@@ -86,7 +86,7 @@ func (fc *messagequeuetriggerClient) Update(f *Messagequeuetrigger) (*Messageque
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
+func (fc *messageQueueTriggerClient) Delete(name string, opts *metav1.DeleteOptions) error {
 	return fc.client.Delete().
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
@@ -96,8 +96,8 @@ func (fc *messagequeuetriggerClient) Delete(name string, opts *metav1.DeleteOpti
 		Error()
 }
 
-func (fc *messagequeuetriggerClient) List(opts metav1.ListOptions) (*MessagequeuetriggerList, error) {
-	var result MessagequeuetriggerList
+func (fc *messageQueueTriggerClient) List(opts metav1.ListOptions) (*MessageQueueTriggerList, error) {
+	var result MessageQueueTriggerList
 	err := fc.client.Get().
 		Namespace(fc.namespace).
 		Resource("messagequeuetriggers").
@@ -110,7 +110,7 @@ func (fc *messagequeuetriggerClient) List(opts metav1.ListOptions) (*Messagequeu
 	return &result, nil
 }
 
-func (fc *messagequeuetriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (fc *messageQueueTriggerClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 	return fc.client.Get().
 		Prefix("watch").
 		Namespace(fc.namespace).

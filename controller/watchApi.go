@@ -25,11 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/tpr"
+	"github.com/fission/fission/crd"
 )
 
 func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
-	watches, err := a.fissionClient.Kuberneteswatchtriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	watches, err := a.fissionClient.KubernetesWatchTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -51,7 +51,7 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var watch tpr.Kuberneteswatchtrigger
+	var watch crd.KubernetesWatchTrigger
 	err = json.Unmarshal(body, &watch)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -66,7 +66,7 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 
 	// TODO check for duplicate watches
 
-	wnew, err := a.fissionClient.Kuberneteswatchtriggers(watch.Metadata.Namespace).Create(&watch)
+	wnew, err := a.fissionClient.KubernetesWatchTriggers(watch.Metadata.Namespace).Create(&watch)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -90,7 +90,7 @@ func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	watch, err := a.fissionClient.Kuberneteswatchtriggers(ns).Get(name)
+	watch, err := a.fissionClient.KubernetesWatchTriggers(ns).Get(name)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -118,7 +118,7 @@ func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Kuberneteswatchtriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.KubernetesWatchTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -37,9 +37,9 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/logdb"
 	storageSvcClient "github.com/fission/fission/storagesvc/client"
-	"github.com/fission/fission/tpr"
 )
 
 func fileSize(filePath string) int64 {
@@ -113,7 +113,7 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 	}
 
 	pkgName := strings.ToLower(uuid.NewV4().String())
-	pkg := &tpr.Package{
+	pkg := &crd.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,
 			Namespace: metav1.NamespaceDefault,
@@ -200,7 +200,7 @@ func fnCreate(c *cli.Context) error {
 
 	pkgMetadata := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 
-	function := &tpr.Function{
+	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
 			Namespace: metav1.NamespaceDefault,
@@ -236,7 +236,7 @@ func fnCreate(c *cli.Context) error {
 		method = "GET"
 	}
 	triggerName := uuid.NewV4().String()
-	ht := &tpr.Httptrigger{
+	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
 			Namespace: metav1.NamespaceDefault,
