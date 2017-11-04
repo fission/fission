@@ -101,15 +101,16 @@ func createPackage(client *client.Client, fnName, envName, srcArchiveName, deplo
 
 	if len(deployArchiveName) > 0 {
 		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
-		if len(srcArchiveName) > 0 {
-			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
-		}
-		pkgStatus = fission.BuildStatusNone
 	}
 	if len(srcArchiveName) > 0 {
 		pkgSpec.Source = *createArchive(client, srcArchiveName)
-		// set pending status to package
+	}
+
+	// start a build only when a package has no deploy archive
+	if len(srcArchiveName) > 0 && len(deployArchiveName) == 0 {
 		pkgStatus = fission.BuildStatusPending
+	} else {
+		pkgStatus = fission.BuildStatusNone
 	}
 
 	if len(buildcmd) > 0 {
