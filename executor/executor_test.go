@@ -184,11 +184,7 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create a package
-<<<<<<< HEAD:executor/poolmgr_test.go
 	p := &crd.Package{
-=======
-	p := &tpr.Package{
->>>>>>> Changed references to poolmgr in tests:executor/executor_test.go
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
@@ -204,11 +200,7 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create a function
-<<<<<<< HEAD:executor/poolmgr_test.go
 	f := &crd.Function{
-=======
-	f := &tpr.Function{
->>>>>>> Changed references to poolmgr in tests:executor/executor_test.go
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,

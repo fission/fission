@@ -130,7 +130,7 @@ func (fsc *FunctionServiceCache) service() {
 	}
 }
 
-func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
+func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
 	fsvcI, err := fsc.byFunction.Get(key)
@@ -147,8 +147,8 @@ func (fsc *functionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // TODO: error should be second return
-func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *FuncSvc) {
-	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.function), &fsvc)
+func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
+	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*FuncSvc)
@@ -247,8 +247,13 @@ func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, mi
 	}
 
 	fsc.byFunction.Delete(crd.CacheKey(&m))
+<<<<<<< HEAD
 	fsc.byAddress.Delete(fsvc.address)
 	fsc.byKubeObject.Delete(obj)
+=======
+	fsc.byAddress.Delete(fsvc.Address)
+	fsc.byPod.Delete(podName)
+>>>>>>> Rebased from master and changed references to tpr -> crd
 	return true, nil
 }
 
