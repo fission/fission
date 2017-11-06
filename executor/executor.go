@@ -206,7 +206,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 
 	ndm := newdeploy.MakeNewDeploy(
 		fissionClient, kubernetesClient,
-		functionNamespace, fsCache)
+		functionNamespace)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 	go api.Serve(port)

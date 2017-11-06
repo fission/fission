@@ -50,7 +50,6 @@ type (
 		fetcherImagePullPolicy apiv1.PullPolicy
 		namespace              string
 		sharedMountPath        string
-		fsCache                *fcache.FunctionServiceCache
 	}
 )
 
@@ -62,7 +61,6 @@ func MakeNewDeploy(
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
 	namespace string,
-	fsCache *fcache.FunctionServiceCache,
 ) *NewDeploy {
 
 	log.Printf("Creating NewDeploy")
@@ -83,7 +81,6 @@ func MakeNewDeploy(
 		fetcherImg:             fetcherImg,
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
 		sharedMountPath:        "/userfunc",
-		fsCache:                fsCache,
 	}
 
 	return nd
@@ -100,7 +97,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 	deployName := fmt.Sprintf("%v-%v",
 		env.Metadata.Name,
 		env.Metadata.UID)
-	deplName := fmt.Sprintf("deploy-%v", deployName)
+	deplName := fmt.Sprintf("nd-%v", deployName)
 
 	deployLables := map[string]string{
 		"environmentName": env.Metadata.Name,
@@ -108,7 +105,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 		"type":            "newdeploy",
 	}
 
-	depl, err := deploy.createNewDeployment(fn, env, deplName, deployLables)
+	depl, err := deploy.createOrGetDeployment(fn, env, deplName, deployLables)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +122,8 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 		deploy.setupLogging(&pod, metadata, env)
 	}
 
-	svcName := fmt.Sprintf("svc-%v", deployName)
-	_, err = deploy.createNewService(deployLables, svcName)
+	svcName := fmt.Sprintf("nds-%v", deployName)
+	_, err = deploy.createOrGetSvc(deployLables, svcName)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +141,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 	return fsvc, nil
 }
 
-func (deploy NewDeploy) createNewDeployment(fn *crd.Function, env *crd.Environment,
+func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
 	replicas := int32(1)
 	targetFilename := "user"
@@ -264,7 +261,7 @@ func (deploy NewDeploy) createNewDeployment(fn *crd.Function, env *crd.Environme
 
 }
 
-func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
+func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
 
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
