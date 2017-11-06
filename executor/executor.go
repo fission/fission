@@ -27,10 +27,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cache"
+	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fcache"
 	"github.com/fission/fission/executor/newdeploy"
 	"github.com/fission/fission/executor/poolmgr"
-	"github.com/fission/fission/tpr"
 )
 
 type (
@@ -38,7 +38,7 @@ type (
 		gpm           *poolmgr.GenericPoolManager
 		ndm           *newdeploy.NewDeploy
 		functionEnv   *cache.Cache
-		fissionClient *tpr.FissionClient
+		fissionClient *crd.FissionClient
 		fsCache       *fcache.FunctionServiceCache
 
 		requestChan chan *createFuncServiceRequest
@@ -55,7 +55,7 @@ type (
 	}
 )
 
-func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *tpr.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
+func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		gpm:           gpm,
 		ndm:           ndm,
@@ -82,13 +82,13 @@ func (executor *Executor) serveCreateFuncServices() {
 		m := req.funcMeta
 
 		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg[tpr.CacheKey(m)]
+		wg, found := executor.fsCreateWg[crd.CacheKey(m)]
 		if !found {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
-			executor.fsCreateWg[tpr.CacheKey(m)] = wg
+			executor.fsCreateWg[crd.CacheKey(m)] = wg
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
@@ -98,7 +98,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					address: address,
 					err:     err,
 				}
-				delete(executor.fsCreateWg, tpr.CacheKey(m))
+				delete(executor.fsCreateWg, crd.CacheKey(m))
 				wg.Done()
 			}()
 		} else {
@@ -159,13 +159,13 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 	}
 }
 
-func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment, error) {
-	var env *tpr.Environment
+func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {
+	var env *crd.Environment
 
 	// Cached ?
-	result, err := executor.functionEnv.Get(tpr.CacheKey(m))
+	result, err := executor.functionEnv.Get(crd.CacheKey(m))
 	if err == nil {
-		env = result.(*tpr.Environment)
+		env = result.(*crd.Environment)
 		return env, nil
 	}
 
@@ -183,7 +183,7 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment
 	}
 
 	// cache for future lookups
-	executor.functionEnv.Set(tpr.CacheKey(m), env)
+	executor.functionEnv.Set(crd.CacheKey(m), env)
 
 	return env, nil
 }
@@ -191,7 +191,7 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*tpr.Environment
 // StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
 // deploymgr and potential future backends
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
-	fissionClient, kubernetesClient, err := tpr.MakeFissionClient()
+	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err

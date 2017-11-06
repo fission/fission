@@ -148,7 +148,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 
 // TODO: error should be second return
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
-	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.function), &fsvc)
+	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*FuncSvc)

@@ -36,16 +36,16 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	"github.com/fission/fission/executor/fcache"
 	"github.com/fission/fission/logger"
-	"github.com/fission/fission/tpr"
 )
 
 type (
 	NewDeploy struct {
 		kubernetesClient       *kubernetes.Clientset
-		fissionClient          *tpr.FissionClient
+		fissionClient          *crd.FissionClient
 		fetcherImg             string
 		fetcherImagePullPolicy apiv1.PullPolicy
 		namespace              string
@@ -59,7 +59,7 @@ const (
 )
 
 func MakeNewDeploy(
-	fissionClient *tpr.FissionClient,
+	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
 	namespace string,
 	fsCache *fcache.FunctionServiceCache,
@@ -89,7 +89,7 @@ func MakeNewDeploy(
 	return nd
 }
 
-func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *tpr.Environment) (*fcache.FuncSvc, error) {
+func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environment) (*fcache.FuncSvc, error) {
 	fn, err := deploy.fissionClient.
 		Functions(metadata.Namespace).
 		Get(metadata.Name)
@@ -144,7 +144,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *tpr.Environ
 	return fsvc, nil
 }
 
-func (deploy NewDeploy) createNewDeployment(fn *tpr.Function, env *tpr.Environment,
+func (deploy NewDeploy) createNewDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
 	replicas := int32(1)
 	targetFilename := "user"
@@ -299,7 +299,7 @@ func (deploy NewDeploy) createNewService(deployLables map[string]string, svcName
 	return svc, nil
 }
 
-func (deploy NewDeploy) setupLogging(pod *apiv1.Pod, metadata *metav1.ObjectMeta, env *tpr.Environment) {
+func (deploy NewDeploy) setupLogging(pod *apiv1.Pod, metadata *metav1.ObjectMeta, env *crd.Environment) {
 
 	logReq := logger.LogRequest{
 		Namespace: pod.Namespace,
