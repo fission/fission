@@ -4,19 +4,24 @@ date: 2017-11-04T03:38:29+08:00
 draft: false
 ---
 
-## TL;DR
+## Introduction
 
-ThirdPartyResource is replaced by CustomResource and will be entirely deprecated in Kubernetes 1.8.
-Since Fission stores state in TPR, we need to migrate from TPRs to CRDs for future Kubernetes 
-release. 
+Kubernetes ThirdPartyResources ("TPR") are replaced by
+CustomResourceDefinitions ("CRD"). TPRs have been deprecated and are
+removed in Kubernetes 1.8.
 
-Below we describe a tool for migrating your TPRs to CRDs.
+Since Fission stores state in TPRs, we need to migrate this state from
+TPRs to CRDs while upgrading.
+
+Follow the instructions below if you're upgrading a Fission 0.2.1 or
+0.3.0 cluster to 0.4. If you're using a pre-0.2 Fission cluster, use
+the [upgrade guide from 0.1 to 0.2]() and then upgrade to 0.4.0.
 
 ## How to Upgrade
 
-1. Get the v0.4-rc CLI
+1. Get the 0.4.0-rc CLI
 2. Get the Fission state from v0.3 install
-3. Upgrade to Fission v0.4.0-rc
+3. Upgrade to Fission 0.4.0-rc
 4. Upgrade Kubernetes cluster version to 1.7.x or higher
 5. Remove all TPR definition (for Kubernetes 1.7.x)
 6. Restore Fission state into CRDs
@@ -26,19 +31,19 @@ Below we describe a tool for migrating your TPRs to CRDs.
 #### OS X
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/v0.4.0-rc/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/v0.4.0-rc/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Windows
 
 For Windows, you can use the linux binary on WSL. Or you can download
-this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/v0.4.0-rc/fission-cli-windows.exe)
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-windows.exe)
 
 ### Get Fission state from v0.3 install
 
@@ -52,7 +57,7 @@ variable `$FISSION_URL` set to point at a v0.3 Fission server.
 This will create a JSON file with all your fission state in the
 current directory.
 
-### Upgrade to Fission v0.4.0-rc
+### Upgrade to Fission 0.4.0-rc
 
 Upgrade fission with a command similar to this:
 
@@ -75,7 +80,7 @@ Though Kubernetes will migrate TPRs to CRDs automatically when TPR definition is
 fission tpr2crd delete
 ```
 
-### Restore your Fission state into Fission v0.4.0-rc
+### Restore your Fission state into Fission 0.4.0-rc
 
 ```
 fission tpr2crd restore --file state.json
