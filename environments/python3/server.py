@@ -24,12 +24,41 @@ def loadv2():
     global userfunc
     body = request.get_json()
     filepath = body['filepath']
-    functionName = body['functionName']
-    # add filepath into syspath for module import
-    sys.path.append(filepath)
-    fn, path, desc = imp.find_module('user', [filepath])
-    mod = imp.load_module('user', fn, path, desc)
-    userfunc = getattr(mod, functionName)
+    handler = body['functionName']
+
+    # The value of "functionName" is consist of `<module-name>.<function-name>`.
+    moduleName, funcName = handler.split(".")
+
+    # check whether the destination is a directory or a file
+    if os.path.isdir(filepath):
+        # add package directory path into module search path
+        sys.path.append(filepath)
+        
+        # find module from package path we append previously.
+        # Python will try to find module from the same name file under
+        # the package directory. If search is successful, the return 
+        # value is a 3-element tuple; otherwise, an exception "ImportError"
+        # is raised.
+        # Second parameter of find_module enforces python to find same 
+        # name module from the given list of directories to prevent name
+        # confliction with built-in modules.
+        f, path, desc = imp.find_module(moduleName, [filepath])
+
+        # load module
+        # Return module object is the load is successful; otherwise, 
+        # an exception is raised.
+        try:
+            mod = imp.load_module(moduleName, f, path, desc)
+        finally:
+            if f:
+                f.close()
+    else:
+        # load source from destination python file
+        mod = imp.load_source(moduleName, filepath)
+
+    # load user function from module
+    userfunc = getattr(mod, funcName)
+
     return ""
 
 @app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])

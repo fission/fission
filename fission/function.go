@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/dchest/uniuri"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,36 +89,48 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
+func createPackage(client *client.Client, fnName, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: metav1.NamespaceDefault,
 			Name:      envName,
 		},
 	}
-	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
+
+	var pkgStatus fission.BuildStatus
 
 	if len(deployArchiveName) > 0 {
 		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
-		if len(srcArchiveName) > 0 {
-			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
-		}
 	}
 	if len(srcArchiveName) > 0 {
 		pkgSpec.Source = *createArchive(client, srcArchiveName)
-		// set pending status to package
+	}
+
+	// start a build only when a package has no deploy archive
+	if len(srcArchiveName) > 0 && len(deployArchiveName) == 0 {
 		pkgStatus = fission.BuildStatusPending
+	} else {
+		pkgStatus = fission.BuildStatusNone
 	}
 
 	if len(buildcmd) > 0 {
 		pkgSpec.BuildCommand = buildcmd
 	}
 
-	pkgName := strings.ToLower(uuid.NewV4().String())
+	fnList, err := json.Marshal([]string{fnName})
+	checkErr(err, "encode json")
+
+	annotation := map[string]string{
+		"createdForFunction": fnName,
+		"usedByFunctions":    string(fnList),
+	}
+
+	pkgName := strings.ToLower(fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6)))
 	pkg := &crd.Package{
 		Metadata: metav1.ObjectMeta{
-			Name:      pkgName,
-			Namespace: metav1.NamespaceDefault,
+			Name:        pkgName,
+			Namespace:   metav1.NamespaceDefault,
+			Annotations: annotation,
 		},
 		Spec: pkgSpec,
 		Status: fission.PackageStatus{
@@ -194,11 +208,8 @@ func fnCreate(c *cli.Context) error {
 
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
-	if len(buildcmd) == 0 {
-		buildcmd = "/builder"
-	}
 
-	pkgMetadata := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
+	pkgMetadata := createPackage(client, fnName, envName, srcArchiveName, deployArchiveName, buildcmd)
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
@@ -357,7 +368,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
 		// create a new package for function
-		pkgMetadata := createPackage(client,
+		pkgMetadata := createPackage(client, function.Metadata.Name,
 			function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
 
 		// update function spec with resource version

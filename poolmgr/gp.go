@@ -68,7 +68,7 @@ type (
 		instanceId             string // poolmgr instance id
 		labelsForPool          map[string]string
 		requestChannel         chan *choosePodRequest
-		sharedMountPath        string
+		sharedMountPath        string // used by generic pool when creating env deployment to specify the share volume path for fetcher & env
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -133,7 +133,7 @@ func MakeGenericPool(
 		instanceId:       instanceId,
 		fetcherImage:     fetcherImage,
 		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
-		sharedMountPath:  "/userfunc", // used by generic pool when creating env deployment to specify the share volume path for fetcher & env
+		sharedMountPath:  "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
 	}
 
 	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
@@ -328,7 +328,13 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 		return err
 	}
 
+	// for backward compatibility, since most v1 env
+	// still try to load user function from hard coded
+	// path /userfunc/user
 	targetFilename := "user"
+	if gp.env.Spec.Version == 2 {
+		targetFilename = string(fn.Metadata.UID)
+	}
 
 	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
@@ -336,7 +342,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
 			Name:      fn.Spec.Package.PackageRef.Name,
 		},
-		Filename: targetFilename, // XXX use function id instead
+		Filename: targetFilename,
 	})
 	if err != nil {
 		return err
@@ -433,7 +439,7 @@ func (gp *GenericPool) createPool() error {
 						{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.Spec.Runtime.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							ImagePullPolicy:        gp.runtimeImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
