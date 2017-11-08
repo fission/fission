@@ -400,25 +400,6 @@ spec:
         svc: logger
     spec:
       containers:
-        - name: logger
-          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-          imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ["/fission-bundle"]
-          args: ["--logger"]
-          volumeMounts:
-            - name: container-log
-              mountPath: /var/log/containers
-              readOnly: true
-            - name: docker-log
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: fission-log
-              mountPath: /var/log/fission
-              readOnly: false
-          ports:
-            - containerPort: 1234
-              hostPort: 1234
-              protocol: TCP
         - name: fluentd
           image: {{ .Values.logger.fluentdImage }}
           imagePullPolicy: {{ .Values.pullPolicy }}
