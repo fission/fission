@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-- Kubernetes 1.6+ with Beta APIs enabled
+- Kubernetes 1.8 or later
 
 
 ## Helm charts
