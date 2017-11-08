@@ -57,15 +57,15 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(httpTriggerSet *HTTPTriggerSet) *mutableRouter {
+func router(httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) *mutableRouter {
 	muxRouter := mux.NewRouter()
 	mr := NewMutableRouter(muxRouter)
-	httpTriggerSet.subscribeRouter(mr)
+	httpTriggerSet.subscribeRouter(mr, resolver)
 	return mr
 }
 
-func serve(port int, httpTriggerSet *HTTPTriggerSet) {
-	mr := router(httpTriggerSet)
+func serve(port int, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) {
+	mr := router(httpTriggerSet, resolver)
 	url := fmt.Sprintf(":%v", port)
 	http.ListenAndServe(url, handlers.LoggingHandler(os.Stdout, mr))
 }
@@ -79,12 +79,8 @@ func Start(port int, poolmgrUrl string) {
 	}
 	restClient := fissionClient.GetCrdClient()
 	poolmgr := poolmgrClient.MakeClient(poolmgrUrl)
-	resolver := makeFunctionReferenceResolver(fissionClient)
-	resolver.Sync(restClient)
-	defer func() {
-		resolver.Stop()
-	}()
-	triggers := makeHTTPTriggerSet(fmap, fissionClient, poolmgr, resolver, restClient)
+	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, poolmgr, restClient)
+	resolver := makeFunctionReferenceResolver(fnStore)
 	log.Printf("Starting router at port %v\n", port)
-	serve(port, triggers)
+	serve(port, triggers, resolver)
 }

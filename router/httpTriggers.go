@@ -24,8 +24,6 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -37,30 +35,37 @@ import (
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
-	fissionClient *crd.FissionClient
-	poolmgr       *poolmgrClient.Client
-	resolver      *functionReferenceResolver
-	triggers      []crd.HTTPTrigger
-	triggerStore  k8sCache.Store
-	functions     []crd.Function
-	funcStore     k8sCache.Store
-	crdClient     *rest.RESTClient
+	fissionClient     *crd.FissionClient
+	poolmgr           *poolmgrClient.Client
+	resolver          *functionReferenceResolver
+	crdClient         *rest.RESTClient
+	triggers          []crd.HTTPTrigger
+	triggerStore      k8sCache.Store
+	triggerController k8sCache.Controller
+	functions         []crd.Function
+	funcStore         k8sCache.Store
+	funcController    k8sCache.Controller
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	poolmgr *poolmgrClient.Client, resolver *functionReferenceResolver, crdClient *rest.RESTClient) *HTTPTriggerSet {
-	triggers := make([]crd.HTTPTrigger, 1)
-	return &HTTPTriggerSet{
+	poolmgr *poolmgrClient.Client, crdClient *rest.RESTClient) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
+	httpTriggerSet := &HTTPTriggerSet{
 		functionServiceMap: fmap,
-		triggers:           triggers,
+		triggers:           []crd.HTTPTrigger{},
 		fissionClient:      fissionClient,
 		poolmgr:            poolmgr,
-		resolver:           resolver,
 		crdClient:          crdClient,
 	}
+	var tStore, fnStore k8sCache.Store
+	if httpTriggerSet.crdClient != nil {
+		tStore, _ = httpTriggerSet.watchTriggers()
+		fnStore, _ = httpTriggerSet.watchFunctions()
+	}
+	return httpTriggerSet, tStore, fnStore
 }
 
-func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
+func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter, resolver *functionReferenceResolver) {
+	ts.resolver = resolver
 	ts.mutableRouter = mr
 	mr.updateRouter(ts.getRouter())
 
@@ -69,8 +74,8 @@ func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter) {
 		log.Printf("Skipping continuous trigger updates")
 		return
 	}
-	go ts.watchTriggers()
-	go ts.watchFunctions()
+	go ts.runWatcher(ts.funcController)
+	go ts.runWatcher(ts.triggerController)
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -140,17 +145,9 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HTTPTrigger, err err
 	// TODO
 }
 
-func (ts *HTTPTriggerSet) watchTriggers() {
-	watchlist := k8sCache.NewListWatchFromClient(ts.crdClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
-	listWatch := &k8sCache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return watchlist.List(options)
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return watchlist.Watch(options)
-		},
-	}
+func (ts *HTTPTriggerSet) watchTriggers() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.HTTPTrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -164,24 +161,13 @@ func (ts *HTTPTriggerSet) watchTriggers() {
 			},
 		})
 	ts.triggerStore = store
-	stop := make(chan struct{})
-	defer func() {
-		stop <- struct{}{}
-	}()
-	controller.Run(stop)
+	ts.triggerController = controller
+	return store, controller
 }
 
-func (ts *HTTPTriggerSet) watchFunctions() {
-	watchlist := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
-	listWatch := &k8sCache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return watchlist.List(options)
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return watchlist.Watch(options)
-		},
-	}
+func (ts *HTTPTriggerSet) watchFunctions() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -207,11 +193,18 @@ func (ts *HTTPTriggerSet) watchFunctions() {
 			},
 		})
 	ts.funcStore = store
-	stop := make(chan struct{})
-	defer func() {
-		stop <- struct{}{}
+	ts.funcController = controller
+	return store, controller
+}
+
+func (ts *HTTPTriggerSet) runWatcher(controller k8sCache.Controller) {
+	go func() {
+		stop := make(chan struct{})
+		defer func() {
+			stop <- struct{}{}
+		}()
+		controller.Run(stop)
 	}()
-	controller.Run(stop)
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {

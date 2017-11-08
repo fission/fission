@@ -58,7 +58,7 @@ func TestRouter(t *testing.T) {
 	frr.refCache.Set(nfr, rr)
 
 	// HTTP trigger set with a trigger for this function
-	triggers := makeHTTPTriggerSet(fmap, nil, nil, frr, nil)
+	triggers, _, _ := makeHTTPTriggerSet(fmap, nil, nil, nil)
 	triggerUrl := "/foo"
 	triggers.triggers = append(triggers.triggers,
 		crd.HTTPTrigger{
@@ -75,7 +75,7 @@ func TestRouter(t *testing.T) {
 
 	// run the router
 	port := 4242
-	go serve(port, triggers)
+	go serve(port, triggers, frr)
 	time.Sleep(100 * time.Millisecond)
 
 	// hit the router
