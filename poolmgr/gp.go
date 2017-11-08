@@ -678,4 +678,3 @@ func (gp *GenericPool) destroy() error {
 
 	return nil
 }
-

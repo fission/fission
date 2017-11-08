@@ -40,7 +40,6 @@ func runKubeWatcher(routerUrl string) {
 	}
 }
 
-
 func runTimer(routerUrl string) {
 	err := timer.Start(routerUrl)
 	if err != nil {
@@ -166,7 +165,6 @@ Options:
 	if arguments["--kubewatcher"] == true {
 		runKubeWatcher(routerUrl)
 	}
-
 
 	if arguments["--timer"] == true {
 		runTimer(routerUrl)
