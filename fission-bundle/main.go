@@ -9,7 +9,6 @@ import (
 	"github.com/fission/fission/buildermgr"
 	"github.com/fission/fission/controller"
 	"github.com/fission/fission/kubewatcher"
-	"github.com/fission/fission/logger"
 	"github.com/fission/fission/mqtrigger"
 	"github.com/fission/fission/poolmgr"
 	"github.com/fission/fission/router"
@@ -41,10 +40,6 @@ func runKubeWatcher(routerUrl string) {
 	}
 }
 
-func runLogger() {
-	logger.Start()
-	log.Fatalf("Error: Logger exited.")
-}
 
 func runTimer(routerUrl string) {
 	err := timer.Start(routerUrl)
@@ -122,7 +117,6 @@ Usage:
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
   fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
-  fission-bundle --logger
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
 Options:
@@ -138,7 +132,6 @@ Options:
   --filePath=<filePath>           Directory to store functions in.
   --namespace=<namespace>         Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
   --kubewatcher                   Start Kubernetes events watcher.
-  --logger                        Start logger.
   --timer                         Start Timer.
   --mqt                           Start message queue trigger.
 `
@@ -174,9 +167,6 @@ Options:
 		runKubeWatcher(routerUrl)
 	}
 
-	if arguments["--logger"] == true {
-		runLogger()
-	}
 
 	if arguments["--timer"] == true {
 		runTimer(routerUrl)
