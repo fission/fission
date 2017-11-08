@@ -6,6 +6,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/pkg/api"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -39,9 +40,14 @@ func TestFunctionServiceCache(t *testing.T) {
 			},
 		},
 		address: "xxx",
-		podName: "yyy",
-		ctime:   now,
-		atime:   now,
+		obj: api.ObjectReference{
+			Kind:       "pod",
+			Name:       "xxx",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+		ctime: now,
+		atime: now,
 	}
 	err, _ := fsc.Add(*fsvc)
 	if err != nil {
@@ -67,7 +73,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-	deleted, err := fsc.DeleteByPod(fsvc.podName, 0)
+	deleted, err := fsc.DeleteByPod(fsvc.obj, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)
