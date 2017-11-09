@@ -57,9 +57,14 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		crdClient:          crdClient,
 	}
 	var tStore, fnStore k8sCache.Store
+	var tController, fnController k8sCache.Controller
 	if httpTriggerSet.crdClient != nil {
-		tStore, _ = httpTriggerSet.watchTriggers()
-		fnStore, _ = httpTriggerSet.watchFunctions()
+		tStore, tController = httpTriggerSet.initTriggerController()
+		httpTriggerSet.triggerStore = tStore
+		httpTriggerSet.triggerController = tController
+		fnStore, fnController = httpTriggerSet.initFunctionController()
+		httpTriggerSet.funcStore = fnStore
+		httpTriggerSet.funcController = fnController
 	}
 	return httpTriggerSet, tStore, fnStore
 }
@@ -145,7 +150,7 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HTTPTrigger, err err
 	// TODO
 }
 
-func (ts *HTTPTriggerSet) watchTriggers() (k8sCache.Store, k8sCache.Controller) {
+func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "httptriggers", metav1.NamespaceDefault, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.HTTPTrigger{}, resyncPeriod,
@@ -160,12 +165,10 @@ func (ts *HTTPTriggerSet) watchTriggers() (k8sCache.Store, k8sCache.Controller) 
 				ts.syncTriggers()
 			},
 		})
-	ts.triggerStore = store
-	ts.triggerController = controller
 	return store, controller
 }
 
-func (ts *HTTPTriggerSet) watchFunctions() (k8sCache.Store, k8sCache.Controller) {
+func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
@@ -192,8 +195,6 @@ func (ts *HTTPTriggerSet) watchFunctions() (k8sCache.Store, k8sCache.Controller)
 				ts.syncTriggers()
 			},
 		})
-	ts.funcStore = store
-	ts.funcController = controller
 	return store, controller
 }
 
