@@ -144,11 +144,11 @@ build_charts() {
     version=$1
     mkdir -p $BUILDDIR/charts
     pushd $DIR/charts
-    for c in all core
+    find . -iname *.~?~ | xargs rm
+    for c in fission-all fission-core
     do
-	tgz=fission-$c-$version.tgz
-	tar czvf $tgz fission-$c/
-	mv $tgz $BUILDDIR/charts/
+	helm package $c/
+	mv *.tgz $BUILDDIR/charts/
     done
     popd
 }
