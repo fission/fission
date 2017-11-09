@@ -21,7 +21,7 @@ build_and_push_fetcher $FETCHER_IMAGE:$TAG
 
 build_builder
 
-ENV='python3'
+ENV='python'
 
 build_and_push_env_runtime $ENV $REPO/$ENV-env:$TAG
 

@@ -128,16 +128,17 @@ build_and_push_all_envs() {
     version=$1
 
     # call with version, env dir, image name base, image name variant
-    build_and_push_env_image "$version" "nodejs" "node-env" ""
-    build_and_push_env_image "$version" "nodejs" "node-env" "debian"
-    build_and_push_env_image "$version" "binary" "binary-env" ""
-    build_and_push_env_image "$version" "dotnet" "dotnet-env" ""
+    build_and_push_env_image "$version" "nodejs"   "node-env"     ""
+    build_and_push_env_image "$version" "nodejs"   "node-env"     "debian"
+    build_and_push_env_image "$version" "binary"   "binary-env"   ""
+    build_and_push_env_image "$version" "dotnet"   "dotnet-env"   ""
     build_and_push_env_image "$version" "dotnet20" "dotnet20-env" ""    
-    build_and_push_env_image "$version" "go" "go-env" ""
-    build_and_push_env_image "$version" "perl" "perl-env" ""
-    build_and_push_env_image "$version" "php7" "php-env" ""
-    build_and_push_env_image "$version" "python3" "python-env" ""
-    build_and_push_env_image "$version" "ruby" "ruby-env" ""
+    build_and_push_env_image "$version" "go"       "go-env"       ""
+    build_and_push_env_image "$version" "perl"     "perl-env"     ""
+    build_and_push_env_image "$version" "php7"     "php-env"      ""
+    build_and_push_env_image "$version" "python"   "python-env"   ""
+    build_and_push_env_image "$version" "python"   "python-env"   "2.7"
+    build_and_push_env_image "$version" "ruby"     "ruby-env"     ""
 }
 
 build_charts() {
