@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -69,7 +70,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 	return httpTriggerSet, tStore, fnStore
 }
 
-func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter, resolver *functionReferenceResolver) {
+func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter, resolver *functionReferenceResolver) {
 	ts.resolver = resolver
 	ts.mutableRouter = mr
 	mr.updateRouter(ts.getRouter())
@@ -79,8 +80,8 @@ func (ts *HTTPTriggerSet) subscribeRouter(mr *mutableRouter, resolver *functionR
 		log.Printf("Skipping continuous trigger updates")
 		return
 	}
-	go ts.runWatcher(ts.funcController)
-	go ts.runWatcher(ts.triggerController)
+	go ts.runWatcher(ctx, ts.funcController)
+	go ts.runWatcher(ctx, ts.triggerController)
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -198,13 +199,9 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 	return store, controller
 }
 
-func (ts *HTTPTriggerSet) runWatcher(controller k8sCache.Controller) {
+func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Controller) {
 	go func() {
-		stop := make(chan struct{})
-		defer func() {
-			stop <- struct{}{}
-		}()
-		controller.Run(stop)
+		controller.Run(ctx.Done())
 	}()
 }
 
