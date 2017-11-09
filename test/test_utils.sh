@@ -117,6 +117,9 @@ helm_install_fission() {
     helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false
 
     helm_setup
+
+    echo "Deleting failed releases"
+    helm list --failed -q|xargs -I@ bash -c "helm delete @"
     
     echo "Installing fission"
     helm install		\
@@ -127,6 +130,8 @@ helm_install_fission() {
 	 --namespace $ns        \
 	 --debug                \
 	 $ROOT/charts/fission-all
+    
+    helm list
 }
 
 wait_for_service() {
