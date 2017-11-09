@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -75,7 +76,9 @@ func TestRouter(t *testing.T) {
 
 	// run the router
 	port := 4242
-	go serve(port, triggers, frr)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go serve(ctx, port, triggers, frr)
 	time.Sleep(100 * time.Millisecond)
 
 	// hit the router
