@@ -7,12 +7,6 @@ draft: false
 Welcome! This guide will get you up and running with Fission on a
 Kubernetes cluster.
 
-<<<<<<< HEAD
-=======
-```
-- :warning: Fission is currently alpha and not tested for production use. :warning:
-```           
->>>>>>> 79924a365dce930636fa6c47f202238a2d811e97
 ### Cluster preliminaries
 
 If you don't have a Kubernetes cluster, [here's a quick guide to set
@@ -163,10 +157,6 @@ svc```).  Then:
 
 ##### GCP
 ```
-# AWS
-  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..hostname}')
-  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..hostname}')
-# GCP
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
 ```
