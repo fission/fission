@@ -36,8 +36,6 @@ type (
 	// functionReferenceResolver provides a resolver to turn a function
 	// reference into a resolveResult
 	functionReferenceResolver struct {
-		fissionClient *crd.FissionClient
-
 		// FunctionReference -> function metadata
 		refCache *cache.Cache
 
@@ -68,26 +66,12 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(fissionClient *crd.FissionClient) *functionReferenceResolver {
+func makeFunctionReferenceResolver(store k8sCache.Store) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		fissionClient: fissionClient,
-		refCache:      cache.MakeCache(time.Minute, 0),
+		refCache: cache.MakeCache(time.Minute, 0),
+		store:    store,
 	}
 	return frr
-}
-
-// Sync starts syncing crd function resources from k8s api server
-func (frr *functionReferenceResolver) Sync(crdClient *rest.RESTClient) {
-	stopCh := make(chan struct{})
-	store, controller := makeK8SCache(crdClient)
-	frr.stopCh = stopCh
-	frr.store = store
-	go controller.Run(stopCh)
-}
-
-// Stop stops crd resources syncing
-func (frr *functionReferenceResolver) Stop() {
-	frr.stopCh <- struct{}{}
 }
 
 func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
