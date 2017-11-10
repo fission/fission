@@ -40,7 +40,7 @@ func TestFunctionServiceCache(t *testing.T) {
 			},
 		},
 		address: "xxx",
-		obj: api.ObjectReference{
+		kubernetesObject: api.ObjectReference{
 			Kind:       "pod",
 			Name:       "xxx",
 			APIVersion: "v1",
@@ -73,7 +73,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-	deleted, err := fsc.DeleteByPod(fsvc.obj, 0)
+	deleted, err := fsc.DeleteByKubeObject(fsvc.kubernetesObject, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)

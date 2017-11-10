@@ -35,7 +35,7 @@ const (
 	TOUCH fscRequestType = iota
 	LISTOLD
 	LOG
-	DELETE_BY_POD
+	DELETE_BY_OBJECT
 )
 
 const (
@@ -45,30 +45,30 @@ const (
 
 type (
 	funcSvc struct {
-		function    *metav1.ObjectMeta  // function this pod/service is for
-		environment *crd.Environment    // function's environment
-		address     string              // Host:Port or IP:Port that the function's service can be reached at.
-		obj         api.ObjectReference // Object (within the function namespace)
-		backend     backendType
+		function         *metav1.ObjectMeta  // function this pod/service is for
+		environment      *crd.Environment    // function's environment
+		address          string              // Host:Port or IP:Port that the function's service can be reached at.
+		kubernetesObject api.ObjectReference // Kubernetes Object (within the function namespace)
+		backend          backendType
 
 		ctime time.Time
 		atime time.Time
 	}
 
 	functionServiceCache struct {
-		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress  *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byObj      *cache.Cache // obj          -> function : map[api.ObjectReference]metav1.ObjectMeta
+		byFunction   *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress    *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
+		byKubeObject *cache.Cache // obj          -> function : map[api.ObjectReference]metav1.ObjectMeta
 
 		requestChannel chan *fscRequest
 	}
 	fscRequest struct {
-		requestType     fscRequestType
-		address         string
-		obj             api.ObjectReference
-		age             time.Duration
-		env             *metav1.ObjectMeta // used for ListOld
-		responseChannel chan *fscResponse
+		requestType      fscRequestType
+		address          string
+		kubernetesObject api.ObjectReference
+		age              time.Duration
+		env              *metav1.ObjectMeta // used for ListOld
+		responseChannel  chan *fscResponse
 	}
 	fscResponse struct {
 		objects []api.ObjectReference
@@ -81,7 +81,7 @@ func MakeFunctionServiceCache() *functionServiceCache {
 	fsc := &functionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
 		byAddress:      cache.MakeCache(0, 0),
-		byObj:          cache.MakeCache(0, 0),
+		byKubeObject:   cache.MakeCache(0, 0),
 		requestChannel: make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -98,9 +98,9 @@ func (fsc *functionServiceCache) service() {
 			resp.error = fsc._touchByAddress(req.address)
 		case LISTOLD:
 			// get svcs idle for > req.age
-			byObjCopy := fsc.byObj.Copy()
-			pods := make([]api.ObjectReference, 0)
-			for objI, mI := range byObjCopy {
+			byKubeObjectCopy := fsc.byKubeObject.Copy()
+			kubeObjects := make([]api.ObjectReference, 0)
+			for objI, mI := range byKubeObjectCopy {
 				m := mI.(metav1.ObjectMeta)
 				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
 				if err != nil {
@@ -111,20 +111,20 @@ func (fsc *functionServiceCache) service() {
 						time.Now().Sub(fsvc.atime) > req.age {
 
 						obj := objI.(api.ObjectReference)
-						pods = append(pods, obj)
+						kubeObjects = append(kubeObjects, obj)
 					}
 				}
 			}
-			resp.objects = pods
+			resp.objects = kubeObjects
 		case LOG:
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
 			for key, fsvcI := range funcCopy {
 				fsvc := fsvcI.(*funcSvc)
-				log.Printf("%v\t%v\t%v", key, fsvc.obj.Kind, fsvc.obj.Name)
+				log.Printf("%v\t%v\t%v", key, fsvc.kubernetesObject.Kind, fsvc.kubernetesObject.Name)
 			}
-		case DELETE_BY_POD:
-			resp.deleted, resp.error = fsc._deleteByPod(req.obj, req.age)
+		case DELETE_BY_OBJECT:
+			resp.deleted, resp.error = fsc._deleteByKubeObject(req.kubernetesObject, req.age)
 		}
 		req.responseChannel <- resp
 	}
@@ -165,7 +165,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 	fsvc.ctime = now
 	fsvc.atime = now
 
-	// Add to byAddress and byPod caches. Ignore NameExists errors
+	// Add to byAddress and byKubernetesObject caches. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byAddress.Set(fsvc.address, *fsvc.function)
 	if err != nil {
@@ -177,7 +177,7 @@ func (fsc *functionServiceCache) Add(fsvc funcSvc) (error, *funcSvc) {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
-	err, _ = fsc.byObj.Set(fsvc.obj, *fsvc.function)
+	err, _ = fsc.byKubeObject.Set(fsvc.kubernetesObject, *fsvc.function)
 	if err != nil {
 		if fe, ok := err.(fission.Error); ok {
 			if fe.Code == fission.ErrorNameExists {
@@ -216,22 +216,22 @@ func (fsc *functionServiceCache) _touchByAddress(address string) error {
 	return nil
 }
 
-func (fsc *functionServiceCache) DeleteByPod(obj api.ObjectReference, minAge time.Duration) (bool, error) {
+func (fsc *functionServiceCache) DeleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
-		requestType:     DELETE_BY_POD,
-		obj:             obj,
-		age:             minAge,
-		responseChannel: responseChannel,
+		requestType:      DELETE_BY_OBJECT,
+		kubernetesObject: obj,
+		age:              minAge,
+		responseChannel:  responseChannel,
 	}
 	resp := <-responseChannel
 	return resp.deleted, resp.error
 }
 
-// _deleteByPod deletes the entry keyed by podName, but only if it is
+// _deleteByKubeObject deletes the entry keyed by Kubernetes Object, but only if it is
 // at least minAge old.
-func (fsc *functionServiceCache) _deleteByPod(obj api.ObjectReference, minAge time.Duration) (bool, error) {
-	mI, err := fsc.byObj.Get(obj)
+func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
+	mI, err := fsc.byKubeObject.Get(obj)
 	if err != nil {
 		return false, err
 	}
@@ -248,7 +248,7 @@ func (fsc *functionServiceCache) _deleteByPod(obj api.ObjectReference, minAge ti
 
 	fsc.byFunction.Delete(crd.CacheKey(&m))
 	fsc.byAddress.Delete(fsvc.address)
-	fsc.byObj.Delete(obj)
+	fsc.byKubeObject.Delete(obj)
 	return true, nil
 }
 

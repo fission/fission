@@ -561,7 +561,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
-	objReference := api.ObjectReference{
+	kubeObjRef := api.ObjectReference{
 		Kind:            pod.TypeMeta.Kind,
 		Name:            pod.ObjectMeta.Name,
 		APIVersion:      pod.TypeMeta.APIVersion,
@@ -571,13 +571,13 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 	}
 
 	fsvc := &funcSvc{
-		function:    m,
-		environment: gp.env,
-		address:     svcHost,
-		obj:         objReference,
-		backend:     POOLMGR,
-		ctime:       time.Now(),
-		atime:       time.Now(),
+		function:         m,
+		environment:      gp.env,
+		address:          svcHost,
+		kubernetesObject: kubeObjRef,
+		backend:          POOLMGR,
+		ctime:            time.Now(),
+		atime:            time.Now(),
 	}
 
 	err, existingFsvc := gp.fsCache.Add(*fsvc)
@@ -586,9 +586,9 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 			if fe.Code == fission.ErrorNameExists {
 				// Some other thread beat us to it -- return the other thread's fsvc and clean up
 				// our own.
-				log.Printf("func svc already exists: %v", existingFsvc.obj.Name)
+				log.Printf("func svc already exists: %v", existingFsvc.kubernetesObject.Name)
 				go func() {
-					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.obj.Name, nil)
+					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.kubernetesObject.Name, nil)
 				}()
 				return existingFsvc, nil
 			}
@@ -600,7 +600,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 
 func (gp *GenericPool) CleanupFunctionService(obj api.ObjectReference) error {
 	// remove ourselves from fsCache (only if we're still old)
-	deleted, err := gp.fsCache.DeleteByPod(obj, gp.idlePodReapTime)
+	deleted, err := gp.fsCache.DeleteByKubeObject(obj, gp.idlePodReapTime)
 	if err != nil {
 		return err
 	}
