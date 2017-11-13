@@ -82,7 +82,7 @@ This is a basic example of how you can easily use asynchronous requests in your 
 $ fission function create --name stock --env nodejs --code stock.js
 
 # Map GET /stock to your new function
-$ fission route create --method GET --url /stock --function stock
+$ fission route create --method POST --url /stock --function stock
 
 # Run the function.
 $ curl -H "Content-Type: application/json" -X POST -d '{"symbol":"AAPL"}' http://$FISSION_ROUTER/stock
@@ -102,4 +102,23 @@ $ fission fn create --name kubeEventsSlack --env nodejs --code kubeEventsSlack.j
 
 # Watch all services in the default namespace:
 $ fission watch create --function kubeEventsSlack --type service --ns default
+```
+
+## weather.js
+
+In this example, the Yahoo Weather API is used to current weather at a given location.
+
+### Usage
+
+```bash
+# Upload your function code to fission
+$ fission function create --name weather --env nodejs --code weather.js
+
+# Map GET /stock to your new function
+$ fission route create --method POST --url /weather --function weather
+
+# Run the function.
+$ curl -H "Content-Type: application/json" -X POST -d '{"location":"Sieteiglesias, Spain"}' http://$FISSION_ROUTER/weather
+
+{"text":"It is 2 celsius degrees in Sieteiglesias, Spain and Mostly Clear"}
 ```
