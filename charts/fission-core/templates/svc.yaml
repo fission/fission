@@ -10,7 +10,9 @@ spec:
   ports:
   - port: 80
     targetPort: 8888
+{{ if eq .Values.serviceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
+{{ end }}
   selector:
     svc: router
 
@@ -27,7 +29,9 @@ spec:
   ports:
   - port: 80
     targetPort: 8888
+{{ if eq .Values.serviceType "NodePort" }}
     nodePort: {{ .Values.controllerPort }}
+{{ end }}
   selector:
     svc: controller
 
