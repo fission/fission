@@ -19,9 +19,9 @@ the [upgrade guide from 0.1 to 0.2]() and then upgrade to 0.4.0.
 
 ## How to Upgrade
 
-1. Get the 0.4.0-rc CLI
+1. Get the 0.4.0 CLI
 2. Get the Fission state from v0.3 install
-3. Upgrade to Fission 0.4.0-rc
+3. Upgrade to Fission 0.4.0
 4. Upgrade Kubernetes cluster version to 1.7.x or higher
 5. Remove all TPR definition (for Kubernetes 1.7.x)
 6. Restore Fission state into CRDs
@@ -31,19 +31,19 @@ the [upgrade guide from 0.1 to 0.2]() and then upgrade to 0.4.0.
 #### OS X
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Windows
 
 For Windows, you can use the linux binary on WSL. Or you can download
-this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.4.0-rc/fission-cli-windows.exe)
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.4.0/fission-cli-windows.exe)
 
 ### Get Fission state from v0.3 install
 
@@ -57,7 +57,7 @@ variable `$FISSION_URL` set to point at a v0.3 Fission server.
 This will create a JSON file with all your fission state in the
 current directory.
 
-### Upgrade to Fission 0.4.0-rc
+### Upgrade to Fission 0.4.0
 
 Upgrade fission with a command similar to this:
 
@@ -80,7 +80,7 @@ Though Kubernetes will migrate TPRs to CRDs automatically when TPR definition is
 fission tpr2crd delete
 ```
 
-### Restore your Fission state into Fission 0.4.0-rc
+### Restore your Fission state into Fission 0.4.0
 
 ```
 fission tpr2crd restore --file state.json

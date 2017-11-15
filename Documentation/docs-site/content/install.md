@@ -48,18 +48,18 @@ First, you'll need the helm CLI:
 
 On __OS X__:
 ```
-$ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.6.1-darwin-amd64.tar.gz
+$ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.0-darwin-amd64.tar.gz
 
-$ tar xzf helm-v2.6.1-darwin-amd64.tar.gz
+$ tar xzf helm-v2.7.0-darwin-amd64.tar.gz
 
 $ mv darwin-amd64/helm /usr/local/bin
 ```
 
 On __Linux__:
 ```
-$ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.6.1-linux-amd64.tar.gz
+$ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.0-linux-amd64.tar.gz
 
-$ tar xzf helm-v2.6.1-linux-amd64.tar.gz
+$ tar xzf helm-v2.7.0-linux-amd64.tar.gz
 
 $ mv linux-amd64/helm /usr/local/bin
 ```
@@ -67,24 +67,15 @@ $ mv linux-amd64/helm /usr/local/bin
 Next, install the Helm server on your Kubernetes cluster:
 
 ```
-$ kubectl -n kube-system create sa tiller
-
-$ kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
-
-$ helm init --service-account tiller
+$ helm init
 ```
-
-(The first two commands are there to make sure that helm is allowed to
-install stuff on Kubernetes, in the common case that your cluster has
-role-based access control.)
-
 
 ### Install Fission
 
 #### Minikube
 
 ```
-$ helm install --namespace fission --set serviceType=NodePort https://github.com/fission/fission/releases/download/0.3.0/fission-all-0.3.0.tgz
+$ helm install --namespace fission --set serviceType=NodePort https://github.com/fission/fission/releases/download/0.4.0/fission-all-0.4.0.tgz
 ```
 
 The serviceType variable allows configuring the type of Kubernetes
@@ -94,7 +85,7 @@ want to expose anything outside the cluster.
 #### Cloud hosted clusters (GKE, AWS, Azure etc.)
 
 ```
-$ helm install --namespace fission https://github.com/fission/fission/releases/download/0.3.0/fission-all-0.3.0.tgz
+$ helm install --namespace fission https://github.com/fission/fission/releases/download/0.4.0/fission-all-0.4.0.tgz
 ```
 
 #### Minimal version
@@ -104,7 +95,7 @@ the NATS message queue, influxDB for logs, etc. If you want a more
 minimal setup, you can install the fission-core chart instead:
 
 ```
-$ helm install --namespace fission https://github.com/fission/fission/releases/download/0.3.0/fission-core-0.3.0.tgz
+$ helm install --namespace fission https://github.com/fission/fission/releases/download/0.4.0/fission-core-0.4.0.tgz
 ```
 
 ### Install the Fission CLI
@@ -114,19 +105,19 @@ $ helm install --namespace fission https://github.com/fission/fission/releases/d
 Get the CLI binary for Mac:
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/0.3.0/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
 ```
-$ curl -Lo fission https://github.com/fission/fission/releases/download/0.3.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+$ curl -Lo fission https://github.com/fission/fission/releases/download/0.4.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Windows
 
 For Windows, you can use the linux binary on WSL. Or you can download
-this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.3.0/fission-cli-windows.exe)
+this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.4.0/fission-cli-windows.exe)
 
 ### Set environment vars
 
@@ -166,7 +157,7 @@ svc```).  Then:
 Finally, you're ready to use Fission!
 
 ```
-$ fission env create --name nodejs --image fission/node-env:0.3.0
+$ fission env create --name nodejs --image fission/node-env:0.4.0
 
 $ curl -LO https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js
 
