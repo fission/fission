@@ -97,11 +97,11 @@ func fnCreate(c *cli.Context) error {
 	secretNameSpace := c.String("secretns")
 	cfgMapNameSpace := c.String("configmapns")
 
-	if len(secretNameSpace) == 0 {
+	if len(secretNameSpace) == 0 && len(secretName) > 0 {
 		secretNameSpace = metav1.NamespaceDefault
 	}
 
-	if len(cfgMapNameSpace) == 0 {
+	if len(cfgMapNameSpace) == 0 && len(cfgMapName) > 0 {
 		cfgMapNameSpace = metav1.NamespaceDefault
 	}
 
@@ -179,18 +179,36 @@ func fnCreate(c *cli.Context) error {
 			},
 
 			SecretList: []fission.SecretReference{
-				{Name:      secretName,
-				Namespace:  secretNameSpace,},
+
 			},
 
 			ConfigMapList: []fission.ConfigMapReference{
-				{Name:      cfgMapName,
-				Namespace:  cfgMapNameSpace,},
+				
 			},
 		},
 	}
 
+<<<<<<< HEAD
 	_, err = client.FunctionCreate(function)
+=======
+	if len(secretName) > 0 {
+		newSecret := fission.SecretReference{
+				Name:       secretName,
+				Namespace:  secretNameSpace,
+		}
+		function.Spec.SecretList = append(function.Spec.SecretList, newSecret)
+	}
+
+	if len(cfgMapName) > 0 {
+		newCfgMap := fission.ConfigMapReference{
+				Name:       cfgMapName,
+				Namespace:  cfgMapNameSpace,
+		}
+		function.Spec.ConfigMapList = append(function.Spec.ConfigMapList, newCfgMap)
+	}
+
+	_, err := client.FunctionCreate(function)
+>>>>>>> refined secret/cfgmap access, removed secret/cfgmap code from fnUpdate
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -319,13 +337,13 @@ func fnUpdate(c *cli.Context) error {
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
 	}
-
-
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
 	secretName := c.String("secret")
+	
+	/*secretName := c.String("secret")
 	secretNameSpace := c.String("secretns")
 
 	//require user to input both secret and secretnamespace together
@@ -388,7 +406,7 @@ func fnUpdate(c *cli.Context) error {
 			}
 			function.Spec.ConfigMapList = append(function.Spec.ConfigMapList, newCfgMap)
 		}
-	}
+	}*/
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: metav1.NamespaceDefault,
