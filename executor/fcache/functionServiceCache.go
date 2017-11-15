@@ -247,13 +247,9 @@ func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, mi
 	}
 
 	fsc.byFunction.Delete(crd.CacheKey(&m))
-<<<<<<< HEAD
 	fsc.byAddress.Delete(fsvc.address)
 	fsc.byKubeObject.Delete(obj)
-=======
-	fsc.byAddress.Delete(fsvc.Address)
-	fsc.byPod.Delete(podName)
->>>>>>> Rebased from master and changed references to tpr -> crd
+
 	return true, nil
 }
 
