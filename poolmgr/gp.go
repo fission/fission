@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
@@ -556,13 +557,23 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
+	kubeObjRef := api.ObjectReference{
+		Kind:            pod.TypeMeta.Kind,
+		Name:            pod.ObjectMeta.Name,
+		APIVersion:      pod.TypeMeta.APIVersion,
+		Namespace:       pod.ObjectMeta.Namespace,
+		ResourceVersion: pod.ObjectMeta.ResourceVersion,
+		UID:             pod.ObjectMeta.UID,
+	}
+
 	fsvc := &funcSvc{
-		function:    m,
-		environment: gp.env,
-		address:     svcHost,
-		podName:     pod.ObjectMeta.Name,
-		ctime:       time.Now(),
-		atime:       time.Now(),
+		function:         m,
+		environment:      gp.env,
+		address:          svcHost,
+		kubernetesObject: kubeObjRef,
+		backend:          POOLMGR,
+		ctime:            time.Now(),
+		atime:            time.Now(),
 	}
 
 	err, existingFsvc := gp.fsCache.Add(*fsvc)
@@ -571,9 +582,9 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 			if fe.Code == fission.ErrorNameExists {
 				// Some other thread beat us to it -- return the other thread's fsvc and clean up
 				// our own.
-				log.Printf("func svc already exists: %v", existingFsvc.podName)
+				log.Printf("func svc already exists: %v", existingFsvc.kubernetesObject.Name)
 				go func() {
-					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.podName, nil)
+					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.kubernetesObject.Name, nil)
 				}()
 				return existingFsvc, nil
 			}
@@ -583,19 +594,19 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*funcSvc, error) {
 	return fsvc, nil
 }
 
-func (gp *GenericPool) CleanupFunctionService(podName string) error {
+func (gp *GenericPool) CleanupFunctionService(obj api.ObjectReference) error {
 	// remove ourselves from fsCache (only if we're still old)
-	deleted, err := gp.fsCache.DeleteByPod(podName, gp.idlePodReapTime)
+	deleted, err := gp.fsCache.DeleteByKubeObject(obj, gp.idlePodReapTime)
 	if err != nil {
 		return err
 	}
 
 	if !deleted {
-		log.Printf("Not deleting %v, in use", podName)
+		log.Printf("Not deleting %v, in use", obj.Name)
 		return nil
 	}
 
-	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(podName, metav1.GetOptions{})
+	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(obj.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -613,7 +624,7 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 	}
 
 	// delete pod
-	err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(podName, nil)
+	err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(obj.Name, nil)
 	if err != nil {
 		return err
 	}
@@ -624,16 +635,16 @@ func (gp *GenericPool) CleanupFunctionService(podName string) error {
 func (gp *GenericPool) idlePodReaper() {
 	for {
 		time.Sleep(time.Minute)
-		podNames, err := gp.fsCache.ListOld(&gp.env.Metadata, gp.idlePodReapTime)
+		objects, err := gp.fsCache.ListOld(&gp.env.Metadata, gp.idlePodReapTime)
 		if err != nil {
 			log.Printf("Error reaping idle pods: %v", err)
 			continue
 		}
-		for _, podName := range podNames {
-			log.Printf("Reaping idle pod '%v'", podName)
-			err := gp.CleanupFunctionService(podName)
+		for _, obj := range objects {
+			log.Printf("Reaping idle pod '%v'", obj.Name)
+			err := gp.CleanupFunctionService(obj)
 			if err != nil {
-				log.Printf("Error deleting idle pod '%v': %v", podName, err)
+				log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
 			}
 		}
 	}
