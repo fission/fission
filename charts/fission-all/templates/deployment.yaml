@@ -348,7 +348,7 @@ metadata:
     svc: influxdb
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
-  type: ClusterIP
+  type: ClusterIP 
   ports:
   - port: 8086
     targetPort: 8086
@@ -400,25 +400,6 @@ spec:
         svc: logger
     spec:
       containers:
-        - name: logger
-          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-          imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ["/fission-bundle"]
-          args: ["--logger"]
-          volumeMounts:
-            - name: container-log
-              mountPath: /var/log/containers
-              readOnly: true
-            - name: docker-log
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: fission-log
-              mountPath: /var/log/fission
-              readOnly: false
-          ports:
-            - containerPort: 1234
-              hostPort: 1234
-              protocol: TCP
         - name: fluentd
           image: {{ .Values.logger.fluentdImage }}
           imagePullPolicy: {{ .Values.pullPolicy }}
@@ -439,9 +420,11 @@ spec:
                 secretKeyRef:
                   name: influxdb
                   key: password
+            - name: FLUENTD_PATH
+              value: /var/log/containers/*{{.Values.functionNamespace}}*.log
           volumeMounts:
             - name: container-log
-              mountPath: /var/log/containers
+              mountPath: /var/log/
               readOnly: true
             - name: docker-log
               mountPath: /var/lib/docker/containers
@@ -453,7 +436,7 @@ spec:
       volumes:
         - name: container-log
           hostPath:
-              path: /var/log/containers
+              path: /var/log/
         - name: docker-log
           hostPath:
               path: /var/lib/docker/containers

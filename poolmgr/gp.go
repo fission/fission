@@ -43,7 +43,6 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
-	"github.com/fission/fission/logger"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -347,9 +346,6 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 	if err != nil {
 		return err
 	}
-
-	// Tell logging helper about this function invocation
-	gp.setupLogging(pod, metadata)
 
 	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata.Name)
@@ -681,33 +677,4 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
-}
-
-// Calls the logging daemonset pod on the node where the given pod is
-// running.
-func (gp *GenericPool) setupLogging(pod *apiv1.Pod, metadata *metav1.ObjectMeta) {
-	logReq := logger.LogRequest{
-		Namespace: pod.Namespace,
-		Pod:       pod.Name,
-		Container: gp.env.Metadata.Name,
-		FuncName:  metadata.Name,
-		FuncUid:   string(metadata.UID),
-	}
-	reqbody, err := json.Marshal(logReq)
-	if err != nil {
-		log.Printf("Error creating log request")
-		return
-	}
-	go func() {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
-		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
-		if err != nil {
-			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-	}()
 }
