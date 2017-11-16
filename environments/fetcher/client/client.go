@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	//"time"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
-	//"github.com/fission/fission/router"
 )
 
 type (
@@ -30,11 +30,8 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 		return err
 	}
 
-	// client := http.Client{
-	// 	Transport: router.MakeRetryingRoundTripper(10, 50*time.Millisecond),
-	// }
+	resp, err := retryablehttp.Post(c.url, "application/json", bytes.NewReader(body))
 
-	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

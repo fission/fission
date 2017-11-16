@@ -48,3 +48,4 @@ import:
   version: ^v0.4.0
 - package: github.com/graymeta/stow
 - package: github.com/mholt/archiver
+- package: github.com/hashicorp/go-retryablehttp
