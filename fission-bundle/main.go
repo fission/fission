@@ -5,9 +5,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/fission/fission/executor"
-
 	"github.com/docopt/docopt-go"
+
 	"github.com/fission/fission/buildermgr"
 	"github.com/fission/fission/controller"
 	"github.com/fission/fission/executor"

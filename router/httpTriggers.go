@@ -51,20 +51,6 @@ type HTTPTriggerSet struct {
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	executor *executorClient.Client, crdClient *rest.RESTClient) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
-	fissionClient *crd.FissionClient
-	executor      *executorClient.Client
-	resolver      *functionReferenceResolver
-	triggers      []crd.HTTPTrigger
-	triggerStore  k8sCache.Store
-	functions     []crd.Function
-	funcStore     k8sCache.Store
-	crdClient     *rest.RESTClient
-}
-
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	executor *executorClient.Client, resolver *functionReferenceResolver, crdClient *rest.RESTClient) *HTTPTriggerSet {
-	triggers := make([]crd.HTTPTrigger, 1)
-	return &HTTPTriggerSet{
 		functionServiceMap: fmap,
 		triggers:           []crd.HTTPTrigger{},
 		fissionClient:      fissionClient,

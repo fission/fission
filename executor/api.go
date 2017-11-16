@@ -17,67 +17,6 @@ limitations under the License.
 package executor
 
 import (
-<<<<<<< HEAD
-	"fmt"
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
-
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-)
-
-type (
-	Executor struct {
-		poolmgrUrl string
-	}
-)
-
-func MakeExecutor(url string) *Executor {
-	executor := &Executor{
-		poolmgrUrl: url,
-	}
-	return executor
-}
-
-func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
-	svcUrl, err := url.Parse(executor.poolmgrUrl + "/v2/getServiceForFunction")
-	if err != nil {
-		log.Printf("Failed to establish proxy server for PoolMgr: %v", err)
-		http.Error(w, "Failed to read request", 500)
-		return
-	}
-	director := func(req *http.Request) {
-		req.URL.Scheme = svcUrl.Scheme
-		req.URL.Host = svcUrl.Host
-		req.URL.Path = svcUrl.Path
-	}
-	proxy := &httputil.ReverseProxy{
-		Director: director,
-	}
-	proxy.ServeHTTP(w, r)
-}
-
-func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
-	//http.Redirect(w, r, executor.poolmgrUrl+"/v2/tapService", 301)
-	svcUrl, err := url.Parse(executor.poolmgrUrl + "/v2/tapService")
-	if err != nil {
-		log.Printf("Failed to establish proxy server for PoolMgr: %v", err)
-		http.Error(w, "Failed to read request", 500)
-		return
-	}
-	director := func(req *http.Request) {
-		req.URL.Scheme = svcUrl.Scheme
-		req.URL.Host = svcUrl.Host
-		req.URL.Path = svcUrl.Path
-	}
-	proxy := &httputil.ReverseProxy{
-		Director: director,
-	}
-	proxy.ServeHTTP(w, r)
-=======
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -154,7 +93,6 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
->>>>>>> Executor logic separated from Poolmgr backend completely, placeholder for new backend
 }
 
 func (executor *Executor) Serve(port int) {
