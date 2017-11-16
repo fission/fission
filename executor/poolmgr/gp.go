@@ -567,14 +567,15 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fcache.FuncSvc, error)
 		UID:             pod.ObjectMeta.UID,
 	}
 
-	fsvc := &funcSvc{
-		function:         m,
-		environment:      gp.env,
-		address:          svcHost,
-		kubernetesObject: kubeObjRef,
-		backend:          POOLMGR,
-		ctime:            time.Now(),
-		atime:            time.Now(),
+	fsvc := &fcache.FuncSvc{
+		Function:         m,
+		Environment:      gp.env,
+		Address:          svcHost,
+		KubernetesObject: kubeObjRef,
+		Backend:          fcache.POOLMGR,
+
+		Ctime: time.Now(),
+		Atime: time.Now(),
 	}
 
 	err, existingFsvc := gp.fsCache.Add(*fsvc)
@@ -583,9 +584,9 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fcache.FuncSvc, error)
 			if fe.Code == fission.ErrorNameExists {
 				// Some other thread beat us to it -- return the other thread's fsvc and clean up
 				// our own.
-				log.Printf("func svc already exists: %v", existingFsvc.kubernetesObject.Name)
+				log.Printf("func svc already exists: %v", existingFsvc.KubernetesObject.Name)
 				go func() {
-					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.kubernetesObject.Name, nil)
+					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.KubernetesObject.Name, nil)
 				}()
 				return existingFsvc, nil
 			}

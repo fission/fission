@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
@@ -129,13 +130,22 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 	}
 	svcAddress := fmt.Sprintf("%v.%v.svc.cluster.local", svcName, deploy.namespace)
 
+	kubeObjRef := api.ObjectReference{
+		Kind:            depl.TypeMeta.Kind,
+		Name:            depl.ObjectMeta.Name,
+		APIVersion:      depl.TypeMeta.APIVersion,
+		Namespace:       depl.ObjectMeta.Namespace,
+		ResourceVersion: depl.ObjectMeta.ResourceVersion,
+		UID:             depl.ObjectMeta.UID,
+	}
+
 	fsvc := &fcache.FuncSvc{
-		Function:    metadata,
-		Environment: env,
-		Address:     svcAddress,
-		PodName:     depl.ObjectMeta.Name,
-		Ctime:       time.Now(),
-		Atime:       time.Now(),
+		Function:         metadata,
+		Environment:      env,
+		Address:          svcAddress,
+		KubernetesObject: kubeObjRef,
+		Ctime:            time.Now(),
+		Atime:            time.Now(),
 	}
 
 	return fsvc, nil
