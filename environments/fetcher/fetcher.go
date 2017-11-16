@@ -289,7 +289,6 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			
 
 			}
-
 		}
 	}
 
@@ -310,15 +309,8 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			body, err = data.Marshal()
-			if err != nil{
-				e := fmt.Sprintf("Failed to marshal configmap: %v", err)
-				log.Printf(e)
-				http.Error(w, e, 400)
-				return
-			}
-
-			configDir := filepath.Join(fetcher.sharedConfigPath, config.Namespace)
+			configPath := config.Namespace + "/" + config.Name
+			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
 			err = os.MkdirAll(configDir, 0777)
 			if err != nil{
 				e := fmt.Sprintf("Failed to create directory %v: %v", configDir, err)
@@ -327,16 +319,17 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			configPath := filepath.Join(configDir, config.Name)
-			err = ioutil.WriteFile(configPath, body, 0600)
-			if err != nil{
-				e := fmt.Sprintf("Failed to write file %v: %v", configPath, err)
-				log.Printf(e)
-				http.Error(w, e, 500)
-				return
+			for key, val := range data.Data {
+				configFilePath := filepath.Join(configDir, key)
+				err = ioutil.WriteFile(configFilePath, []byte(val), 0600)
+					if err != nil {
+						e := fmt.Sprintf("Failed to write file %v: %v", configPath, err)
+						log.Printf(e)
+						http.Error(w, e, 500)
+						return
 
+					}
 			}
-
 		}
 	}
 
