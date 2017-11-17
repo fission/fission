@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
@@ -28,29 +32,36 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 		return err
 	}
 
-	maxretries := 10
+	maxRetries := 20
 	var resp *http.Response
 
-	for i := 0; i < maxretries-1; i++ {
+	for i := 0; i < maxRetries; i++ {
 		resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
 
 		if err == nil && resp.StatusCode == 200 {
 			defer resp.Body.Close()
 			return nil
 		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						continue
+					}
+				}
+			}
+		}
 	}
 
-	resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
+	if err == nil {
+		err = fission.MakeErrorFromHTTP(resp)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fission.MakeErrorFromHTTP(resp)
-	}
-
-	return nil
+	log.Printf("Failed to fetch: %v", err)
+	return err
 }
 
 func (c *Client) Upload(fr *fetcher.UploadRequest) (*fetcher.UploadResponse, error) {
