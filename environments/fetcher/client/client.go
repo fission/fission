@@ -6,8 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
-
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
@@ -30,7 +28,19 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 		return err
 	}
 
-	resp, err := retryablehttp.Post(c.url, "application/json", bytes.NewReader(body))
+	maxretries := 10
+	var resp *http.Response
+
+	for i := 0; i < maxretries-1; i++ {
+		resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
+
+		if err == nil && resp.StatusCode == 200 {
+			defer resp.Body.Close()
+			return nil
+		}
+	}
+
+	resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
 
 	if err != nil {
 		return err
