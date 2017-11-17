@@ -93,7 +93,7 @@ func fnCreate(c *cli.Context) error {
 =======
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
-	
+
 	secretNameSpace := c.String("secretns")
 	cfgMapNameSpace := c.String("configmapns")
 
@@ -178,13 +178,9 @@ func fnCreate(c *cli.Context) error {
 				},
 			},
 
-			SecretList: []fission.SecretReference{
+			SecretList: []fission.SecretReference{},
 
-			},
-
-			ConfigMapList: []fission.ConfigMapReference{
-				
-			},
+			ConfigMapList: []fission.ConfigMapReference{},
 		},
 	}
 
@@ -193,16 +189,16 @@ func fnCreate(c *cli.Context) error {
 =======
 	if len(secretName) > 0 {
 		newSecret := fission.SecretReference{
-				Name:       secretName,
-				Namespace:  secretNameSpace,
+			Name:      secretName,
+			Namespace: secretNameSpace,
 		}
 		function.Spec.SecretList = append(function.Spec.SecretList, newSecret)
 	}
 
 	if len(cfgMapName) > 0 {
 		newCfgMap := fission.ConfigMapReference{
-				Name:       cfgMapName,
-				Namespace:  cfgMapNameSpace,
+			Name:      cfgMapName,
+			Namespace: cfgMapNameSpace,
 		}
 		function.Spec.ConfigMapList = append(function.Spec.ConfigMapList, newCfgMap)
 	}
@@ -366,7 +362,7 @@ func fnUpdate(c *cli.Context) error {
 		}
 
 		if !secretExists {
-			
+
 			newSecret := fission.SecretReference{
 				Name:       secretName,
 				Namespace:  secretNameSpace,
@@ -399,7 +395,7 @@ func fnUpdate(c *cli.Context) error {
 		}
 
 		if !cfgMapExists {
-			
+
 			newCfgMap := fission.ConfigMapReference{
 				Name:       cfgMapName,
 				Namespace:  cfgMapNameSpace,
