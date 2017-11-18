@@ -44,7 +44,7 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
-	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/executor/fscache"
 )
 
 const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
@@ -53,14 +53,14 @@ const POD_PHASE_RUNNING string = "Running"
 type (
 	GenericPool struct {
 		env                    *crd.Environment
-		replicas               int32                        // num idle pods
-		deployment             *v1beta1.Deployment          // kubernetes deployment
-		namespace              string                       // namespace to keep our resources
-		podReadyTimeout        time.Duration                // timeout for generic pods to become ready
-		idlePodReapTime        time.Duration                // pods unused for idlePodReapTime are deleted
-		fsCache                *fcache.FunctionServiceCache // cache funcSvc's by function, address and podname
-		useSvc                 bool                         // create k8s service for specialized pods
-		poolInstanceId         string                       // small random string to uniquify pod names
+		replicas               int32                         // num idle pods
+		deployment             *v1beta1.Deployment           // kubernetes deployment
+		namespace              string                        // namespace to keep our resources
+		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
+		idlePodReapTime        time.Duration                 // pods unused for idlePodReapTime are deleted
+		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
+		useSvc                 bool                          // create k8s service for specialized pods
+		poolInstanceId         string                        // small random string to uniquify pod names
 		fetcherImage           string
 		fetcherImagePullPolicy apiv1.PullPolicy
 		runtimeImagePullPolicy apiv1.PullPolicy // pull policy for generic pool to created env deployment
@@ -100,7 +100,7 @@ func MakeGenericPool(
 	env *crd.Environment,
 	initialReplicas int32,
 	namespace string,
-	fsCache *fcache.FunctionServiceCache,
+	fsCache *fscache.FunctionServiceCache,
 	instanceId string) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
@@ -516,7 +516,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 	return svc, err
 }
 
-func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fcache.FuncSvc, error) {
+func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 
 	log.Printf("[%v] Choosing pod from pool", m.Name)
 	newLabels := gp.labelsForFunction(m)
@@ -567,29 +567,18 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fcache.FuncSvc, error)
 		UID:             pod.ObjectMeta.UID,
 	}
 
-	fsvc := &fcache.FuncSvc{
+	fsvc := &fscache.FuncSvc{
 		Function:         m,
 		Environment:      gp.env,
 		Address:          svcHost,
 		KubernetesObject: kubeObjRef,
-		Backend:          fcache.POOLMGR,
+		Backend:          fscache.POOLMGR,
 		Ctime:            time.Now(),
 		Atime:            time.Now(),
 	}
 
-	err, existingFsvc := gp.fsCache.Add(*fsvc)
+	err, _ = gp.fsCache.Add(*fsvc)
 	if err != nil {
-		if fe, ok := err.(fission.Error); ok {
-			if fe.Code == fission.ErrorNameExists {
-				// Some other thread beat us to it -- return the other thread's fsvc and clean up
-				// our own.
-				log.Printf("func svc already exists: %v", existingFsvc.KubernetesObject.Name)
-				go func() {
-					gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(fsvc.KubernetesObject.Name, nil)
-				}()
-				return existingFsvc, nil
-			}
-		}
 		return nil, err
 	}
 	return fsvc, nil

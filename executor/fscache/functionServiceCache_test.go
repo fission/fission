@@ -1,4 +1,4 @@
-package fcache
+package fscache
 
 import (
 	"log"
@@ -26,7 +26,7 @@ func TestFunctionServiceCache(t *testing.T) {
 			Name: "foo",
 			UID:  "1212",
 		},
-		environment: &crd.Environment{
+		Environment: &crd.Environment{
 			Metadata: metav1.ObjectMeta{
 				Name: "foo-env",
 				UID:  "2323",
@@ -39,15 +39,15 @@ func TestFunctionServiceCache(t *testing.T) {
 				Builder: fission.Builder{},
 			},
 		},
-		address: "xxx",
-		kubernetesObject: api.ObjectReference{
+		Address: "xxx",
+		KubernetesObject: api.ObjectReference{
 			Kind:       "pod",
 			Name:       "xxx",
 			APIVersion: "v1",
 			Namespace:  "fission-function",
 		},
-		ctime: now,
-		atime: now,
+		Ctime: now,
+		Atime: now,
 	}
 	err, _ := fsc.Add(*fsvc)
 	if err != nil {
@@ -73,11 +73,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-<<<<<<< HEAD:executor/fcache/functionServiceCache_test.go
-	deleted, err := fsc.DeleteByPod(fsvc.PodName, 0)
-=======
-	deleted, err := fsc.DeleteByKubeObject(fsvc.kubernetesObject, 0)
->>>>>>> Changed podName to a generic objectReference in fscache (#391):poolmgr/functionServiceCache_test.go
+	deleted, err := fsc.DeleteByKubeObject(fsvc.KubernetesObject, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)

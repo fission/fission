@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fcache
+package fscache
 
 import (
 	"log"
@@ -44,18 +44,18 @@ const (
 )
 
 type (
-	funcSvc struct {
-		function         *metav1.ObjectMeta  // function this pod/service is for
-		environment      *crd.Environment    // function's environment
-		address          string              // Host:Port or IP:Port that the function's service can be reached at.
-		kubernetesObject api.ObjectReference // Kubernetes Object (within the function namespace)
-		backend          backendType
+	FuncSvc struct {
+		Function         *metav1.ObjectMeta  // function this pod/service is for
+		Environment      *crd.Environment    // function's environment
+		Address          string              // Host:Port or IP:Port that the function's service can be reached at.
+		KubernetesObject api.ObjectReference // Kubernetes Object (within the function namespace)
+		Backend          backendType
 
 		Ctime time.Time
 		Atime time.Time
 	}
 
-	functionServiceCache struct {
+	FunctionServiceCache struct {
 		byFunction   *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
 		byAddress    *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
 		byKubeObject *cache.Cache // obj          -> function : map[api.ObjectReference]metav1.ObjectMeta
@@ -120,8 +120,8 @@ func (fsc *FunctionServiceCache) service() {
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
 			for key, fsvcI := range funcCopy {
-				fsvc := fsvcI.(*funcSvc)
-				log.Printf("%v\t%v\t%v", key, fsvc.kubernetesObject.Kind, fsvc.kubernetesObject.Name)
+				fsvc := fsvcI.(*FuncSvc)
+				log.Printf("%v\t%v\t%v", key, fsvc.KubernetesObject.Kind, fsvc.KubernetesObject.Name)
 			}
 		case DELETE_BY_OBJECT:
 			resp.deleted, resp.error = fsc._deleteByKubeObject(req.kubernetesObject, req.age)
@@ -177,7 +177,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
-	err, _ = fsc.byKubeObject.Set(fsvc.kubernetesObject, *fsvc.function)
+	err, _ = fsc.byKubeObject.Set(fsvc.KubernetesObject, *fsvc.Function)
 	if err != nil {
 		if fe, ok := err.(fission.Error); ok {
 			if fe.Code == fission.ErrorNameExists {
@@ -216,7 +216,7 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 	return nil
 }
 
-func (fsc *functionServiceCache) DeleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) DeleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:      DELETE_BY_OBJECT,
@@ -230,7 +230,7 @@ func (fsc *functionServiceCache) DeleteByKubeObject(obj api.ObjectReference, min
 
 // _deleteByKubeObject deletes the entry keyed by Kubernetes Object, but only if it is
 // at least minAge old.
-func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) _deleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
 	mI, err := fsc.byKubeObject.Get(obj)
 	if err != nil {
 		return false, err
@@ -247,12 +247,13 @@ func (fsc *functionServiceCache) _deleteByKubeObject(obj api.ObjectReference, mi
 	}
 
 	fsc.byFunction.Delete(crd.CacheKey(&m))
-	fsc.byAddress.Delete(fsvc.address)
+	fsc.byAddress.Delete(fsvc.Address)
 	fsc.byKubeObject.Delete(obj)
+
 	return true, nil
 }
 
-func (fsc *functionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]api.ObjectReference, error) {
+func (fsc *FunctionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]api.ObjectReference, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,

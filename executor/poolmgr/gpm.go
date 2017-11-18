@@ -25,7 +25,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/executor/fscache"
 )
 
 type requestType int
@@ -42,7 +42,7 @@ type (
 		namespace        string
 
 		fissionClient  *crd.FissionClient
-		fsCache        *fcache.FunctionServiceCache
+		fsCache        *fscache.FunctionServiceCache
 		instanceId     string
 		requestChannel chan *request
 	}
@@ -63,7 +63,7 @@ func MakeGenericPoolManager(
 	kubernetesClient *kubernetes.Clientset,
 	fissionNamespace string,
 	functionNamespace string,
-	fsCache *fcache.FunctionServiceCache,
+	fsCache *fscache.FunctionServiceCache,
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{

@@ -73,7 +73,7 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 		respChan: respChan,
 	}
 	resp := <-respChan
-	return resp.address, resp.err
+	return resp.funcSvc.Address, resp.err
 }
 
 // find funcSvc and update its atime
