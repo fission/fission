@@ -39,7 +39,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
-	"github.com/fission/fission/executor/fcache"
+	"github.com/fission/fission/executor/fscache"
 	"github.com/fission/fission/logger"
 )
 
@@ -87,7 +87,7 @@ func MakeNewDeploy(
 	return nd
 }
 
-func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environment) (*fcache.FuncSvc, error) {
+func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environment) (*fscache.FuncSvc, error) {
 	fn, err := deploy.fissionClient.
 		Functions(metadata.Namespace).
 		Get(metadata.Name)
@@ -139,7 +139,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 		UID:             depl.ObjectMeta.UID,
 	}
 
-	fsvc := &fcache.FuncSvc{
+	fsvc := &fscache.FuncSvc{
 		Function:         metadata,
 		Environment:      env,
 		Address:          svcAddress,
