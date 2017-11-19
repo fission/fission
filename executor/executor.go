@@ -132,7 +132,7 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 		return "", err
 	}
 	// Appropriate backend handles the service creation
-	backend := os.Getenv("EXECUTOR_BACKEND")
+	backend, err := executor.chooseBackend(meta)
 
 	switch backend {
 	case "NEWDEPLOY":
@@ -157,6 +157,10 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (str
 		fmt.Println("Returning address of service:", fsvc.Address)
 		return fsvc.Address, nil
 	}
+}
+
+func (executor *Executor) chooseBackend(meta *metav1.ObjectMeta) (string, error) {
+	return os.Getenv("EXECUTOR_BACKEND"), nil
 }
 
 func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {

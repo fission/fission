@@ -18,6 +18,7 @@ package fission
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/pkg/api/v1"
 )
 
 type (
@@ -102,6 +103,12 @@ type (
 		FunctionName string `json:"functionName"`
 	}
 
+	BackendType string
+
+	InvokeSpec struct {
+		Backend BackendType
+	}
+
 	// FunctionSpec describes the contents of the function.
 	FunctionSpec struct {
 		// Environment is the build and runtime environment that this function is
@@ -111,6 +118,11 @@ type (
 
 		// Reference to a package containing deployment and optionally the source
 		Package FunctionPackageRef `json:"package"`
+
+		InvokeSpec InvokeSpec `json:"invokeSpecs"`
+
+		// cpu and memory resources as per K8S standards
+		Resources v1.ResourceRequirements `json:"resources"`
 	}
 
 	FunctionReferenceType string
@@ -171,6 +183,8 @@ type (
 		// Optional
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
+
+		Resources v1.ResourceRequirements `json:"resources"`
 	}
 
 	AllowedFunctionsPerContainer string
