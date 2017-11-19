@@ -275,7 +275,6 @@ spec:
         - name: EXECUTOR_BACKEND
           value: "{{ .Values.execBackend }}"
       serviceAccount: fission-svc
-
 ---
 apiVersion: v1
 kind: Service

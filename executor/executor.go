@@ -17,7 +17,10 @@ limitations under the License.
 package executor
 
 import (
+<<<<<<< HEAD
 	"fmt"
+=======
+>>>>>>> executor_abstraction
 	"log"
 	"os"
 	"sync"
@@ -28,18 +31,28 @@ import (
 
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
+<<<<<<< HEAD
 	"github.com/fission/fission/executor/fcache"
 	"github.com/fission/fission/executor/newdeploy"
+=======
+	"github.com/fission/fission/executor/fscache"
+>>>>>>> executor_abstraction
 	"github.com/fission/fission/executor/poolmgr"
 )
 
 type (
 	Executor struct {
 		gpm           *poolmgr.GenericPoolManager
+<<<<<<< HEAD
 		ndm           *newdeploy.NewDeploy
 		functionEnv   *cache.Cache
 		fissionClient *crd.FissionClient
 		fsCache       *fcache.FunctionServiceCache
+=======
+		functionEnv   *cache.Cache
+		fissionClient *crd.FissionClient
+		fsCache       *fscache.FunctionServiceCache
+>>>>>>> executor_abstraction
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  map[string]*sync.WaitGroup
@@ -50,15 +63,25 @@ type (
 	}
 
 	createFuncServiceResponse struct {
+<<<<<<< HEAD
 		address string
+=======
+		funcSvc *fscache.FuncSvc
+>>>>>>> executor_abstraction
 		err     error
 	}
 )
 
+<<<<<<< HEAD
 func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fcache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		gpm:           gpm,
 		ndm:           ndm,
+=======
+func MakeExecutor(gpm *poolmgr.GenericPoolManager, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
+	executor := &Executor{
+		gpm:           gpm,
+>>>>>>> executor_abstraction
 		functionEnv:   cache.MakeCache(10*time.Second, 0),
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
@@ -93,9 +116,15 @@ func (executor *Executor) serveCreateFuncServices() {
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
 			go func() {
+<<<<<<< HEAD
 				address, err := executor.createServiceForFunction(m)
 				req.respChan <- &createFuncServiceResponse{
 					address: address,
+=======
+				fsvc, err := executor.createServiceForFunction(m)
+				req.respChan <- &createFuncServiceResponse{
+					funcSvc: fsvc,
+>>>>>>> executor_abstraction
 					err:     err,
 				}
 				delete(executor.fsCreateWg, crd.CacheKey(m))
@@ -109,12 +138,17 @@ func (executor *Executor) serveCreateFuncServices() {
 
 				// get the function service from the cache
 				fsvc, err := executor.fsCache.GetByFunction(m)
+<<<<<<< HEAD
 				address := ""
 				if err == nil {
 					address = fsvc.Address
 				}
 				req.respChan <- &createFuncServiceResponse{
 					address: address,
+=======
+				req.respChan <- &createFuncServiceResponse{
+					funcSvc: fsvc,
+>>>>>>> executor_abstraction
 					err:     err,
 				}
 			}()
@@ -122,6 +156,7 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
+<<<<<<< HEAD
 func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (string, error) {
 	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
@@ -163,6 +198,36 @@ func (executor *Executor) chooseBackend(meta *metav1.ObjectMeta) (string, error)
 	return os.Getenv("EXECUTOR_BACKEND"), nil
 }
 
+=======
+func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+	log.Printf("[%v] No cached function service found, creating one", m.Name)
+
+	env, err := executor.getFunctionEnv(m)
+	if err != nil {
+		return nil, err
+	}
+	// Appropriate backend handles the service creation
+	backend := os.Getenv("EXECUTOR_BACKEND")
+	switch backend {
+	case "DEPLOY":
+		return nil, nil
+	default:
+		pool, err := executor.gpm.GetPool(env)
+		if err != nil {
+			return nil, err
+		}
+		// from GenericPool -> get one function container
+		// (this also adds to the cache)
+		log.Printf("[%v] getting function service from pool", m.Name)
+		fsvc, err := pool.GetFuncSvc(m)
+		if err != nil {
+			return nil, err
+		}
+		return fsvc, nil
+	}
+}
+
+>>>>>>> executor_abstraction
 func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {
 	var env *crd.Environment
 
@@ -200,6 +265,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
+<<<<<<< HEAD
 	fsCache := fcache.MakeFunctionServiceCache()
 
 	poolID := uniuri.NewLen(8)
@@ -213,6 +279,18 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 		functionNamespace)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
+=======
+
+	instanceID := uniuri.NewLen(8)
+	poolmgr.CleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceID)
+
+	fsCache := fscache.MakeFunctionServiceCache()
+	gpm := poolmgr.MakeGenericPoolManager(
+		fissionClient, kubernetesClient, fissionNamespace,
+		functionNamespace, fsCache, instanceID)
+
+	api := MakeExecutor(gpm, fissionClient, fsCache)
+>>>>>>> executor_abstraction
 	go api.Serve(port)
 
 	return nil
