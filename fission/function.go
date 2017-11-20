@@ -105,7 +105,7 @@ func fnCreate(c *cli.Context) error {
 		cfgMapNameSpace = metav1.NamespaceDefault
 	}
 
-	fmt.Println("secret: %s cfg: %s", secretName, cfgMapName)
+	//fmt.Println("secret: %s cfg: %s", secretName, cfgMapName)
 
 	srcArchiveName := c.String("src")
 	deployArchiveName := c.String("code")
