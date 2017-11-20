@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/executor/newdeploy"
 
 	"github.com/dchest/uniuri"
@@ -127,16 +128,11 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 	if err != nil {
 		return nil, err
 	}
-	// Appropriate backend handles the service creation
-	backend, err := executor.chooseBackend(meta)
 
-	switch backend {
-	case "NEWDEPLOY":
+	switch env.Spec.Backend {
+	case fission.BackendTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta, env)
-		if err != nil {
-			return nil, err
-		}
-		return fs, nil
+		return fs, err
 
 	default:
 		pool, err := executor.gpm.GetPool(env)
@@ -147,10 +143,7 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		// (this also adds to the cache)
 		log.Printf("[%v] getting function service from pool", meta.Name)
 		fsvc, err := pool.GetFuncSvc(meta)
-		if err != nil {
-			return nil, err
-		}
-		return fsvc, nil
+		return fsvc, err
 	}
 }
 
