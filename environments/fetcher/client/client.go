@@ -48,8 +48,7 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 			if netErr, ok := urlErr.Err.(*net.OpError); ok {
 				if netErr.Op == "dial" {
 					if i < maxRetries-1 {
-						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
 						continue
 					}
 				}
