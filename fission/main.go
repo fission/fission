@@ -104,14 +104,15 @@ func main() {
 
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
+	envBackendFlag := cli.StringFlag{Name: "backend", Usage: "Backend for environment (One of poolmgr and newdeploy supported), defaults to poolmgr"}
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
 	envBuilderImageFlag := cli.StringFlag{Name: "builder", Usage: "Environment builder image URL (optional)"}
 	envBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for environment builder to build source package (optional)"}
 	envVersionFlag := cli.IntFlag{Name: "version", Usage: "Environment API version: defaults to 1 (means v1 interface)"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envVersionFlag}, Action: envCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envBackendFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envVersionFlag}, Action: envCreate},
 		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag}, Action: envGet},
-		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag}, Action: envUpdate},
+		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envBackendFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag}, Action: envUpdate},
 		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag}, Action: envDelete},
 		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{}, Action: envList},
 	}

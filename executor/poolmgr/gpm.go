@@ -107,13 +107,16 @@ func (gpm *GenericPoolManager) service() {
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
 			latestEnvSet := make(map[string]bool)
+			latestEnvBackend := make(map[string]fission.BackendType)
 			for _, env := range req.envList {
 				latestEnvSet[crd.CacheKey(&env.Metadata)] = true
+				latestEnvBackend[crd.CacheKey(&env.Metadata)] = env.Spec.Backend
 			}
 			for key, pool := range gpm.pools {
 				_, ok := latestEnvSet[key]
-				if !ok {
-					// Env no longer exists -- remove our cache
+				backend := latestEnvBackend[key]
+				if !ok || backend != fission.BackendTypePoolmgr {
+					// Env no longer exists or backend type changed -- remove our cache
 					log.Printf("Destroying generic pool for environment [%v]", key)
 					delete(gpm.pools, key)
 
@@ -160,9 +163,13 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
 		for i := range envs.Items {
-			_, err := gpm.GetPool(&envs.Items[i])
-			if err != nil {
-				log.Printf("eager-create pool failed: %v", err)
+			env := envs.Items[i]
+			// Create pool only for poolmgr backend (Ignore other backends)
+			if env.Spec.Backend == fission.BackendTypePoolmgr {
+				_, err := gpm.GetPool(&envs.Items[i])
+				if err != nil {
+					log.Printf("eager-create pool failed: %v", err)
+				}
 			}
 		}
 
