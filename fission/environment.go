@@ -19,10 +19,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -54,6 +57,8 @@ func envCreate(c *cli.Context) error {
 		}
 	}
 
+	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmem"), c.Int("maxmem"))
+
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
 	if envVersion == 0 {
@@ -74,7 +79,8 @@ func envCreate(c *cli.Context) error {
 				Image:   envBuilderImg,
 				Command: envBuildCmd,
 			},
-			Backend: envBackend,
+			Backend:   envBackend,
+			Resources: resourceReq,
 		},
 	}
 
@@ -200,7 +206,56 @@ func chooseBackend(backendName string) fission.BackendType {
 	case fission.BackendTypeNewdeploy:
 		envBackend = fission.BackendTypeNewdeploy
 	default:
-		fatal("Backend must be left blank or be one of 'poolmgr' or 'newdeploy'")
+		fatal("Backend must be one of 'poolmgr' or 'newdeploy'")
 	}
 	return envBackend
+}
+
+func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceRequirements {
+	if mincpu < 1 || maxcpu < 1 {
+		fatal("Minmum and Maximum CPU should be more than 1")
+	}
+
+	requestResources := make(map[v1.ResourceName]resource.Quantity)
+
+	if mincpu != 0 {
+		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
+		if err != nil {
+			fatal("Failed to parse mincpu")
+		}
+		requestResources[v1.ResourceRequestsCPU] = cpuRequest
+	}
+
+	if minmem != 0 {
+		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
+		if err != nil {
+			fatal("Failed to parse minmemory")
+		}
+		requestResources[v1.ResourceRequestsMemory] = memRequest
+	}
+
+	limitResources := make(map[v1.ResourceName]resource.Quantity)
+
+	if maxcpu != 0 {
+		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
+		if err != nil {
+			fatal("Failed to parse maxcpu")
+		}
+		limitResources[v1.ResourceLimitsCPU] = cpuLimit
+	}
+
+	if maxmem != 0 {
+		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
+		if err != nil {
+			fatal("Failed to parse maxmemory")
+		}
+		limitResources[v1.ResourceLimitsMemory] = memLimit
+	}
+
+	resources := v1.ResourceRequirements{
+		Requests: requestResources,
+		Limits:   limitResources,
+	}
+
+	return resources
 }
