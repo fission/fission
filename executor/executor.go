@@ -25,13 +25,12 @@ import (
 	"github.com/dchest/uniuri"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
-	"github.com/fission/fission/executor/poolmgr"  
-	"github.com/fission/fission"
 	"github.com/fission/fission/executor/newdeploy"
-
+	"github.com/fission/fission/executor/poolmgr"
 )
 
 type (
@@ -149,7 +148,6 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 func (executor *Executor) chooseBackend(meta *metav1.ObjectMeta) (string, error) {
 	return os.Getenv("EXECUTOR_BACKEND"), nil
 }
-
 
 func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {
 	var env *crd.Environment
