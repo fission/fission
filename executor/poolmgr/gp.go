@@ -445,6 +445,7 @@ func (gp *GenericPool) createPool() error {
 									MountPath: gp.sharedMountPath,
 								},
 							},
+							Resources: gp.env.Spec.Resources,
 						},
 						{
 							Name:                   "fetcher",

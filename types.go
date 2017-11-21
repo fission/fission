@@ -178,7 +178,7 @@ type (
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
 
-		Resources v1.ResourceRequirements `json:"resources"`
+		Resources v1.ResourceRequirements `json:"resourcerequirements"`
 
 		Backend BackendType
 	}

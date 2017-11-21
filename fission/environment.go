@@ -57,7 +57,7 @@ func envCreate(c *cli.Context) error {
 		}
 	}
 
-	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmem"), c.Int("maxmem"))
+	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
 
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
@@ -213,7 +213,7 @@ func chooseBackend(backendName string) fission.BackendType {
 
 func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceRequirements {
 	if mincpu < 1 || maxcpu < 1 {
-		fatal("Minmum and Maximum CPU should be more than 1")
+		fatal("Minmum and Maximum CPU should be more than 1 (Millicore)")
 	}
 
 	requestResources := make(map[v1.ResourceName]resource.Quantity)

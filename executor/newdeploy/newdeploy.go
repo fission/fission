@@ -17,19 +17,16 @@ limitations under the License.
 package newdeploy
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
@@ -40,7 +37,6 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	"github.com/fission/fission/executor/fscache"
-	"github.com/fission/fission/logger"
 )
 
 type (
@@ -108,27 +104,17 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environ
 
 	depl, err := deploy.createOrGetDeployment(fn, env, deplName, deployLables)
 	if err != nil {
+		log.Printf("Failed to create deployment", err)
 		return nil, err
-	}
-
-	pods, err := deploy.kubernetesClient.CoreV1().Pods(deploy.namespace).List(
-		metav1.ListOptions{
-			LabelSelector: labels.Set(deployLables).AsSelector().String(),
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	for _, pod := range pods.Items {
-		deploy.setupLogging(&pod, metadata, env)
 	}
 
 	svcName := fmt.Sprintf("nds-%v", deployName)
-	_, err = deploy.createOrGetSvc(deployLables, svcName)
+	svc, err := deploy.createOrGetSvc(deployLables, svcName)
 	if err != nil {
+		log.Printf("Failed to create service", err)
 		return nil, err
 	}
-	svcAddress := fmt.Sprintf("%v.%v.svc.cluster.local", svcName, deploy.namespace)
+	svcAddress := svc.Spec.ClusterIP
 
 	kubeObjRef := api.ObjectReference{
 		Kind:            depl.TypeMeta.Kind,
@@ -214,6 +200,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 									MountPath: deploy.sharedMountPath,
 								},
 							},
+							Resources: env.Spec.Resources,
 						},
 						{
 							Name:                   "fetcher",
@@ -267,7 +254,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 		}
 		time.Sleep(time.Second)
 	}
-	return nil, errors.New("Deployment failed to create replicas")
+	return nil, errors.New("Failed to create replicas in deployment")
 
 }
 
@@ -277,7 +264,6 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 	if err == nil {
 		return existingSvc, err
 	}
-
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: svcName,
@@ -289,7 +275,7 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       "",
+					Name:       "pod-port",
 					Port:       int32(80),
 					TargetPort: intstr.FromInt(8888)},
 			},
@@ -304,32 +290,4 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 	}
 
 	return svc, nil
-}
-
-func (deploy NewDeploy) setupLogging(pod *apiv1.Pod, metadata *metav1.ObjectMeta, env *crd.Environment) {
-
-	logReq := logger.LogRequest{
-		Namespace: pod.Namespace,
-		Pod:       pod.Name,
-		Container: env.Metadata.Name,
-		FuncName:  metadata.Name,
-		FuncUid:   string(metadata.UID),
-	}
-	reqbody, err := json.Marshal(logReq)
-	if err != nil {
-		log.Printf("Error creating log request")
-		return
-	}
-	go func() {
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log", pod.Status.HostIP)
-		resp, err := http.Post(loggerUrl, "application/json", bytes.NewReader(reqbody))
-		if err != nil {
-			log.Printf("Error connecting to %s log daemonset pod: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Error from %s log daemonset pod: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-	}()
 }
