@@ -212,9 +212,6 @@ func chooseBackend(backendName string) fission.BackendType {
 }
 
 func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceRequirements {
-	if mincpu < 1 || maxcpu < 1 {
-		fatal("Minmum and Maximum CPU should be more than 1 (Millicore)")
-	}
 
 	requestResources := make(map[v1.ResourceName]resource.Quantity)
 
