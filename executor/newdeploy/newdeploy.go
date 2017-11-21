@@ -247,7 +247,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 	for i := 0; i < 20; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, errors.New("Failed to get deployment")
+			return nil, err
 		}
 		if latestDepl.Status.ReadyReplicas >= replicas {
 			return latestDepl, err

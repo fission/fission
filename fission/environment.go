@@ -223,7 +223,7 @@ func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceR
 		if err != nil {
 			fatal("Failed to parse mincpu")
 		}
-		requestResources[v1.ResourceRequestsCPU] = cpuRequest
+		requestResources[v1.ResourceCPU] = cpuRequest
 	}
 
 	if minmem != 0 {
@@ -231,7 +231,7 @@ func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceR
 		if err != nil {
 			fatal("Failed to parse minmemory")
 		}
-		requestResources[v1.ResourceRequestsMemory] = memRequest
+		requestResources[v1.ResourceMemory] = memRequest
 	}
 
 	limitResources := make(map[v1.ResourceName]resource.Quantity)
@@ -241,7 +241,7 @@ func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceR
 		if err != nil {
 			fatal("Failed to parse maxcpu")
 		}
-		limitResources[v1.ResourceLimitsCPU] = cpuLimit
+		limitResources[v1.ResourceCPU] = cpuLimit
 	}
 
 	if maxmem != 0 {
@@ -249,7 +249,7 @@ func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceR
 		if err != nil {
 			fatal("Failed to parse maxmemory")
 		}
-		limitResources[v1.ResourceLimitsMemory] = memLimit
+		limitResources[v1.ResourceMemory] = memLimit
 	}
 
 	resources := v1.ResourceRequirements{
