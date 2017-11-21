@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"io"
+	"path"
 )
 
 const (
@@ -129,43 +131,68 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 
 func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath string) (string, error) {
 	cmd := exec.Command(command)
-	cmd.Dir = srcPkgPath
+
+	fi, err := os.Stat(srcPkgPath)
+	if err != nil {
+		return "", errors.New(fmt.Sprintf("could not find srcPkgPath: '%s'", srcPkgPath))
+	}
+	if fi.IsDir() {
+		cmd.Dir = srcPkgPath
+	} else {
+		cmd.Dir = path.Dir(srcPkgPath)
+	}
+
 	// set env variables for build command
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("%v=%v", envSrcPkg, srcPkgPath),
 		fmt.Sprintf("%v=%v", envDeployPkg, deployPkgPath),
 	)
 
-	cmdReader, err := cmd.StdoutPipe()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", errors.New(fmt.Sprintf("Error creating stdout pipe for cmd: %v", err.Error()))
 	}
 
-	scanner := bufio.NewScanner(cmdReader)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", errors.New(fmt.Sprintf("Error creating stderr pipe for cmd: %v", err.Error()))
+	}
+
+	var buildLogs string
+
+	fmt.Println("\n=== Build Logs ===")
+	// Init logs
+	fmt.Printf("command=%v\n", command)
+	fmt.Printf("env=%v\n", cmd.Env)
+
+	out := io.MultiReader(stdout, stderr)
+	scanner := bufio.NewScanner(out)
 
 	err = cmd.Start()
 	if err != nil {
 		return "", errors.New(fmt.Sprintf("Error starting cmd: %v", err.Error()))
 	}
 
-	var buildLogs string
-
-	fmt.Println("\n=== Build Logs ===")
+	// Runtime logs
 	for scanner.Scan() {
 		output := scanner.Text()
 		fmt.Println(output)
 		buildLogs += fmt.Sprintf("%v\n", output)
 	}
-	fmt.Println("==================\n")
 
 	if err := scanner.Err(); err != nil {
-		return "", errors.New(fmt.Sprintf("Error reading cmd output: %v", err.Error()))
+		scanErr := errors.New(fmt.Sprintf("Error reading cmd output: %v", err.Error()))
+		fmt.Println(scanErr)
+		return "", scanErr
 	}
 
 	err = cmd.Wait()
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("Error waiting for cmd: %v", err.Error()))
+		cmdErr := errors.New(fmt.Sprintf("Error waiting for cmd '%v': %v", command, err.Error()))
+		fmt.Println(cmdErr)
+		return "", cmdErr
 	}
+	fmt.Println("==================\n")
 
 	return buildLogs, nil
 }
