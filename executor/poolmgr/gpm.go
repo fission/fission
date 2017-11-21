@@ -117,6 +117,7 @@ func (gpm *GenericPoolManager) service() {
 				backend := latestEnvBackend[key]
 				if !ok || backend != fission.BackendTypePoolmgr {
 					// Env no longer exists or backend type changed -- remove our cache
+
 					log.Printf("Destroying generic pool for environment [%v]", key)
 					delete(gpm.pools, key)
 
