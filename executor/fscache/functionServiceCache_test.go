@@ -1,4 +1,4 @@
-package poolmgr
+package fscache
 
 import (
 	"log"
@@ -18,15 +18,15 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("error creating cache")
 	}
 
-	var fsvc *funcSvc
+	var fsvc *FuncSvc
 	now := time.Now()
 
-	fsvc = &funcSvc{
-		function: &metav1.ObjectMeta{
+	fsvc = &FuncSvc{
+		Function: &metav1.ObjectMeta{
 			Name: "foo",
 			UID:  "1212",
 		},
-		environment: &crd.Environment{
+		Environment: &crd.Environment{
 			Metadata: metav1.ObjectMeta{
 				Name: "foo-env",
 				UID:  "2323",
@@ -39,15 +39,15 @@ func TestFunctionServiceCache(t *testing.T) {
 				Builder: fission.Builder{},
 			},
 		},
-		address: "xxx",
-		kubernetesObject: api.ObjectReference{
+		Address: "xxx",
+		KubernetesObject: api.ObjectReference{
 			Kind:       "pod",
 			Name:       "xxx",
 			APIVersion: "v1",
 			Namespace:  "fission-function",
 		},
-		ctime: now,
-		atime: now,
+		Ctime: now,
+		Atime: now,
 	}
 	err, _ := fsc.Add(*fsvc)
 	if err != nil {
@@ -55,25 +55,25 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to add fsvc: %v", err)
 	}
 
-	f, err := fsc.GetByFunction(fsvc.function)
+	f, err := fsc.GetByFunction(fsvc.Function)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to get fsvc: %v", err)
 	}
-	fsvc.atime = f.atime
-	fsvc.ctime = f.ctime
+	fsvc.Atime = f.Atime
+	fsvc.Ctime = f.Ctime
 	if *f != *fsvc {
 		fsc.Log()
 		log.Panicf("Incorrect fsvc \n(expected: %#v)\n (found: %#v)", fsvc, f)
 	}
 
-	err = fsc.TouchByAddress(fsvc.address)
+	err = fsc.TouchByAddress(fsvc.Address)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-	deleted, err := fsc.DeleteByKubeObject(fsvc.kubernetesObject, 0)
+	deleted, err := fsc.DeleteByKubeObject(fsvc.KubernetesObject, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)
@@ -83,7 +83,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Did not delete fsvc")
 	}
 
-	_, err = fsc.GetByFunction(fsvc.function)
+	_, err = fsc.GetByFunction(fsvc.Function)
 	if err == nil {
 		fsc.Log()
 		log.Panicf("found fsvc while expecting empty cache: %v", err)

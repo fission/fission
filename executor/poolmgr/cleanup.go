@@ -26,7 +26,7 @@ import (
 
 // cleanupOldPoolmgrResources looks for resources created by an old
 // poolmgr instance and cleans them up.
-func cleanupOldPoolmgrResources(client *kubernetes.Clientset, namespace string, instanceId string) {
+func CleanupOldPoolmgrResources(client *kubernetes.Clientset, namespace string, instanceId string) {
 	go func() {
 		err := cleanup(client, namespace, instanceId)
 		if err != nil {

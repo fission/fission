@@ -262,8 +262,8 @@ dump_logs() {
     dump_env_pods $fns
     dump_fission_logs $ns $fns controller
     dump_fission_logs $ns $fns router
-    dump_fission_logs $ns $fns poolmgr
     dump_fission_logs $ns $fns buildermgr
+    dump_fission_logs $ns $fns executor
     dump_function_pod_logs $ns $fns
     dump_fission_crds
 }
