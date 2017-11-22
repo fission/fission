@@ -73,6 +73,9 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 		respChan: respChan,
 	}
 	resp := <-respChan
+	if resp.err != nil {
+		return "", resp.err
+	}
 	return resp.funcSvc.Address, resp.err
 }
 
