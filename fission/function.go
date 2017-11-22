@@ -179,6 +179,31 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
+func getInvokeStrategy(minScale int, maxScale int, backend string, realtimeApp bool) fission.InvokeStrategy {
+
+	backendType := chooseBackend(backend)
+
+	if minScale == 0 {
+		minScale = 1
+	}
+	if maxScale == 0 {
+		minScale = 1
+	}
+	// Right now a simple single case strategy implementation
+	// This will potentially get more sophisticated once we have more strategies in place
+	strategy := fission.InvokeStrategy{
+		StrategyParams: fission.StrategyParams{
+			ExecutionStrategyParams: fission.ExecutionStrategyParams{
+				Backend:     backendType,
+				MinScale:    minScale,
+				MaxScale:    maxScale,
+				RealTimeApp: realtimeApp,
+			},
+		},
+	}
+	return strategy
+}
+
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
@@ -211,6 +236,10 @@ func fnCreate(c *cli.Context) error {
 
 	pkgMetadata := createPackage(client, fnName, envName, srcArchiveName, deployArchiveName, buildcmd)
 
+	//TODO Warn user about resources at fn level overriding the env resources
+	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("appType"))
+
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
@@ -229,6 +258,8 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
+			Resources:      resourceReq,
+			InvokeStrategy: invokeStrategy,
 		},
 	}
 

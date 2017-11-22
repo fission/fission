@@ -117,6 +117,25 @@ type (
 
 		// cpu and memory resources as per K8S standards
 		Resources v1.ResourceRequirements `json:"resources"`
+
+		InvokeStrategy
+	}
+
+	InvokeStrategy struct {
+		StrategyParams
+	}
+
+	// StrategyParams Can have only one member
+	StrategyParams struct {
+		ExecutionStrategyParams
+		// Other strategy params for future
+	}
+
+	ExecutionStrategyParams struct {
+		Backend     BackendType
+		MinScale    int
+		MaxScale    int
+		RealTimeApp bool
 	}
 
 	FunctionReferenceType string
