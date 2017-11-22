@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
+	"net"
 	"net/http"
-	//"time"
+	"net/url"
+	"time"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
-	//"github.com/fission/fission/router"
 )
 
 type (
@@ -30,21 +32,35 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 		return err
 	}
 
-	// client := http.Client{
-	// 	Transport: router.MakeRetryingRoundTripper(10, 50*time.Millisecond),
-	// }
+	maxRetries := 20
+	var resp *http.Response
 
-	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
+
+		if err == nil && resp.StatusCode == 200 {
+			defer resp.Body.Close()
+			return nil
+		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
+						continue
+					}
+				}
+			}
+		}
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fission.MakeErrorFromHTTP(resp)
+	if err == nil {
+		err = fission.MakeErrorFromHTTP(resp)
 	}
-
-	return nil
+	log.Printf("Failed to fetch: %v", err)
+	return err
 }
 
 func (c *Client) Upload(fr *fetcher.UploadRequest) (*fetcher.UploadResponse, error) {
