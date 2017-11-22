@@ -444,9 +444,9 @@ func fnLogs(c *cli.Context) error {
 		Namespace: metav1.NamespaceDefault,
 	}
 
-	recordLimit := c.String("recordcount")
-	if len(recordLimit) == 0 {
-		recordLimit = "1000"
+	recordLimit := c.Int("recordcount")
+	if recordLimit <= 0 {
+		recordLimit = 1000
 	}
 
 	f, err := client.FunctionGet(m)
