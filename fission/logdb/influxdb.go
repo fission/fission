@@ -22,6 +22,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,12 +76,13 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	parameters := make(map[string]interface{})
 	parameters["funcuid"] = filter.FuncUid
 	parameters["time"] = timestamp
+	//the parameters above are only for the where clause and do not work with LIMIT
 
 	if filter.Pod != "" {
-		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time ORDER BY time ASC"
+		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
-		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"time\" > $time ORDER BY time ASC"
+		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 	}
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
@@ -95,6 +98,10 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 				if err != nil {
 					log.Fatal(err)
 				}
+				seqNum, err := strconv.Atoi(row[1].(string))
+				if err != nil {
+					return logEntries, err
+				}
 				logEntries = append(logEntries, LogEntry{
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
 					Timestamp: t,
@@ -105,10 +112,21 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 					Namespace: row[14].(string),                           //kubernetes_namespace_name
 					Pod:       row[15].(string),                           //kubernetes_pod_name
 					Stream:    row[18].(string),                           //stream
+					Sequence:  seqNum,                                     //sequence tag
 				})
 			}
 		}
 	}
+	sort.Slice(logEntries, func(i, j int) bool {
+
+		if logEntries[i].Timestamp.Before(logEntries[j].Timestamp) {
+			return true
+		}
+		if logEntries[j].Timestamp.Before(logEntries[i].Timestamp) {
+			return false
+		}
+		return logEntries[i].Sequence < logEntries[j].Sequence
+	})
 	return logEntries, nil
 }
 

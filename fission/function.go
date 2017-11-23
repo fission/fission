@@ -444,6 +444,11 @@ func fnLogs(c *cli.Context) error {
 		Namespace: metav1.NamespaceDefault,
 	}
 
+	recordLimit := c.Int("recordcount")
+	if recordLimit <= 0 {
+		recordLimit = 1000
+	}
+
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
@@ -463,10 +468,11 @@ func fnLogs(c *cli.Context) error {
 			select {
 			case <-requestChan:
 				logFilter := logdb.LogFilter{
-					Pod:      fnPod,
-					Function: f.Metadata.Name,
-					FuncUid:  string(f.Metadata.UID),
-					Since:    t,
+					Pod:         fnPod,
+					Function:    f.Metadata.Name,
+					FuncUid:     string(f.Metadata.UID),
+					Since:       t,
+					RecordLimit: recordLimit,
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
