@@ -149,6 +149,10 @@ type (
 		// server listens for function requests. Optional;
 		// default 8888.
 		FunctionEndpointPort int32 `json:"functionendpointport"`
+
+		// Optional
+		// Environment variables to be set in environment
+		Env []EnvVar `json:"env"`
 	}
 	Builder struct {
 		// Image for containing the language runtime.
@@ -156,6 +160,10 @@ type (
 
 		// (Optional) Default build command to run for this build environment.
 		Command string `json:"command"`
+
+		// Optional
+		// Environment variables to be set in environment
+		Env []EnvVar `json:"env"`
 	}
 	EnvironmentSpec struct {
 		// Environment API version
@@ -174,6 +182,10 @@ type (
 		// Optional
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
+	}
+	EnvVar struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
 	}
 
 	AllowedFunctionsPerContainer string

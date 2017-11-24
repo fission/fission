@@ -18,9 +18,21 @@ package fission
 
 import (
 	"fmt"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func UrlForFunction(name string) string {
 	prefix := "/fission-function"
 	return fmt.Sprintf("%v/%v", prefix, name)
+}
+
+func K8sEnvVars(env []EnvVar) []apiv1.EnvVar {
+	envVars := make([]apiv1.EnvVar, len(env))
+	for k, v := range env {
+		envVars[k] = apiv1.EnvVar{
+			Name:  v.Name,
+			Value: v.Value,
+		}
+	}
+	return envVars
 }
