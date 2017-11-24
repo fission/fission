@@ -94,10 +94,11 @@ func pkgUpdate(c *cli.Context) error {
 	envName := c.String("env")
 	srcArchiveName := c.String("src")
 	deployArchiveName := c.String("deploy")
+	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
-		len(envName) == 0 {
-		fatal("Need --env or --src or --deploy argument.")
+		len(envName) == 0 && len(buildcmd) == 0 {
+		fatal("Need --env or --src or --deploy or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -118,6 +119,11 @@ func pkgUpdate(c *cli.Context) error {
 
 	if len(envName) > 0 {
 		pkg.Spec.Environment.Name = envName
+		needToBuild = true
+	}
+
+	if len(buildcmd) > 0 {
+		pkg.Spec.BuildCommand = buildcmd
 		needToBuild = true
 	}
 
