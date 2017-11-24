@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -46,16 +48,16 @@ func getFunctionsByPackage(client *client.Client, pkgName string) ([]crd.Functio
 }
 
 // downloadStoragesvcURL downloads and return archive content with given storage service url
-func downloadStoragesvcURL(client *client.Client, fileUrl string) []byte {
+func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser {
 	u, err := url.ParseRequestURI(fileUrl)
 	if err != nil {
 		return nil
 	}
 	// replace in-cluster storage service host with controller server url
 	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage" + u.RequestURI()
-	body, err := downloadURL(fileDownloadUrl)
+	reader, err := downloadURL(fileDownloadUrl)
 	checkErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
-	return body
+	return reader
 }
 
 func pkgCreate(c *cli.Context) error {
@@ -172,21 +174,22 @@ func pkgSourceGet(c *cli.Context) error {
 		return err
 	}
 
-	var sourceVal []byte
+	var reader io.Reader
 
 	if pkg.Spec.Source.Type == fission.ArchiveTypeLiteral {
-		sourceVal = pkg.Spec.Source.Literal
+		reader = bytes.NewReader(pkg.Spec.Source.Literal)
 	} else if pkg.Spec.Source.Type == fission.ArchiveTypeUrl {
-		sourceVal = downloadStoragesvcURL(client, pkg.Spec.Source.URL)
+		readCloser := downloadStoragesvcURL(client, pkg.Spec.Source.URL)
+		defer readCloser.Close()
+		reader = readCloser
 	}
 
 	if len(output) > 0 {
-		writeArchiveToFile(output, sourceVal)
+		return writeArchiveToFile(output, reader)
 	} else {
-		os.Stdout.Write(sourceVal)
+		_, err := io.Copy(os.Stdout, reader)
+		return err
 	}
-
-	return nil
 }
 
 func pkgDeployGet(c *cli.Context) error {
@@ -207,21 +210,22 @@ func pkgDeployGet(c *cli.Context) error {
 		return err
 	}
 
-	var deployVal []byte
+	var reader io.Reader
 
 	if pkg.Spec.Deployment.Type == fission.ArchiveTypeLiteral {
-		deployVal = pkg.Spec.Deployment.Literal
+		reader = bytes.NewReader(pkg.Spec.Deployment.Literal)
 	} else if pkg.Spec.Deployment.Type == fission.ArchiveTypeUrl {
-		deployVal = downloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
+		readCloser := downloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
+		defer readCloser.Close()
+		reader = readCloser
 	}
 
 	if len(output) > 0 {
-		writeArchiveToFile(output, deployVal)
+		return writeArchiveToFile(output, reader)
 	} else {
-		os.Stdout.Write(deployVal)
+		_, err := io.Copy(os.Stdout, reader)
+		return err
 	}
-
-	return nil
 }
 
 func pkgInfo(c *cli.Context) error {

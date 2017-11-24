@@ -203,14 +203,22 @@ func getTempDir() (string, error) {
 	return tmpPath, err
 }
 
-func writeArchiveToFile(fileName string, body []byte) error {
+func writeArchiveToFile(fileName string, reader io.Reader) error {
 	tmpDir, err := getTempDir()
 	if err != nil {
 		return err
 	}
 
 	path := filepath.Join(tmpDir, fileName+".tmp")
-	err = ioutil.WriteFile(path, body, 0644)
+	w, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, reader)
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(path, 0644)
 	if err != nil {
 		return err
 	}
@@ -226,7 +234,8 @@ func writeArchiveToFile(fileName string, body []byte) error {
 // downloadToTempFile fetches archive file from arbitrary url
 // and write it to temp file for further usage
 func downloadToTempFile(fileUrl string) string {
-	body, err := downloadURL(fileUrl)
+	reader, err := downloadURL(fileUrl)
+	defer reader.Close()
 	checkErr(err, fmt.Sprintf("download from url: %v", fileUrl))
 
 	tmpDir, err := getTempDir()
@@ -237,28 +246,20 @@ func downloadToTempFile(fileUrl string) string {
 	err = os.Mkdir(tmpDir, 0744)
 	checkErr(err, "create temp directory")
 
-	err = writeArchiveToFile(destination, body)
+	err = writeArchiveToFile(destination, reader)
 	checkErr(err, "write archive to file")
 
 	return destination
 }
 
 // downloadURL downloads file from given url
-func downloadURL(fileUrl string) ([]byte, error) {
+func downloadURL(fileUrl string) (io.ReadCloser, error) {
 	resp, err := http.Get(fileUrl)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
 	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return body, nil
+	return resp.Body, nil
 }
