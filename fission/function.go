@@ -81,7 +81,7 @@ func fnCreate(c *cli.Context) error {
 	// check function existence before creating package
 	for _, fn := range fnList {
 		if fn.Metadata.Name == fnName {
-			fatal("Function with the same name already exists.")
+			fatal("A function with the same name already exists.")
 		}
 	}
 	entrypoint := c.String("entrypoint")
@@ -113,7 +113,7 @@ func fnCreate(c *cli.Context) error {
 		}
 		// fatal when both src & deploy archive are empty
 		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-			fatal("Need --code or --deploy or --src argument.")
+			fatal("Need --deploy or --src argument.")
 		}
 
 		buildcmd := c.String("buildcmd")
@@ -261,7 +261,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
 		len(entrypoint) == 0 && len(buildcmd) == 0 {
-		fatal("Need --env or --code or --deploy or --src or --pkg or --entrypoint or --buildcmd argument.")
+		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd argument.")
 	} else if len(pkgName) > 0 && (len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0) {
 		fatal("Please use package command to update package's src/deploy archive, environment and build command.")
 	}
