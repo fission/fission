@@ -49,7 +49,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		Ctime: now,
 		Atime: now,
 	}
-	err, _ := fsc.Add(*fsvc)
+	_, err := fsc.Add(*fsvc)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to add fsvc: %v", err)

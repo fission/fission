@@ -146,20 +146,19 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-// TODO: error should be second return
-func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
+func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*FuncSvc)
 			err2 := fsc.TouchByAddress(f.Address)
 			if err2 != nil {
-				return err2, nil
+				return nil, err2
 			}
 			fCopy := *f
-			return err, &fCopy
+			return &fCopy, err
 		}
-		return err, nil
+		return nil, err
 	}
 	now := time.Now()
 	fsvc.Ctime = now
@@ -175,7 +174,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 			}
 		}
 		log.Printf("error caching fsvc: %v", err)
-		return err, nil
+		return nil, err
 	}
 	err, _ = fsc.byKubeObject.Set(fsvc.KubernetesObject, *fsvc.Function)
 	if err != nil {
@@ -185,7 +184,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 			}
 		}
 		log.Printf("error caching fsvc: %v", err)
-		return err, nil
+		return nil, err
 	}
 	return nil, nil
 }

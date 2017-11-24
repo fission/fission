@@ -130,7 +130,7 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 
 	switch env.Spec.Backend {
 	case fission.BackendTypeNewdeploy:
-		fs, err := executor.ndm.GetFuncSvc(meta, env)
+		fs, err := executor.ndm.GetFuncSvc(meta)
 		return fs, err
 	default:
 		pool, err := executor.gpm.GetPool(env)
@@ -182,6 +182,7 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 // deploymgr and potential future backends
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+	restClient := fissionClient.GetCrdClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
@@ -196,8 +197,8 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 		functionNamespace, fsCache, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(
-		fissionClient, kubernetesClient,
-		functionNamespace)
+		fissionClient, kubernetesClient, restClient,
+		functionNamespace, fsCache)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 

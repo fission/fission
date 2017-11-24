@@ -19,126 +19,23 @@ package newdeploy
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
-	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
-	"github.com/fission/fission/executor/fscache"
 )
-
-type (
-	NewDeploy struct {
-		kubernetesClient       *kubernetes.Clientset
-		fissionClient          *crd.FissionClient
-		fetcherImg             string
-		fetcherImagePullPolicy apiv1.PullPolicy
-		namespace              string
-		sharedMountPath        string
-	}
-)
-
-const (
-	envVersion = "ENV_VERSION"
-)
-
-func MakeNewDeploy(
-	fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset,
-	namespace string,
-) *NewDeploy {
-
-	log.Printf("Creating NewDeploy")
-
-	fetcherImg := os.Getenv("FETCHER_IMAGE")
-	if len(fetcherImg) == 0 {
-		fetcherImg = "fission/fetcher"
-	}
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
-
-	nd := &NewDeploy{
-		fissionClient:          fissionClient,
-		kubernetesClient:       kubernetesClient,
-		namespace:              namespace,
-		fetcherImg:             fetcherImg,
-		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
-		sharedMountPath:        "/userfunc",
-	}
-
-	return nd
-}
-
-func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta, env *crd.Environment) (*fscache.FuncSvc, error) {
-	fn, err := deploy.fissionClient.
-		Functions(metadata.Namespace).
-		Get(metadata.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	deployName := fmt.Sprintf("%v-%v",
-		env.Metadata.Name,
-		env.Metadata.UID)
-	deplName := fmt.Sprintf("nd-%v", deployName)
-
-	deployLables := map[string]string{
-		"environmentName": env.Metadata.Name,
-		"environmentUid":  string(env.Metadata.UID),
-		"type":            "newdeploy",
-	}
-
-	depl, err := deploy.createOrGetDeployment(fn, env, deplName, deployLables)
-	if err != nil {
-		log.Printf("Failed to create deployment", err)
-		return nil, err
-	}
-
-	svcName := fmt.Sprintf("nds-%v", deployName)
-	svc, err := deploy.createOrGetSvc(deployLables, svcName)
-	if err != nil {
-		log.Printf("Failed to create service", err)
-		return nil, err
-	}
-	svcAddress := svc.Spec.ClusterIP
-
-	kubeObjRef := api.ObjectReference{
-		Kind:            depl.TypeMeta.Kind,
-		Name:            depl.ObjectMeta.Name,
-		APIVersion:      depl.TypeMeta.APIVersion,
-		Namespace:       depl.ObjectMeta.Namespace,
-		ResourceVersion: depl.ObjectMeta.ResourceVersion,
-		UID:             depl.ObjectMeta.UID,
-	}
-
-	fsvc := &fscache.FuncSvc{
-		Function:         metadata,
-		Environment:      env,
-		Address:          svcAddress,
-		KubernetesObject: kubeObjRef,
-		Ctime:            time.Now(),
-		Atime:            time.Now(),
-	}
-
-	return fsvc, nil
-}
 
 func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
+
 	replicas := int32(1)
 	targetFilename := "user"
 
@@ -258,6 +155,17 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 
 }
 
+func (deploy NewDeploy) deleteDeployment(ns string, name string) error {
+	deletePropagation := metav1.DeletePropagationForeground
+	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePropagation,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
 
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
@@ -290,4 +198,12 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 	}
 
 	return svc, nil
+}
+
+func (deploy NewDeploy) deleteSvc(ns string, name string) error {
+	err := deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }

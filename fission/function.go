@@ -238,7 +238,7 @@ func fnCreate(c *cli.Context) error {
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("appType"))
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("syncapp"))
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{

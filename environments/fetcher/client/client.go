@@ -32,7 +32,6 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 		return err
 	}
 
-
 	maxRetries := 20
 	var resp *http.Response
 

@@ -578,7 +578,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 		Atime:            time.Now(),
 	}
 
-	err, _ = gp.fsCache.Add(*fsvc)
+	_, err = gp.fsCache.Add(*fsvc)
 	if err != nil {
 		return nil, err
 	}
