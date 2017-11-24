@@ -107,8 +107,22 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "get package")
 
-	newPkgMeta := updatePackage(client, pkg, envName,
-		srcArchiveName, deployArchiveName, buildcmd, force)
+	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+	checkErr(err, "get function list")
+
+	if !force && len(fnList) > 1 {
+		fatal("Package is used by multiple functions, use --force to force update")
+	}
+
+	newPkgMeta := updatePackage(client, pkg,
+		envName, srcArchiveName, deployArchiveName, buildcmd)
+
+	// update resource version of package reference of functions that shared the same package
+	for _, fn := range fnList {
+		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
+		_, err := client.FunctionUpdate(&fn)
+		checkErr(err, "update function")
+	}
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
 
@@ -116,14 +130,7 @@ func pkgUpdate(c *cli.Context) error {
 }
 
 func updatePackage(client *client.Client, pkg *crd.Package, envName,
-	srcArchiveName, deployArchiveName, buildcmd string, force bool) *metav1.ObjectMeta {
-
-	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
-	checkErr(err, "get function list")
-
-	if !force && len(fnList) > 1 {
-		fatal("Package is used by multiple functions, use --force to force update")
-	}
+	srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
@@ -160,13 +167,6 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName,
 
 	newPkgMeta, err := client.PackageUpdate(pkg)
 	checkErr(err, "update package")
-
-	// update resource version of package reference of functions that shared the same package
-	for _, fn := range fnList {
-		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
-		_, err := client.FunctionUpdate(&fn)
-		checkErr(err, "update function")
-	}
 
 	return newPkgMeta
 }
