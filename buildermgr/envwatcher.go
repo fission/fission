@@ -530,6 +530,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 									},
 								},
 							},
+							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
 						},
 						{
 							Name:                   "fetcher",
@@ -567,6 +568,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 									},
 								},
 							},
+							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
 						},
 					},
 					ServiceAccountName: "fission-builder",
