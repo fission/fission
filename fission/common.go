@@ -110,7 +110,7 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 
 	// fetch archive from arbitrary url if fileName is a url
 	if strings.HasPrefix(fileName, "http://") || strings.HasPrefix(fileName, "https://") {
-		fileName = fetchArchiveFromArbitraryURL(fileName)
+		fileName = downloadToTempFile(fileName)
 	}
 
 	if fileSize(fileName) < fission.ArchiveLiteralSizeLimit {
@@ -223,9 +223,9 @@ func writeArchiveToFile(fileName string, body []byte) error {
 	return nil
 }
 
-// fetchArchiveFromArbitraryURL fetches archive file from arbitrary url
+// downloadToTempFile fetches archive file from arbitrary url
 // and write it to temp file for further usage
-func fetchArchiveFromArbitraryURL(fileUrl string) string {
+func downloadToTempFile(fileUrl string) string {
 	body, err := downloadURL(fileUrl)
 	checkErr(err, fmt.Sprintf("download from url: %v", fileUrl))
 
