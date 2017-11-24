@@ -119,7 +119,7 @@ func fnCreate(c *cli.Context) error {
 		buildcmd := c.String("buildcmd")
 
 		// create new package
-		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd, "")
+		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 	}
 
 	function := &crd.Function{
@@ -296,7 +296,7 @@ func fnUpdate(c *cli.Context) error {
 		if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
 			// create a new package for function
 			pkgMetadata = createPackage(client,
-				function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd, "")
+				function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
 		}
 	}
 

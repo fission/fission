@@ -66,7 +66,6 @@ func pkgCreate(c *cli.Context) error {
 		fatal("Need --env argument.")
 	}
 
-	description := c.String("desc")
 	srcArchiveName := c.String("src")
 	deployArchiveName := c.String("deploy")
 	buildcmd := c.String("buildcmd")
@@ -75,7 +74,7 @@ func pkgCreate(c *cli.Context) error {
 		fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	meta := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd, description)
+	meta := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 	fmt.Printf("Package %v is created\n", meta.GetName())
 
 	return nil
@@ -91,13 +90,12 @@ func pkgUpdate(c *cli.Context) error {
 
 	force := c.Bool("f")
 	envName := c.String("env")
-	description := c.String("desc")
 	srcArchiveName := c.String("src")
 	deployArchiveName := c.String("deploy")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
-		len(envName) == 0 && len(description) == 0 {
-		fatal("Need --env or --desc or --src or --deploy or --desc argument.")
+		len(envName) == 0 {
+		fatal("Need --env or --src or --deploy argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -130,10 +128,6 @@ func pkgUpdate(c *cli.Context) error {
 	if len(deployArchiveName) > 0 {
 		deployArchiveMetadata = createArchive(client, deployArchiveName)
 		pkg.Spec.Deployment = *deployArchiveMetadata
-	}
-
-	if len(description) > 0 {
-		pkg.Spec.Description = description
 	}
 
 	if needToBuild {
@@ -246,7 +240,6 @@ func pkgInfo(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Metadata.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Description:", pkg.Spec.Description)
 	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
 	fmt.Fprintf(w, "%v\n%v", "Build Logs:", pkg.Status.BuildLog)
@@ -264,10 +257,10 @@ func pkgList(c *cli.Context) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "DESCRIPTION")
+	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
 	for _, pkg := range pkgList {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name,
-			pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Spec.Description)
+		fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
+			pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
 	}
 	w.Flush()
 

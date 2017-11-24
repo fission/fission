@@ -149,13 +149,12 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd, description string) *metav1.ObjectMeta {
+func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: metav1.NamespaceDefault,
 			Name:      envName,
 		},
-		Description: description,
 	}
 	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
 
