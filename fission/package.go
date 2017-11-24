@@ -130,7 +130,9 @@ func pkgUpdate(c *cli.Context) error {
 		pkg.Spec.Deployment = *deployArchiveMetadata
 	}
 
-	if needToBuild {
+	// Set package as pending status only when there is no
+	// deploy archive.
+	if needToBuild && len(pkg.Spec.Deployment.Type) == 0 {
 		// change into pending state to trigger package build
 		pkg.Status = fission.PackageStatus{
 			BuildStatus: fission.BuildStatusPending,

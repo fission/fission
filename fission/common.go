@@ -160,9 +160,6 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 
 	if len(deployArchiveName) > 0 {
 		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
-		if len(srcArchiveName) > 0 {
-			fmt.Println("Deployment may be overwritten by builder manager after source package compilation")
-		}
 	}
 	if len(srcArchiveName) > 0 {
 		pkgSpec.Source = *createArchive(client, srcArchiveName)
