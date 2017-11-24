@@ -65,6 +65,7 @@ checkFunctionResponse $fn 'a: 1 b: {c: 3, d: 4}'
 
 echo "Creating package with deploy archive"
 mkdir testDir
+touch testDir/__init__.py
 printf 'def main():\n    return "Hello, world!"' > testDir/hello.py
 zip -jr demo-deploy-pkg.zip testDir/
 pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut -f2 -d' '| tr -d \')

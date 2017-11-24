@@ -277,13 +277,15 @@ func fnUpdate(c *cli.Context) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
-	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		pkg, err := client.PackageGet(&metav1.ObjectMeta{
-			Namespace: metav1.NamespaceDefault,
-			Name:      pkgName,
-		})
-		checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Namespace: metav1.NamespaceDefault,
+		Name:      pkgName,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 
+	pkgMetadata := &pkg.Metadata
+
+	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
 		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
 		checkErr(err, "get function list")
 
@@ -291,7 +293,7 @@ func fnUpdate(c *cli.Context) error {
 			fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata := updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd)
+		pkgMetadata = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd)
 		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
@@ -305,13 +307,13 @@ func fnUpdate(c *cli.Context) error {
 				checkErr(err, "update function")
 			}
 		}
+	}
 
-		// update function spec with new package metadata
-		function.Spec.Package.PackageRef = fission.PackageRef{
-			Namespace:       pkgMetadata.Namespace,
-			Name:            pkgMetadata.Name,
-			ResourceVersion: pkgMetadata.ResourceVersion,
-		}
+	// update function spec with new package metadata
+	function.Spec.Package.PackageRef = fission.PackageRef{
+		Namespace:       pkgMetadata.Namespace,
+		Name:            pkgMetadata.Name,
+		ResourceVersion: pkgMetadata.ResourceVersion,
 	}
 
 	_, err = client.FunctionUpdate(function)
