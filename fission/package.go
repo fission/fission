@@ -107,11 +107,20 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "get package")
 
-	fnList, err := getFunctionsByPackage(client, pkgName)
+	_, err = updatePackage(client, pkg, envName,
+		srcArchiveName, deployArchiveName, buildcmd, force)
+
+	return err
+}
+
+func updatePackage(client *client.Client, pkg *crd.Package, envName,
+	srcArchiveName, deployArchiveName, buildcmd string, force bool) (*metav1.ObjectMeta, error) {
+
+	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
 	checkErr(err, "get function list")
 
 	if !force && len(fnList) > 0 {
-		fatal("Package is used by multiple functions, use -f to force update")
+		fatal("Package is used by multiple functions, use --force to force update")
 	}
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
@@ -159,7 +168,7 @@ func pkgUpdate(c *cli.Context) error {
 
 	fmt.Printf("Package %v is updated\n", newPkgMeta.GetName())
 
-	return err
+	return nil, err
 }
 
 func pkgSourceGet(c *cli.Context) error {

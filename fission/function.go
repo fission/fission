@@ -258,12 +258,11 @@ func fnUpdate(c *cli.Context) error {
 	pkgName := c.String("pkg")
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
+	force := c.Bool("force")
 
 	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
 		len(entrypoint) == 0 && len(buildcmd) == 0 {
 		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd argument.")
-	} else if len(pkgName) > 0 && (len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0) {
-		fatal("Please use package command to update package's src/deploy archive, environment and build command.")
 	}
 
 	if len(envName) > 0 {
@@ -274,30 +273,17 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
-	var pkgMetadata *metav1.ObjectMeta
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Namespace: metav1.NamespaceDefault,
+		Name:      pkgName,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 
-	if len(pkgName) > 0 {
-		pkg, err := client.PackageGet(&metav1.ObjectMeta{
-			Namespace: metav1.NamespaceDefault,
-			Name:      pkgName,
-		})
-		checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
-		pkgMetadata = &pkg.Metadata
-	} else {
-		// use previous build command if not specified.
-		if len(buildcmd) == 0 {
-			pkg, err := client.PackageGet(&metav1.ObjectMeta{
-				Name:      function.Spec.Package.PackageRef.Name,
-				Namespace: function.Spec.Package.PackageRef.Namespace,
-			})
-			checkErr(err, fmt.Sprintf("read package '%v'", function.Spec.Package.PackageRef.Name))
-			buildcmd = pkg.Spec.BuildCommand
-		}
-		if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
-			// create a new package for function
-			pkgMetadata = createPackage(client,
-				function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
-		}
+	pkgMetadata := &pkg.Metadata
+
+	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
+		pkgMetadata, err = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd, force)
+		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
 	}
 
 	// pkgMetadata is nil when a user updates envName or
