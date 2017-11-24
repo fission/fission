@@ -273,6 +273,10 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
+	if len(pkgName) == 0 {
+		pkgName = function.Spec.Package.PackageRef.Name
+	}
+
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: metav1.NamespaceDefault,
 		Name:      pkgName,
@@ -282,8 +286,9 @@ func fnUpdate(c *cli.Context) error {
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		pkgMetadata, err = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd, force)
+		pkgMetadata = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd, force)
 		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
+		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
 	}
 
 	// pkgMetadata is nil when a user updates envName or

@@ -77,7 +77,7 @@ func pkgCreate(c *cli.Context) error {
 	}
 
 	meta := createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
-	fmt.Printf("Package %v is created\n", meta.GetName())
+	fmt.Printf("Package '%v' created\n", meta.GetName())
 
 	return nil
 }
@@ -107,19 +107,21 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "get package")
 
-	_, err = updatePackage(client, pkg, envName,
+	newPkgMeta := updatePackage(client, pkg, envName,
 		srcArchiveName, deployArchiveName, buildcmd, force)
 
-	return err
+	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
+
+	return nil
 }
 
 func updatePackage(client *client.Client, pkg *crd.Package, envName,
-	srcArchiveName, deployArchiveName, buildcmd string, force bool) (*metav1.ObjectMeta, error) {
+	srcArchiveName, deployArchiveName, buildcmd string, force bool) *metav1.ObjectMeta {
 
 	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
 	checkErr(err, "get function list")
 
-	if !force && len(fnList) > 0 {
+	if !force && len(fnList) > 1 {
 		fatal("Package is used by multiple functions, use --force to force update")
 	}
 
@@ -166,9 +168,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName,
 		checkErr(err, "update function")
 	}
 
-	fmt.Printf("Package %v is updated\n", newPkgMeta.GetName())
-
-	return nil, err
+	return newPkgMeta
 }
 
 func pkgSourceGet(c *cli.Context) error {
@@ -319,7 +319,7 @@ func pkgDelete(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("Package %v is deleted\n", pkgName)
+	fmt.Printf("Package '%v' deleted\n", pkgName)
 
 	return nil
 }
