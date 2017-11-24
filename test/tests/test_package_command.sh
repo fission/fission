@@ -46,7 +46,7 @@ sleep 30
 
 echo "Creating pacakage with source archive"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
-pkgName=$(fission package create --src demo-src-pkg.zip --env python --buildcmd "./build.sh"| cut -f2 -d' ')
+pkgName=$(fission package create --src demo-src-pkg.zip --env python --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
 
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkgName"
@@ -67,7 +67,7 @@ echo "Creating package with deploy archive"
 mkdir testDir
 printf 'def main():\n    return "Hello, world!"' > testDir/hello.py
 zip -jr demo-deploy-pkg.zip testDir/
-pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut -f2 -d' ')
+pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut -f2 -d' '| tr -d \')
 
 echo "Updating function " $fn
 fission fn update --name $fn --pkg $pkgName --entrypoint "hello.main"
