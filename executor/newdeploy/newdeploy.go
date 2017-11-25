@@ -26,11 +26,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
+	asv1 "k8s.io/client-go/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
+)
+
+const (
+	DeploymentKind    = "Deployment"
+	DeploymentVersion = "extensions/v1beta1"
 )
 
 func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
@@ -63,6 +69,10 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 	loadPayload, err := json.Marshal(loadReq)
 
 	deployment := &v1beta1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: DeploymentVersion,
+			Kind:       DeploymentKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   deployName,
 			Labels: deployLables,
@@ -164,6 +174,40 @@ func (deploy NewDeploy) deleteDeployment(ns string, name string) error {
 		return err
 	}
 	return nil
+}
+
+func (deploy NewDeploy) createHpa(hpaName string, execStrategy fission.ExecutionStrategyParams, depl v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
+
+	minRepl := int32(execStrategy.MinScale)
+	maxRepl := int32(execStrategy.MaxScale)
+
+	hpa := asv1.HorizontalPodAutoscaler{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "autoscaling/v1",
+			Kind:       "HorizontalPodAutoscaler",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      hpaName,
+			Namespace: deploy.namespace,
+			Labels:    depl.Labels,
+		},
+		Spec: asv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: asv1.CrossVersionObjectReference{
+				Kind:       DeploymentKind,
+				Name:       depl.ObjectMeta.Name,
+				APIVersion: DeploymentVersion,
+			},
+			MinReplicas: &minRepl,
+			MaxReplicas: maxRepl,
+		},
+	}
+
+	cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Create(&hpa)
+	if err != nil {
+		return nil, err
+	}
+	return cHpa, nil
+
 }
 
 func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName string) (*apiv1.Service, error) {

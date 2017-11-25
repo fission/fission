@@ -23,6 +23,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,9 +73,9 @@ const (
 )
 
 const (
-	FN_CREATE requestType = iota
-	FN_DELETE
-	FN_UPDATE
+	FnCreate requestType = iota
+	FnDelete
+	FnUpdate
 )
 
 func MakeNewDeploy(
@@ -129,33 +130,43 @@ func (deploy NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controlle
 	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-
 			fn := obj.(*crd.Function)
-			// Eager creation of function if it is RealTimeApp
-			if fn.Spec.InvokeStrategy.RealTimeApp {
-				c := make(chan *fnResponse)
-				deploy.requestChannel <- &fnRequest{
-					fn:              fn,
-					reqType:         FN_CREATE,
-					responseChannel: c,
-				}
-				resp := <-c
-				if resp.error != nil {
-					log.Printf("Error eager creating function: %v", resp.error)
+			env, err := deploy.fissionClient.
+				Environments(fn.Spec.Environment.Namespace).
+				Get(fn.Spec.Environment.Name)
+			if err != nil {
+				log.Printf("Error in fetching environment while eagerly creating function: %v", err)
+			}
+			if fn.Spec.Backend == fission.BackendTypeNewdeploy || env.Spec.Backend == fission.BackendTypeNewdeploy {
+				log.Printf("Eagerly creating newDeploy objects for function")
+				// Eager creation of function if it is RealTimeApp
+				if fn.Spec.InvokeStrategy.RealTimeApp {
+					c := make(chan *fnResponse)
+					deploy.requestChannel <- &fnRequest{
+						fn:              fn,
+						reqType:         FnCreate,
+						responseChannel: c,
+					}
+					resp := <-c
+					if resp.error != nil {
+						log.Printf("Error eager creating function: %v", resp.error)
+					}
 				}
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
-			c := make(chan *fnResponse)
-			deploy.requestChannel <- &fnRequest{
-				fn:              fn,
-				reqType:         FN_DELETE,
-				responseChannel: c,
-			}
-			resp := <-c
-			if resp.error != nil {
-				log.Printf("Error deleing the function: %v", resp.error)
+			if fn.Spec.Backend == fission.BackendTypeNewdeploy {
+				c := make(chan *fnResponse)
+				deploy.requestChannel <- &fnRequest{
+					fn:              fn,
+					reqType:         FnDelete,
+					responseChannel: c,
+				}
+				resp := <-c
+				if resp.error != nil {
+					log.Printf("Error deleing the function: %v", resp.error)
+				}
 			}
 		},
 		UpdateFunc: func(newObj interface{}, oldObj interface{}) {
@@ -169,7 +180,7 @@ func (deploy NewDeploy) service() {
 	for {
 		req := <-deploy.requestChannel
 		switch req.reqType {
-		case FN_CREATE:
+		case FnCreate:
 			fsvc, err := deploy.fsCache.GetByFunction(&req.fn.Metadata)
 			if err == nil {
 				req.responseChannel <- &fnResponse{
@@ -191,22 +202,20 @@ func (deploy NewDeploy) service() {
 				continue
 			}
 
-			identifier := fmt.Sprintf("%v-%v",
+			objName := fmt.Sprintf("%v-%v",
 				env.Metadata.Name,
 				req.fn.Metadata.Name)
 
-			deployName := fmt.Sprintf("depl-%v", identifier)
 			deployLables := map[string]string{
 				"environmentName": env.Metadata.Name,
 				"environmentUid":  string(env.Metadata.UID),
 				"functioName":     req.fn.Metadata.Name,
 				"backend":         string(req.fn.Spec.Backend),
 			}
-			svcName := fmt.Sprintf("svc-%v", identifier)
 
-			depl, err := deploy.createOrGetDeployment(req.fn, env, deployName, deployLables)
+			depl, err := deploy.createOrGetDeployment(req.fn, env, objName, deployLables)
 			if err != nil {
-				log.Printf("Error creating the deployment %v: %v", deployName, err)
+				log.Printf("Error creating the deployment %v: %v", objName, err)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -214,9 +223,9 @@ func (deploy NewDeploy) service() {
 				continue
 			}
 
-			svc, err := deploy.createOrGetSvc(deployLables, svcName)
+			svc, err := deploy.createOrGetSvc(deployLables, objName)
 			if err != nil {
-				log.Printf("Error creating the service %v: %v", svcName, err)
+				log.Printf("Error creating the service %v: %v", objName, err)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -224,6 +233,16 @@ func (deploy NewDeploy) service() {
 				continue
 			}
 			svcAddress := svc.Spec.ClusterIP
+
+			_, err = deploy.createHpa(objName, req.fn.Spec.ExecutionStrategyParams, *depl)
+			if err != nil {
+				log.Printf("Error creating the HPA %v: %v", objName, err)
+				req.responseChannel <- &fnResponse{
+					error: err,
+					fSvc:  nil,
+				}
+				continue
+			}
 
 			kubeObjRef := api.ObjectReference{
 				Kind:            depl.TypeMeta.Kind,
@@ -258,16 +277,14 @@ func (deploy NewDeploy) service() {
 				fSvc:  fsvc,
 			}
 
-		case FN_UPDATE:
+		case FnUpdate:
 			// TBD
-		case FN_DELETE:
+		case FnDelete:
 			fsvc, err := deploy.fsCache.GetByFunction(&req.fn.Metadata)
-			identifier := fmt.Sprintf("%v-%v",
+			objName := fmt.Sprintf("%v-%v",
 				req.fn.Spec.Environment.Name,
 				req.fn.Metadata.Name)
-			deplName := fmt.Sprintf("depl-%v", identifier)
-			svcName := fmt.Sprintf("svc-%v", identifier)
-
+			log.Printf("Deleting objects with name: %v", objName)
 			if err != nil {
 				req.responseChannel <- &fnResponse{
 					error: err,
@@ -275,7 +292,7 @@ func (deploy NewDeploy) service() {
 				}
 				continue
 			}
-			err = deploy.deleteDeployment(deploy.namespace, deplName)
+			err = deploy.deleteDeployment(deploy.namespace, objName)
 			if err != nil {
 				req.responseChannel <- &fnResponse{
 					error: err,
@@ -284,7 +301,7 @@ func (deploy NewDeploy) service() {
 				continue
 			}
 
-			err = deploy.deleteSvc(deploy.namespace, svcName)
+			err = deploy.deleteSvc(deploy.namespace, objName)
 			if err != nil {
 				req.responseChannel <- &fnResponse{
 					error: err,
@@ -320,7 +337,7 @@ func (deploy NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncSv
 	}
 	deploy.requestChannel <- &fnRequest{
 		fn:              fn,
-		reqType:         FN_CREATE,
+		reqType:         FnCreate,
 		responseChannel: c,
 	}
 	resp := <-c
