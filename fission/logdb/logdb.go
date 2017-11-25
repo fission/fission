@@ -32,16 +32,18 @@ type LogDatabase interface {
 }
 
 type LogFilter struct {
-	Pod      string
-	Function string
-	FuncUid  string
-	Since    time.Time
+	Pod         string
+	Function    string
+	FuncUid     string
+	Since       time.Time
+	RecordLimit int
 }
 
 type LogEntry struct {
 	Timestamp time.Time
 	Message   string
 	Stream    string
+	Sequence  int
 	Container string
 	Namespace string
 	FuncName  string

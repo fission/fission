@@ -78,12 +78,15 @@ func downloadUrl(url string, localPath string) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	w, err := os.Create(localPath)
 	if err != nil {
 		return err
 	}
-
-	err = ioutil.WriteFile(localPath, body, 0600)
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(localPath, 0600)
 	if err != nil {
 		return err
 	}

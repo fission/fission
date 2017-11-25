@@ -18,138 +18,23 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/dchest/uniuri"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/logdb"
-	storageSvcClient "github.com/fission/fission/storagesvc/client"
 )
-
-func fileSize(filePath string) int64 {
-	info, err := os.Stat(filePath)
-	checkErr(err, fmt.Sprintf("stat %v", filePath))
-	return info.Size()
-}
-
-// upload a file and return a fission.Archive
-func createArchive(client *client.Client, fileName string) *fission.Archive {
-	var archive fission.Archive
-	if fileSize(fileName) < fission.ArchiveLiteralSizeLimit {
-		contents := getContents(fileName)
-		archive.Type = fission.ArchiveTypeLiteral
-		archive.Literal = contents
-	} else {
-		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
-		ssClient := storageSvcClient.MakeClient(u)
-
-		// TODO add a progress bar
-		id, err := ssClient.Upload(fileName, nil)
-		checkErr(err, fmt.Sprintf("upload file %v", fileName))
-
-		archiveUrl := ssClient.GetUrl(id)
-
-		archive.Type = fission.ArchiveTypeUrl
-		archive.URL = archiveUrl
-
-		f, err := os.Open(fileName)
-		if err != nil {
-			checkErr(err, fmt.Sprintf("find file %v", fileName))
-		}
-		defer f.Close()
-
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
-		}
-
-		archive.Checksum = fission.Checksum{
-			Type: fission.ChecksumTypeSHA256,
-			Sum:  hex.EncodeToString(h.Sum(nil)),
-		}
-	}
-	return &archive
-}
-
-func createPackage(client *client.Client, fnName, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
-	pkgSpec := fission.PackageSpec{
-		Environment: fission.EnvironmentReference{
-			Namespace: metav1.NamespaceDefault,
-			Name:      envName,
-		},
-	}
-
-	var pkgStatus fission.BuildStatus
-
-	if len(deployArchiveName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
-	}
-	if len(srcArchiveName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcArchiveName)
-	}
-
-	// start a build only when a package has no deploy archive
-	if len(srcArchiveName) > 0 && len(deployArchiveName) == 0 {
-		pkgStatus = fission.BuildStatusPending
-	} else {
-		pkgStatus = fission.BuildStatusNone
-	}
-
-	if len(buildcmd) > 0 {
-		pkgSpec.BuildCommand = buildcmd
-	}
-
-	fnList, err := json.Marshal([]string{fnName})
-	checkErr(err, "encode json")
-
-	annotation := map[string]string{
-		"createdForFunction": fnName,
-		"usedByFunctions":    string(fnList),
-	}
-
-	pkgName := strings.ToLower(fmt.Sprintf("%v-%v", fnName, uniuri.NewLen(6)))
-	pkg := &crd.Package{
-		Metadata: metav1.ObjectMeta{
-			Name:        pkgName,
-			Namespace:   metav1.NamespaceDefault,
-			Annotations: annotation,
-		},
-		Spec: pkgSpec,
-		Status: fission.PackageStatus{
-			BuildStatus: pkgStatus,
-		},
-	}
-	pkgMetadata, err := client.PackageCreate(pkg)
-	checkErr(err, "create package")
-	return pkgMetadata
-}
-
-func getContents(filePath string) []byte {
-	var code []byte
-	var err error
-
-	code, err = ioutil.ReadFile(filePath)
-	checkErr(err, fmt.Sprintf("read %v", filePath))
-	return code
-}
 
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
@@ -216,25 +101,51 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --name argument.")
 	}
 
-	envName := c.String("env")
-	if len(envName) == 0 {
-		fatal("Need --env argument.")
+	fnList, err := client.FunctionList()
+	checkErr(err, "get function list")
+	// check function existence before creating package
+	for _, fn := range fnList {
+		if fn.Metadata.Name == fnName {
+			fatal("A function with the same name already exists.")
+		}
 	}
-
-	srcArchiveName := c.String("src")
-	deployArchiveName := c.String("code")
-	if len(deployArchiveName) == 0 {
-		deployArchiveName = c.String("deploy")
-	}
-
-	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		fatal("Need --code or --deploy to specify deployment archive, or use --src to specify source archive.")
-	}
-
 	entrypoint := c.String("entrypoint")
-	buildcmd := c.String("buildcmd")
+	pkgName := c.String("pkg")
 
-	pkgMetadata := createPackage(client, fnName, envName, srcArchiveName, deployArchiveName, buildcmd)
+	var pkgMetadata *metav1.ObjectMeta
+	var envName string
+
+	if len(pkgName) > 0 {
+		// use existing package
+		pkg, err := client.PackageGet(&metav1.ObjectMeta{
+			Namespace: metav1.NamespaceDefault,
+			Name:      pkgName,
+		})
+		checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
+		pkgMetadata = &pkg.Metadata
+		envName = pkg.Spec.Environment.Name
+	} else {
+		// need to specify environment for creating new package
+		envName = c.String("env")
+		if len(envName) == 0 {
+			fatal("Need --env argument.")
+		}
+
+		srcArchiveName := c.String("src")
+		deployArchiveName := c.String("code")
+		if len(deployArchiveName) == 0 {
+			deployArchiveName = c.String("deploy")
+		}
+		// fatal when both src & deploy archive are empty
+		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
+			fatal("Need --deploy or --src argument.")
+		}
+
+		buildcmd := c.String("buildcmd")
+
+		// create new package
+		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
+	}
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
@@ -263,7 +174,7 @@ func fnCreate(c *cli.Context) error {
 		},
 	}
 
-	_, err := client.FunctionCreate(function)
+	_, err = client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
@@ -350,13 +261,17 @@ func fnGetMeta(c *cli.Context) error {
 func fnUpdate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	if len(c.String("package")) > 0 {
+		fatal("--package is deprecated, please use --deploy instead.")
+	}
+
+	if len(c.String("srcpkg")) > 0 {
+		fatal("--srcpkg is deprecated, please use --src instead.")
+	}
+
 	fnName := c.String("name")
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
-	}
-
-	if len(c.String("package")) > 0 {
-		fatal("--package is deprecated, please use --deploy instead.")
 	}
 
 	function, err := client.FunctionGet(&metav1.ObjectMeta{
@@ -371,43 +286,65 @@ func fnUpdate(c *cli.Context) error {
 		deployArchiveName = c.String("deploy")
 	}
 	srcArchiveName := c.String("src")
+	pkgName := c.String("pkg")
+	entrypoint := c.String("entrypoint")
+	buildcmd := c.String("buildcmd")
+	force := c.Bool("force")
 
-	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 {
-		fatal("Need --env or --code or --package or --deploy argument.")
+	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
+		len(entrypoint) == 0 && len(buildcmd) == 0 {
+		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd argument.")
 	}
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
 	}
 
-	entrypoint := c.String("entrypoint")
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
-	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Name:      function.Spec.Package.PackageRef.Name,
-		Namespace: function.Spec.Package.PackageRef.Namespace,
-	})
-	checkErr(err, fmt.Sprintf("read package '%v'", function.Spec.Package.PackageRef.Name))
-
-	buildcmd := c.String("buildcmd")
-	if len(buildcmd) == 0 {
-		// use previous build command if not specified.
-		buildcmd = pkg.Spec.BuildCommand
+	if len(pkgName) == 0 {
+		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
-	if len(deployArchiveName) > 0 || len(srcArchiveName) > 0 {
-		// create a new package for function
-		pkgMetadata := createPackage(client, function.Metadata.Name,
-			function.Spec.Environment.Name, srcArchiveName, deployArchiveName, buildcmd)
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Namespace: metav1.NamespaceDefault,
+		Name:      pkgName,
+	})
+	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 
-		// update function spec with resource version
-		function.Spec.Package.PackageRef = fission.PackageRef{
-			Namespace:       pkgMetadata.Namespace,
-			Name:            pkgMetadata.Name,
-			ResourceVersion: pkgMetadata.ResourceVersion,
+	pkgMetadata := &pkg.Metadata
+
+	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
+		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+		checkErr(err, "get function list")
+
+		if !force && len(fnList) > 1 {
+			fatal("Package is used by multiple functions, use --force to force update")
 		}
+
+		pkgMetadata = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd)
+		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
+
+		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
+
+		// update resource version of package reference of functions that shared the same package
+		for _, fn := range fnList {
+			// ignore the update for current function here, it will be updated later.
+			if fn.Metadata.Name != fnName {
+				fn.Spec.Package.PackageRef.ResourceVersion = pkgMetadata.ResourceVersion
+				_, err := client.FunctionUpdate(&fn)
+				checkErr(err, "update function")
+			}
+		}
+	}
+
+	// update function spec with new package metadata
+	function.Spec.Package.PackageRef = fission.PackageRef{
+		Namespace:       pkgMetadata.Namespace,
+		Name:            pkgMetadata.Name,
+		ResourceVersion: pkgMetadata.ResourceVersion,
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -475,6 +412,11 @@ func fnLogs(c *cli.Context) error {
 		Namespace: metav1.NamespaceDefault,
 	}
 
+	recordLimit := c.Int("recordcount")
+	if recordLimit <= 0 {
+		recordLimit = 1000
+	}
+
 	f, err := client.FunctionGet(m)
 	checkErr(err, "get function")
 
@@ -494,10 +436,11 @@ func fnLogs(c *cli.Context) error {
 			select {
 			case <-requestChan:
 				logFilter := logdb.LogFilter{
-					Pod:      fnPod,
-					Function: f.Metadata.Name,
-					FuncUid:  string(f.Metadata.UID),
-					Since:    t,
+					Pod:         fnPod,
+					Function:    f.Metadata.Name,
+					FuncUid:     string(f.Metadata.UID),
+					Since:       t,
+					RecordLimit: recordLimit,
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
