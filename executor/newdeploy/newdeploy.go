@@ -207,7 +207,11 @@ func (deploy NewDeploy) createHpa(hpaName string, execStrategy fission.Execution
 		return nil, err
 	}
 	return cHpa, nil
+}
 
+func (deploy NewDeploy) deleteHpa(ns string, name string) error {
+	err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
+	return err
 }
 
 func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName string) (*apiv1.Service, error) {

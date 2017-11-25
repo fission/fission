@@ -156,7 +156,13 @@ func (deploy NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controlle
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
-			if fn.Spec.Backend == fission.BackendTypeNewdeploy {
+			env, err := deploy.fissionClient.
+				Environments(fn.Spec.Environment.Namespace).
+				Get(fn.Spec.Environment.Name)
+			if err != nil {
+				log.Printf("Error in fetching environment while eagerly creating function: %v", err)
+			}
+			if fn.Spec.Backend == fission.BackendTypeNewdeploy || env.Spec.Backend == fission.BackendTypeNewdeploy {
 				c := make(chan *fnResponse)
 				deploy.requestChannel <- &fnRequest{
 					fn:              fn,
@@ -309,6 +315,16 @@ func (deploy NewDeploy) service() {
 				}
 				continue
 			}
+
+			err = deploy.deleteHpa(deploy.namespace, objName)
+			if err != nil {
+				req.responseChannel <- &fnResponse{
+					error: err,
+					fSvc:  nil,
+				}
+				continue
+			}
+
 			_, err = deploy.fsCache.DeleteByKubeObject(fsvc.KubernetesObject, time.Second*0)
 			if err != nil {
 				req.responseChannel <- &fnResponse{
