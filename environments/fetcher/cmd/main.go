@@ -2,16 +2,16 @@ package main
 
 import (
 	"net/http"
-	"os"
-
+	"flag"
 	"github.com/fission/fission/environments/fetcher"
 )
 
 // Usage: fetcher <shared volume path>
 func main() {
-	funcDir := os.Args[1]
-	secretDir := os.Args[2]
-	configDir := os.Args[3]
+	flag.Parse()
+	funcDir := flag.Arg(0)
+	secretDir := flag.Arg(1)
+	configDir := flag.Arg(2)
 	
 	fetcher := fetcher.MakeFetcher(funcDir, secretDir, configDir)
 	mux := http.NewServeMux()
