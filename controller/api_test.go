@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"reflect"
 )
 
 var g struct {
@@ -211,7 +212,7 @@ func TestEnvironmentApi(t *testing.T) {
 
 	e, err := g.client.EnvironmentGet(m)
 	panicIf(err)
-	assert(testEnv.Spec == e.Spec, "env should match after reading")
+	assert(reflect.DeepEqual(testEnv.Spec, e.Spec), "env should match after reading")
 
 	testEnv.Metadata.ResourceVersion = m.ResourceVersion
 	testEnv.Spec.Runtime.Image = "another-img"
