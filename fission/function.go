@@ -181,9 +181,6 @@ func fnCreate(c *cli.Context) error {
 		},
 	}
 
-<<<<<<< HEAD
-	_, err = client.FunctionCreate(function)
-=======
 	if len(secretName) > 0 {
 		newSecret := fission.SecretReference{
 			Name:      secretName,
@@ -201,7 +198,7 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	_, err := client.FunctionCreate(function)
->>>>>>> refined secret/cfgmap access, removed secret/cfgmap code from fnUpdate
+
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
