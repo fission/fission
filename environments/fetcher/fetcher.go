@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"reflect"
 
 	"github.com/mholt/archiver"
 	"github.com/satori/go.uuid"
@@ -66,7 +67,23 @@ const (
 	FETCH_URL // remove this?
 )
 
+func MakeDir(volumePath string) {
+	if _, err := os.Stat(volumePath); err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(volumePath, os.ModeDir|0700)
+			if err != nil {
+				log.Fatalf("Error creating %v: %v", volumePath, err)
+			}
+		}
+	}
+	return
+}
+
 func MakeFetcher(sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) *Fetcher {
+	MakeDir(sharedVolumePath)
+	MakeDir(sharedSecretPath)
+	MakeDir(sharedConfigPath)
+
 	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil
@@ -136,6 +153,28 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 		return fission.MakeError(fission.ErrorChecksumFail, "Checksum validation failed")
 	}
 	return nil
+}
+
+func writeSecretOrConfigMap(dataMap interface{}, dirPath string, w http.ResponseWriter) {
+
+	dMap := reflect.ValueOf(dataMap)
+	for _, key := range dMap.MapKeys() {
+
+
+		writeFilePath := filepath.Join(dirPath, key.String())
+		
+		val := dMap.MapIndex(key)
+		err := ioutil.WriteFile(writeFilePath, val.Bytes(), 0600)
+
+		if err != nil {
+				e := fmt.Sprintf("Failed to write file %v: %v", writeFilePath, err)
+				log.Printf(e)
+				http.Error(w, e, 500)
+				return
+			}
+
+	}
+	return
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
@@ -249,13 +288,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Checking secrets/cfgmaps")
 	if len(req.SecretList) > 0 {
-		log.Println("writing secrets to file")
-
 		for _, secret := range req.SecretList {
-
-			if len(secret.Name) == 0 {
-				continue
-			}
 			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 
 			if err != nil {
@@ -267,36 +300,19 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 			secretPath := secret.Namespace + "/" + secret.Name
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
-			err = os.MkdirAll(secretDir, 0777)
+			err = os.MkdirAll(secretDir, 0700)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", secretDir, err)
 				log.Printf(e)
 				http.Error(w, e, 500)
 				return
 			}
-
-			for key, val := range data.Data {
-
-				secretFilePath := filepath.Join(secretDir, key)
-				err = ioutil.WriteFile(secretFilePath, val, 0600)
-				if err != nil {
-					e := fmt.Sprintf("Failed to write file %v: %v", secretPath, err)
-					log.Printf(e)
-					http.Error(w, e, 500)
-					return
-				}
-
-			}
+			writeSecretOrConfigMap(data.Data, secretDir, w)
 		}
 	}
 
 	if len(req.ConfigMapList) > 0 {
-		log.Println("writing configMaps to file")
 		for _, config := range req.ConfigMapList {
-
-			if len(config.Name) == 0 {
-				continue
-			}
 			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(config.Name, metav1.GetOptions{})
 
 			if err != nil {
@@ -308,28 +324,16 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 			configPath := config.Namespace + "/" + config.Name
 			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
-			err = os.MkdirAll(configDir, 0777)
+			err = os.MkdirAll(configDir, 0700)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", configDir, err)
 				log.Printf(e)
 				http.Error(w, e, 500)
 				return
 			}
-
-			for key, val := range data.Data {
-				configFilePath := filepath.Join(configDir, key)
-				err = ioutil.WriteFile(configFilePath, []byte(val), 0600)
-				if err != nil {
-					e := fmt.Sprintf("Failed to write file %v: %v", configPath, err)
-					log.Printf(e)
-					http.Error(w, e, 500)
-					return
-
-				}
-			}
+			writeSecretOrConfigMap(data.Data, configDir, w)
 		}
 	}
-
 	log.Printf("Completed fetch request")
 	// all done
 	w.WriteHeader(http.StatusOK)
