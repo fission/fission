@@ -164,6 +164,9 @@ func writeSecretOrConfigMap(dataMap interface{}, dirPath string, w http.Response
 		writeFilePath := filepath.Join(dirPath, key.String())
 		
 		val := dMap.MapIndex(key)
+		if val.Type() == reflect.TypeOf("hello") {
+			val = val.Convert(reflect.TypeOf([]byte(nil)))
+		}
 		err := ioutil.WriteFile(writeFilePath, val.Bytes(), 0600)
 
 		if err != nil {
