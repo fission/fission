@@ -87,7 +87,6 @@ func fnCreate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
 
-
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
 
