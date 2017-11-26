@@ -87,10 +87,10 @@ func fnCreate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
 
-<<<<<<< HEAD
+
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
-=======
+
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 
@@ -110,7 +110,6 @@ func fnCreate(c *cli.Context) error {
 	if len(deployArchiveName) == 0 {
 		deployArchiveName = c.String("deploy")
 	}
->>>>>>> Functions have access to secrets/configmaps specified by the user
 
 	if len(pkgName) > 0 {
 		// use existing package
