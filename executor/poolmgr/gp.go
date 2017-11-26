@@ -297,15 +297,28 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	return fmt.Sprintf("http://%v:8000/", podIP)
 }
 
+func IsIPv6(podIP string) bool {
+	ip := net.ParseIP(podIP)
+	return ip != nil && strings.Contains(podIP, ":")
+}
+
 func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	u := os.Getenv("TEST_SPECIALIZE_URL")
 	if len(u) != 0 {
 		return u
 	}
-	if version == 1 {
-		return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	t := IsIPv6(podIP)
+	if t == false {
+		if version == 1 {
+			return fmt.Sprintf("http://%v:8888/specialize", podIP)
+		}
+		return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
+	} else if t == true {
+		if version == 1 {
+			return fmt.Sprintf("http://[%v]:8888/specialize", podIP)
+		}
+		return fmt.Sprintf("http://[%v]:8888/v%v/specialize", podIP, version)
 	}
-	return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
 }
 
 // specializePod chooses a pod, copies the required user-defined function to that pod
