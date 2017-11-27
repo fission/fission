@@ -196,8 +196,7 @@ func fnCreate(c *cli.Context) error {
 		function.Spec.ConfigMapList = append(function.Spec.ConfigMapList, newCfgMap)
 	}
 
-	_, err := client.FunctionCreate(function)
-
+	_, err = client.FunctionCreate(function)
 	checkErr(err, "create function")
 
 	fmt.Printf("function '%v' created\n", fnName)
