@@ -104,12 +104,6 @@ func fnCreate(c *cli.Context) error {
 		cfgMapNameSpace = metav1.NamespaceDefault
 	}
 
-	srcArchiveName := c.String("src")
-	deployArchiveName := c.String("code")
-	if len(deployArchiveName) == 0 {
-		deployArchiveName = c.String("deploy")
-	}
-
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
