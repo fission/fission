@@ -248,7 +248,7 @@ dump_builder_pod_logs() {
     do
     echo "--- builder pod logs $p ---"
     containers=$(kubectl -n $bns get $p -o jsonpath={.spec.containers[*].name})
-    for c in containers
+    for c in $containers
     do
         echo "--- builder pod logs $p: container $c ---"
         kubectl -n $bns logs $p $c
