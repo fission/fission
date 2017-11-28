@@ -272,8 +272,6 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: RUNTIME_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
-        - name: EXECUTOR_BACKEND
-          value: "{{ .Values.execBackend }}"
       serviceAccount: fission-svc
 ---
 apiVersion: v1

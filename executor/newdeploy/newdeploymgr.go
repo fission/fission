@@ -69,10 +69,6 @@ type (
 )
 
 const (
-	envVersion = "ENV_VERSION"
-)
-
-const (
 	FnCreate requestType = iota
 	FnDelete
 	FnUpdate
@@ -131,16 +127,10 @@ func (deploy NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controlle
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
-			env, err := deploy.fissionClient.
-				Environments(fn.Spec.Environment.Namespace).
-				Get(fn.Spec.Environment.Name)
-			if err != nil {
-				log.Printf("Error in fetching environment while eagerly creating function: %v", err)
-			}
-			if fn.Spec.Backend == fission.BackendTypeNewdeploy || env.Spec.Backend == fission.BackendTypeNewdeploy {
-				log.Printf("Eagerly creating newDeploy objects for function")
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
 				// Eager creation of function if it is RealTimeApp
-				if fn.Spec.InvokeStrategy.RealTimeApp {
+				if fn.Spec.InvokeStrategy.ExecutionStrategy.EagerCreation == true {
+					log.Printf("Eagerly creating newDeploy objects for function")
 					c := make(chan *fnResponse)
 					deploy.requestChannel <- &fnRequest{
 						fn:              fn,
@@ -156,13 +146,7 @@ func (deploy NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controlle
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
-			env, err := deploy.fissionClient.
-				Environments(fn.Spec.Environment.Namespace).
-				Get(fn.Spec.Environment.Name)
-			if err != nil {
-				log.Printf("Error in fetching environment while eagerly creating function: %v", err)
-			}
-			if fn.Spec.Backend == fission.BackendTypeNewdeploy || env.Spec.Backend == fission.BackendTypeNewdeploy {
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
 				c := make(chan *fnResponse)
 				deploy.requestChannel <- &fnRequest{
 					fn:              fn,
@@ -216,7 +200,6 @@ func (deploy NewDeploy) service() {
 				"environmentName": env.Metadata.Name,
 				"environmentUid":  string(env.Metadata.UID),
 				"functioName":     req.fn.Metadata.Name,
-				"backend":         string(req.fn.Spec.Backend),
 			}
 
 			depl, err := deploy.createOrGetDeployment(req.fn, env, objName, deployLables)
@@ -240,7 +223,7 @@ func (deploy NewDeploy) service() {
 			}
 			svcAddress := svc.Spec.ClusterIP
 
-			_, err = deploy.createHpa(objName, req.fn.Spec.ExecutionStrategyParams, *depl)
+			_, err = deploy.createHpa(objName, req.fn.Spec.InvokeStrategy.ExecutionStrategy, *depl)
 			if err != nil {
 				log.Printf("Error creating the HPA %v: %v", objName, err)
 				req.responseChannel <- &fnResponse{
@@ -286,20 +269,14 @@ func (deploy NewDeploy) service() {
 		case FnUpdate:
 			// TBD
 		case FnDelete:
-			fsvc, err := deploy.fsCache.GetByFunction(&req.fn.Metadata)
 			objName := fmt.Sprintf("%v-%v",
 				req.fn.Spec.Environment.Name,
 				req.fn.Metadata.Name)
 			log.Printf("Deleting objects with name: %v", objName)
+
+			err := deploy.deleteDeployment(deploy.namespace, objName)
 			if err != nil {
-				req.responseChannel <- &fnResponse{
-					error: err,
-					fSvc:  nil,
-				}
-				continue
-			}
-			err = deploy.deleteDeployment(deploy.namespace, objName)
-			if err != nil {
+				log.Printf("Error deleting the deployment: %v", objName)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -309,6 +286,7 @@ func (deploy NewDeploy) service() {
 
 			err = deploy.deleteSvc(deploy.namespace, objName)
 			if err != nil {
+				log.Printf("Error deleting the service: %v", objName)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -318,6 +296,7 @@ func (deploy NewDeploy) service() {
 
 			err = deploy.deleteHpa(deploy.namespace, objName)
 			if err != nil {
+				log.Printf("Error deleting the HPA: %v", objName)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -325,8 +304,18 @@ func (deploy NewDeploy) service() {
 				continue
 			}
 
+			fsvc, err := deploy.fsCache.GetByFunction(&req.fn.Metadata)
+			if err != nil {
+				log.Printf("fsvc not fonud in cache: %v", req.fn.Metadata)
+				req.responseChannel <- &fnResponse{
+					error: err,
+					fSvc:  nil,
+				}
+				continue
+			}
 			_, err = deploy.fsCache.DeleteByKubeObject(fsvc.KubernetesObject, time.Second*0)
 			if err != nil {
+				log.Printf("Error deleting the Kubernetes Object from cache: %v", fsvc.KubernetesObject)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,

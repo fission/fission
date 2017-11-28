@@ -103,7 +103,11 @@ type (
 		FunctionName string `json:"functionName"`
 	}
 
+	//BackendType is the primary backend for an environment
 	BackendType string
+
+	//StrategyType is the strategy to be used for function execution
+	StrategyType string
 
 	// FunctionSpec describes the contents of the function.
 	FunctionSpec struct {
@@ -118,24 +122,23 @@ type (
 		// cpu and memory resources as per K8S standards
 		Resources v1.ResourceRequirements `json:"resources"`
 
-		InvokeStrategy
+		// InvokeStrategy decides the backend selection and execution parameters
+		InvokeStrategy InvokeStrategy
 	}
 
+	// InvokeStrategy defines the type of strategy and parameters of the strategy
+	// User should set only one strategy
 	InvokeStrategy struct {
-		StrategyParams
+		ExecutionStrategy ExecutionStrategy
+		StrategyType      StrategyType
 	}
 
-	// StrategyParams Can have only one member
-	StrategyParams struct {
-		ExecutionStrategyParams
-		// Other strategy params for future
-	}
-
-	ExecutionStrategyParams struct {
-		Backend     BackendType
-		MinScale    int
-		MaxScale    int
-		RealTimeApp bool
+	//ExecutionStrategy decides the scale & immediate/delayed creation
+	ExecutionStrategy struct {
+		Backend       BackendType
+		MinScale      int
+		MaxScale      int
+		EagerCreation bool
 	}
 
 	FunctionReferenceType string
@@ -200,9 +203,11 @@ type (
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
 
+		// Request and limit resources for the environment
 		Resources v1.ResourceRequirements `json:"resources"`
 
-		Backend BackendType `json:"backend"`
+		// The initial pool size for environment
+		Poolsize int `json:"poolsize"`
 	}
 
 	AllowedFunctionsPerContainer string
@@ -307,6 +312,10 @@ const (
 const (
 	BackendTypePoolmgr   = "poolmgr"
 	BackendTypeNewdeploy = "newdeploy"
+)
+
+const (
+	StrategyTypeExecution = "execution"
 )
 
 const (

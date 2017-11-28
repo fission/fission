@@ -18,7 +18,6 @@ package executor
 
 import (
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -128,7 +127,14 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		return nil, err
 	}
 
-	switch env.Spec.Backend {
+	fn, err := executor.fissionClient.
+		Functions(meta.Namespace).
+		Get(meta.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	switch fn.Spec.InvokeStrategy.ExecutionStrategy.Backend {
 	case fission.BackendTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta)
 		return fs, err
@@ -143,10 +149,6 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		fsvc, err := pool.GetFuncSvc(meta)
 		return fsvc, err
 	}
-}
-
-func (executor *Executor) chooseBackend(meta *metav1.ObjectMeta) (string, error) {
-	return os.Getenv("EXECUTOR_BACKEND"), nil
 }
 
 func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {

@@ -39,6 +39,10 @@ const (
 	DeploymentVersion = "extensions/v1beta1"
 )
 
+const (
+	envVersion = "ENV_VERSION"
+)
+
 func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
 
@@ -114,6 +118,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 							Image:                  deploy.fetcherImg,
 							ImagePullPolicy:        deploy.fetcherImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
+							Resources:              env.Spec.Resources,
 							VolumeMounts: []apiv1.VolumeMount{
 								{
 									Name:      "userfunc",
@@ -151,7 +156,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 		return nil, err
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 40; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -161,7 +166,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 		}
 		time.Sleep(time.Second)
 	}
-	return nil, errors.New("Failed to create replicas in deployment")
+	return nil, errors.New("Failed to create deployment within timeout window")
 
 }
 
@@ -176,7 +181,7 @@ func (deploy NewDeploy) deleteDeployment(ns string, name string) error {
 	return nil
 }
 
-func (deploy NewDeploy) createHpa(hpaName string, execStrategy fission.ExecutionStrategyParams, depl v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy NewDeploy) createHpa(hpaName string, execStrategy fission.ExecutionStrategy, depl v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
 
 	minRepl := int32(execStrategy.MinScale)
 	maxRepl := int32(execStrategy.MaxScale)

@@ -157,17 +157,18 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("fetcher received fetch request and started downloading: %v", req)
 
-	err, code := fetcher.Fetch(req)
+	code, err := fetcher.Fetch(req)
 	if err != nil {
 		http.Error(w, err.Error(), code)
 	}
 
-	log.Printf("Completed fetch request")
 	// all done
 	w.WriteHeader(http.StatusOK)
 }
 
-func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
+// Fetch takes FetchRequest and makes the fetch call
+// It returns the HTTP code and error if any
+func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
@@ -177,7 +178,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 			log.Printf(e)
-			return errors.New(e), 400
+			return 400, errors.New(e)
 		}
 	} else {
 		// get pkg
@@ -185,7 +186,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
-			return errors.New(e), 500
+			return 500, errors.New(e)
 		}
 
 		var archive *fission.Archive
@@ -201,7 +202,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
-				return errors.New(e), 500
+				return 500, errors.New(e)
 			}
 		} else {
 			// download and verify
@@ -209,14 +210,14 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
-				return errors.New(e), 400
+				return 400, errors.New(e)
 			}
 
 			err = verifyChecksum(tmpPath, &archive.Checksum)
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)
-				return errors.New(e), 400
+				return 400, errors.New(e)
 			}
 		}
 	}
@@ -228,19 +229,19 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (error, int) {
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			log.Println(err.Error())
-			return err, 500
+			return 500, err
 		}
 		tmpPath = tmpUnarchivePath
 	}
 
 	// move tmp file to requested filename
 	err := fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
-	log.Printf("Successfully placed at %v", filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
 		log.Println(err.Error())
-		return err, 500
+		return 500, err
 	}
-	return nil, 200
+	log.Printf("Successfully placed at %v", filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	return 200, nil
 }
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {

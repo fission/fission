@@ -43,7 +43,7 @@ func main() {
 	maxMem := cli.StringFlag{Name: "maxmemory", Usage: "Maximum memory to be assigned to pod (In megabyte)"}
 	minScale := cli.StringFlag{Name: "minscale", Usage: "Minmum number of pods (Uses resource inputs to configure HPA)"}
 	maxScale := cli.StringFlag{Name: "maxscale", Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
-	syncApp := cli.BoolFlag{Name: "syncapp", Usage: "Function is assumed to be called synchronously if specified"}
+	eagerCreate := cli.BoolFlag{Name: "eagercreate", Usage: "Eager creation of pods"}
 
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
@@ -63,12 +63,13 @@ func main() {
 	fnBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "build command for builder to run with"}
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
+	fnBackendFlag := cli.StringFlag{Name: "backend", Usage: "backend for execution one of 'poolmgr', 'newdeploy' default to 'poolmgr'"}
 
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, syncApp}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, eagerCreate, fnBackendFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag}, Action: fnGet},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag}, Action: fnGetMeta},
-		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale}, Action: fnUpdate},
+		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, eagerCreate, fnBackendFlag}, Action: fnUpdate},
 		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag}, Action: fnDelete},
 		{Name: "list", Usage: "List all functions", Flags: []cli.Flag{}, Action: fnList},
 		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogCountFlag}, Action: fnLogs},
@@ -116,16 +117,16 @@ func main() {
 
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
-	envBackendFlag := cli.StringFlag{Name: "backend", Usage: "Backend for environment (One of poolmgr or newdeploy), defaults to poolmgr"}
+	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Usage: "Size of the pool"}
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
 	envBuilderImageFlag := cli.StringFlag{Name: "builder", Usage: "Environment builder image URL (optional)"}
 	envBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for environment builder to build source package (optional)"}
 
 	envVersionFlag := cli.IntFlag{Name: "version", Usage: "Environment API version: defaults to 1 (means v1 interface)"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envBackendFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag}, Action: envCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag}, Action: envCreate},
 		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag}, Action: envGet},
-		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envBackendFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem}, Action: envUpdate},
+		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem}, Action: envUpdate},
 		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag}, Action: envDelete},
 		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{}, Action: envList},
 	}

@@ -632,10 +632,16 @@ func (gp *GenericPool) idlePodReaper() {
 			continue
 		}
 		for _, obj := range objects {
-			log.Printf("Reaping idle pod '%v'", obj.Name)
-			err := gp.CleanupFunctionService(obj)
+			fn, err := gp.fissionClient.Functions(obj.Namespace).Get(obj.Name)
 			if err != nil {
-				log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
+				log.Printf("Error getting function '%v': %v", obj.Name, err)
+			}
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypePoolmgr {
+				log.Printf("Reaping idle pod '%v'", obj.Name)
+				err := gp.CleanupFunctionService(obj)
+				if err != nil {
+					log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
+				}
 			}
 		}
 	}

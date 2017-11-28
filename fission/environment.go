@@ -39,7 +39,7 @@ func envCreate(c *cli.Context) error {
 		fatal("Need a name, use --name.")
 	}
 
-	envBackend := chooseBackend(c.String("backend"))
+	poolsize := c.Int("poolsize")
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
@@ -79,7 +79,7 @@ func envCreate(c *cli.Context) error {
 				Image:   envBuilderImg,
 				Command: envBuildCmd,
 			},
-			Backend:   envBackend,
+			Poolsize:  poolsize,
 			Resources: resourceReq,
 		},
 	}
@@ -151,7 +151,7 @@ func envUpdate(c *cli.Context) error {
 		env.Spec.Builder.Command = envBuildCmd
 	}
 
-	env.Spec.Backend = chooseBackend(c.String("backend"))
+	env.Spec.Poolsize = c.Int("poolsize")
 
 	_, err = client.EnvironmentUpdate(env)
 	checkErr(err, "update environment")
@@ -186,29 +186,14 @@ func envList(c *cli.Context) error {
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "BACKEND")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE")
 	for _, env := range envs {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Backend)
+			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Poolsize)
 	}
 	w.Flush()
 
 	return nil
-}
-
-func chooseBackend(backendName string) fission.BackendType {
-	var envBackend fission.BackendType
-	switch backendName {
-	case "":
-		envBackend = fission.BackendTypePoolmgr
-	case fission.BackendTypePoolmgr:
-		envBackend = fission.BackendTypePoolmgr
-	case fission.BackendTypeNewdeploy:
-		envBackend = fission.BackendTypeNewdeploy
-	default:
-		fatal("Backend must be one of 'poolmgr' or 'newdeploy'")
-	}
-	return envBackend
 }
 
 func getResourceReq(mincpu int, maxcpu int, minmem int, maxmem int) v1.ResourceRequirements {

@@ -39,52 +39,70 @@ func main() {
 		}
 	}
 
-	_fetcher := fetcher.MakeFetcher(dir)
+	f := fetcher.MakeFetcher(dir)
 
 	if *specializeOnStart {
-		specializePod(_fetcher, fetchPayload, loadPayload)
+		specializePod(f, fetchPayload, loadPayload)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", _fetcher.FetchHandler)
-	mux.HandleFunc("/upload", _fetcher.UploadHandler)
+	mux.HandleFunc("/", f.FetchHandler)
+	mux.HandleFunc("/upload", f.UploadHandler)
 	http.ListenAndServe(":8000", mux)
 }
 
 func fetcherUsage() {
-	fmt.Printf("Usage: fetcher [OPTIONAL] -specialize-on-startup [OPTIONAL] -fetch-request <json> -load-request <json> <shared volume path> \n")
+	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] <shared volume path> \n")
 }
 
-func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
+func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
 	// Fetch code
 	var fetchReq fetcher.FetchRequest
 	err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
 	if err != nil {
 		log.Fatalf("Error parsing fetch request: %v", err)
 	}
-	err, _ = _fetcher.Fetch(fetchReq)
+	_, err = f.Fetch(fetchReq)
 	if err != nil {
 		log.Fatalf("Error fetching: %v", err)
 	}
 
 	// Specialize the pod
+
 	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
 	if err != nil {
-		log.Fatalf("Error parsing environment version %v", err)
+		log.Fatalf("Error parsing environment version %v, error: %v", envVersion, err)
 	}
-	maxRetries := 30
-	for i := 0; i < maxRetries; i++ {
-		var resp2 *http.Response
-		if envVersion == 2 {
-			resp2, err = http.Post("http://localhost:8888/v2/specialize", "application/json", bytes.NewReader([]byte{}))
-		} else {
-			resp2, err = http.Post("http://localhost:8888/specialize", "application/json", bytes.NewReader([]byte{}))
-		}
 
-		if err == nil && resp2.StatusCode < 300 {
+	maxRetries := 30
+	var contentType string
+	var specializeURL string
+	var reader *bytes.Reader
+
+	if envVersion == 2 {
+		contentType = "application/json"
+		specializeURL = "http://localhost:8888/v2/specialize"
+		reader = bytes.NewReader([]byte(*loadPayload))
+	} else {
+		contentType = "text/plain"
+		specializeURL = "http://localhost:8888/specialize"
+		reader = bytes.NewReader([]byte{})
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Post(specializeURL, contentType, reader)
+		if err == nil && resp.StatusCode < 300 {
 			// Success
-			resp2.Body.Close()
-			os.OpenFile("/tmp/ready", os.O_RDONLY|os.O_CREATE, 0666)
+			resp.Body.Close()
+			//On Success creates a file which is used as a readiness probe by Kubernetes for this container/pod
+			file, err := os.OpenFile("/tmp/ready", os.O_RDONLY|os.O_CREATE, 0666)
+			if err != nil {
+				log.Fatalf("Error creating readiness file: %v", err)
+			}
+			err = file.Close()
+			if err != nil {
+				log.Fatalf("Error closing readiness file: %v", err)
+			}
 			break
 		}
 
@@ -102,7 +120,7 @@ func specializePod(_fetcher *fetcher.Fetcher, fetchPayload *string, loadPayload 
 		}
 
 		if err == nil {
-			err = fission.MakeErrorFromHTTP(resp2)
+			err = fission.MakeErrorFromHTTP(resp)
 		}
 		log.Printf("Failed to specialize pod: %v", err)
 	}

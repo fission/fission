@@ -64,26 +64,41 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, backend string, realtimeApp bool) fission.InvokeStrategy {
+func getInvokeStrategy(minScale int, maxScale int, backend string, eagerCreate bool) fission.InvokeStrategy {
 
-	backendType := chooseBackend(backend)
-
+	// Hpa needs minimum 1 pods
 	if minScale == 0 {
 		minScale = 1
 	}
 	if maxScale == 0 {
 		minScale = 1
 	}
+
+	if minScale > maxScale {
+		fatal("Maxscale must be higher than or equal to minscale")
+	}
+
+	var fnBackend fission.BackendType
+	switch backend {
+	case "":
+		fnBackend = fission.BackendTypePoolmgr
+	case fission.BackendTypePoolmgr:
+		fnBackend = fission.BackendTypePoolmgr
+	case fission.BackendTypeNewdeploy:
+		fnBackend = fission.BackendTypeNewdeploy
+	default:
+		fatal("Backend must be one of 'poolmgr' or 'newdeploy', default to 'poolmgr'")
+	}
+
 	// Right now a simple single case strategy implementation
 	// This will potentially get more sophisticated once we have more strategies in place
 	strategy := fission.InvokeStrategy{
-		StrategyParams: fission.StrategyParams{
-			ExecutionStrategyParams: fission.ExecutionStrategyParams{
-				Backend:     backendType,
-				MinScale:    minScale,
-				MaxScale:    maxScale,
-				RealTimeApp: realtimeApp,
-			},
+		StrategyType: fission.StrategyTypeExecution,
+		ExecutionStrategy: fission.ExecutionStrategy{
+			Backend:       fnBackend,
+			MinScale:      minScale,
+			MaxScale:      maxScale,
+			EagerCreation: eagerCreate,
 		},
 	}
 	return strategy
@@ -149,7 +164,7 @@ func fnCreate(c *cli.Context) error {
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("syncapp"))
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("eagercreate"))
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
