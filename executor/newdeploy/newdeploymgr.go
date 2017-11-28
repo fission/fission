@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/executor"
 	"github.com/fission/fission/executor/fscache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -42,6 +43,7 @@ type (
 		kubernetesClient *kubernetes.Clientset
 		fissionClient    *crd.FissionClient
 		crdClient        *rest.RESTClient
+		instanceID       string
 
 		fetcherImg             string
 		fetcherImagePullPolicy apiv1.PullPolicy
@@ -80,6 +82,7 @@ func MakeNewDeploy(
 	crdClient *rest.RESTClient,
 	namespace string,
 	fsCache *fscache.FunctionServiceCache,
+	instanceID string,
 ) *NewDeploy {
 
 	log.Printf("Creating NewDeploy Backend")
@@ -97,6 +100,7 @@ func MakeNewDeploy(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		crdClient:        crdClient,
+		instanceID:       instanceID,
 
 		namespace: namespace,
 		fsCache:   fsCache,
@@ -197,9 +201,10 @@ func (deploy NewDeploy) service() {
 				req.fn.Metadata.Name)
 
 			deployLables := map[string]string{
-				"environmentName": env.Metadata.Name,
-				"environmentUid":  string(env.Metadata.UID),
-				"functioName":     req.fn.Metadata.Name,
+				"environmentName":                  env.Metadata.Name,
+				"environmentUid":                   string(env.Metadata.UID),
+				"functioName":                      req.fn.Metadata.Name,
+				executor.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
 			}
 
 			depl, err := deploy.createOrGetDeployment(req.fn, env, objName, deployLables)

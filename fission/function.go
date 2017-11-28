@@ -71,7 +71,7 @@ func getInvokeStrategy(minScale int, maxScale int, backend string, eagerCreate b
 		minScale = 1
 	}
 	if maxScale == 0 {
-		minScale = 1
+		maxScale = 1
 	}
 
 	if minScale > maxScale {
