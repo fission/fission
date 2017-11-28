@@ -20,11 +20,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/fission/fission"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
-
-const EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
 
 // cleanupOldResources looks for resources created by an old
 // poolmgr instance and cleans them up.
@@ -86,7 +85,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		return err
 	}
 	for _, dep := range deploymentList.Items {
-		id, ok := dep.ObjectMeta.Labels[EXECUTOR_INSTANCEID_LABEL]
+		id, ok := dep.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
 			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
@@ -103,7 +102,7 @@ func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instance
 		return err
 	}
 	for _, rs := range rsList.Items {
-		id, ok := rs.ObjectMeta.Labels[EXECUTOR_INSTANCEID_LABEL]
+		id, ok := rs.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
 			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
@@ -119,7 +118,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 		return err
 	}
 	for _, pod := range podList.Items {
-		id, ok := pod.ObjectMeta.Labels[EXECUTOR_INSTANCEID_LABEL]
+		id, ok := pod.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
 			err := client.CoreV1().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
@@ -136,7 +135,7 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 		return err
 	}
 	for _, svc := range svcList.Items {
-		id, ok := svc.ObjectMeta.Labels[EXECUTOR_INSTANCEID_LABEL]
+		id, ok := svc.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up svc %v", svc.ObjectMeta.Name)
 			err := client.CoreV1().Services(namespace).Delete(svc.ObjectMeta.Name, nil)
@@ -154,7 +153,7 @@ func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId strin
 	}
 
 	for _, hpa := range hpaList.Items {
-		id, ok := hpa.ObjectMeta.Labels[EXECUTOR_INSTANCEID_LABEL]
+		id, ok := hpa.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up HPA %v", hpa.ObjectMeta.Name)
 			err := client.AutoscalingV1().HorizontalPodAutoscalers().Delete(hpa.ObjectMeta.Name, nil)

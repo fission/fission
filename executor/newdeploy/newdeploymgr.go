@@ -25,7 +25,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/executor"
 	"github.com/fission/fission/executor/fscache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -201,10 +200,10 @@ func (deploy NewDeploy) service() {
 				req.fn.Metadata.Name)
 
 			deployLables := map[string]string{
-				"environmentName":                  env.Metadata.Name,
-				"environmentUid":                   string(env.Metadata.UID),
-				"functioName":                      req.fn.Metadata.Name,
-				executor.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
+				"environmentName":                 env.Metadata.Name,
+				"environmentUid":                  string(env.Metadata.UID),
+				"functioName":                     req.fn.Metadata.Name,
+				fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
 			}
 
 			depl, err := deploy.createOrGetDeployment(req.fn, env, objName, deployLables)

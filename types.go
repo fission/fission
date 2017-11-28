@@ -283,6 +283,8 @@ type (
 	}
 )
 
+const EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
+
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )

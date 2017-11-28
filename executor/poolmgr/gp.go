@@ -44,7 +44,6 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
-	"github.com/fission/fission/executor"
 	"github.com/fission/fission/executor/fscache"
 )
 
@@ -144,9 +143,9 @@ func MakeGenericPool(
 
 	// Labels for generic deployment/RS/pods.
 	gp.labelsForPool = map[string]string{
-		"environmentName":                  gp.env.Metadata.Name,
-		"environmentUid":                   string(gp.env.Metadata.UID),
-		executor.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
+		"environmentName":                 gp.env.Metadata.Name,
+		"environmentUid":                  string(gp.env.Metadata.UID),
+		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
 	}
 
 	// create the pool
@@ -267,10 +266,10 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 
 func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string]string {
 	return map[string]string{
-		"functionName":                     metadata.Name,
-		"functionUid":                      string(metadata.UID),
-		"unmanaged":                        "true", // this allows us to easily find pods not managed by the deployment
-		executor.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
+		"functionName":                    metadata.Name,
+		"functionUid":                     string(metadata.UID),
+		"unmanaged":                       "true", // this allows us to easily find pods not managed by the deployment
+		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
 	}
 }
 
