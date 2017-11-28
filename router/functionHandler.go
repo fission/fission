@@ -29,10 +29,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	executorClient "github.com/fission/fission/executor/client"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type functionHandler struct {
 	fmap     *functionServiceMap
+	fmetrics *functionMetricsMap
 	executor *executorClient.Client
 	function *metav1.ObjectMeta
 }
@@ -91,6 +93,30 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	reqStartTime := time.Now()
+
+	//increment the request counter for the function here
+	log.Println("incrementing prometheus request counter")
+	metrics, err := fh.fmetrics.lookup(fh.function)
+	if err != nil {
+		//function metrics cache miss
+		requestCounter := prometheus.NewCounter(prometheus.CounterOpts{
+			Name: fh.function.Name + "_request_count",
+			Help: "Number of requests to this particular function route",
+			})
+		regErr := prometheus.Register(requestCounter)
+
+		if regErr !=  nil {
+			log.Println("error registering request counter: ", regErr)
+			return
+		}
+		requestCounter.Inc()
+		newfunctionMetrics := &functionMetrics {
+			requestCount: requestCounter,
+		}
+		fh.fmetrics.assign(fh.function, newfunctionMetrics)
+	} else {
+		metrics.requestCount.Inc()
+	}
 
 	// retrieve url params and add them to request header
 	vars := mux.Vars(request)

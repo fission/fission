@@ -18,52 +18,48 @@ package router
 
 import (
 	"log"
-	"net/url"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cache"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type (
-	functionServiceMap struct {
-		cache *cache.Cache // map[metadataKey]*url.URL
+	functionMetricsMap struct {
+		cache *cache.Cache // map[metadataKey]*functionMetrics
+	}
+
+	functionMetrics struct {
+		requestCount prometheus.Counter
 	}
 )
 
-func makeFunctionServiceMap(expiry time.Duration) *functionServiceMap {
-	return &functionServiceMap{
+func makeFunctionMetricsMap(expiry time.Duration) *functionMetricsMap {
+	return &functionMetricsMap{
 		cache: cache.MakeCache(expiry, 0),
 	}
 }
 
-func keyFromMetadata(m *metav1.ObjectMeta) *metadataKey {
-	return &metadataKey{
-		Name:            m.Name,
-		Namespace:       m.Namespace,
-		ResourceVersion: m.ResourceVersion,
-	}
-}
-
-func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
+func (fmap *functionMetricsMap) lookup(f *metav1.ObjectMeta) (*functionMetrics, error) {
 	mk := keyFromMetadata(f)
 	item, err := fmap.cache.Get(*mk)
 	if err != nil {
 		return nil, err
 	}
-	u := item.(*url.URL)
+	u := item.(*functionMetrics)
 	return u, nil
 }
 
-func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceUrl *url.URL) {
+func (fmap *functionMetricsMap) assign(f *metav1.ObjectMeta, fMetrics *functionMetrics) {
 	mk := keyFromMetadata(f)
-	err, old := fmap.cache.Set(*mk, serviceUrl)
+	err, old := fmap.cache.Set(*mk, fMetrics)
 	if err != nil {
-		if *serviceUrl == *(old.(*url.URL)) {
+		if *fMetrics == *(old.(*functionMetrics)) {
 			return
 		}
-		log.Printf("error caching service url for function with a different value: %v", err)
+		log.Printf("error caching function metrics for function with a different value: %v", err)
 		// ignore error
 	}
 }
