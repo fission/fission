@@ -122,8 +122,8 @@ type (
 		// Reference to a package containing deployment and optionally the source
 		Package FunctionPackageRef `json:"package"`
 
-		SecretList    []SecretReference    `json:"secretList"`
-		ConfigMapList []ConfigMapReference `json:"configMapList"`
+		SecretList    []SecretReference    `json:"secrets"`
+		ConfigMapList []ConfigMapReference `json:"configmaps"`
 	}
 
 	FunctionReferenceType string

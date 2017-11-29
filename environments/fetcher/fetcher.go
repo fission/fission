@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"github.com/mholt/archiver"
@@ -155,18 +154,12 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 	return nil
 }
 
-func writeSecretOrConfigMap(dataMap interface{}, dirPath string, w http.ResponseWriter) {
+func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string, w http.ResponseWriter) {
 
-	dMap := reflect.ValueOf(dataMap)
-	for _, key := range dMap.MapKeys() {
+	for key, val := range dataMap {
 
-		writeFilePath := filepath.Join(dirPath, key.String())
-
-		val := dMap.MapIndex(key)
-		if val.Type() == reflect.TypeOf("hello") {
-			val = val.Convert(reflect.TypeOf([]byte(nil)))
-		}
-		err := ioutil.WriteFile(writeFilePath, val.Bytes(), 0600)
+		writeFilePath := filepath.Join(dirPath, key)
+		err := ioutil.WriteFile(writeFilePath, val, 0600)
 
 		if err != nil {
 			e := fmt.Sprintf("Failed to write file %v: %v", writeFilePath, err)
@@ -174,7 +167,6 @@ func writeSecretOrConfigMap(dataMap interface{}, dirPath string, w http.Response
 			http.Error(w, e, 500)
 			return
 		}
-
 	}
 	return
 }
@@ -333,7 +325,11 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, e, 500)
 				return
 			}
-			writeSecretOrConfigMap(data.Data, configDir, w)
+			configMap := make(map[string][]byte)
+			for key, val := range data.Data {
+				configMap[key] = []byte(val)
+			}
+			writeSecretOrConfigMap(configMap, configDir, w)
 		}
 	}
 	log.Printf("Completed fetch request")
