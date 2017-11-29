@@ -117,7 +117,7 @@ func main() {
 
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
-	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Usage: "Size of the pool"}
+	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Usage: "Size of the pool, if not specified defaults to 3"}
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
 	envBuilderImageFlag := cli.StringFlag{Name: "builder", Usage: "Environment builder image URL (optional)"}
 	envBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for environment builder to build source package (optional)"}

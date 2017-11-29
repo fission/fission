@@ -151,7 +151,11 @@ func envUpdate(c *cli.Context) error {
 		env.Spec.Builder.Command = envBuildCmd
 	}
 
-	env.Spec.Poolsize = c.Int("poolsize")
+	if c.IsSet("poolsize") {
+		env.Spec.Poolsize = c.Int("poolsize")
+	} else {
+		env.Spec.Poolsize = 3
+	}
 
 	_, err = client.EnvironmentUpdate(env)
 	checkErr(err, "update environment")
