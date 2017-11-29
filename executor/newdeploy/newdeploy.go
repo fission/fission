@@ -19,6 +19,7 @@ package newdeploy
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -43,11 +44,12 @@ const (
 	envVersion = "ENV_VERSION"
 )
 
-func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLables map[string]string) (*v1beta1.Deployment, error) {
+func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
+	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(1)
 	targetFilename := "user"
+	userfunc := "userfunc"
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 	if err == nil && existingDepl.Status.ReadyReplicas >= replicas {
@@ -70,30 +72,32 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 	}
 
 	fetchPayload, err := json.Marshal(fetchReq)
+	if err != nil {
+		return nil, err
+	}
 	loadPayload, err := json.Marshal(loadReq)
+	if err != nil {
+		return nil, err
+	}
 
 	deployment := &v1beta1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: DeploymentVersion,
-			Kind:       DeploymentKind,
-		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   deployName,
-			Labels: deployLables,
+			Labels:       deployLabels,
+			GenerateName: fn.Metadata.Name,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: deployLables,
+				MatchLabels: deployLabels,
 			},
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: deployLables,
+					Labels: deployLabels,
 				},
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{
 						{
-							Name: "userfunc",
+							Name: userfunc,
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
@@ -107,7 +111,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "userfunc",
+									Name:      userfunc,
 									MountPath: deploy.sharedMountPath,
 								},
 							},
@@ -121,7 +125,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 							Resources:              env.Spec.Resources,
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "userfunc",
+									Name:      userfunc,
 									MountPath: deploy.sharedMountPath,
 								},
 							},
@@ -141,7 +145,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 										Command: []string{"cat", "/tmp/ready"},
 									},
 								},
-								InitialDelaySeconds: 2,
+								InitialDelaySeconds: 1,
 								PeriodSeconds:       1,
 							},
 						},
@@ -153,6 +157,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 	}
 	depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
 	if err != nil {
+		log.Printf("Error while creating deployment: %v", err)
 		return nil, err
 	}
 
@@ -161,7 +166,8 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 		if err != nil {
 			return nil, err
 		}
-		if latestDepl.Status.ReadyReplicas >= replicas {
+		//TODO check for imagePullerror
+		if latestDepl.Status.ReadyReplicas == replicas {
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)
@@ -170,7 +176,7 @@ func (deploy NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environ
 
 }
 
-func (deploy NewDeploy) deleteDeployment(ns string, name string) error {
+func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	deletePropagation := metav1.DeletePropagationForeground
 	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
@@ -181,7 +187,7 @@ func (deploy NewDeploy) deleteDeployment(ns string, name string) error {
 	return nil
 }
 
-func (deploy NewDeploy) createHpa(hpaName string, execStrategy fission.ExecutionStrategy, depl v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) createHpa(hpaName string, execStrategy *fission.ExecutionStrategy, depl *v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
 
 	minRepl := int32(execStrategy.MinScale)
 	maxRepl := int32(execStrategy.MaxScale)
@@ -219,7 +225,7 @@ func (deploy NewDeploy) deleteHpa(ns string, name string) error {
 	return err
 }
 
-func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName string) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string) (*apiv1.Service, error) {
 
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
@@ -236,11 +242,11 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       "pod-port",
+					Name:       "runtime-env-port",
 					Port:       int32(80),
 					TargetPort: intstr.FromInt(8888)},
 			},
-			Selector: deployLables,
+			Selector: deployLabels,
 			Type:     apiv1.ServiceTypeClusterIP,
 		},
 	}
@@ -253,7 +259,7 @@ func (deploy NewDeploy) createOrGetSvc(deployLables map[string]string, svcName s
 	return svc, nil
 }
 
-func (deploy NewDeploy) deleteSvc(ns string, name string) error {
+func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 	err := deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		return err

@@ -147,7 +147,7 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 }
 
 func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers().List(meta_v1.ListOptions{})
+	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(namespace).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId strin
 		id, ok := hpa.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up HPA %v", hpa.ObjectMeta.Name)
-			err := client.AutoscalingV1().HorizontalPodAutoscalers().Delete(hpa.ObjectMeta.Name, nil)
+			err := client.AutoscalingV1().HorizontalPodAutoscalers(namespace).Delete(hpa.ObjectMeta.Name, nil)
 			logErr("Cleaning up HPA", err)
 		}
 
