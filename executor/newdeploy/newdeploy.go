@@ -82,8 +82,8 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:       deployLabels,
-			GenerateName: fn.Metadata.Name,
+			Labels: deployLabels,
+			Name:   deployName,
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &replicas,

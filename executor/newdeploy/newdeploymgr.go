@@ -252,7 +252,9 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		return fsvc, err
 	}
 
-	objName := fn.Metadata.Name
+	objName := fmt.Sprintf("%v-%v",
+		fn.Metadata.Namespace,
+		fn.Metadata.Name)
 
 	deployLabels := map[string]string{
 		"environmentName":                 env.Metadata.Name,
@@ -307,7 +309,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	objName := fmt.Sprintf("%v-%v",
-		fn.Spec.Environment.Name,
+		fn.Metadata.Namespace,
 		fn.Metadata.Name)
 
 	log.Printf("Deleting objects with name: %v", objName)

@@ -39,7 +39,12 @@ func envCreate(c *cli.Context) error {
 		fatal("Need a name, use --name.")
 	}
 
-	poolsize := c.Int("poolsize")
+	var poolsize int
+	if c.IsSet("poolsize") {
+		poolsize = c.Int("poolsize")
+	} else {
+		poolsize = 3
+	}
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
@@ -153,8 +158,6 @@ func envUpdate(c *cli.Context) error {
 
 	if c.IsSet("poolsize") {
 		env.Spec.Poolsize = c.Int("poolsize")
-	} else {
-		env.Spec.Poolsize = 3
 	}
 
 	_, err = client.EnvironmentUpdate(env)
