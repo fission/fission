@@ -25,7 +25,7 @@ checkFunctionResponse() {
 
 waitBuild() {
     echo "Waiting for builder manager to finish the build"
-    
+    sleep 4    
     while true; do
       kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
       if [[ $? -eq 0 ]]; then
