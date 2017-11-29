@@ -304,20 +304,21 @@ func IsIPv6(podIP string) bool {
 
 func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	u := os.Getenv("TEST_SPECIALIZE_URL")
+	isv6 := IsIPv6(podIP)
+	var baseUrl string
 	if len(u) != 0 {
 		return u
 	}
-	t := IsIPv6(podIP)
-	if t == false {
-		r := fmt.Sprintf("http://%v:8888", podIP)
-	} else if t == true { //Use bracket if IP == IPv6
-		r := fmt.Sprintf("http://[%v]:8888", podIP)
+	if isv6 == false {
+		baseUrl := fmt.Sprintf("http://%v:8888", podIP)
+	} else if isv6 == true { //Use bracket if IP == IPv6
+		baseUrl := fmt.Sprintf("http://[%v]:8888", podIP)
 	}
 
 	if version == 1 {
-	 	return fmt.Sprintf("%v/specialize", r)
+	 	return fmt.Sprintf("%v/specialize", baseUrl)
 	} else {
-	 	return fmt.Sprintf("%v/v%v/specialize", r, version)
+	 	return fmt.Sprintf("%v/v%v/specialize", baseUrl, version)
 	}
 }
 
