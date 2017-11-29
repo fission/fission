@@ -34,7 +34,7 @@ do
 done
 
 echo "Waiting for router to catch up"
-sleep 2
+sleep 4
 
 echo "Testing internal routes"
 for f in $f1 $f2
