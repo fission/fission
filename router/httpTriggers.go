@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type HTTPTriggerSet struct {
@@ -92,6 +93,7 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
+	muxRouter.Handle("/metrics", promhttp.Handler())
 
 	// HTTP triggers setup by the user
 	homeHandled := false

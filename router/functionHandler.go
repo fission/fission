@@ -98,6 +98,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	log.Println("incrementing prometheus request counter")
 	metrics, err := fh.fmetrics.lookup(fh.function)
 	if err != nil {
+		log.Println("functionmetricsmap cache miss!!!!", err)
 		//function metrics cache miss
 		requestCounter := prometheus.NewCounter(prometheus.CounterOpts{
 			Name: fh.function.Name + "_request_count",
