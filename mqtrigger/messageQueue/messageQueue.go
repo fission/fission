@@ -22,12 +22,12 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fission/fission/crd"
 )
 
 const (
 	NATS string = "nats-streaming"
+	KAFKA string = "kafka"
 )
 
 const (
@@ -87,6 +87,8 @@ func MakeMessageQueueTriggerManager(fissionClient *crd.FissionClient, routerUrl 
 	switch mqConfig.MQType {
 	case NATS:
 		messageQueue, err = makeNatsMessageQueue(routerUrl, mqConfig)
+	case KAFKA:
+		messageQueue, err = makeKafkaMessageQueue(routerUrl, mqConfig)
 	default:
 		err = errors.New("No matched message queue type found")
 	}
@@ -222,6 +224,9 @@ func IsTopicValid(mqType string, topic string) bool {
 	switch mqType {
 	case NATS:
 		return isTopicValidForNats(topic)
+	case KAFKA:
+		//Delegate to Kafka
+		return true; 
 	}
 	return false
 }
