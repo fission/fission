@@ -559,7 +559,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 	}
 
 	kubeObjRef := api.ObjectReference{
-		Kind:            pod.TypeMeta.Kind,
+		Kind:            "Pod",
 		Name:            pod.ObjectMeta.Name,
 		APIVersion:      pod.TypeMeta.APIVersion,
 		Namespace:       pod.ObjectMeta.Namespace,
@@ -596,29 +596,22 @@ func (gp *GenericPool) CleanupFunctionService(obj api.ObjectReference) error {
 		return nil
 	}
 
-	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(obj.Name, metav1.GetOptions{})
+	switch strings.ToLower(obj.Kind) {
+	case "pod":
+		err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(obj.Name, nil)
+	case "deployment":
+		err = gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Delete(obj.Name, nil)
+	case "service":
+		err = gp.kubernetesClient.CoreV1().Services(gp.namespace).Delete(obj.Name, nil)
+	case "hpa":
+		err = gp.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(gp.namespace).Delete(obj.Name, nil)
+	default:
+		log.Printf("The object type not identified for obj %v : %v", obj, obj.Kind)
+		return err
+	}
 	if err != nil {
 		return err
 	}
-
-	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
-	req, err := http.NewRequest("DELETE", loggerUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-	} else {
-		if resp.StatusCode != 200 {
-			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
-		}
-		resp.Body.Close()
-	}
-
-	// delete pod
-	err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(obj.Name, nil)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -631,16 +624,10 @@ func (gp *GenericPool) idlePodReaper() {
 			continue
 		}
 		for _, obj := range objects {
-			fn, err := gp.fissionClient.Functions(obj.Namespace).Get(obj.Name)
+			log.Printf("Reaping idle pod '%v'", obj.Name)
+			err := gp.CleanupFunctionService(obj)
 			if err != nil {
-				log.Printf("Error getting function '%v': %v", obj.Name, err)
-			}
-			if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypePoolmgr {
-				log.Printf("Reaping idle pod '%v'", obj.Name)
-				err := gp.CleanupFunctionService(obj)
-				if err != nil {
-					log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
-				}
+				log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
 			}
 		}
 	}

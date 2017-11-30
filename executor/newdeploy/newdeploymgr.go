@@ -157,7 +157,6 @@ func (deploy *NewDeploy) service() {
 				continue
 			}
 			if err != nil {
-				log.Printf("Error retrieving the environment: %v", err)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -176,7 +175,6 @@ func (deploy *NewDeploy) service() {
 				continue
 			}
 			if err != nil {
-				log.Printf("Error retrieving the environment: %v", err)
 				req.responseChannel <- &fnResponse{
 					error: err,
 					fSvc:  nil,
@@ -308,39 +306,46 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 }
 
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
+
+	var delError error
 	objName := fmt.Sprintf("%v-%v",
 		fn.Metadata.Namespace,
 		fn.Metadata.Name)
 
 	log.Printf("Deleting objects with name: %v", objName)
-
 	err := deploy.deleteDeployment(deploy.namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the deployment: %v", objName)
-		return nil, err
+		delError = err
 	}
 
 	err = deploy.deleteSvc(deploy.namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the service: %v", objName)
-		return nil, err
+		delError = err
 	}
 
 	err = deploy.deleteHpa(deploy.namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the HPA: %v", objName)
-		return nil, err
+		delError = err
 	}
 
 	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
 	if err != nil {
 		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
-		return nil, err
+		delError = err
+	} else {
+		// Delete KubernetesObject only if fsvc found in cache
+		_, err = deploy.fsCache.DeleteByKubeObject(fsvc.KubernetesObject, time.Second*0)
+		if err != nil {
+			log.Printf("Error deleting the Kubernetes Object from cache: %v", fsvc.KubernetesObject)
+			delError = err
+		}
 	}
-	_, err = deploy.fsCache.DeleteByKubeObject(fsvc.KubernetesObject, time.Second*0)
-	if err != nil {
-		log.Printf("Error deleting the Kubernetes Object from cache: %v", fsvc.KubernetesObject)
-		return nil, err
+
+	if delError != nil {
+		return nil, delError
 	}
 	return nil, nil
 }
