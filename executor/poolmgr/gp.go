@@ -559,7 +559,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 	}
 
 	kubeObjRef := api.ObjectReference{
-		Kind:            "Pod",
+		Kind:            "pod",
 		Name:            pod.ObjectMeta.Name,
 		APIVersion:      pod.TypeMeta.APIVersion,
 		Namespace:       pod.ObjectMeta.Namespace,
@@ -624,6 +624,10 @@ func (gp *GenericPool) idlePodReaper() {
 			continue
 		}
 		for _, obj := range objects {
+			// This is a temp fix and will be solved by https://github.com/fission/fission/issues/420
+			if obj.Kind != "pod" {
+				continue
+			}
 			log.Printf("Reaping idle pod '%v'", obj.Name)
 			err := gp.CleanupFunctionService(obj)
 			if err != nil {
