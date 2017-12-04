@@ -36,7 +36,7 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 	var resp *http.Response
 
 	for i := 0; i < maxRetries; i++ {
-		resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
+		resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
 
 		if err == nil && resp.StatusCode == 200 {
 			defer resp.Body.Close()

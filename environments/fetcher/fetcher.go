@@ -330,7 +330,8 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 	return nil
 }
 
-// archive is a function that zips directory into a zip file
+// archive zips the contents of directory at src into a new zip file
+// at dst (note that the contents are zipped, not the directory itself).
 func (fetcher *Fetcher) archive(src string, dst string) error {
 	var files []string
 	target, err := os.Stat(src)
