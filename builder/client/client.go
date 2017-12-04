@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 
@@ -50,20 +51,18 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fission.MakeErrorFromHTTP(resp)
-	}
-
 	rBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("Error reading resp body: %v", err)
 		return nil, err
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
 	err = json.Unmarshal([]byte(rBody), &pkgBuildResp)
 	if err != nil {
+		log.Printf("Error parsing resp body: %v", err)
 		return nil, err
 	}
 
-	return &pkgBuildResp, nil
+	return &pkgBuildResp, fission.MakeErrorFromHTTP(resp)
 }

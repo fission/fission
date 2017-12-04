@@ -124,7 +124,12 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+		var buildLogs string
+		if buildResp != nil {
+			buildLogs = buildResp.BuildLogs
+		}
+		buildLogs += fmt.Sprintf("%v\n", e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -141,7 +146,8 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -153,7 +159,8 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error creating deployment package CRD resource: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -162,7 +169,8 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 	if err != nil {
 		e := fmt.Sprintf("Error getting function list: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
+		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
 		return e, fission.MakeError(500, e)
 	}
 
@@ -178,7 +186,8 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 			if err != nil {
 				e := fmt.Sprintf("Error updating function package resource version: %v", err)
 				log.Println(e)
-				updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+				buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
+				updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
 				return e, fission.MakeError(500, e)
 			}
 		}
