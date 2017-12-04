@@ -19,6 +19,7 @@ package buildermgr
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +51,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 	if pkg.Status.BuildStatus != fission.BuildStatusPending {
 		e := "package is not in pending state"
 		log.Println(e)
-		return e, fission.MakeError(400, e)
+		return e, fission.MakeError(http.StatusBadRequest, e)
 	}
 
 	// update package status to running state, so that
@@ -67,7 +68,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		e := fmt.Sprintf("Error setting package pending state: %v", err)
 		log.Println(e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	env, err := fissionClient.Environments(metav1.NamespaceDefault).Get(pkg.Spec.Environment.Name)
@@ -75,7 +76,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		e := fmt.Sprintf("Error getting environment CRD info: %v", err)
 		log.Println(e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	svcName := fmt.Sprintf("%v-%v.%v", env.Metadata.Name, env.Metadata.ResourceVersion, builderNamespace)
@@ -95,7 +96,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		e := fmt.Sprintf("Error fetching source package: %v", err)
 		log.Println(e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	buildCmd := pkg.Spec.BuildCommand
@@ -120,7 +121,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		}
 		buildLogs += fmt.Sprintf("%v\n", e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	log.Printf("Build succeed, source package: %v, deployment package: %v", srcPkgFilename, buildResp.ArtifactFilename)
@@ -138,7 +139,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		log.Println(e)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	log.Printf("Start updating info of package: %v", pkg.Metadata.Name)
@@ -151,7 +152,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		log.Println(e)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	fnList, err := fissionClient.
@@ -161,7 +162,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 		log.Println(e)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(500, e)
+		return e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	// A package may be used by multiple functions. Update
@@ -178,7 +179,7 @@ func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes
 				log.Println(e)
 				buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 				updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-				return e, fission.MakeError(500, e)
+				return e, fission.MakeError(http.StatusInternalServerError, e)
 			}
 		}
 	}
