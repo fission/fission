@@ -157,10 +157,10 @@ func htList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION_NAME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "FUNCTION_NAME")
 	for _, ht := range hts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-			ht.Metadata.Name, ht.Spec.Method, ht.Spec.RelativeURL, ht.Spec.FunctionReference.Name)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+			ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 
