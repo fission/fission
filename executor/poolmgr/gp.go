@@ -311,14 +311,14 @@ func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	}
 	if isv6 == false {
 		baseUrl = fmt.Sprintf("http://%v:8888", podIP)
-	} else if isv6 == true { 		// We use bracket if the IP is in IPv6.
+	} else if isv6 == true { // We use bracket if the IP is in IPv6.
 		baseUrl = fmt.Sprintf("http://[%v]:8888", podIP)
 	}
 
 	if version == 1 {
-	 	return fmt.Sprintf("%v/specialize", baseUrl)
+		return fmt.Sprintf("%v/specialize", baseUrl)
 	} else {
-	 	return fmt.Sprintf("%v/v%v/specialize", baseUrl, version)
+		return fmt.Sprintf("%v/v%v/specialize", baseUrl, version)
 	}
 }
 
