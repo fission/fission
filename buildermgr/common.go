@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission"
@@ -44,8 +43,8 @@ import (
 // 6. Update package status to succeed state
 // 7. Update package resource in package ref of functions that share the same package
 // *. Update package status to failed state,if any one of steps above failed
-func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes.Clientset,
-	builderNamespace string, storageSvcUrl string, pkg *crd.Package) (buildLogs string, err error) {
+func buildPackage(fissionClient *crd.FissionClient, builderNamespace string,
+	storageSvcUrl string, pkg *crd.Package) (buildLogs string, err error) {
 
 	// Only do build for pending packages
 	if pkg.Status.BuildStatus != fission.BuildStatusPending {

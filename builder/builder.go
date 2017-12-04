@@ -136,8 +136,8 @@ func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLo
 	}
 
 	w.Header().Add("Content-Type", "application/json")
-	// should write header before body or client
-	// will receive http 200 regardless the real statusCode
+	// should write header before writing the body,
+	// or client will receive HTTP 200 regardless the real status code
 	w.WriteHeader(statusCode)
 	w.Write(rBody)
 }

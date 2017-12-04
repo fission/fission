@@ -22,7 +22,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -31,17 +30,15 @@ import (
 type (
 	packageWatcher struct {
 		fissionClient    *crd.FissionClient
-		kubernetesClient *kubernetes.Clientset
 		builderNamespace string
 		storageSvcUrl    string
 	}
 )
 
 func makePackageWatcher(fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, builderNamespace string, storageSvcUrl string) *packageWatcher {
+	builderNamespace string, storageSvcUrl string) *packageWatcher {
 	pkgw := &packageWatcher{
 		fissionClient:    fissionClient,
-		kubernetesClient: kubernetesClient,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
 	}
@@ -49,8 +46,7 @@ func makePackageWatcher(fissionClient *crd.FissionClient,
 }
 
 func (pkgw *packageWatcher) build(pkg *crd.Package) {
-	_, err := buildPackage(pkgw.fissionClient,
-		pkgw.kubernetesClient, pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
+	_, err := buildPackage(pkgw.fissionClient, pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
 	if err != nil {
 		log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 	}
