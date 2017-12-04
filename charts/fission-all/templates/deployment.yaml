@@ -1,77 +1,3 @@
-{{ if .Values.openshift }}
-
-# For openshift
-
----
-apiVersion: v1
-kind: ProjectRequest
-metadata:
-  name: fission
-  labels:
-    name: fission
-
----
-apiVersion: v1
-kind: ProjectRequest
-metadata:
-  name: {{ .Values.functionNamespace }}
-  labels:
-    name: fission-function
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: fission-admin
-  namespace: {{ .Release.Namespace }}
-
----
-apiVersion: v1
-kind: ClusterRole
-metadata:
-  name: fission:fission-admin
-rules:
-- apiGroups:
-  - extensions
-  attributeRestrictions: null
-  resources:
-  - deployments
-  verbs:
-  - create
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
-  attributeRestrictions: null
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - update
-
----
-apiVersion: v1
-groupNames: null
-kind: RoleBinding
-metadata:
-  name: fission:fission-admin
-  namespace: {{ .Values.functionNamespace }}
-roleRef:
-  name: fission:fission-admin
-subjects:
-- kind: ServiceAccount
-  name: fission-admin
-  namespace: {{ .Release.Namespace }}
-userNames:
-- system:serviceaccount:fission:fission-admin
-
-{{ else }}
-
-# For all environments except openshift
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -182,8 +108,6 @@ roleRef:
   kind: ClusterRole
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
-
-{{ end }}
 
 ---
 apiVersion: extensions/v1beta1
