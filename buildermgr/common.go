@@ -44,17 +44,7 @@ import (
 // 7. Update package resource in package ref of functions that share the same package
 // *. Update package status to failed state,if any one of steps above failed
 func buildPackage(fissionClient *crd.FissionClient, kubernetesClient *kubernetes.Clientset,
-	builderNamespace string, storageSvcUrl string, buildReq BuildRequest) (buildLogs string, err error) {
-
-	pkg, err := fissionClient.
-		Packages(buildReq.Package.Namespace).
-		Get(buildReq.Package.Name)
-	if err != nil {
-		e := fmt.Sprintf("Error getting function CRD info: %v", err)
-		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(500, e)
-	}
+	builderNamespace string, storageSvcUrl string, pkg *crd.Package) (buildLogs string, err error) {
 
 	// Only do build for pending packages
 	if pkg.Status.BuildStatus != fission.BuildStatusPending {

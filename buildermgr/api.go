@@ -82,8 +82,18 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pkg, err := builderMgr.fissionClient.
+		Packages(buildReq.Package.Namespace).
+		Get(buildReq.Package.Name)
+	if err != nil {
+		e := fmt.Sprintf("Error getting package CRD info: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
 	buildLogs, err := buildPackage(builderMgr.fissionClient, builderMgr.kubernetesClient,
-		builderMgr.namespace, builderMgr.storageSvcUrl, buildReq)
+		builderMgr.namespace, builderMgr.storageSvcUrl, pkg)
 	if err != nil {
 		code, e := fission.GetHTTPError(err)
 		http.Error(w, e, code)
