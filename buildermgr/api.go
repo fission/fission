@@ -39,9 +39,9 @@ type (
 	}
 
 	BuilderMgr struct {
-		fissionClient    *crd.FissionClient
-		storageSvcUrl    string
-		namespace        string
+		fissionClient *crd.FissionClient
+		storageSvcUrl string
+		namespace     string
 	}
 )
 
@@ -56,9 +56,9 @@ func MakeBuilderMgr(fissionClient *crd.FissionClient,
 	go pkgWatcher.watchPackages()
 
 	return &BuilderMgr{
-		fissionClient:    fissionClient,
-		storageSvcUrl:    storageSvcUrl,
-		namespace:        envBuilderNamespace,
+		fissionClient: fissionClient,
+		storageSvcUrl: storageSvcUrl,
+		namespace:     envBuilderNamespace,
 	}
 }
 
