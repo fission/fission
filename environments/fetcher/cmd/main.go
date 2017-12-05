@@ -23,5 +23,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", fetcher.FetchHandler)
 	mux.HandleFunc("/upload", fetcher.UploadHandler)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	http.ListenAndServe(":8000", mux)
 }
