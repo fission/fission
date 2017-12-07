@@ -39,10 +39,9 @@ type (
 	}
 
 	BuilderMgr struct {
-		fissionClient    *crd.FissionClient
-		kubernetesClient *kubernetes.Clientset
-		storageSvcUrl    string
-		namespace        string
+		fissionClient *crd.FissionClient
+		storageSvcUrl string
+		namespace     string
 	}
 )
 
@@ -53,14 +52,13 @@ func MakeBuilderMgr(fissionClient *crd.FissionClient,
 	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
-	pkgWatcher := makePackageWatcher(fissionClient, kubernetesClient, envBuilderNamespace, storageSvcUrl)
+	pkgWatcher := makePackageWatcher(fissionClient, envBuilderNamespace, storageSvcUrl)
 	go pkgWatcher.watchPackages()
 
 	return &BuilderMgr{
-		fissionClient:    fissionClient,
-		kubernetesClient: kubernetesClient,
-		storageSvcUrl:    storageSvcUrl,
-		namespace:        envBuilderNamespace,
+		fissionClient: fissionClient,
+		storageSvcUrl: storageSvcUrl,
+		namespace:     envBuilderNamespace,
 	}
 }
 
@@ -76,14 +74,23 @@ func (builderMgr *BuilderMgr) build(w http.ResponseWriter, r *http.Request) {
 	buildReq := BuildRequest{}
 	err = json.Unmarshal([]byte(body), &buildReq)
 	if err != nil {
-		e := fmt.Sprintf("invalid request body: %v", err)
+		e := fmt.Sprintf("Invalid request body: %v", err)
 		log.Println(e)
 		http.Error(w, e, 400)
 		return
 	}
 
-	buildLogs, err := buildPackage(builderMgr.fissionClient, builderMgr.kubernetesClient,
-		builderMgr.namespace, builderMgr.storageSvcUrl, buildReq)
+	pkg, err := builderMgr.fissionClient.
+		Packages(buildReq.Package.Namespace).
+		Get(buildReq.Package.Name)
+	if err != nil {
+		e := fmt.Sprintf("Error getting package CRD info: %v", err)
+		log.Println(e)
+		http.Error(w, e, 500)
+		return
+	}
+
+	buildLogs, err := buildPackage(builderMgr.fissionClient, builderMgr.namespace, builderMgr.storageSvcUrl, pkg)
 	if err != nil {
 		code, e := fission.GetHTTPError(err)
 		http.Error(w, e, code)

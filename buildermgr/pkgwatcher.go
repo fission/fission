@@ -22,7 +22,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -31,31 +30,25 @@ import (
 type (
 	packageWatcher struct {
 		fissionClient    *crd.FissionClient
-		kubernetesClient *kubernetes.Clientset
 		builderNamespace string
 		storageSvcUrl    string
 	}
 )
 
 func makePackageWatcher(fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, builderNamespace string, storageSvcUrl string) *packageWatcher {
+	builderNamespace string, storageSvcUrl string) *packageWatcher {
 	pkgw := &packageWatcher{
 		fissionClient:    fissionClient,
-		kubernetesClient: kubernetesClient,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
 	}
 	return pkgw
 }
 
-func (pkgw *packageWatcher) build(pkgMetadata metav1.ObjectMeta) {
-	buildReq := BuildRequest{
-		Package: pkgMetadata,
-	}
-	_, err := buildPackage(pkgw.fissionClient,
-		pkgw.kubernetesClient, pkgw.builderNamespace, pkgw.storageSvcUrl, buildReq)
+func (pkgw *packageWatcher) build(pkg *crd.Package) {
+	_, err := buildPackage(pkgw.fissionClient, pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
 	if err != nil {
-		log.Printf("Error building package %v: %v", buildReq.Package.Name, err)
+		log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 	}
 }
 
@@ -84,7 +77,7 @@ func (pkgw *packageWatcher) watchPackages() {
 
 			// only do build for packages in pending state
 			if pkg.Status.BuildStatus == fission.BuildStatusPending {
-				go pkgw.build(pkg.Metadata)
+				go pkgw.build(pkg)
 			}
 		}
 	}
