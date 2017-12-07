@@ -285,6 +285,12 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 	}()
 }
 
+func IsIPv6(podIP string) bool {
+	ip := net.ParseIP(podIP)
+	return ip != nil && strings.Contains(podIP, ":")
+}
+
+
 func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	testUrl := os.Getenv("TEST_FETCHER_URL")
 	if len(testUrl) != 0 {
@@ -294,12 +300,13 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 		time.Sleep(5 * time.Second)
 		return testUrl
 	}
-	return fmt.Sprintf("http://%v:8000/", podIP)
-}
+	isv6 := IsIPv6(podIP)
+	if isv6 == false {
+		return fmt.Sprintf("http://%v:8000/", podIP)
+	} else if isv6 == true { // We use bracket if the IP is in IPv6.
+		return fmt.Sprintf("http://[%v]:8000/", podIP)
+	}
 
-func IsIPv6(podIP string) bool {
-	ip := net.ParseIP(podIP)
-	return ip != nil && strings.Contains(podIP, ":")
 }
 
 func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
