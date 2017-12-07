@@ -85,7 +85,7 @@ func loadPlugin(codePath, entrypoint string) http.HandlerFunc {
 
 func specializeHandler(w http.ResponseWriter, r *http.Request) {
 	if userFunc != nil {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Not a generic container"))
 		return
 	}
@@ -108,7 +108,7 @@ func specializeHandler(w http.ResponseWriter, r *http.Request) {
 
 func specializeHandlerV2(w http.ResponseWriter, r *http.Request) {
 	if userFunc != nil {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Not a generic container"))
 		return
 	}
