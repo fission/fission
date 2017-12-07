@@ -290,7 +290,6 @@ func IsIPv6(podIP string) bool {
 	return ip != nil && strings.Contains(podIP, ":")
 }
 
-
 func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	testUrl := os.Getenv("TEST_FETCHER_URL")
 	if len(testUrl) != 0 {
