@@ -1,4 +1,6 @@
-FROM golang:1.8.1
+ARG GO_VERSION=1.9.2
+
+FROM golang:${GO_VERSION}
 
 ENV GOPATH /usr
 ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/go
