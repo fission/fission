@@ -300,11 +300,13 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 		return testUrl
 	}
 	isv6 := IsIPv6(podIP)
+	var baseUrl string
 	if isv6 == false {
-		return fmt.Sprintf("http://%v:8000/", podIP)
+		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
 	} else if isv6 == true { // We use bracket if the IP is in IPv6.
-		return fmt.Sprintf("http://[%v]:8000/", podIP)
+		baseUrl = fmt.Sprintf("http://[%v]:8000/", podIP)
 	}
+	return baseUrl
 
 }
 
