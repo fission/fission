@@ -285,6 +285,11 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 	}()
 }
 
+func IsIPv6(podIP string) bool {
+	ip := net.ParseIP(podIP)
+	return ip != nil && strings.Contains(podIP, ":")
+}
+
 func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	testUrl := os.Getenv("TEST_FETCHER_URL")
 	if len(testUrl) != 0 {
@@ -294,18 +299,35 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 		time.Sleep(5 * time.Second)
 		return testUrl
 	}
-	return fmt.Sprintf("http://%v:8000/", podIP)
+	isv6 := IsIPv6(podIP)
+	var baseUrl string
+	if isv6 == false {
+		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
+	} else if isv6 == true { // We use bracket if the IP is in IPv6.
+		baseUrl = fmt.Sprintf("http://[%v]:8000/", podIP)
+	}
+	return baseUrl
+
 }
 
 func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 	u := os.Getenv("TEST_SPECIALIZE_URL")
+	isv6 := IsIPv6(podIP)
+	var baseUrl string
 	if len(u) != 0 {
 		return u
 	}
-	if version == 1 {
-		return fmt.Sprintf("http://%v:8888/specialize", podIP)
+	if isv6 == false {
+		baseUrl = fmt.Sprintf("http://%v:8888", podIP)
+	} else if isv6 == true { // We use bracket if the IP is in IPv6.
+		baseUrl = fmt.Sprintf("http://[%v]:8888", podIP)
 	}
-	return fmt.Sprintf("http://%v:8888/v%v/specialize", podIP, version)
+
+	if version == 1 {
+		return fmt.Sprintf("%v/specialize", baseUrl)
+	} else {
+		return fmt.Sprintf("%v/v%v/specialize", baseUrl, version)
+	}
 }
 
 // specializePod chooses a pod, copies the required user-defined function to that pod
