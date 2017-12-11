@@ -116,7 +116,12 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			function: rr.functionMetadata,
 			executor: ts.executor,
 		}
-		muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler).Methods(trigger.Spec.Method)
+
+		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+		ht.Methods(trigger.Spec.Method)
+		if trigger.Spec.Host != "" {
+			ht.Host(trigger.Spec.Host)
+		}
 		if trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
 			homeHandled = true
 		}
