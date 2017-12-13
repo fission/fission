@@ -31,6 +31,7 @@ script:
   - glide install
   - ./fission-bundle/build.sh
   - hack/verify-gofmt.sh
+  - hack/verify-govet.sh
   - hack/runtests.sh
   - test/build_and_test.sh
 
