@@ -30,7 +30,6 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
-	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 )
 
@@ -473,6 +472,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 								},
 							},
 							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
+							Env: env.Spec.Builder.Env,
 						},
 						{
 							Name:                   "fetcher",
@@ -500,6 +500,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 								},
 							},
 							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
+							Env: env.Spec.Builder.Env,
 						},
 					},
 					ServiceAccountName: "fission-builder",

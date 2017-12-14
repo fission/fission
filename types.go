@@ -18,6 +18,7 @@ package fission
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 type (
@@ -152,7 +153,7 @@ type (
 
 		// Optional
 		// Environment variables to be set in environment
-		Env []EnvVar `json:"env"`
+		Env []apiv1.EnvVar `json:"env"`
 	}
 	Builder struct {
 		// Image for containing the language runtime.
@@ -163,7 +164,7 @@ type (
 
 		// Optional
 		// Environment variables to be set in environment
-		Env []EnvVar `json:"env"`
+		Env []apiv1.EnvVar `json:"env"`
 	}
 	EnvironmentSpec struct {
 		// Environment API version
@@ -182,10 +183,6 @@ type (
 		// Optional
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
-	}
-	EnvVar struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
 	}
 
 	AllowedFunctionsPerContainer string
