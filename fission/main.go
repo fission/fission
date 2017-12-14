@@ -20,14 +20,19 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
+	"fmt"
 )
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = "0.5.0"
-
+	app.Version = "0.4.0"
+	LocalPort := "30500"
+	err := runportForward(LocalPort)
+	if err != nil {
+		fatal(fmt.Sprintf("%v", err))
+	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalPort, Usage: "Fission server URL"},
 	}
