@@ -25,10 +25,12 @@ func runportForward(localPort string) error {
 		fatal("Error getting PodList with selector")
 	}
 	var podName string
+	var podNameSpace string
 	//there should only be one Pod in this list, the controller pod
 	for _, item := range PodList.Items {
 
 		podName = item.Name
+		podNameSpace = item.Namespace
 		break
 	}
 	fmt.Println(podName)
@@ -38,19 +40,31 @@ func runportForward(localPort string) error {
 		fatal(msg)
 	}
 
+	//get the ControllerPort
+	controllerService, err := PodClient.CoreV1().Services(podNameSpace).Get("controller", meta_v1.GetOptions{})
+	if err != nil {
+		fatal(fmt.Sprintf("Error getting controller service:%v", err))
+	}
+	var targetPort string
+	for  _, servicePort := range controllerService.Spec.Ports {
+
+		targetPort = servicePort.TargetPort.String()
+	}
+
 	StopChannel := make(chan struct{}, 1)
 	ReadyChannel := make(chan struct{})
 
 	fmt.Println("creating request url")
 	//create request URL
-	req := PodClient.CoreV1Client.RESTClient().Post().Resource("pods").Namespace("default").Name(podName).SubResource("portforward")
+	req := PodClient.CoreV1Client.RESTClient().Post().Resource("pods").Namespace(podNameSpace).Name(podName).SubResource("portforward")
 	url := req.URL()
 
 
 	fmt.Println("finished creating request url: ", url)
 
 	//create ports slice
-	ports := []string{localPort, "8888"}
+	portCombo := localPort + ":" + targetPort
+	ports := []string{portCombo}
 
 	//actually start the port-forwarding process here
 	dialer, err := remotecommand.NewExecutor(config, "POST", url)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/urfave/cli"
 	"fmt"
+	"time"
 )
 
 func main() {
@@ -29,10 +30,18 @@ func main() {
 	app.Usage = "Serverless functions for Kubernetes"
 	app.Version = "0.4.0"
 	LocalPort := "30500"
-	err := runportForward(LocalPort)
-	if err != nil {
-		fatal(fmt.Sprintf("%v", err))
-	}
+
+	go func() {
+		fmt.Println("starting port forward")
+		err := runportForward(LocalPort)
+		if err != nil {
+			fatal(fmt.Sprintf("%v", err))
+		}
+		fmt.Println("finishing go routine")
+
+	}()
+	fmt.Println("goroutine portforward has been called")
+	time.Sleep(10 * time.Second)
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalPort, Usage: "Fission server URL"},
 	}
