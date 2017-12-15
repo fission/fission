@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"net"
-	"strconv"
 	"github.com/fission/fission/crd"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"net"
+	"os"
+	"strconv"
 )
 
 func findFreePort() (string, error) {
@@ -21,17 +21,17 @@ func findFreePort() (string, error) {
 	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), nil
 }
 
-func runportForward(localPort string) error {
+func runportForward(serviceName string, localPort string) error {
 
 	//KUBECONFIG needs to be set to the correct path i.e ~/.kube/config
 	config, PodClient, _, err := crd.GetKubernetesClient()
 	if err != nil {
-		msg := fmt.Sprint("%v\n", err)
+		msg := fmt.Sprint("%v", err)
 		fatal(msg)
 	}
 
 	//get the podname for the controller
-	PodList, err := PodClient.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector:"svc=controller"})
+	PodList, err := PodClient.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: "svc=" + serviceName})
 	if err != nil {
 		fatal("Error getting PodList with selector")
 	}
@@ -52,12 +52,12 @@ func runportForward(localPort string) error {
 	}
 
 	//get the ControllerPort
-	controllerService, err := PodClient.CoreV1().Services(podNameSpace).Get("controller", meta_v1.GetOptions{})
+	service, err := PodClient.CoreV1().Services(podNameSpace).Get(serviceName, meta_v1.GetOptions{})
 	if err != nil {
-		fatal(fmt.Sprintf("Error getting controller service:%v", err))
+		fatal(fmt.Sprintf("Error getting %v service :%v", serviceName, err))
 	}
 	var targetPort string
-	for  _, servicePort := range controllerService.Spec.Ports {
+	for _, servicePort := range service.Spec.Ports {
 
 		targetPort = servicePort.TargetPort.String()
 	}
@@ -79,7 +79,7 @@ func runportForward(localPort string) error {
 		msg := fmt.Sprintf("newexecutor errored out :%v", err)
 		fatal(msg)
 	}
-	fw, err := portforward.New(dialer, ports , StopChannel, ReadyChannel, os.Stdout, os.Stderr)
+	fw, err := portforward.New(dialer, ports, StopChannel, ReadyChannel, os.Stdout, os.Stderr)
 
 	if err != nil {
 		msg := fmt.Sprintf("portforward.new errored out :%v", err)

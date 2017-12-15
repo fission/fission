@@ -19,10 +19,10 @@ package main
 import (
 	"os"
 
-	"github.com/urfave/cli"
 	"fmt"
-	"time"
+	"github.com/urfave/cli"
 	"net"
+	"time"
 )
 
 func main() {
@@ -30,15 +30,14 @@ func main() {
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
 	app.Version = "0.4.0"
-
-	//find an unused port
-	LocalPort, err := findFreePort()
+	// port forward Controller
+	LocalControllerPort, err := findFreePort()
 	if err != nil {
 		fatal(fmt.Sprintf("Error finding unused port :%v", err))
 	}
 
 	go func() {
-		err := runportForward(LocalPort)
+		err := runportForward("controller", LocalControllerPort)
 		if err != nil {
 			fatal(fmt.Sprintf("%v", err))
 		}
@@ -46,7 +45,7 @@ func main() {
 
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("",LocalPort), time.Second)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Second)
 		if conn != nil {
 			conn.Close()
 			break
@@ -54,7 +53,7 @@ func main() {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalPort, Usage: "Fission server URL"},
+		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalControllerPort, Usage: "Fission server URL"},
 	}
 
 	// trigger method and url flags (used in function and route CLIs)
