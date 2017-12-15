@@ -3,11 +3,23 @@ package main
 import (
 	"fmt"
 	"os"
+	"net"
+	"strconv"
 	"github.com/fission/fission/crd"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func findFreePort() (string, error) {
+
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return "", err
+	}
+	defer listener.Close()
+	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), nil
+}
 
 func runportForward(localPort string) error {
 

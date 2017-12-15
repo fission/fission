@@ -30,7 +30,12 @@ func main() {
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
 	app.Version = "0.4.0"
-	LocalPort := "30500"
+
+	//find an unused port
+	LocalPort, err := findFreePort()
+	if err != nil {
+		fatal(fmt.Sprintf("Error finding unused port :%v", err))
+	}
 
 	go func() {
 		err := runportForward(LocalPort)
