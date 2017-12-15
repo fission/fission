@@ -33,15 +33,11 @@ func main() {
 	LocalPort := "30500"
 
 	go func() {
-		fmt.Println("starting port forward")
 		err := runportForward(LocalPort)
 		if err != nil {
 			fatal(fmt.Sprintf("%v", err))
 		}
-		fmt.Println("finishing go routine")
-
 	}()
-	fmt.Println("goroutine portforward has been called")
 
 
 	for {

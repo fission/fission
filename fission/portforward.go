@@ -6,7 +6,6 @@ import (
 	"github.com/fission/fission/crd"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
-	//"k8s.io/client-go/rest"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,13 +53,9 @@ func runportForward(localPort string) error {
 	StopChannel := make(chan struct{}, 1)
 	ReadyChannel := make(chan struct{})
 
-	fmt.Println("creating request url")
 	//create request URL
 	req := PodClient.CoreV1Client.RESTClient().Post().Resource("pods").Namespace(podNameSpace).Name(podName).SubResource("portforward")
 	url := req.URL()
-
-
-	fmt.Println("finished creating request url: ", url)
 
 	//create ports slice
 	portCombo := localPort + ":" + targetPort
@@ -78,6 +73,5 @@ func runportForward(localPort string) error {
 		msg := fmt.Sprintf("portforward.new errored out :%v", err)
 		fatal(msg)
 	}
-	fmt.Println("calling portforwarder forwardports")
 	return fw.ForwardPorts()
 }
