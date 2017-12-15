@@ -22,6 +22,7 @@ import (
 	"github.com/urfave/cli"
 	"fmt"
 	"time"
+	"net"
 )
 
 func main() {
@@ -41,7 +42,16 @@ func main() {
 
 	}()
 	fmt.Println("goroutine portforward has been called")
-	time.Sleep(10 * time.Second)
+
+
+	for {
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("",LocalPort), time.Second)
+		if conn != nil {
+			conn.Close()
+			break
+		}
+	}
+
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalPort, Usage: "Fission server URL"},
 	}
