@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/scrape: 'true'
+  labels:
+    name: prometheus
+  name: prometheus
+spec:
+  selector:
+    app: prometheus
+  type: NodePort
+  ports:
+  - name: prometheus
+    protocol: TCP
+    port: 9090
+    nodePort: 30900
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      name: prometheus
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: quay.io/coreos/prometheus:0.19.2
+        args:
+          - '-storage.local.retention=6h'
+          - '-storage.local.memory-chunks=500000'
+          - '-config.file=/etc/prometheus/prometheus.yml'
+        ports:
+        - name: web
+          containerPort: 9090
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-configmap
