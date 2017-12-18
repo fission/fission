@@ -12,6 +12,14 @@ ROOT=$(dirname $0)/..
 
 helm_setup() {
     helm init
+    # wait for tiller ready
+    while true; do
+      kubectl --namespace kube-system get pod|grep tiller|grep Running
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
 }
 
 gcloud_login() {
@@ -137,7 +145,7 @@ helm_install_fission() {
 
     helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage
 
-    helm_setup
+    timeout 30 helm_setup
 
     echo "Deleting failed releases"
     helm list --failed -q|xargs -I@ bash -c "helm delete @"
