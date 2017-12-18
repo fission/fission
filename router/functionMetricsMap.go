@@ -33,6 +33,8 @@ type (
 
 	functionMetrics struct {
 		requestCount prometheus.Counter
+		latencyOverhead prometheus.Histogram
+		functionErrorCount prometheus.Counter
 	}
 )
 
