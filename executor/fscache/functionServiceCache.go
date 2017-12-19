@@ -45,11 +45,11 @@ const (
 
 type (
 	FuncSvc struct {
-		Function         *metav1.ObjectMeta  // function this pod/service is for
-		Environment      *crd.Environment    // function's environment
-		Address          string              // Host:Port or IP:Port that the function's service can be reached at.
-		KubernetesObject api.ObjectReference // Kubernetes Object (within the function namespace)
-		Backend          backendType
+		Function          *metav1.ObjectMeta    // function this pod/service is for
+		Environment       *crd.Environment      // function's environment
+		Address           string                // Host:Port or IP:Port that the function's service can be reached at.
+		KubernetesObjects []api.ObjectReference // Kubernetes Objects (within the function namespace)
+		Backend           backendType
 
 		Ctime time.Time
 		Atime time.Time
@@ -121,7 +121,9 @@ func (fsc *FunctionServiceCache) service() {
 			log.Printf("Cache has %v entries", len(funcCopy))
 			for key, fsvcI := range funcCopy {
 				fsvc := fsvcI.(*FuncSvc)
-				log.Printf("%v\t%v\t%v", key, fsvc.KubernetesObject.Kind, fsvc.KubernetesObject.Name)
+				for _, kubeObj := range fsvc.KubernetesObjects {
+					log.Printf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name)
+				}
 			}
 		case DELETE_BY_OBJECT:
 			resp.deleted, resp.error = fsc._deleteByKubeObject(req.kubernetesObject, req.age)
@@ -177,15 +179,17 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
-	err, _ = fsc.byKubeObject.Set(fsvc.KubernetesObject, *fsvc.Function)
-	if err != nil {
-		if fe, ok := err.(fission.Error); ok {
-			if fe.Code == fission.ErrorNameExists {
-				err = nil
+	for _, kubeObj := range fsvc.KubernetesObjects {
+		err, _ := fsc.byKubeObject.Set(kubeObj, *fsvc.Function)
+		if err != nil {
+			if fe, ok := err.(fission.Error); ok {
+				if fe.Code == fission.ErrorNameExists {
+					err = nil
+				}
 			}
+			log.Printf("error caching fsvc: %v", err)
+			return err, nil
 		}
-		log.Printf("error caching fsvc: %v", err)
-		return err, nil
 	}
 	return nil, nil
 }
@@ -248,6 +252,7 @@ func (fsc *FunctionServiceCache) _deleteByKubeObject(obj api.ObjectReference, mi
 
 	fsc.byFunction.Delete(crd.CacheKey(&m))
 	fsc.byAddress.Delete(fsvc.Address)
+	// Should delete only given K8S object or all others too?
 	fsc.byKubeObject.Delete(obj)
 
 	return true, nil
