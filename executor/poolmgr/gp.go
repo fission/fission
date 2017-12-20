@@ -580,23 +580,25 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
-	kubeObjRef := api.ObjectReference{
-		Kind:            pod.TypeMeta.Kind,
-		Name:            pod.ObjectMeta.Name,
-		APIVersion:      pod.TypeMeta.APIVersion,
-		Namespace:       pod.ObjectMeta.Namespace,
-		ResourceVersion: pod.ObjectMeta.ResourceVersion,
-		UID:             pod.ObjectMeta.UID,
+	kubeObjRef := []api.ObjectReference{
+		{
+			Kind:            pod.TypeMeta.Kind,
+			Name:            pod.ObjectMeta.Name,
+			APIVersion:      pod.TypeMeta.APIVersion,
+			Namespace:       pod.ObjectMeta.Namespace,
+			ResourceVersion: pod.ObjectMeta.ResourceVersion,
+			UID:             pod.ObjectMeta.UID,
+		},
 	}
 
 	fsvc := &fscache.FuncSvc{
-		Function:         m,
-		Environment:      gp.env,
-		Address:          svcHost,
-		KubernetesObject: kubeObjRef,
-		Backend:          fscache.POOLMGR,
-		Ctime:            time.Now(),
-		Atime:            time.Now(),
+		Function:          m,
+		Environment:       gp.env,
+		Address:           svcHost,
+		KubernetesObjects: kubeObjRef,
+		Backend:           fscache.POOLMGR,
+		Ctime:             time.Now(),
+		Atime:             time.Now(),
 	}
 
 	err, _ = gp.fsCache.Add(*fsvc)
@@ -606,39 +608,43 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 	return fsvc, nil
 }
 
-func (gp *GenericPool) CleanupFunctionService(obj api.ObjectReference) error {
+func (gp *GenericPool) CleanupFunctionService(obj *fscache.FuncSvc) error {
 	// remove ourselves from fsCache (only if we're still old)
-	deleted, err := gp.fsCache.DeleteByKubeObject(obj, gp.idlePodReapTime)
+	deleted, err := gp.fsCache.DeleteOld(obj, gp.idlePodReapTime)
 	if err != nil {
 		return err
 	}
 
 	if !deleted {
-		log.Printf("Not deleting %v, in use", obj.Name)
+		log.Printf("Not deleting %v, in use", obj.Function)
 		return nil
 	}
 
-	pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(obj.Name, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
+	var pod *apiv1.Pod
 
-	loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
-	req, err := http.NewRequest("DELETE", loggerUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-	} else {
-		if resp.StatusCode != 200 {
-			log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
+	for _, kubeobj := range obj.KubernetesObjects {
+		pod, err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(kubeobj.Name, metav1.GetOptions{})
+
+		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
+		req, err := http.NewRequest("DELETE", loggerUrl, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
+		} else {
+			if resp.StatusCode != 200 {
+				log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
+			}
+			resp.Body.Close()
 		}
-		resp.Body.Close()
-	}
 
-	// delete pod
-	err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(obj.Name, nil)
-	if err != nil {
-		return err
+		// delete pod
+		err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(kubeobj.Name, nil)
+		if err != nil {
+			return err
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -653,10 +659,9 @@ func (gp *GenericPool) idlePodReaper() {
 			continue
 		}
 		for _, obj := range objects {
-			log.Printf("Reaping idle pod '%v'", obj.Name)
 			err := gp.CleanupFunctionService(obj)
 			if err != nil {
-				log.Printf("Error deleting idle pod '%v': %v", obj.Name, err)
+				log.Printf("Error deleting Kube objects for fsvc '%v': %v", obj, err)
 			}
 		}
 	}

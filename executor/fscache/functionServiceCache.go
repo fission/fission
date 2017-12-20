@@ -35,7 +35,6 @@ const (
 	TOUCH fscRequestType = iota
 	LISTOLD
 	LOG
-	DELETE_BY_OBJECT
 )
 
 const (
@@ -63,15 +62,15 @@ type (
 		requestChannel chan *fscRequest
 	}
 	fscRequest struct {
-		requestType      fscRequestType
-		address          string
-		kubernetesObject api.ObjectReference
-		age              time.Duration
-		env              *metav1.ObjectMeta // used for ListOld
-		responseChannel  chan *fscResponse
+		requestType       fscRequestType
+		address           string
+		kubernetesObjects []api.ObjectReference
+		age               time.Duration
+		env               *metav1.ObjectMeta // used for ListOld
+		responseChannel   chan *fscResponse
 	}
 	fscResponse struct {
-		objects []api.ObjectReference
+		objects []*FuncSvc
 		deleted bool
 		error
 	}
@@ -99,8 +98,8 @@ func (fsc *FunctionServiceCache) service() {
 		case LISTOLD:
 			// get svcs idle for > req.age
 			byKubeObjectCopy := fsc.byKubeObject.Copy()
-			kubeObjects := make([]api.ObjectReference, 0)
-			for objI, mI := range byKubeObjectCopy {
+			funcObjects := make([]*FuncSvc, 0)
+			for _, mI := range byKubeObjectCopy {
 				m := mI.(metav1.ObjectMeta)
 				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
 				if err != nil {
@@ -109,13 +108,11 @@ func (fsc *FunctionServiceCache) service() {
 					fsvc := fsvcI.(*FuncSvc)
 					if fsvc.Environment.Metadata.UID == req.env.UID &&
 						time.Now().Sub(fsvc.Atime) > req.age {
-
-						obj := objI.(api.ObjectReference)
-						kubeObjects = append(kubeObjects, obj)
+						funcObjects = append(funcObjects, fsvc)
 					}
 				}
 			}
-			resp.objects = kubeObjects
+			resp.objects = funcObjects
 		case LOG:
 			funcCopy := fsc.byFunction.Copy()
 			log.Printf("Cache has %v entries", len(funcCopy))
@@ -125,8 +122,6 @@ func (fsc *FunctionServiceCache) service() {
 					log.Printf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name)
 				}
 			}
-		case DELETE_BY_OBJECT:
-			resp.deleted, resp.error = fsc._deleteByKubeObject(req.kubernetesObject, req.age)
 		}
 		req.responseChannel <- resp
 	}
@@ -220,45 +215,21 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 	return nil
 }
 
-func (fsc *FunctionServiceCache) DeleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
-	responseChannel := make(chan *fscResponse)
-	fsc.requestChannel <- &fscRequest{
-		requestType:      DELETE_BY_OBJECT,
-		kubernetesObject: obj,
-		age:              minAge,
-		responseChannel:  responseChannel,
-	}
-	resp := <-responseChannel
-	return resp.deleted, resp.error
-}
-
-// _deleteByKubeObject deletes the entry keyed by Kubernetes Object, but only if it is
-// at least minAge old.
-func (fsc *FunctionServiceCache) _deleteByKubeObject(obj api.ObjectReference, minAge time.Duration) (bool, error) {
-	mI, err := fsc.byKubeObject.Get(obj)
-	if err != nil {
-		return false, err
-	}
-	m := mI.(metav1.ObjectMeta)
-	fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
-	if err != nil {
-		return false, err
-	}
-	fsvc := fsvcI.(*FuncSvc)
-
+func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
 	if time.Now().Sub(fsvc.Atime) < minAge {
 		return false, nil
 	}
 
-	fsc.byFunction.Delete(crd.CacheKey(&m))
+	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
-	// Should delete only given K8S object or all others too?
-	fsc.byKubeObject.Delete(obj)
+	for _, kubeobj := range fsvc.KubernetesObjects {
+		fsc.byKubeObject.Delete(kubeobj)
+	}
 
 	return true, nil
 }
 
-func (fsc *FunctionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]api.ObjectReference, error) {
+func (fsc *FunctionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]*FuncSvc, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
