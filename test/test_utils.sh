@@ -21,6 +21,7 @@ helm_setup() {
       sleep 1
     done
 }
+export -f helm_setup
 
 gcloud_login() {
     KEY=${HOME}/gcloud-service-key.json
@@ -196,6 +197,7 @@ helm_uninstall_fission() {
     echo "Uninstalling fission"
     helm delete --purge $1
 }
+export -f helm_uninstall_fission
 
 set_environment() {
     id=$1
