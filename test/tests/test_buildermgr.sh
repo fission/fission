@@ -39,7 +39,8 @@ waitEnvBuilder() {
     echo "Waiting for env builder to catch up"
 
     while true; do
-      kubectl --namespace fission-builder get pod|grep python|grep Running
+      JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' \
+        && kubectl -n fission-builder get pod -o jsonpath="$JSONPATH" | grep "Ready=True"
       if [[ $? -eq 0 ]]; then
           break
       fi

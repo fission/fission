@@ -34,6 +34,21 @@ checkFunctionResponse() {
     echo $response | grep -i "$2"
 }
 
+waitEnvBuilder() {
+    echo "Waiting for env builder to catch up"
+
+    while true; do
+      JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' \
+        && kubectl -n fission-builder get pod -o jsonpath="$JSONPATH" | grep "Ready=True"
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+    done
+
+    sleep 10
+}
+export -f waitEnvBuilder
+
 echo "Pre-test cleanup"
 fission env delete --name python || true
 
@@ -41,8 +56,7 @@ echo "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 trap "fission env delete --name python" EXIT
 
-echo "Waiting for env builder to catch up"
-sleep 30
+timeout 180s bash -c waitEnvBuilder
 
 echo "Creating pacakage with source archive"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/

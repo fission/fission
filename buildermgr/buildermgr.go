@@ -33,7 +33,7 @@ func Start(storageSvcUrl string, envBuilderNamespace string) error {
 	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
-	pkgWatcher := makePackageWatcher(fissionClient, envBuilderNamespace, storageSvcUrl)
+	pkgWatcher := makePackageWatcher(fissionClient, kubernetesClient.CoreV1().RESTClient(), envBuilderNamespace, storageSvcUrl)
 	go pkgWatcher.watchPackages()
 
 	select {}
