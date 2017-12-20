@@ -460,7 +460,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 							Command: []string{"/builder", sharedMountPath},
 							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
-								PeriodSeconds: 2,
+								PeriodSeconds:       2,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
 										Path: "/healthz",
@@ -486,7 +486,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 							Command: []string{"/fetcher", sharedMountPath},
 							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
-								PeriodSeconds: 2,
+								PeriodSeconds:       2,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
 										Path: "/healthz",
