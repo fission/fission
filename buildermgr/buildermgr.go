@@ -23,17 +23,18 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(port int, storageSvcUrl string, envBuilderNamespace string) error {
+func Start(storageSvcUrl string, envBuilderNamespace string) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
 
-	api := MakeBuilderMgr(fissionClient, kubernetesClient,
-		storageSvcUrl, envBuilderNamespace)
+	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
+	go envWatcher.watchEnvironments()
 
-	go api.Serve(port)
+	pkgWatcher := makePackageWatcher(fissionClient, envBuilderNamespace, storageSvcUrl)
+	go pkgWatcher.watchPackages()
 
-	return nil
+	select {}
 }

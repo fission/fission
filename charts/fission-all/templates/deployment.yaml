@@ -197,21 +197,6 @@ spec:
         - name: RUNTIME_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
       serviceAccount: fission-svc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: buildermgr
-  labels:
-    svc: buildermgr
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 8889
-  selector:
-    svc: buildermgr
 
 ---
 apiVersion: extensions/v1beta1
@@ -232,7 +217,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--builderMgrPort", "8889", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"

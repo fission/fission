@@ -64,8 +64,8 @@ func runStorageSvc(port int, filePath string) {
 		filePath, subdir, port)
 }
 
-func runBuilderMgr(port int, storageSvcUrl string, envBuilderNamespace string) {
-	err := buildermgr.Start(port, storageSvcUrl, envBuilderNamespace)
+func runBuilderMgr(storageSvcUrl string, envBuilderNamespace string) {
+	err := buildermgr.Start(storageSvcUrl, envBuilderNamespace)
 	if err != nil {
 		log.Fatalf("Error starting buildermgr: %v", err)
 	}
@@ -116,7 +116,7 @@ Usage:
   fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --filePath=<filePath>
-  fission-bundle --builderMgrPort=<port> [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
+  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
 Options:
@@ -124,7 +124,6 @@ Options:
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
-  --builderMgrPort=<port>         Port that the buildermgr should listen on.
   --executorUrl=<url>             Executor URL. Not required if --executorPort is specified.
   --routerUrl=<url>               Router URL.
   --etcdUrl=<etcdUrl>             Etcd URL.
@@ -134,6 +133,7 @@ Options:
   --kubewatcher                   Start Kubernetes events watcher.
   --timer                         Start Timer.
   --mqt                           Start message queue trigger.
+  --builderMgr                    Start builder manager.
 `
 	arguments, err := docopt.Parse(usage, nil, true, "fission-bundle", false)
 	if err != nil {
@@ -181,9 +181,8 @@ Options:
 		runStorageSvc(port, filePath)
 	}
 
-	if arguments["--builderMgrPort"] != nil {
-		port := getPort(arguments["--builderMgrPort"])
-		runBuilderMgr(port, storageSvcUrl, envBuilderNs)
+	if arguments["--builderMgr"] != nil {
+		runBuilderMgr(storageSvcUrl, envBuilderNs)
 	}
 
 	select {}
