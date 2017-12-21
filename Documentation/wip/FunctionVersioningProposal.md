@@ -4,7 +4,7 @@
 1. Create a new version of a function with code changes ( perhaps adding some new features to a function )
 2. Have two versions of a function deployed and perform canary testing by creating an HTTP trigger for both versions of a function.
 3. Create an HTTP Trigger for a function with a specific version, if not fall back to the `“latest”` version of a function.
-4. Create other kings of triggers to a function with a specific version.
+4. Create other kinds of triggers to a function with a specific version.
 5. Create a set of functions and group them as one version. ( perhaps run a group of functions as a cronjob with one timeTrigger, haven’t thought this through )
 
 
@@ -34,7 +34,7 @@ $ fission function create --name hello-nv --env nodejs --code hello3.js —> thi
 
 Code changes :
 
-1. In fnCreate : Just ligitke today, we first create a `crd.package` object. Next step is to create a `crd.function` object for each version of the function. The name of the `crd.function` object can be `"functionName_versionNumber"`.  
+1. In fnCreate : Just like today, we first create a `crd.package` object. Next step is to create a `crd.function` object for each version of the function. The name of the `crd.function` object can be `"functionName_versionNumber"`.  
 2. Next, create an object of type `crd.Version` to keep track of the `"latest"` version of a function. The name of this object can be something like "functionName_versionLatest" and the value of the field `FunctionRef` will be an array of function names such as `["hello_v1.0.0", "hello_v1.0.1"]`. So at any point in time, for a function its easy to get the function object that is latest.
 
 
@@ -75,7 +75,7 @@ Code changes :
 2. Haven't still figured out the code for TimeTrigger yet. But will fill in the code changes required there to handle this later.
 
 #### Note :
-1. With this proposal, the syntax of versions is left to the fission users and fission code doesn't handle them differently. Ex : the user can create functions with versions such as v1, v2 so on. Or, Vx.y.z following the semantics of semver.
+1. With this proposal, the syntax of version is left to fission users and fission code doesn't handle them differently. Ex : the user can create functions with versions such as v1, v2 so on. Or, Vx.y.z following the semantics of semver.
 Do let me know if you think these need to be handled differently.
 2. With this proposal, the `"latest"` version of a function will point to the most recent version created for that function. Referring to CLI example under use case 1 and 2, the function hello will have its "latest" pointed to v1.0.1.
 There might be a gotcha over here that needs explicit stating. If a user creates a function version 1.0.1 first and then creates a function version 1.0.0, the "latest" will point to v1.0.0. I feel like this is an anti pattern and this will/should never happen. But would like to hear your opinion.
