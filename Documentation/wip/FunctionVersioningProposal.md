@@ -67,7 +67,7 @@ CLI changes :
 
 ```bash
 $ fission function create --name foo --env nodejs --code foo.js —-tag v1.0.0
-$ fission function create --name bar --env nodejs --code bar.js —-tag v1.0.1
+$ fission function create --name bar --env nodejs --code bar.js —-tag v1.0.0
 ```
 
 Code changes :
