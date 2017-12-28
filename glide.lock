@@ -1,5 +1,5 @@
 hash: 7c938e591b0602b9fd3412aeffd3f1438fc77eaea80c8d9dd03431adb0e1e1c9
-updated: 2017-11-01T16:18:51.144141389+08:00
+updated: 2017-12-28T16:18:51.144141389+08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -33,7 +33,7 @@ imports:
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
 - name: github.com/dsnet/compress
-  version: c4dbed65594871659ea7347a85e1b8dcd97b9990
+  version: cc9eb1d7ad760af14e8f918698f745e80377af4f
   subpackages:
   - bzip2
   - bzip2/internal/sais
@@ -80,9 +80,9 @@ imports:
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/handlers
-  version: a4043c62cc2329bacda331d33fc908ab11ef0ec3
+  version: 90663712d74cb411cbef281bc1e08c19d1a76145
 - name: github.com/gorilla/mux
-  version: 24fca303ac6da784b9e8269f724ddeb0b2eea5e7
+  version: 7f08801859139f86dfafd1c296e2cba9a80d292e
 - name: github.com/graymeta/stow
   version: 1c51f76db54d79c9db24cb131011632eb586196c
   subpackages:
