@@ -141,6 +141,11 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		// function metadata here.
 		req.URL.Path = "/"
 
+		// Overwrite request host with internal host,
+		// or request will be blocked in some situations
+		// (e.g. istio-proxy)
+		req.Host = serviceUrl.Host
+
 		// leave the query string intact (req.URL.RawQuery)
 
 		if _, ok := req.Header["User-Agent"]; !ok {

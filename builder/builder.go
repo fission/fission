@@ -21,18 +21,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/dchest/uniuri"
-	"io"
-	"path"
 )
 
 const (
@@ -70,7 +70,9 @@ func MakeBuilder(sharedVolumePath string) *Builder {
 
 func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "", 405)
+		e := fmt.Sprintf("Method not allowed: %v", r.Method)
+		log.Println(e)
+		builder.reply(w, "", e, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -83,15 +85,17 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading request body")
-		http.Error(w, err.Error(), 500)
+		e := errors.New(fmt.Sprintf("Error reading request body: %v", err))
+		log.Println(e.Error())
+		builder.reply(w, "", e.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req PackageBuildRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		log.Printf("Error parsing json body: %v", err)
-		http.Error(w, err.Error(), 400)
+		e := errors.New(fmt.Sprintf("Error parsing json body: %v", err))
+		log.Println(e.Error())
+		builder.reply(w, "", e.Error(), http.StatusBadRequest)
 		return
 	}
 	log.Printf("Builder received request: %v", req)
@@ -108,25 +112,34 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	buildLogs, err := builder.build(buildCmd, srcPkgPath, deployPkgPath)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Error building source package: %v", err))
-		http.Error(w, e.Error(), 500)
+		log.Println(e.Error())
+		// append error at the end of build logs
+		buildLogs += fmt.Sprintf("%v\n", e.Error())
+		builder.reply(w, deployPkgFilename, buildLogs, http.StatusInternalServerError)
 		return
 	}
 
+	builder.reply(w, deployPkgFilename, buildLogs, http.StatusOK)
+}
+
+func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLogs string, statusCode int) {
 	resp := PackageBuildResponse{
-		ArtifactFilename: deployPkgFilename,
+		ArtifactFilename: pkgFilename,
 		BuildLogs:        buildLogs,
 	}
 
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Error encoding response body: %v", err))
-		http.Error(w, e.Error(), 500)
-		return
+		rBody = []byte(fmt.Sprintf(`{"buildLogs": "%v"}`, e.Error()))
+		statusCode = http.StatusInternalServerError
 	}
 
 	w.Header().Add("Content-Type", "application/json")
+	// should write header before writing the body,
+	// or client will receive HTTP 200 regardless the real status code
+	w.WriteHeader(statusCode)
 	w.Write(rBody)
-	w.WriteHeader(http.StatusOK)
 }
 
 func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath string) (string, error) {
@@ -183,14 +196,14 @@ func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath s
 	if err := scanner.Err(); err != nil {
 		scanErr := errors.New(fmt.Sprintf("Error reading cmd output: %v", err.Error()))
 		fmt.Println(scanErr)
-		return "", scanErr
+		return buildLogs, scanErr
 	}
 
 	err = cmd.Wait()
 	if err != nil {
 		cmdErr := errors.New(fmt.Sprintf("Error waiting for cmd '%v': %v", command, err.Error()))
 		fmt.Println(cmdErr)
-		return "", cmdErr
+		return buildLogs, cmdErr
 	}
 	fmt.Println("==================\n")
 

@@ -35,9 +35,6 @@ functionNamespace: fission-function
 ## the release namespace)
 builderNamespace: fission-builder
 
-## Set up openshift RBAC rule
-openshift: false
-  
 ## Persist data to a persistent volume.
 persistence:
   enabled: true
