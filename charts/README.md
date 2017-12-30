@@ -52,13 +52,16 @@ The following table lists the configurable parameters of the Fission chart and t
 
 * Extra configuration for `fission-all`
 
-| Parameter              | Description                 | Default                    |
-| ---------------------- | --------------------------- | -------------------------- |
-| `logger.influxdbAdmin` | Log database admin username | `admin`.                   |
-| `logger.fluentdImage`  | Logger fluentd image        | `fission/fluentd`          |
-| `fissionUiImage`       | Fission ui image            | `fission/fission-ui:0.1.0` |
-| `nats.authToken`       | Nats streaming auth token   | `defaultFissionAuthToken`  |
-| `nats.clusterID`       | Nats streaming clusterID    | `fissionMQTrigger`         |
+| Parameter                      | Description                     | Default                    |
+| ------------------------------ | ------------------------------- | -------------------------- |
+| `logger.influxdbAdmin`         | Log database admin username     | `admin`.                   |
+| `logger.fluentdImage`          | Logger fluentd image            | `fission/fluentd`          |
+| `fissionUiImage`               | Fission ui image                | `fission/fission-ui:0.1.0` |
+| `messagequeues.nats.enabled`   | Nats streaming trigger enabled  | `true`                     |
+| `messagequeues.nats.authToken` | Nats streaming auth token       | `defaultFissionAuthToken`  |
+| `messagequeues.nats.clusterID` | Nats streaming clusterID        | `fissionMQTrigger`         |
+| `messagequeues.kafka.enabled`  | Kafka trigger enabled           | `false`                    |
+| `messagequeues.kafka.brokers`  | Kafka brokers uri               | `kafka-0.kafka`            |
 
 
 

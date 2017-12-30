@@ -1,5 +1,5 @@
-hash: 7c938e591b0602b9fd3412aeffd3f1438fc77eaea80c8d9dd03431adb0e1e1c9
-updated: 2017-12-13T16:13:45.935783+08:00
+hash: 2e179697c8feae8e526cea32a0db41d2f5818476968350abb5299580b1c37fa1
+updated: 2017-12-31T12:39:20.248482+01:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -13,6 +13,8 @@ imports:
   - autorest/adal
   - autorest/azure
   - autorest/date
+- name: github.com/bsm/sarama-cluster
+  version: 24016d206c730276dfb58f802999066f2f4bfeaa
 - name: github.com/coreos/etcd
   version: 3ac54be402ffe4e6df505814456d4931508aaf21
   subpackages:
@@ -40,6 +42,14 @@ imports:
   - internal
   - internal/errors
   - internal/prefix
+- name: github.com/eapache/go-resiliency
+  version: b1fe83b5b03f624450823b751b662259ffc6af70
+  subpackages:
+  - breaker
+- name: github.com/eapache/go-xerial-snappy
+  version: bb955e01b9346ac19dc29eb16586c90ded99a98c
+- name: github.com/eapache/queue
+  version: 44cc805cf13205b55f69e14bcb69867d1ae92f98
 - name: github.com/emicklei/go-restful
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
   subpackages:
@@ -121,7 +131,7 @@ imports:
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
-  version: f9638df9ef7ee548313eeb5a9dda9c888dc769a0
+  version: e2d5e2dc702d5f5a2d4ae1b1841d87a42b94cc00
   subpackages:
   - util
 - name: github.com/nats-io/nuid
@@ -138,10 +148,14 @@ imports:
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
+- name: github.com/rcrowley/go-metrics
+  version: e181e095bae94582363434144c61a9653aff6e50
 - name: github.com/robfig/cron
   version: 736158dc09e10f1911ca3a1e1b01f11b566ce5db
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
+- name: github.com/Shopify/sarama
+  version: 3b1b38866a79f06deddf0487d5c27ba0697ccd65
 - name: github.com/sirupsen/logrus
   version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
 - name: github.com/spf13/pflag
@@ -196,8 +210,10 @@ imports:
   - unicode/norm
   - width
 - name: google.golang.org/appengine
-  version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
+  version: 9d8544a6b2c7df9cff240fcf92d7b2f59bc13416
+  repo: https://github.com/golang/appengine
   subpackages:
+  - cloudsql
   - internal
   - internal/app_identity
   - internal/base

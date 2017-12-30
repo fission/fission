@@ -20,13 +20,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/fission/fission/crd"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"github.com/fission/fission/crd"
 )
 
 const (
-	NATS string = "nats-streaming"
+	NATS  string = "nats-streaming"
 	KAFKA string = "kafka"
 )
 
@@ -225,8 +225,7 @@ func IsTopicValid(mqType string, topic string) bool {
 	case NATS:
 		return isTopicValidForNats(topic)
 	case KAFKA:
-		//Delegate to Kafka
-		return true; 
+		return isTopicValidForKafka(topic)
 	}
 	return false
 }
