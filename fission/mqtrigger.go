@@ -48,8 +48,10 @@ func mqtCreate(c *cli.Context) error {
 		mqType = messageQueue.NATS
 	case messageQueue.NATS:
 		mqType = messageQueue.NATS
+	case messageQueue.KAFKA:
+		mqType = messageQueue.KAFKA
 	default:
-		fatal("Unknown message queue type, currently only \"nats-streaming\" is supported")
+		fatal("Unknown message queue type, currently only \"nats-streaming\" and \"kafka\" are supported ")
 	}
 
 	// TODO: check topic availability

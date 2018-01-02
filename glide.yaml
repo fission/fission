@@ -48,3 +48,7 @@ import:
   version: ^v0.4.0
 - package: github.com/graymeta/stow
 - package: github.com/mholt/archiver
+- package: github.com/bsm/sarama-cluster
+  version: ^2.1.11
+- package: github.com/Shopify/sarama
+  version: ^1.15.0

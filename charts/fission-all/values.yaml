@@ -1,6 +1,6 @@
 #
 # Fission chart configuration
-# 
+#
 
 ## Kubernetes configuration
 ## For minikube, set this to NodePort, elsewhere use LoadBalancer.
@@ -10,7 +10,7 @@ serviceType: LoadBalancer
 image: fission/fission-bundle
 
 ## Image pull policy
-pullPolicy: IfNotPresent 
+pullPolicy: IfNotPresent
 
 ## Fission image version
 imageTag: 0.4.0
@@ -43,13 +43,6 @@ logger:
   influxdbAdmin: "admin"
   fluentdImage: fission/fluentd
 
-## Message queue trigger config
-### NATS Streaming
-nats:
-  authToken: "defaultFissionAuthToken"
-  clusterID: "fissionMQTrigger"
-  
-
 ## Persist data to a persistent volume.
 persistence:
   enabled: true
@@ -63,3 +56,14 @@ persistence:
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
 analytics: true
+
+## Message queue trigger config
+messagequeues:
+  ### NATS Streaming
+  nats:
+    enabled: true
+    authToken: "defaultFissionAuthToken"
+    clusterID: "fissionMQTrigger"
+  kafka:
+    enabled: false
+    brokers: kafka:9092
