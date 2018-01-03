@@ -11,14 +11,15 @@ set -euo pipefail
 ROOT=$(dirname $0)/..
 
 export TEST_REPORT=""
-report_msg(msg) {
-    TEST_REPORT="$REPORT\n$msg"
+
+report_msg() {
+    TEST_REPORT="$REPORT\n$1"
 }
-report_test_passed(testname) {
-    report_msg "--- PASSED $testname"
+report_test_passed() {
+    report_msg "--- PASSED $1"
 }
-report_test_failed(testname) {
-    report_msg "*** FAILED $testname"
+report_test_failed() {
+    report_msg "*** FAILED $1"
 }
 show_test_report() {
     echo "------\n$TEST_REPORT\n------"
