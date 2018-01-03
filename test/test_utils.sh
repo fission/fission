@@ -324,16 +324,17 @@ run_all_tests() {
 
     for file in $test_files
     do
-	echo ------- Running $file -------
+	testname=${file#$ROOT/test/tests}
+	echo ------- Running $testname -------
 	pushd $(dirname $file)
 	if $file
 	then
-	    echo SUCCESS: $file
-	    report_test_passed($file)
+	    echo SUCCESS: $testname
+	    report_test_passed $testname
 	else
-	    echo FAILED: $file
+	    echo FAILED: $testname
 	    export FAILURES=$(($FAILURES+1))
-	    report_test_failed($file)
+	    report_test_failed $testname
 	fi
 	popd
     done
