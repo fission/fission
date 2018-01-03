@@ -13,7 +13,7 @@ ROOT=$(dirname $0)/..
 export TEST_REPORT=""
 
 report_msg() {
-    TEST_REPORT="$REPORT\n$1"
+    TEST_REPORT="$TEST_REPORT\n$1"
 }
 report_test_passed() {
     report_msg "--- PASSED $1"
@@ -325,9 +325,10 @@ run_all_tests() {
     for file in $test_files
     do
 	testname=${file#$ROOT/test/tests}
+	testpath=$(realpath $file)
 	echo ------- Running $testname -------
-	pushd $(dirname $file)
-	if $file
+	pushd $(dirname $testpath)
+	if $testpath
 	then
 	    echo SUCCESS: $testname
 	    report_test_passed $testname
