@@ -10,6 +10,20 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/..
 
+export TEST_REPORT=""
+report_msg(msg) {
+    TEST_REPORT="$REPORT\n$msg"
+}
+report_test_passed(testname) {
+    report_msg "--- PASSED $testname"
+}
+report_test_failed(testname) {
+    report_msg "*** FAILED $testname"
+}
+show_test_report() {
+    echo "------\n$TEST_REPORT\n------"
+}
+
 helm_setup() {
     helm init
     # wait for tiller ready
@@ -29,7 +43,7 @@ gcloud_login() {
     then
 	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
     fi
-    
+
     gcloud auth activate-service-account --key-file $KEY
 }
 
@@ -41,7 +55,7 @@ build_and_push_fission_bundle() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -54,7 +68,7 @@ build_and_push_fetcher() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -94,7 +108,7 @@ build_and_push_env_runtime() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -109,7 +123,7 @@ build_and_push_env_builder() {
     docker build -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -150,7 +164,7 @@ helm_install_fission() {
 
     echo "Deleting old releases"
     helm list -q|xargs helm_uninstall_fission
-    
+
     echo "Installing fission"
     helm install		\
 	 --wait			\
@@ -160,7 +174,7 @@ helm_install_fission() {
 	 --namespace $ns        \
 	 --debug                \
 	 $ROOT/charts/fission-all
-    
+
     helm list
 }
 
@@ -235,7 +249,7 @@ dump_fission_logs() {
     component=$3
 
     echo --- $component logs ---
-    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs 
+    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs
     echo --- end $component logs ---
 }
 
@@ -268,7 +282,7 @@ dump_all_fission_resources() {
     ns=$1
 
     echo "--- All objects in the fission namespace $ns ---"
-    kubectl -n $ns get all 
+    kubectl -n $ns get all
     echo "--- End objects in the fission namespace $ns ---"
 }
 
@@ -304,17 +318,23 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-        
-    for file in $ROOT/test/tests/test_*.sh
+
+    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
+
+    for file in $test_files
     do
 	echo ------- Running $file -------
+	pushd $(dirname $file)
 	if $file
 	then
 	    echo SUCCESS: $file
+	    report_test_passed($file)
 	else
 	    echo FAILED: $file
 	    export FAILURES=$(($FAILURES+1))
+	    report_test_failed($file)
 	fi
+	popd
     done
 }
 
@@ -345,6 +365,8 @@ install_and_test() {
     run_all_tests $id
 
     dump_logs $id
+
+    show_test_report
 
     if [ $FAILURES -ne 0 ]
     then
