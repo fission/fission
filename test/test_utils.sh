@@ -320,12 +320,13 @@ run_all_tests() {
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
 
-    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
+    pushd $ROOT/test/tests
+    test_files=$(find $(pwd) -iname 'test_*.sh')
 
     for file in $test_files
     do
 	testname=${file#$ROOT/test/tests}
-	testpath=$(realpath $file)
+	testpath=$file
 	echo ------- Running $testname -------
 	pushd $(dirname $testpath)
 	if $testpath
@@ -339,6 +340,7 @@ run_all_tests() {
 	fi
 	popd
     done
+    popd
 }
 
 install_and_test() {
