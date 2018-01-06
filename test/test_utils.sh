@@ -25,7 +25,7 @@ report_test_failed() {
     report_msg "*** FAILED $1"
 }
 show_test_report() {
-    echo "------\n$TEST_REPORT\n------"
+    echo -e "------\n$TEST_REPORT\n------"
 }
 
 helm_setup() {
