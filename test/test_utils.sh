@@ -8,7 +8,10 @@
 
 set -euo pipefail
 
-ROOT=$(dirname $0)/..
+ROOT_RELPATH=$(dirname $0)/..
+pushd $ROOT_RELPATH
+ROOT=$(pwd)
+popd
 
 export TEST_REPORT=""
 
@@ -320,8 +323,7 @@ run_all_tests() {
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
 
-    pushd $ROOT/test/tests
-    test_files=$(find $(pwd) -iname 'test_*.sh')
+    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
 
     for file in $test_files
     do
@@ -340,7 +342,6 @@ run_all_tests() {
 	fi
 	popd
     done
-    popd
 }
 
 install_and_test() {
