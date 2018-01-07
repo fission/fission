@@ -34,6 +34,16 @@ $ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.16.0/min
 $ minikube start
 ```
 
+## Docker for Mac/Windows
+
+Docker 17.12.0 and up ship with a [full Kubernetes cluster built-in](https://www.docker.com/kubernetes).
+After enabling the Kubernetes cluster in Docker for Mac or Docker for Windows, ensure that you switch to the right context:
+
+```
+kubectl config use-context docker-for-desktop
+```
+
+
 ## Google Container Engine
 
 Alternatively, you can use [Google Container Engine's](https://cloud.google.com/container-engine/) free trial to
