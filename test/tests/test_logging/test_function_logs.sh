@@ -4,14 +4,12 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/../..
 
-fn=nodejs-logtest
-
+fn=nodejs-logtest-$(date +%N)
 
 function cleanup {
     echo "Cleanup route"
     var=$(fission route list | grep $fn | awk '{print $1;}')
     fission route delete --name $var
-    fission function delete --name $fn
 }
 
 # Create a hello world function in nodejs, test it with an http trigger
@@ -27,32 +25,28 @@ fission fn create --name $fn --env nodejs --code log.js
 trap "fission fn delete --name $fn" EXIT
 
 echo "Creating route"
-fission route create --function $fn --url /logtest --method GET
+fission route create --function $fn --url /$fn --method GET
+trap cleanup EXIT
 
 echo "Waiting for router to catch up"
 sleep 3
 
 echo "Doing 4 HTTP GET on the function's route"
-curl http://$FISSION_ROUTER/logtest
-curl http://$FISSION_ROUTER/logtest
-curl http://$FISSION_ROUTER/logtest
-curl http://$FISSION_ROUTER/logtest
-
+for i in 1 2 3 4
+do
+    curl -s http://$FISSION_ROUTER/$fn
+done
 
 echo "Grabbing logs, should have 4 calls in logs"
 
 sleep 15
 
-echo "woke up"
-logs=$(fission function logs --name $fn)
-num=$(echo "$logs" | grep 'log test' | wc -l)
-echo $num
+num=$(fission function logs --name $fn | grep 'log test' | wc -l)
+echo $num logs found
 
 if [ $num -ne 4 ]
 then
-    echo "Test Failed"
-    trap cleanup EXIT
+    echo "Test Failed: expected 4, found $num logs"
 fi
-cleanup
  
 echo "All done."
