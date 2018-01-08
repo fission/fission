@@ -31,6 +31,7 @@ import (
 	executorClient "github.com/fission/fission/executor/client"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"strconv"
 )
 
 type functionHandler struct {
@@ -103,7 +104,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	loggedWriter := &LoggedResponse{
 		ResponseWriter: responseWriter,
-		status: 200,
+		status:         200,
 	}
 	//TODO when the FunctionMetricsMap cache misses, we create and register ALL the prometheus metrics
 	log.Println("incrementing prometheus request counter")
@@ -114,40 +115,51 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		requestCounter := prometheus.NewCounter(prometheus.CounterOpts{
 			Name: fh.function.Name + "_request_count",
 			Help: "Number of requests to this particular function route",
-			})
+		})
 		errorCounter := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: fh.function.Name +"_error_count",
+			Name: fh.function.Name + "_error_count",
 			Help: "Number of errors from this particular function",
 		})
-		latencyObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
+		executorLatencyObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name: fh.function.Name + "_latency_overhead",
 			Help: "Time this function spent waiting for poolmgr/executor",
 		})
-
+		totalLatencyObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: fh.function.Name + "_total_latency",
+			Help: "Total request latency from beginning of handler() at reqStartTime to when the request is Served",
+		},
+			[]string{"code", "method"})
 
 		regErr := prometheus.Register(requestCounter)
-		if regErr !=  nil {
+		if regErr != nil {
 			log.Println("error registering request counter: ", regErr)
 			return
 		}
 		requestCounter.Inc()
 
 		regErr = prometheus.Register(errorCounter)
-		if regErr !=  nil {
+		if regErr != nil {
 			log.Println("error registering error counter: ", regErr)
 			return
 		}
 
-		regErr = prometheus.Register(latencyObserver)
+		regErr = prometheus.Register(executorLatencyObserver)
 		if regErr != nil {
-			log.Println("error registering latency observer: ", regErr)
+			log.Println("error registering latency overhead observer: ", regErr)
 			return
 		}
 
-		newfunctionMetrics := &functionMetrics {
-			requestCount: requestCounter,
+		regErr = prometheus.Register(totalLatencyObserver)
+		if regErr != nil {
+			log.Println("error registering total latency observer: ", regErr)
+			return
+		}
+
+		newfunctionMetrics := &functionMetrics{
+			requestCount:       requestCounter,
 			functionErrorCount: errorCounter,
-			latencyOverhead: latencyObserver,
+			executorLatency:    executorLatencyObserver,
+			totalLatency:       totalLatencyObserver,
 		}
 		fh.fmetrics.assign(fh.function, newfunctionMetrics)
 	} else {
@@ -184,7 +196,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		serviceUrl, poolErr = fh.getServiceForFunction()
 		executorTimeElapsed := time.Since(executorLatencyStart)
 		msExecutorLatency := executorTimeElapsed / time.Millisecond
-		metrics.latencyOverhead.Observe(float64(msExecutorLatency))
+		metrics.executorLatency.Observe(float64(msExecutorLatency))
 
 		if poolErr != nil {
 			log.Printf("Failed to get service for function %v: %v", fh.function.Name, poolErr)
@@ -202,7 +214,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		go fh.tapService(serviceUrl)
 		executorTimeElapsed := time.Since(executorLatencyStart)
 		msExecutorLatency := executorTimeElapsed / time.Millisecond
-		metrics.latencyOverhead.Observe(float64(msExecutorLatency))
+		metrics.executorLatency.Observe(float64(msExecutorLatency))
 	}
 
 	// Proxy off our request to the serviceUrl, and send the response back.
@@ -239,7 +251,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: RetryingRoundTripper{
-			maxRetries:    10,
+			maxRetries: 10,
 
 			initalTimeout: 50 * time.Millisecond,
 		},
@@ -249,8 +261,10 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		log.Printf("Request delay for %v: %v", serviceUrl, delay)
 	}
 
-
 	proxy.ServeHTTP(loggedWriter, request)
+	totalElapsedTime := time.Since(reqStartTime)
+	totalElapsedMS := totalElapsedTime / time.Millisecond
+	metrics.totalLatency.WithLabelValues(strconv.Itoa(loggedWriter.status), request.Method).Observe(float64(totalElapsedMS))
 
 	log.Printf("Status code returned by function: %v", loggedWriter.status)
 	if loggedWriter.status != 200 {

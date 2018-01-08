@@ -32,9 +32,10 @@ type (
 	}
 
 	functionMetrics struct {
-		requestCount prometheus.Counter
-		latencyOverhead prometheus.Histogram
+		requestCount       prometheus.Counter
+		executorLatency    prometheus.Histogram
 		functionErrorCount prometheus.Counter
+		totalLatency       *prometheus.HistogramVec
 	}
 )
 
