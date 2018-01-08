@@ -73,7 +73,7 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 
 func Start(port int, executorUrl string) {
 	fmap := makeFunctionServiceMap(time.Minute)
-	fmetricsmap := makeFunctionMetricsMap(time.Minute)
+	fmetricsmap := makeFunctionMetricsMap(0)
 	fissionClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Error connecting to kubernetes API: %v", err)
