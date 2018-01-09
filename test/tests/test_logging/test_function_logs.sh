@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#test:disabled
+
 set -euo pipefail
 
 ROOT=$(dirname $0)/../..
@@ -45,7 +47,7 @@ logs=$(fission function logs --name $fn --detail)
 echo "---function logs---"
 echo $logs
 echo "------"
-num=(cat $logs | grep 'log test' | wc -l)
+num=(cat "$logs" | grep 'log test' | wc -l)
 echo $num logs found
 
 if [ $num -ne 4 ]

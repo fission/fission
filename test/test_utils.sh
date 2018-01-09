@@ -24,6 +24,9 @@ report_test_passed() {
 report_test_failed() {
     report_msg "*** FAILED $1"
 }
+report_test_failed() {
+    report_msg "### SKIPPED $1"
+}
 show_test_report() {
     echo -e "------\n$TEST_REPORT\n------"
 }
@@ -334,18 +337,25 @@ run_all_tests() {
     do
 	testname=${file#$ROOT/test/tests}
 	testpath=$file
-	echo ------- Running $testname -------
-	pushd $(dirname $testpath)
-	if $testpath
+
+	if grep "^#test:disabled" $file
 	then
-	    echo SUCCESS: $testname
-	    report_test_passed $testname
+	    report_test_skipped $testname
+	    echo ------- Skipped $testname -------
 	else
-	    echo FAILED: $testname
-	    export FAILURES=$(($FAILURES+1))
-	    report_test_failed $testname
+	    echo ------- Running $testname -------
+	    pushd $(dirname $testpath)
+	    if $testpath
+	    then
+		echo SUCCESS: $testname
+		report_test_passed $testname
+	    else
+		echo FAILED: $testname
+		export FAILURES=$(($FAILURES+1))
+		report_test_failed $testname
+	    fi
+	    popd
 	fi
-	popd
     done
 }
 
