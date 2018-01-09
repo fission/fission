@@ -31,7 +31,7 @@ trap cleanup EXIT
 echo "Waiting for router to catch up"
 sleep 3
 
-echo "Doing 4 HTTP GET on the function's route"
+echo "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4
 do
     curl -s http://$FISSION_ROUTER/$fn
@@ -41,7 +41,11 @@ echo "Grabbing logs, should have 4 calls in logs"
 
 sleep 15
 
-num=$(fission function logs --name $fn | grep 'log test' | wc -l)
+logs=$(fission function logs --name $fn)
+echo "---function logs---"
+echo $logs
+echo "------"
+num=(cat $logs | grep 'log test' | wc -l)
 echo $num logs found
 
 if [ $num -ne 4 ]

@@ -206,7 +206,7 @@ wait_for_services() {
     wait_for_service $id router
 }
 
-helm_uninstall_fission() {
+helm_uninstall_fission() {(set +e
     id=$1
 
     if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
@@ -217,9 +217,9 @@ helm_uninstall_fission() {
     echo "Uninstalling fission"
     helm delete --purge $1
 
-    kubectl delete ns f-$1 || true
-    kubectl delete ns f-func-$1 || true
-}
+    kubectl delete ns f-$1
+    kubectl delete ns f-func-$1
+)}
 export -f helm_uninstall_fission
 
 set_environment() {
