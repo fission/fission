@@ -218,10 +218,9 @@ helm_uninstall_fission() {(set +e
 	return
     fi
     echo "Uninstalling fission"
-    helm delete --purge $1
+    helm delete --purge $id
 
-    kubectl delete ns f-$1
-    kubectl delete ns f-func-$1
+    kubectl delete ns f-$id
 )}
 export -f helm_uninstall_fission
 
