@@ -207,6 +207,8 @@ wait_for_services() {
 }
 
 helm_uninstall_fission() {
+    id=$1
+
     if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
     then
 	echo "Fission uninstallation skipped"
@@ -214,6 +216,9 @@ helm_uninstall_fission() {
     fi
     echo "Uninstalling fission"
     helm delete --purge $1
+
+    kubectl delete ns f-$1 || true
+    kubectl delete ns f-func-$1 || true
 }
 export -f helm_uninstall_fission
 
