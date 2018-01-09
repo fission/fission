@@ -24,7 +24,7 @@ report_test_passed() {
 report_test_failed() {
     report_msg "*** FAILED $1"
 }
-report_test_failed() {
+report_test_skipped() {
     report_msg "### SKIPPED $1"
 }
 show_test_report() {
