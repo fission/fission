@@ -7,10 +7,6 @@ data:
     global:
       scrape_interval: 5s
     scrape_configs:
-    - job_name: 'router'
-      target_groups:
-      - targets:
-        - a2f9b8457d58111e7979c0a4b0fc07ee-503011518.us-west-2.elb.amazonaws.com
 
     - job_name: 'kubernetes_components'
       kubernetes_sd_configs:
@@ -29,7 +25,7 @@ data:
       # Only scrape apiserver and kubelets.
       - source_labels: [__meta_kubernetes_role]
         action: keep
-        regex: (?:apiserver|node)
+        regex: (?:apiserver|node|service)
       # Redefine the Prometheus job based on the monitored Kubernetes component.
       - source_labels: [__meta_kubernetes_role]
         target_label: job
