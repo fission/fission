@@ -12,7 +12,7 @@ type (
 	}
 
 	LoggedResponse struct {
-		http.ResponseWriter
+		rw http.ResponseWriter
 		status int
 	}
 )
