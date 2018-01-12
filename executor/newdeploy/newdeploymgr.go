@@ -205,8 +205,8 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 
 func (deploy *NewDeploy) createFunction(fn *crd.Function) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
-		// Eager creation of function if it is RealTimeApp
-		if fn.Spec.InvokeStrategy.ExecutionStrategy.EagerCreation == true {
+		// Eager creation of function if minScale is greater than 0
+		if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 {
 			log.Printf("Eagerly creating newDeploy objects for function")
 			c := make(chan *fnResponse)
 			deploy.requestChannel <- &fnRequest{
@@ -250,9 +250,10 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		return fsvc, err
 	}
 
-	objName := fmt.Sprintf("%v-%v",
+	objName := fmt.Sprintf("%v-%v-%v",
 		fn.Metadata.Namespace,
-		fn.Metadata.Name)
+		fn.Metadata.Name,
+		deploy.instanceID)
 
 	deployLabels := map[string]string{
 		"environmentName":                 env.Metadata.Name,
@@ -260,6 +261,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		"functionName":                    fn.Metadata.Name,
 		"functionUid":                     string(fn.Metadata.UID),
 		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
+		"backend":                         fission.BackendTypeNewdeploy,
 	}
 
 	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
@@ -275,7 +277,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	}
 	svcAddress := svc.Spec.ClusterIP
 
-	_, err = deploy.createHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
+	_, err = deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
 	if err != nil {
 		log.Printf("Error creating the HPA %v: %v", objName, err)
 		return fsvc, err

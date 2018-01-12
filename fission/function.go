@@ -64,12 +64,8 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, backend string, eagerCreate bool) fission.InvokeStrategy {
+func getInvokeStrategy(minScale int, maxScale int, backend string) fission.InvokeStrategy {
 
-	// Hpa needs minimum 1 pods
-	if minScale == 0 {
-		minScale = 1
-	}
 	if maxScale == 0 {
 		maxScale = 1
 	}
@@ -95,10 +91,9 @@ func getInvokeStrategy(minScale int, maxScale int, backend string, eagerCreate b
 	strategy := fission.InvokeStrategy{
 		StrategyType: fission.StrategyTypeExecution,
 		ExecutionStrategy: fission.ExecutionStrategy{
-			Backend:       fnBackend,
-			MinScale:      minScale,
-			MaxScale:      maxScale,
-			EagerCreation: eagerCreate,
+			Backend:  fnBackend,
+			MinScale: minScale,
+			MaxScale: maxScale,
 		},
 	}
 	return strategy
@@ -164,7 +159,7 @@ func fnCreate(c *cli.Context) error {
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Bool("eagercreate"))
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"))
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{

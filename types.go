@@ -135,10 +135,9 @@ type (
 
 	//ExecutionStrategy decides the scale & immediate/delayed creation
 	ExecutionStrategy struct {
-		Backend       BackendType
-		MinScale      int
-		MaxScale      int
-		EagerCreation bool
+		Backend  BackendType
+		MinScale int
+		MaxScale int
 	}
 
 	FunctionReferenceType string

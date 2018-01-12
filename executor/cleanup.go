@@ -38,10 +38,21 @@ func cleanupOldResources(client *kubernetes.Clientset, namespace string, instanc
 }
 
 func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) error {
+
+	err := cleanupServices(client, namespace, instanceId)
+	if err != nil {
+		return err
+	}
+
+	err = cleanupHpa(client, namespace, instanceId)
+	if err != nil {
+		return err
+	}
+
 	// Deployments are used for idle pools and can be cleaned up
 	// immediately.  (We should "adopt" these instead of creating
 	// a new pool.)
-	err := cleanupDeployments(client, namespace, instanceId)
+	err = cleanupDeployments(client, namespace, instanceId)
 	if err != nil {
 		return err
 	}
@@ -62,16 +73,6 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	time.Sleep(6 * time.Minute)
 
 	err = cleanupPods(client, namespace, instanceId)
-	if err != nil {
-		return err
-	}
-
-	err = cleanupServices(client, namespace, instanceId)
-	if err != nil {
-		return err
-	}
-
-	err = cleanupHpa(client, namespace, instanceId)
 	if err != nil {
 		return err
 	}

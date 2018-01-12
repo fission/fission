@@ -18,6 +18,7 @@ package executor
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -192,7 +193,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 
 	fsCache := fscache.MakeFunctionServiceCache()
 
-	poolID := uniuri.NewLen(8)
+	poolID := strings.ToLower(uniuri.NewLen(8))
 	cleanupOldResources(kubernetesClient, functionNamespace, poolID)
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,

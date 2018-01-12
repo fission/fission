@@ -122,7 +122,6 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 							Image:                  deploy.fetcherImg,
 							ImagePullPolicy:        deploy.fetcherImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
-							Resources:              env.Spec.Resources,
 							VolumeMounts: []apiv1.VolumeMount{
 								{
 									Name:      userfunc,
@@ -187,10 +186,18 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	return nil
 }
 
-func (deploy *NewDeploy) createHpa(hpaName string, execStrategy *fission.ExecutionStrategy, depl *v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.ExecutionStrategy, depl *v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
 
 	minRepl := int32(execStrategy.MinScale)
+	if minRepl == 0 {
+		minRepl = 1
+	}
 	maxRepl := int32(execStrategy.MaxScale)
+
+	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
+	if err == nil {
+		return existingHpa, err
+	}
 
 	hpa := asv1.HorizontalPodAutoscaler{
 		TypeMeta: metav1.TypeMeta{
@@ -233,7 +240,8 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 	}
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: svcName,
+			Name:   svcName,
+			Labels: deployLabels,
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",

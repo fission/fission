@@ -146,6 +146,7 @@ func MakeGenericPool(
 		"environmentName":                 gp.env.Metadata.Name,
 		"environmentUid":                  string(gp.env.Metadata.UID),
 		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
+		"backend":                         fission.BackendTypePoolmgr,
 	}
 
 	// create the pool

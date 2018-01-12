@@ -15,7 +15,7 @@ fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 1
 trap "fission env delete --name nodejs" EXIT
 
 echo "Creating function"
-fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js --minscale 2 --maxscale 4 --backend newdeploy --eagercreate
+fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js --minscale 2 --maxscale 4 --backend newdeploy
 trap "fission fn delete --name $fn" EXIT
 
 echo "Creating route"
