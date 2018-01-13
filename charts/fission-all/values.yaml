@@ -1,6 +1,6 @@
 #
 # Fission chart configuration
-# 
+#
 
 ## Kubernetes configuration
 ## For minikube, set this to NodePort, elsewhere use LoadBalancer.
@@ -10,7 +10,7 @@ serviceType: LoadBalancer
 image: fission/fission-bundle
 
 ## Image pull policy
-pullPolicy: IfNotPresent 
+pullPolicy: IfNotPresent
 
 ## Fission image version
 imageTag: 0.4.0
@@ -48,15 +48,18 @@ logger:
 nats:
   authToken: "defaultFissionAuthToken"
   clusterID: "fissionMQTrigger"
-  
+
 
 ## Persist data to a persistent volume.
 persistence:
   enabled: true
-  ## If defined, volume.beta.kubernetes.io/storage-class: <storageClass>
-  ## Default: volume.alpha.kubernetes.io/storage-class: default
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner. (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
   ##
-  # storageClass:
+  # storageClass: "-"
   accessMode: ReadWriteOnce
   size: 8Gi
 
