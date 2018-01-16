@@ -94,6 +94,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	for _, r := range response.Results {
 		for _, series := range r.Series {
 			for _, row := range series.Values {
+				fmt.Printf("Entire row is: %v", row)
 				t, err := time.Parse(time.RFC3339, row[0].(string))
 				if err != nil {
 					log.Fatal(err)
