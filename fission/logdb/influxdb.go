@@ -94,7 +94,9 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	for _, r := range response.Results {
 		for _, series := range r.Series {
 			for _, row := range series.Values {
-				fmt.Printf("Entire row is: %v", row)
+				//fmt.Println("Entire row is: ", row)
+				//fmt.Printf("\n")
+				rowSize := len(row)
 				t, err := time.Parse(time.RFC3339, row[0].(string))
 				if err != nil {
 					log.Fatal(err)
@@ -109,10 +111,10 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 					Container: row[2].(string),                            //docker_container_id
 					FuncName:  row[8].(string),                            //kubernetes_labels_functionName
 					FuncUid:   row[3].(string),                            //funcuid
-					Message:   strings.TrimSuffix(row[17].(string), "\n"), //log field
+					Message:   strings.TrimSuffix(row[rowSize-2].(string), "\n"), //log field
 					Namespace: row[14].(string),                           //kubernetes_namespace_name
 					Pod:       row[15].(string),                           //kubernetes_pod_name
-					Stream:    row[18].(string),                           //stream
+					Stream:    row[rowSize-1].(string),                           //stream
 					Sequence:  seqNum,                                     //sequence tag
 				})
 			}
