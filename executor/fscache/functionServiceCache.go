@@ -55,9 +55,8 @@ type (
 	}
 
 	FunctionServiceCache struct {
-		byFunction   *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress    *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byKubeObject *cache.Cache // obj          -> function : map[api.ObjectReference]metav1.ObjectMeta
+		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress  *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
 
 		requestChannel chan *fscRequest
 	}
@@ -80,7 +79,6 @@ func MakeFunctionServiceCache() *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
 		byAddress:      cache.MakeCache(0, 0),
-		byKubeObject:   cache.MakeCache(0, 0),
 		requestChannel: make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -97,19 +95,13 @@ func (fsc *FunctionServiceCache) service() {
 			resp.error = fsc._touchByAddress(req.address)
 		case LISTOLD:
 			// get svcs idle for > req.age
-			byKubeObjectCopy := fsc.byKubeObject.Copy()
+			fscs := fsc.byFunction.Copy()
 			funcObjects := make([]*FuncSvc, 0)
-			for _, mI := range byKubeObjectCopy {
-				m := mI.(metav1.ObjectMeta)
-				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
-				if err != nil {
-					resp.error = err
-				} else {
-					fsvc := fsvcI.(*FuncSvc)
-					if fsvc.Environment.Metadata.UID == req.env.UID &&
-						time.Now().Sub(fsvc.Atime) > req.age {
-						funcObjects = append(funcObjects, fsvc)
-					}
+			for _, funcSvc := range fscs {
+				fsvc := funcSvc.(*FuncSvc)
+				if fsvc.Environment.Metadata.UID == req.env.UID &&
+					time.Now().Sub(fsvc.Atime) > req.age {
+					funcObjects = append(funcObjects, fsvc)
 				}
 			}
 			resp.objects = funcObjects
@@ -162,7 +154,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 	fsvc.Ctime = now
 	fsvc.Atime = now
 
-	// Add to byAddress and byKubernetesObject caches. Ignore NameExists errors
+	// Add to byAddress cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
@@ -173,18 +165,6 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 		}
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
-	}
-	for _, kubeObj := range fsvc.KubernetesObjects {
-		err, _ := fsc.byKubeObject.Set(kubeObj, *fsvc.Function)
-		if err != nil {
-			if fe, ok := err.(fission.Error); ok {
-				if fe.Code == fission.ErrorNameExists {
-					err = nil
-				}
-			}
-			log.Printf("error caching fsvc: %v", err)
-			return err, nil
-		}
 	}
 	return nil, nil
 }
@@ -222,9 +202,6 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 
 	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
-	for _, kubeobj := range fsvc.KubernetesObjects {
-		fsc.byKubeObject.Delete(kubeobj)
-	}
 
 	return true, nil
 }

@@ -661,7 +661,7 @@ func (gp *GenericPool) idlePodReaper() {
 			if err != nil {
 				log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", obj, err)
 				log.Printf("Object Name| Object Kind | Object Space")
-				for _, kubeobj := range obj.KubernetesObjects{
+				for _, kubeobj := range obj.KubernetesObjects {
 					log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
 				}
 			}
