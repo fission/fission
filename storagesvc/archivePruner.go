@@ -1,6 +1,8 @@
 package storagesvc
 
-import "time"
+import (
+	"time"
+)
 
 type ArchivePruner struct {
 	archiveCache ArchiveCache
@@ -21,7 +23,7 @@ func (pruner *ArchivePruner) pruneArchives() {
 
 				// read archiveIDs from archiveChan and issue a delete request on them
 				archiveID <- pruner.archiveChan
-				if err := pruner.ss.container.RemoveItem(archiveID); err != nil {
+				if err := pruner.ss.storageClient.RemoveItem(archiveID); err != nil {
 					// logging the error and continuing with other deletions.
 					// hopefully this archive will be deleted in the next iteration.
 					// log.Errorf("err: %v deleting archive: %s from storage", err, archiveID)

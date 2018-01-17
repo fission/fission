@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -28,36 +27,18 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/local"
-	"github.com/satori/go.uuid"
 )
 
 type (
-	StorageType   string
-	storageConfig struct {
-		storageType   StorageType
-		localPath     string
-		containerName string
-		// other stuff, such as google or s3 credentials, bucket names etc
-	}
-
-
-
 	StorageService struct {
-		config    storageConfig
-		location  stow.Location
-		container stow.Container
+		storageClient *StowClient
 		port      int
 	}
 
 	UploadResponse struct {
 		ID string `json:"id"`
 	}
-)
-
-const (
-	StorageTypeLocal StorageType = "local"
 )
 
 // Handle multipart file uploads.
@@ -96,21 +77,16 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	//fileMetadata := make(map[string]interface{})
 	//fileMetadata["filename"] = handler.Filename
 
-	// This is not the item ID (that's returned by Put)
-	// should we just use handler.Filename? what are the constraints here?
-	uploadName := uuid.NewV4().String()
-
-	// save the file to the storage backend
-	item, err := ss.container.Put(uploadName, file, int64(fileSize), nil)
+	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
 		log.Printf("Error saving uploaded file: '%v'", err)
-		http.Error(w, "Error saving uploaded file", 400)
+		http.Error(w, "Error saving uploaded file", 500) // TODO : This was 400. I think it shd be 500.  TBD
 		return
 	}
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
-		ID: item.ID(),
+		ID: id,
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
@@ -137,7 +113,7 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = ss.container.RemoveItem(fileId)
+	err = ss.storageClient.removeFileByID(fileId)
 	if err != nil {
 		msg := fmt.Sprintf("Error deleting item: %v", err)
 		http.Error(w, msg, 500)
@@ -156,82 +132,31 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 
 	// Get the file (called "item" in stow's jargon), open it,
 	// stream it to response
-
-	item, err := ss.container.Item(fileId)
+	err = ss.storageClient.getFileIntoResponseWriter(fileId, &w)
 	if err != nil {
 		log.Printf("Error getting item id '%v': %v", fileId, err)
-		if err == stow.ErrNotFound {
+		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", 404)
-		} else {
-			http.Error(w, "Error retrieving item", 400)
+		} else if err == ErrRetrievingItem  {
+			http.Error(w, "Error retrieving item", 500) // TODO : TBD between 400 n 500. cud it be 503?
+		} else if err == ErrOpeningItem {
+			http.Error(w, "Error opening item", 500) // TODO : TBD between 400 n 500.
+		} else if err == ErrWritingFileIntoResponse {
+			http.Error(w, "Error writing response", 500)
 		}
-		return
-	}
-
-	f, err := item.Open()
-	if err != nil {
-		log.Printf("Error opening item %v: %v", fileId, err)
-		// TODO better http errors based on err
-		http.Error(w, "Error opening item", 400)
-		return
-	}
-	defer f.Close()
-
-	_, err = io.Copy(w, f)
-	if err != nil {
-		log.Printf("Error writing response: %v", err)
-		http.Error(w, "Error writing response", 500)
 		return
 	}
 }
 
-func MakeStorageService(sc *storageConfig) (*StorageService, error) {
-	ss := &StorageService{
-		config: *sc,
+func MakeStorageService(storageClient *StowClient, port int) *StorageService {
+	return &StorageService{
+		storageClient: storageClient,
+		port: port,
 	}
-
-	if sc.storageType != StorageTypeLocal {
-		return nil, errors.New("Storage types other than 'local' are not implemented")
-	}
-
-	cfg := stow.ConfigMap{"path": sc.localPath}
-	loc, err := stow.Dial("local", cfg)
-	if err != nil {
-		log.Printf("Error initializing storage: %v", err)
-		return nil, err
-	}
-	ss.location = loc
-
-	con, err := loc.CreateContainer(sc.containerName)
-	if os.IsExist(err) {
-		var cons []stow.Container
-		var cursor string
-
-		// use location.Containers to find containers that match the prefix (container name)
-		cons, cursor, err = loc.Containers(sc.containerName, stow.CursorStart, 1)
-		if err == nil {
-			if !stow.IsCursorEnd(cursor) {
-				// Should only have one storage container
-				err = errors.New("Found more than one matched storage containers")
-			} else {
-				con = cons[0]
-			}
-		}
-	}
-	if err != nil {
-		log.Printf("Error initializing storage: %v", err)
-		return nil, err
-	}
-	ss.container = con
-
-	return ss, nil
 }
 
-// TODO : Time Interval configurable for pruner
+
 func (ss *StorageService) Start(port int) {
-	// start a go routine to prune unused archives
-
-
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
@@ -243,20 +168,18 @@ func (ss *StorageService) Start(port int) {
 
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) *StorageService {
 	// storage
-	ss, err := MakeStorageService(&storageConfig{
-		storageType:   storageType,
-		localPath:     storagePath,
-		containerName: containerName,
-	})
+	storageClient, err := MakeStowClient(storageType, storagePath, containerName)
 	if err != nil {
 		log.Panicf("Error initializing storage: %v", err)
 	}
 
 	// http handlers
-	go ss.Start(port)
+	storageService := MakeStorageService(storageClient, port)
+	go storageService.Start(port)
 
+	// TODO : Time Interval configurable for pruner
 	// pruner := makeArchivePruner(ss)
 	// go pruner.pruneUnusedArchives
 
-	return ss
+	return storageService
 }
