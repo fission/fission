@@ -79,7 +79,7 @@ func runportForward(serviceName string, localPort string) error {
 		msg := fmt.Sprintf("newexecutor errored out :%v", err)
 		fatal(msg)
 	}
-	fw, err := portforward.New(dialer, ports, StopChannel, ReadyChannel, os.Stdout, os.Stderr)
+	fw, err := portforward.New(dialer, ports, StopChannel, ReadyChannel, nil, os.Stderr)
 
 	if err != nil {
 		msg := fmt.Sprintf("portforward.new errored out :%v", err)
