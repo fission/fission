@@ -15,6 +15,11 @@ func (pruner *ArchivePruner) pruneArchives() {
 	for {
 		select {
 			case <- ticker.C:
+				// These methods fetch unused archive IDs and send them to archiveChannel
+				go pruner.getArchiveFromOrphanedPkgs()
+				go pruner.getOrphanedArchives()
+
+				// read archiveIDs from archiveChan and issue a delete request on them
 				archiveID <- pruner.archiveChan
 				if err := pruner.ss.container.RemoveItem(archiveID); err != nil {
 					// logging the error and continuing with other deletions.
@@ -33,6 +38,9 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
 	// kubPackages := get all pkgs from kubernetes
 
+	// kubPackages might contain packages created less than an hour ago, still not referenced by a function
+	// filter out those pkgs using pkg metadata.
+
 	// funcRefPackages := get all pkgs referenced by functions
 
 	// orphanedPkgs := kubPackages - funcRefPackages
@@ -41,8 +49,8 @@ func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
 }
 
 /*
-   A user may have deleted pkgs with kubectl or fission cli. That only deletes the crd.Package object from kubernetes
-   database and not the archives that are referenced in it, leaving the archives as orphans.
+   A user may have deleted pkgs with kubectl or fission cli. That only deletes crd.Package objects from kubernetes
+   and not the archives that are referenced in them, leaving the archives as orphans.
    This method reaps those orphaned archives.
  */
 func (pruner *ArchivePruner) getOrphanedArchives() {
@@ -51,7 +59,20 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 	// pkgs := get all pkgs from kubernetes
 	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
 
-	// archivesInStorage := get all archives on storage
+	// archivesInStorage := get all archives on storage which are older than an hour ago.
+	/*
+	TODO : Create a method to do this in StorageService
+	err = stow.Walk(containers[0], stow.NoPrefix, 100, func(item stow.Item, err error) error {
+		if err != nil {
+			return err
+		}
+		log.Println(item.Name())
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	 */
 
 	// orphanedArchives := archivesInStorage - archivesInPkgs
 
