@@ -53,7 +53,7 @@ func main() {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Value: "127.0.0.1:" + LocalControllerPort, Usage: "Fission server URL"},
+		cli.StringFlag{Name: "server", Value: "http://127.0.0.1:" + LocalControllerPort, Usage: "Fission server URL"},
 	}
 
 	// trigger method and url flags (used in function and route CLIs)

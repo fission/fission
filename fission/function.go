@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -602,12 +603,33 @@ func fnPods(c *cli.Context) error {
 }
 
 func fnTest(c *cli.Context) error {
+	//we can port-forward the router specifically for this method
 	fnName := c.String("name")
-	routerURL := os.Getenv("FISSION_ROUTER")
-	if len(routerURL) == 0 {
-		fatal("Need FISSION_ROUTER set to your fission router.")
+	if len(fnName) == 0 {
+		fatal("Need function name to be specified with --name")
 	}
 
+	LocalRouterPort, err := findFreePort()
+	if err != nil {
+		fatal(fmt.Sprintf("Error finding unused port for router :%v", err))
+	}
+
+	go func() {
+		err := runportForward("router", LocalRouterPort)
+		if err != nil {
+			fatal(fmt.Sprintf("%v", err))
+		}
+	}()
+
+	for {
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalRouterPort), time.Second)
+		if conn != nil {
+			conn.Close()
+			break
+		}
+	}
+
+	routerURL := "127.0.0.1:" + LocalRouterPort
 	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
 	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
