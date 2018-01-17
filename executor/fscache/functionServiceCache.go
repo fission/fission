@@ -100,7 +100,7 @@ func (fsc *FunctionServiceCache) service() {
 			for _, funcSvc := range fscs {
 				fsvc := funcSvc.(*FuncSvc)
 				if fsvc.Environment.Metadata.UID == req.env.UID &&
-					time.Now().Sub(fsvc.Atime) > req.age {
+					time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
 			}
@@ -196,7 +196,7 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 }
 
 func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
-	if time.Now().Sub(fsvc.Atime) < minAge {
+	if time.Since(fsvc.Atime) < minAge {
 		return false, nil
 	}
 

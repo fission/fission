@@ -237,7 +237,7 @@ func TestExecutor(t *testing.T) {
 	if err != nil {
 		log.Panicf("failed to get func svc: %v", err)
 	}
-	log.Printf("svc for function created at: %v (in %v)", svc, time.Now().Sub(t1))
+	log.Printf("svc for function created at: %v (in %v)", svc, time.Since(t1))
 
 	// ensure that a pod with the label functionName=f.Metadata.Name exists
 	podCount := countPods(kubeClient, functionNs, map[string]string{"functionName": f.Metadata.Name})

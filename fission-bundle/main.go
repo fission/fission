@@ -163,15 +163,15 @@ Options:
 		runExecutor(port, fissionNs, functionNs)
 	}
 
-	if arguments["--kubewatcher"] == true {
+	if arguments["--kubewatcher"] {
 		runKubeWatcher(routerUrl)
 	}
 
-	if arguments["--timer"] == true {
+	if arguments["--timer"] {
 		runTimer(routerUrl)
 	}
 
-	if arguments["--mqt"] == true {
+	if arguments["--mqt"] {
 		runMessageQueueMgr(routerUrl)
 	}
 
