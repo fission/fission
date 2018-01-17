@@ -31,7 +31,7 @@ fi
 # Get helm
 if [ ! -f $K8SCLI_DIR/helm ]
 then
-    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.5.1-linux-amd64.tar.gz
+    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.2-linux-amd64.tar.gz
     tar xzvf helm-*.tar.gz
     mv linux-amd64/helm $K8SCLI_DIR/helm
 fi
