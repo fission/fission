@@ -61,11 +61,11 @@ type (
 )
 
 func (c *Cache) IsOld(v *Value) bool {
-	if (c.ctimeExpiry != time.Duration(0)) && (time.Now().Sub(v.ctime) > c.ctimeExpiry) {
+	if (c.ctimeExpiry != time.Duration(0)) && (time.Since(v.ctime) > c.ctimeExpiry) {
 		return true
 	}
 
-	if (c.atimeExpiry != time.Duration(0)) && (time.Now().Sub(v.atime) > c.atimeExpiry) {
+	if (c.atimeExpiry != time.Duration(0)) && (time.Since(v.atime) > c.atimeExpiry) {
 		return true
 	}
 

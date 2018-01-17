@@ -198,7 +198,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 	startTime := time.Now()
 	for {
 		// Retries took too long, error out.
-		if time.Now().Sub(startTime) > gp.podReadyTimeout {
+		if time.Since(startTime) > gp.podReadyTimeout {
 			log.Printf("[%v] Erroring out, timed out", newLabels)
 			return nil, errors.New("timeout: waited too long to get a ready pod")
 		}
@@ -260,7 +260,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 				continue
 			}
 		}
-		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Now().Sub(startTime))
+		log.Printf("Chosen pod: %v (in %v)", chosenPod.ObjectMeta.Name, time.Since(startTime))
 		return chosenPod, nil
 	}
 }
@@ -510,7 +510,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 			return nil
 		}
 
-		if time.Now().Sub(startTime) > gp.podReadyTimeout {
+		if time.Since(startTime) > gp.podReadyTimeout {
 			return errors.New("timeout: waited too long for pod to be ready")
 		}
 		time.Sleep(1000 * time.Millisecond)

@@ -81,7 +81,7 @@ func TestStorageService(t *testing.T) {
 	panicIf(err)
 	contents2, err := ioutil.ReadFile(retrievedfile.Name())
 	panicIf(err)
-	if bytes.Compare(contents1, contents2) != 0 {
+	if !bytes.Equal(contents1, contents2) {
 		log.Panicf("Contents don't match")
 	}
 
