@@ -40,13 +40,13 @@ done
 
 echo "Grabbing logs, should have 4 calls in logs"
 
-sleep 15
+sleep 25
 
-logs=$(fission function logs --name $fn --detail)
+fission function logs --name $fn --detail > logfile
 echo "---function logs---"
-echo $logs
+cat logfile
 echo "------"
-num=(cat "$logs" | grep 'log test' | wc -l)
+num=$(grep 'log test' logfile | wc -l)
 echo $num logs found
 
 if [ $num -ne 4 ]
