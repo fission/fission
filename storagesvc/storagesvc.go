@@ -42,6 +42,8 @@ type (
 		// other stuff, such as google or s3 credentials, bucket names etc
 	}
 
+
+
 	StorageService struct {
 		config    storageConfig
 		location  stow.Location
@@ -225,7 +227,11 @@ func MakeStorageService(sc *storageConfig) (*StorageService, error) {
 	return ss, nil
 }
 
+// TODO : Time Interval configurable for pruner
 func (ss *StorageService) Start(port int) {
+	// start a go routine to prune unused archives
+
+
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
@@ -248,6 +254,9 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 
 	// http handlers
 	go ss.Start(port)
+
+	// pruner := makeArchivePruner(ss)
+	// go pruner.pruneUnusedArchives
 
 	return ss
 }
