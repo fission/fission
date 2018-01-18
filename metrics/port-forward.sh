@@ -12,6 +12,6 @@ then
     port=9090
 fi
 
-kubectl get pods -l app=$app -o name --namespace fission | \
+kubectl get pods -l app=$app -o name --namespace default | \
         sed 's/^.*\///' | \
-        xargs -I{} kubectl port-forward {} $port:$port --namespace fission
+        xargs -I{} kubectl port-forward {} $port:$port -n default
