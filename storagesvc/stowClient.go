@@ -90,7 +90,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	}
 	stowClient.container = con
 
-	return stowClient
+	return stowClient, nil
 
 }
 
@@ -111,7 +111,7 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	return item.ID(), nil
 }
 
-func (client *StowClient) getFileIntoResponseWriter(fileId string, w *http.ResponseWriter) error {
+func (client *StowClient) getFileIntoResponseWriter(fileId string, w http.ResponseWriter) error {
 	item, err := client.container.Item(fileId)
 	if err != nil {
 		log.Printf("Error getting item id '%v': %v", fileId, err)

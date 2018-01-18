@@ -7,7 +7,7 @@ import (
 
 type ArchivePruner struct {
 	//archiveCache ArchiveCache // TODO: Come back
-	crdClient CRDClient
+	crdClient *CRDClient
 	archiveChan chan(string)
 	stowClient *StowClient
 }
@@ -76,11 +76,11 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 
 	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
 	for _, pkg := range pkgs {
-		if pkg.Spec.Deployment.URL {
+		if pkg.Spec.Deployment.URL != "" {
 			archiveID = utilGetQueryParamValue(pkg.Spec.Deployment.URL, "id")
 			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
 		}
-		if pkg.Spec.Source.URL {
+		if pkg.Spec.Source.URL != ""{
 			archiveID = utilGetQueryParamValue(pkg.Spec.Source.URL, "id")
 			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
 		}

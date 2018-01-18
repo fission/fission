@@ -5,7 +5,7 @@ import (
 )
 
 type CRDClient struct {
-	client crd.FissionClient
+	client *crd.FissionClient
 }
 
 func MakeCRDClient() *CRDClient {
@@ -15,6 +15,7 @@ func MakeCRDClient() *CRDClient {
 	}
 	return &CRDClient{client: fissionClient}
 }
+// TODO : Fill in namespace and list options.
 
 func (cc *CRDClient) getPkgList() ([]crd.Package, error){
 	pkgList, err := cc.client.Packages().List()
