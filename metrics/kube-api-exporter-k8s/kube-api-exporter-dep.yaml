@@ -2,7 +2,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: kube-api-exporter
-  namespace: fission
+  namespace: default
 spec:
   replicas: 1
   template:

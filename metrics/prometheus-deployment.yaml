@@ -5,7 +5,7 @@ metadata:
   labels:
     name: prometheus-deployment
   name: prometheus
-  namespace: fission
+  namespace: default
 spec:
   replicas: 1
   template:
@@ -36,14 +36,14 @@ spec:
       - configMap:
           name: prometheus-config
         name: config-volume
-      serviceAccountName: prometheus
+
 
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: fission
+  namespace: default
 data:
   prometheus.yml: |
     global:

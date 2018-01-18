@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kube-api-exporter
-  namespace: fission
+  namespace: default
   annotations:
     prometheus.io/scrape: 'true'
     prometheus.io/path: '/'
