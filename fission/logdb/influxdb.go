@@ -128,13 +128,13 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
 					Timestamp: t,
 					Container: row[container].(string),                            //docker_container_id
-					FuncName:  row[functionName].(string),                            //kubernetes_labels_functionName
-					FuncUid:   row[funcuid].(string),                            //funcuid
+					FuncName:  row[functionName].(string),                         //kubernetes_labels_functionName
+					FuncUid:   row[funcuid].(string),                              //funcuid
 					Message:   strings.TrimSuffix(row[logMessage].(string), "\n"), //log field
-					Namespace: row[nameSpace].(string),                           //kubernetes_namespace_name
-					Pod:       row[podName].(string),                           //kubernetes_pod_name
-					Stream:    row[stream].(string),                           //stream
-					Sequence:  seqNum,                                     //sequence tag
+					Namespace: row[nameSpace].(string),                            //kubernetes_namespace_name
+					Pod:       row[podName].(string),                              //kubernetes_pod_name
+					Stream:    row[stream].(string),                               //stream
+					Sequence:  seqNum,                                             //sequence tag
 				})
 			}
 		}
