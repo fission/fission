@@ -25,6 +25,7 @@ func (cc *CRDClient) getPkgList() ([]crd.Package, error){
 	return pkgList.Items, nil
 }
 
+/*
 func (cc *CRDClient) getFunctionList() {
 
 }
@@ -33,3 +34,4 @@ func (cc *CRDClient) getPackageFromFunction(funcName string) (pkgName string, er
 
 
 }
+*/

@@ -38,6 +38,14 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 	pruner.archiveChan <- archiveID
 }
 
+/*
+  Everytime a function is updated, a new package is created, leaving the pkg that the function referenced earlier as orphan.
+  Also, the archives that are pointed to by these orphan pkgs can be deleted from the storage.
+  This method fetches archives from such orphan pkgs.
+
+  TODO : From earlier discussion, we dont need it. Instead we might change the way function update works today.
+  Just need clarification one more time.
+ */
 func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
 	// kubPackages := get all pkgs from kubernetes
 
