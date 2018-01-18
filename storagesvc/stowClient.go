@@ -32,8 +32,8 @@ type (
 const (
 	StorageTypeLocal StorageType = "local"
 	PaginationSize int = 50 // TODO: TBD before fixing. any benefit making this configurable during runtime?
-	CursorStart string = "CursorStart"
-
+	CursorStart string = ""
+	ContainerPrefix string = ""
 )
 
 var (
@@ -148,7 +148,7 @@ func (client *StowClient) getItems() ([]string, error){
 	archiveIDList := make([]string, 0)
 
 	for cursor = CursorStart; !stow.IsCursorEnd(cursor);{
-		items, cursor, err = client.container.Items("", cursor, PaginationSize)
+		items, cursor, err = client.container.Items(ContainerPrefix, cursor, PaginationSize)
 		if err != nil {
 			log.Printf("Error in getItems: %v", err)
 			return nil, err
