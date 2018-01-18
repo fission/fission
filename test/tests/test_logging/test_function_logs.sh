@@ -11,6 +11,8 @@ function cleanup {
     echo "Cleanup route"
     var=$(fission route list | grep $fn | awk '{print $1;}')
     fission route delete --name $var
+    echo "delete logfile"
+    rm "/tmp/logfile"
 }
 
 # Create a hello world function in nodejs, test it with an http trigger
@@ -42,18 +44,18 @@ echo "Grabbing logs, should have 4 calls in logs"
 
 sleep 15
 
-fission function logs --name $fn --detail > logfile
+fission function logs --name $fn --detail > /tmp/logfile
 
-size=$(wc -c <logfile)
+size=$(wc -c </tmp/logfile)
 if [ $size = 0 ]
 then
-    fission function logs --name $fn --detail > logfile
+    fission function logs --name $fn --detail > /tmp/logfile
 fi
 
 echo "---function logs---"
-cat logfile
+cat /tmp/logfile
 echo "------"
-num=$(grep 'log test' logfile | wc -l)
+num=$(grep 'log test' /tmp/logfile | wc -l)
 echo $num logs found
 
 if [ $num -ne 4 ]
