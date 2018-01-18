@@ -222,10 +222,12 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	latency := time.Now().Sub(callStartTime)
 	metricStatus := fmt.Sprint(wrapper.Status())
-	increaseHttpCalls(metricCold, fh.function.Name, fh.function.UID,
+	increaseHttpCalls(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method)
-	observeHttpCallLatency(metricCold, fh.function.Name, fh.function.UID,
+	observeHttpCallDelay(metricCached, fh.function.Name, string(fh.function.UID),
+		metricPath, metricStatus, request.Method, float64(delay.Nanoseconds())/10e9)
+	observeHttpCallLatency(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
-	observeHttpCallResponseSize(metricCached, fh.function.Name, fh.function.UID,
+	observeHttpCallResponseSize(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
 }
