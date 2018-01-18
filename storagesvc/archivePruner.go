@@ -6,30 +6,30 @@ import (
 )
 
 type ArchivePruner struct {
-	archiveCache ArchiveCache
+	//archiveCache ArchiveCache // TODO: Come back
 	crdClient CRDClient
 	archiveChan chan(string)
 	stowClient *StowClient
 }
 
+func MakeArchivePruner(stowClient *StowClient) *ArchivePruner {
+	return &ArchivePruner{
+		crdClient: MakeCRDClient(),
+		archiveChan: make(chan string),
+		stowClient: stowClient,
+	}
+}
+
 func (pruner *ArchivePruner) pruneArchives() {
-	var archiveID string
-	ticker := time.NewTicker(60 * time.Second) // TODO : Interval configurable in helm chart. Fed in to the pod through env variable.
 	for {
 		select {
-			case <- ticker.C:
-				// These methods fetch unused archive IDs and send them to archiveChannel
-				go pruner.getArchiveFromOrphanedPkgs()
-				go pruner.getOrphanedArchives()
-
-				// read archiveIDs from archiveChan and issue a delete request on them
-				archiveID <- pruner.archiveChan
-				if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
-					// logging the error and continuing with other deletions.
-					// hopefully this archive will be deleted in the next iteration.
-					log.Printf("err: %v deleting archiveID: %s from storage", err, archiveID)
-				}
-
+		case archiveID := <- pruner.archiveChan:
+			// read archiveIDs from archiveChan and issue a delete request on them
+			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
+				// logging the error and continuing with other deletions.
+				// hopefully this archive will be deleted in the next iteration.
+				log.Printf("err: %v deleting archiveID: %s from storage", err, archiveID)
+			}
 		}
 	}
 }
@@ -41,7 +41,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
 	// kubPackages := get all pkgs from kubernetes
 
-	// kubPackages might contain packages created less than an hour ago, still not referenced by a function
+	// kubPackages might contain packages created by user less than an hour ago, still not referenced by a function
 	// filter out those pkgs using pkg metadata.
 
 	// funcRefPackages := get all pkgs referenced by functions
@@ -90,5 +90,18 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 	// for item in orphanedArchives; insertArchive(item);
 	for _, archiveID = range orphanedArchives{
 		pruner.insertArchive(archiveID)
+	}
+}
+
+func (pruner *ArchivePruner) Start() {
+	ticker := time.NewTicker(60 * time.Second) // TODO : Interval configurable in helm chart. Fed in to the pod through env variable.
+	go pruner.pruneArchives()
+	for {
+		select {
+		case <- ticker.C:
+			// These methods fetch unused archive IDs and send them to archiveChannel
+			go pruner.getArchiveFromOrphanedPkgs()
+			go pruner.getOrphanedArchives()
+		}
 	}
 }
