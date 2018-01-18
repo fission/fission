@@ -2,13 +2,14 @@ package storagesvc
 
 import (
 	"time"
+	"log"
 )
 
 type ArchivePruner struct {
 	archiveCache ArchiveCache
 	crdClient CRDClient
 	archiveChan chan(string)
-	ss StorageService
+	stowClient *StowClient
 }
 
 func (pruner *ArchivePruner) pruneArchives() {
@@ -23,10 +24,10 @@ func (pruner *ArchivePruner) pruneArchives() {
 
 				// read archiveIDs from archiveChan and issue a delete request on them
 				archiveID <- pruner.archiveChan
-				if err := pruner.ss.storageClient.RemoveItem(archiveID); err != nil {
+				if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 					// logging the error and continuing with other deletions.
 					// hopefully this archive will be deleted in the next iteration.
-					// log.Errorf("err: %v deleting archive: %s from storage", err, archiveID)
+					log.Printf("err: %v deleting archiveID: %s from storage", err, archiveID)
 				}
 
 		}
@@ -56,28 +57,38 @@ func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
    This method reaps those orphaned archives.
  */
 func (pruner *ArchivePruner) getOrphanedArchives() {
-	// archiveInPkgs := make([]{})
+	archivesRefByPkgs := make([]string, 0)
+	var archiveID string
 
 	// pkgs := get all pkgs from kubernetes
-	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
-
-	// archivesInStorage := get all archives on storage which are older than an hour ago.
-	/*
-	TODO : Create a method to do this in StorageService
-	err = stow.Walk(containers[0], stow.NoPrefix, 100, func(item stow.Item, err error) error {
-		if err != nil {
-			return err
-		}
-		log.Println(item.Name())
-		return nil
-	})
+	pkgs, err := pruner.crdClient.getPkgList()
 	if err != nil {
-		return err
+
 	}
-	 */
+
+	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
+	for _, pkg := range pkgs {
+		if pkg.Spec.Deployment.URL {
+			archiveID = utilGetQueryParamValue(pkg.Spec.Deployment.URL, "id")
+			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
+		}
+		if pkg.Spec.Source.URL {
+			archiveID = utilGetQueryParamValue(pkg.Spec.Source.URL, "id")
+			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
+		}
+	}
+
+	// get all archives on storage
+	// TODO : out of all the archives on storage, there may be some just created but not referenced by packages yet. Need to filter them out here
+	// We can either have a fixed time , ex : 1 hour and filter out those archives created within 1 hour.
+	// Or, use an archiveCache. Insert archives into this cache everytime a createArchive is called.
+	archivesInStorage, err := pruner.stowClient.getItems()
 
 	// orphanedArchives := archivesInStorage - archivesInPkgs
+	orphanedArchives := utilGetDifferenceOfLists(archivesInStorage, archivesRefByPkgs)
 
 	// for item in orphanedArchives; insertArchive(item);
-
+	for _, archiveID = range orphanedArchives{
+		pruner.insertArchive(archiveID)
+	}
 }

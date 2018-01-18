@@ -16,11 +16,12 @@ func MakeCRDClient() *CRDClient {
 	return &CRDClient{client: fissionClient}
 }
 
-func (cc *CRDClient) getPkgList() (*crd.Package, error){
+func (cc *CRDClient) getPkgList() ([]crd.Package, error){
 	pkgList, err := cc.client.Packages().List()
 	if err != nil {
 		return nil, err
 	}
+
 	return pkgList.Items, nil
 }
 

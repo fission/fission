@@ -178,7 +178,7 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	go storageService.Start(port)
 
 	// TODO : Time Interval configurable for pruner
-	// pruner := makeArchivePruner(ss)
+	// pruner := makeArchivePruner(storageClient)
 	// go pruner.pruneUnusedArchives
 
 	return storageService

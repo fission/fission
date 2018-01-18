@@ -31,14 +31,17 @@ type (
 
 const (
 	StorageTypeLocal StorageType = "local"
+	PaginationSize int = 50 // TODO: TBD before fixing. any benefit making this configurable during runtime?
+	CursorStart string = "CursorStart"
+
 )
 
 var (
 	ErrNotFound = errors.New("not found")
-	ErrRetrievingItem = errors.New("not able to retrieve file")
+	ErrRetrievingItem = errors.New("not able to retrieve item")
 	ErrOpeningItem = errors.New("not able to open item")
 	ErrWritingFile = errors.New("not able to write file")
-	ErrWritingFileIntoResponse = errors.New("not able to copy file into http response")
+	ErrWritingFileIntoResponse = errors.New("not able to copy item into http response")
 )
 
 func MakeStowClient(storageType StorageType, storagePath string, containerName string) (*StowClient, error) {
@@ -136,4 +139,25 @@ func (client *StowClient) getFileIntoResponseWriter(fileId string, w *http.Respo
 
 func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
+}
+
+func (client *StowClient) getItems() ([]string, error){
+	var cursor string
+	var items []stow.Item
+	var err error
+	archiveIDList := make([]string, 0)
+
+	for cursor = CursorStart; !stow.IsCursorEnd(cursor);{
+		items, cursor, err = client.container.Items("", cursor, PaginationSize)
+		if err != nil {
+			log.Printf("Error in getItems: %v", err)
+			return nil, err
+		}
+		for _, item := range items {
+			// if item.LastMod() > one hour ago
+			archiveIDList = append(archiveIDList, item.ID())
+		}
+	}
+
+	return archiveIDList, nil
 }
