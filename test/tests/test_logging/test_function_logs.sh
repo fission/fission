@@ -30,7 +30,7 @@ fission route create --function $fn --url /$fn --method GET
 trap cleanup EXIT
 
 echo "Waiting for router to catch up"
-sleep 3
+sleep 15
 
 echo "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4
@@ -40,7 +40,7 @@ done
 
 echo "Grabbing logs, should have 4 calls in logs"
 
-sleep 25
+sleep 15
 
 fission function logs --name $fn --detail > logfile
 
