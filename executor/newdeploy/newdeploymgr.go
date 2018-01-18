@@ -250,10 +250,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		return fsvc, err
 	}
 
-	objName := fmt.Sprintf("%v-%v-%v",
-		fn.Metadata.Namespace,
-		fn.Metadata.Name,
-		deploy.instanceID)
+	objName := deploy.getObjName(fn)
 
 	deployLabels := map[string]string{
 		"environmentName":                 env.Metadata.Name,
@@ -277,26 +274,45 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	}
 	svcAddress := svc.Spec.ClusterIP
 
-	_, err = deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
+	hpa, err := deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
 	if err != nil {
 		log.Printf("Error creating the HPA %v: %v", objName, err)
 		return fsvc, err
 	}
 
-	kubeObjRef := api.ObjectReference{
-		Kind:            depl.TypeMeta.Kind,
-		Name:            depl.ObjectMeta.Name,
-		APIVersion:      depl.TypeMeta.APIVersion,
-		Namespace:       depl.ObjectMeta.Namespace,
-		ResourceVersion: depl.ObjectMeta.ResourceVersion,
-		UID:             depl.ObjectMeta.UID,
+	kubeObjRefs := []api.ObjectReference{
+		{
+			//obj.TypeMeta.Kind does not work hence this, needs investigationa and a fix
+			Kind:            "deployment",
+			Name:            depl.ObjectMeta.Name,
+			APIVersion:      depl.TypeMeta.APIVersion,
+			Namespace:       depl.ObjectMeta.Namespace,
+			ResourceVersion: depl.ObjectMeta.ResourceVersion,
+			UID:             depl.ObjectMeta.UID,
+		},
+		{
+			Kind:            "service",
+			Name:            svc.ObjectMeta.Name,
+			APIVersion:      svc.TypeMeta.APIVersion,
+			Namespace:       svc.ObjectMeta.Namespace,
+			ResourceVersion: svc.ObjectMeta.ResourceVersion,
+			UID:             svc.ObjectMeta.UID,
+		},
+		{
+			Kind:            "horizontalpodautoscaler",
+			Name:            hpa.ObjectMeta.Name,
+			APIVersion:      hpa.TypeMeta.APIVersion,
+			Namespace:       hpa.ObjectMeta.Namespace,
+			ResourceVersion: hpa.ObjectMeta.ResourceVersion,
+			UID:             hpa.ObjectMeta.UID,
+		},
 	}
 
 	fsvc = &fscache.FuncSvc{
-		Function:         &fn.Metadata,
-		Environment:      env,
-		Address:          svcAddress,
-		KubernetesObject: kubeObjRef,
+		Function:          &fn.Metadata,
+		Environment:       env,
+		Address:           svcAddress,
+		KubernetesObjects: kubeObjRefs,
 	}
 
 	_, err = deploy.fsCache.Add(*fsvc)
@@ -310,12 +326,21 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	var delError error
-	objName := fmt.Sprintf("%v-%v",
-		fn.Metadata.Namespace,
-		fn.Metadata.Name)
+	objName := deploy.getObjName(fn)
 
-	log.Printf("Deleting objects with name: %v", objName)
-	err := deploy.deleteDeployment(deploy.namespace, objName)
+	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
+	if err != nil {
+		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
+		delError = err
+	} else {
+		_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
+		if err != nil {
+			log.Printf("Error deleting the function from cache: %v", fsvc)
+			delError = err
+		}
+	}
+
+	err = deploy.deleteDeployment(deploy.namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the deployment: %v", objName)
 		delError = err
@@ -333,21 +358,15 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 		delError = err
 	}
 
-	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
-	if err != nil {
-		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
-		delError = err
-	} else {
-		// Delete KubernetesObject only if fsvc found in cache
-		_, err = deploy.fsCache.DeleteByKubeObject(fsvc.KubernetesObject, time.Second*0)
-		if err != nil {
-			log.Printf("Error deleting the Kubernetes Object from cache: %v", fsvc.KubernetesObject)
-			delError = err
-		}
-	}
-
 	if delError != nil {
 		return nil, delError
 	}
 	return nil, nil
+}
+
+func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
+	return fmt.Sprintf("%v-%v-%v",
+		fn.Metadata.Namespace,
+		fn.Metadata.Name,
+		deploy.instanceID)
 }

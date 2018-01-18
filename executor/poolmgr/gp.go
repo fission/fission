@@ -158,11 +158,6 @@ func MakeGenericPool(
 
 	go gp.choosePodService()
 
-	// Unless specified otherwise, periodically cleanup inactive pods.
-	if env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
-		go gp.idlePodReaper()
-	}
-
 	return gp, nil
 }
 
@@ -583,7 +578,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 
 	kubeObjRefs := []api.ObjectReference{
 		{
-			Kind:            pod.TypeMeta.Kind,
+			Kind:            "pod",
 			Name:            pod.ObjectMeta.Name,
 			APIVersion:      pod.TypeMeta.APIVersion,
 			Namespace:       pod.ObjectMeta.Namespace,
@@ -607,66 +602,6 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 		return nil, err
 	}
 	return fsvc, nil
-}
-
-func (gp *GenericPool) CleanupFunctionService(obj *fscache.FuncSvc) error {
-	// remove ourselves from fsCache (only if we're still old)
-	deleted, err := gp.fsCache.DeleteOld(obj, gp.idlePodReapTime)
-	if err != nil {
-		return err
-	}
-
-	if !deleted {
-		log.Printf("Not deleting %v, in use", obj.Function)
-		return nil
-	}
-
-	for _, kubeobj := range obj.KubernetesObjects {
-		pod, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Get(kubeobj.Name, metav1.GetOptions{})
-
-		loggerUrl := fmt.Sprintf("http://%s:1234/v1/log/%s", pod.Spec.NodeName, pod.Name)
-		req, err := http.NewRequest("DELETE", loggerUrl, nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Printf("Error from %s daemonset logger: %v", pod.Spec.NodeName, err)
-		} else {
-			if resp.StatusCode != 200 {
-				log.Printf("Received not http 200(OK) status from %s daemonset logger: %s", pod.Spec.NodeName, resp.Status)
-			}
-			resp.Body.Close()
-		}
-
-		// delete pod
-		err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(kubeobj.Name, nil)
-		if err != nil {
-			return err
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (gp *GenericPool) idlePodReaper() {
-	for {
-		time.Sleep(time.Minute)
-		funcSvcs, err := gp.fsCache.ListOld(&gp.env.Metadata, gp.idlePodReapTime)
-		if err != nil {
-			log.Printf("Error reaping idle pods: %v", err)
-			continue
-		}
-		for _, obj := range funcSvcs {
-			err := gp.CleanupFunctionService(obj)
-			if err != nil {
-				log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", obj, err)
-				log.Printf("Object Name| Object Kind | Object Space")
-				for _, kubeobj := range obj.KubernetesObjects {
-					log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
-				}
-			}
-		}
-	}
 }
 
 // destroys the pool -- the deployment, replicaset and pods

@@ -194,7 +194,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	fsCache := fscache.MakeFunctionServiceCache()
 
 	poolID := strings.ToLower(uniuri.NewLen(8))
-	cleanupOldResources(kubernetesClient, functionNamespace, poolID)
+	cleanupService(kubernetesClient, fissionClient, fsCache, functionNamespace, poolID)
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, poolID)

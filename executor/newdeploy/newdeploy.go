@@ -160,7 +160,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		return nil, err
 	}
 
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 120; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -200,10 +200,6 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	}
 
 	hpa := asv1.HorizontalPodAutoscaler{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "autoscaling/v1",
-			Kind:       "HorizontalPodAutoscaler",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      hpaName,
 			Namespace: deploy.namespace,
@@ -242,10 +238,6 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   svcName,
 			Labels: deployLabels,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{

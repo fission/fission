@@ -17,24 +17,35 @@ limitations under the License.
 package executor
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"time"
+
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/executor/fscache"
 
 	"github.com/fission/fission"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-// cleanupOldResources looks for resources created by an old
-// poolmgr instance and cleans them up.
-func cleanupOldResources(client *kubernetes.Clientset, namespace string, instanceId string) {
+// cleanupService cleans up resources created by old backend instances
+// and reaps idle resources based on minScale parameter
+func cleanupService(kubernetesClient *kubernetes.Clientset,
+	fissionClient *crd.FissionClient,
+	fsCache *fscache.FunctionServiceCache,
+	namespace string,
+	instanceId string) {
 	go func() {
-		err := cleanup(client, namespace, instanceId)
+		err := cleanup(kubernetesClient, namespace, instanceId)
 		if err != nil {
 			// TODO retry cleanup; logged and ignored for now
 			log.Printf("Failed to cleanup: %v", err)
 		}
 	}()
+
+	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
 }
 
 func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) error {
@@ -78,6 +89,78 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	}
 
 	return nil
+}
+
+func idleObjectReaper(kubeClient *kubernetes.Clientset,
+	fissionClient *crd.FissionClient,
+	fsCache *fscache.FunctionServiceCache,
+	idlePodReapTime time.Duration) {
+
+	pollSleep := time.Duration(2 * time.Second)
+	for {
+		time.Sleep(pollSleep)
+
+		envs, err := fissionClient.Environments(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+		if err != nil {
+			log.Fatalf("Failed to get environment list: %v", err)
+		}
+
+		for i := range envs.Items {
+			env := envs.Items[i]
+			if env.Spec.AllowedFunctionsPerContainer != fission.AllowedFunctionsPerContainerInfinite {
+				funcSvcs, err := fsCache.ListOld(&env.Metadata, idlePodReapTime)
+				if err != nil {
+					log.Printf("Error reaping idle pods: %v", err)
+					continue
+				}
+
+				for _, fsvc := range funcSvcs {
+
+					fn, err := fissionClient.Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name)
+					if err != nil {
+						log.Printf("Error getting function: %v", fsvc.Function.Name)
+						continue
+					}
+
+					// Ignore functions of NewDeploy backend with MinScale > 0
+					if !(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 && fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy) {
+						deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
+
+						if err != nil {
+							log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
+							log.Printf("Object Name| Object Kind | Object Namespace")
+							for _, kubeobj := range fsvc.KubernetesObjects {
+								log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
+							}
+						}
+
+						if !deleted {
+							log.Printf("Not deleting %v, in use", fsvc.Function)
+						} else {
+							for _, kubeobj := range fsvc.KubernetesObjects {
+								switch strings.ToLower(kubeobj.Kind) {
+								case "pod":
+									err = kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(kubeobj.Name, nil)
+									logErr(fmt.Sprintf("cleaning up pod %v ", kubeobj.Name), err)
+								case "service":
+									err = kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(kubeobj.Name, nil)
+									logErr(fmt.Sprintf("cleaning up service %v ", kubeobj.Name), err)
+								case "deployment":
+									err = kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Delete(kubeobj.Name, nil)
+									logErr(fmt.Sprintf("cleaning up deployment %v ", kubeobj.Name), err)
+								case "horizontalpodautoscaler":
+									err = kubeClient.AutoscalingV1().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(kubeobj.Name, nil)
+									logErr(fmt.Sprintf("cleaning up horizontalpodautoscaler %v ", kubeobj.Name), err)
+								default:
+									log.Printf("There was an error identifying the object type: %v for obj: %v", kubeobj.Kind, kubeobj)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func cleanupDeployments(client *kubernetes.Clientset, namespace string, instanceId string) error {
@@ -140,7 +223,7 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 		if ok && id != instanceId {
 			log.Printf("Cleaning up svc %v", svc.ObjectMeta.Name)
 			err := client.CoreV1().Services(namespace).Delete(svc.ObjectMeta.Name, nil)
-			logErr("cleaning up svc", err)
+			logErr("cleaning up service", err)
 			// ignore err
 		}
 	}
@@ -158,7 +241,7 @@ func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId strin
 		if ok && id != instanceId {
 			log.Printf("Cleaning up HPA %v", hpa.ObjectMeta.Name)
 			err := client.AutoscalingV1().HorizontalPodAutoscalers(namespace).Delete(hpa.ObjectMeta.Name, nil)
-			logErr("Cleaning up HPA", err)
+			logErr("cleaning up HPA", err)
 		}
 
 	}
