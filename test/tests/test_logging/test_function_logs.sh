@@ -43,6 +43,13 @@ echo "Grabbing logs, should have 4 calls in logs"
 sleep 25
 
 fission function logs --name $fn --detail > logfile
+
+size=$(wc -c <logfile)
+if [ $size = 0 ]
+then
+    fission function logs --name $fn --detail > logfile
+fi
+
 echo "---function logs---"
 cat logfile
 echo "------"
