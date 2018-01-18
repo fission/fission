@@ -24,11 +24,14 @@ func (pruner *ArchivePruner) pruneArchives() {
 	for {
 		select {
 		case archiveID := <- pruner.archiveChan:
+			log.Printf("Sending delete request for archive ID: %s", archiveID)
 			// read archiveIDs from archiveChan and issue a delete request on them
 			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
 				// hopefully this archive will be deleted in the next iteration.
 				log.Printf("err: %v deleting archiveID: %s from storage", err, archiveID)
+				// TODO : But there may be issue w.r.t permissions that need verification, perhaps?
+				// Or not, since storageSvc creates the archive, so it shd well have permissions to delete it?
 			}
 		}
 	}
@@ -43,7 +46,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
   Also, the archives that are pointed to by these orphan pkgs can be deleted from the storage.
   This method fetches archives from such orphan pkgs.
 
-  TODO : From earlier discussion, we dont need it. Instead we might change the way function update works today.
+  TODO : From earlier discussion, we dont need it. Instead we might have to change the way function update works today and ensure it doesnt leak packages.
   Just need clarification one more time.
  */
 func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
@@ -65,13 +68,16 @@ func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
    This method reaps those orphaned archives.
  */
 func (pruner *ArchivePruner) getOrphanedArchives() {
+	log.Printf("getting orphaned archives..")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
 	// pkgs := get all pkgs from kubernetes
 	pkgs, err := pruner.crdClient.getPkgList()
 	if err != nil {
-
+		// Safe to just silence the error here. Hoping next iteration will succeed.
+		log.Printf("Error getting pkg list from kubernetes: %v", err)
+		return
 	}
 
 	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
@@ -86,14 +92,18 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 		}
 	}
 
+	utilDumpListContents(archivesRefByPkgs, "archives referenced by packages")
+
 	// get all archives on storage
 	// TODO : out of all the archives on storage, there may be some just created but not referenced by packages yet. Need to filter them out here
 	// We can either have a fixed time , ex : 1 hour and filter out those archives created within 1 hour.
 	// Or, use an archiveCache. Insert archives into this cache everytime a createArchive is called.
 	archivesInStorage, err := pruner.stowClient.getItems()
+	utilDumpListContents(archivesInStorage, "archives in storage")
 
 	// orphanedArchives := archivesInStorage - archivesInPkgs
 	orphanedArchives := utilGetDifferenceOfLists(archivesInStorage, archivesRefByPkgs)
+	utilDumpListContents(orphanedArchives, "archives left orphan")
 
 	// for item in orphanedArchives; insertArchive(item);
 	for _, archiveID = range orphanedArchives{

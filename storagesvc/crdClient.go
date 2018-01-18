@@ -1,6 +1,7 @@
 package storagesvc
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"github.com/fission/fission/crd"
 )
 
@@ -16,9 +17,8 @@ func MakeCRDClient() *CRDClient {
 	return &CRDClient{client: fissionClient}
 }
 // TODO : Fill in namespace and list options.
-
 func (cc *CRDClient) getPkgList() ([]crd.Package, error){
-	pkgList, err := cc.client.Packages().List()
+	pkgList, err := cc.client.Packages(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
