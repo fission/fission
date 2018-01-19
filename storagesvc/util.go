@@ -4,7 +4,6 @@ package storagesvc
 import (
 	"net/url"
 	"log"
-	"fmt"
 )
 
 func utilGetQueryParamValue(urlString string, queryParam string) string {
@@ -39,9 +38,5 @@ func utilGetDifferenceOfLists(firstList []string, secondList []string) []string 
 
 func utilDumpListContents(list []string, listDescription string) {
 	log.Printf("Dumping list %s", listDescription)
-	var dump string
-	for _, item := range list {
-		dump = fmt.Sprintf("%s ", item)
-	}
-	log.Printf(dump)
+	log.Printf("%s", list)
 }

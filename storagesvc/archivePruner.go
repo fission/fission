@@ -21,6 +21,7 @@ func MakeArchivePruner(stowClient *StowClient) *ArchivePruner {
 }
 
 func (pruner *ArchivePruner) pruneArchives() {
+	log.Println("starting loop to prune archives..")
 	for {
 		select {
 		case archiveID := <- pruner.archiveChan:
@@ -46,7 +47,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
   Also, the archives that are pointed to by these orphan pkgs can be deleted from the storage.
   This method fetches archives from such orphan pkgs.
 
-  TODO : From earlier discussion, we dont need it. Instead we might have to change the way function update works today and ensure it doesnt leak packages.
+  TODO : From earlier discussion, we dont need this. Instead we might have to change the way function update works today and ensure it doesnt leak packages.
   Just need clarification one more time.
  */
 func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
@@ -68,7 +69,7 @@ func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
    This method reaps those orphaned archives.
  */
 func (pruner *ArchivePruner) getOrphanedArchives() {
-	log.Printf("getting orphaned archives..")
+	log.Println("getting orphaned archives..")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
@@ -95,10 +96,9 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 	utilDumpListContents(archivesRefByPkgs, "archives referenced by packages")
 
 	// get all archives on storage
-	// TODO : out of all the archives on storage, there may be some just created but not referenced by packages yet. Need to filter them out here
-	// We can either have a fixed time , ex : 1 hour and filter out those archives created within 1 hour.
-	// Or, use an archiveCache. Insert archives into this cache everytime a createArchive is called.
-	archivesInStorage, err := pruner.stowClient.getItems()
+	// out of all the archives on storage, there may be some just created but not referenced by packages yet.
+	// Need to filter them out.
+	archivesInStorage, err := pruner.stowClient.getItemIDsWithFilter(filterItemCreatedAMinuteAgo, time.Now())
 	utilDumpListContents(archivesInStorage, "archives in storage")
 
 	// orphanedArchives := archivesInStorage - archivesInPkgs
@@ -106,7 +106,7 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 	utilDumpListContents(orphanedArchives, "archives left orphan")
 
 	// for item in orphanedArchives; insertArchive(item);
-	for _, archiveID = range orphanedArchives{
+	for _, archiveID = range orphanedArchives {
 		pruner.insertArchive(archiveID)
 	}
 }
