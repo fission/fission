@@ -23,7 +23,7 @@ var (
 	)
 	httpCallErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fission_http_callerrors_total",
+			Name: "fission_http_call_errors_total",
 			Help: "How many fission error during HTTP call labelled by reason.",
 		},
 		[]string{"reason"},
@@ -52,6 +52,13 @@ var (
 		},
 		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
 	)
+	functionErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_function_errors",
+			Help: "The number of total function errors",
+		},
+		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
+	)
 )
 
 func init() {
@@ -61,6 +68,7 @@ func init() {
 	prometheus.MustRegister(httpCallLatencySummary)
 	prometheus.MustRegister(httpCallDelaySummary)
 	prometheus.MustRegister(httpCallResponseSizeSummary)
+	prometheus.MustRegister(functionErrors)
 }
 
 func increaseHttpCalls(cached, funcname, funcuid, path, code, method string) {
@@ -81,4 +89,8 @@ func observeHttpCallDelay(cached, funcname, funcuid, path, code, method string, 
 
 func observeHttpCallResponseSize(cached, funcname, funcuid, path, code, method string, size float64) {
 	httpCallResponseSizeSummary.WithLabelValues(cached, funcname, funcuid, path, code, method).Observe(size)
+}
+
+func increaseFunctionErrors(cached, funcname, funcuid, path, code, method string) {
+	functionErrors.WithLabelValues(cached, funcname, funcuid, path, code, method).Inc()
 }

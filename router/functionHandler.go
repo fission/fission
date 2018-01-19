@@ -222,6 +222,12 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	latency := time.Now().Sub(callStartTime)
 	metricStatus := fmt.Sprint(wrapper.Status())
+
+	if wrapper.status != 200 {
+		increaseFunctionErrors(metricCached, fh.function.Name, string(fh.function.UID),
+			metricPath, metricStatus, request.Method)
+	}
+
 	increaseHttpCalls(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method)
 	observeHttpCallDelay(metricCached, fh.function.Name, string(fh.function.UID),
