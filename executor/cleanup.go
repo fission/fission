@@ -27,6 +27,7 @@ import (
 
 	"github.com/fission/fission"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -142,15 +143,21 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 								case "pod":
 									err = kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(kubeobj.Name, nil)
 									logErr(fmt.Sprintf("cleaning up pod %v ", kubeobj.Name), err)
+
 								case "service":
 									err = kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(kubeobj.Name, nil)
 									logErr(fmt.Sprintf("cleaning up service %v ", kubeobj.Name), err)
+
 								case "deployment":
+									depl, err := kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Get(kubeobj.Name, meta_v1.GetOptions{})
 									err = kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Delete(kubeobj.Name, nil)
 									logErr(fmt.Sprintf("cleaning up deployment %v ", kubeobj.Name), err)
+									cleanupDeploymentObjects(kubeClient, kubeobj.Namespace, depl.Labels)
+
 								case "horizontalpodautoscaler":
 									err = kubeClient.AutoscalingV1().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(kubeobj.Name, nil)
 									logErr(fmt.Sprintf("cleaning up horizontalpodautoscaler %v ", kubeobj.Name), err)
+
 								default:
 									log.Printf("There was an error identifying the object type: %v for obj: %v", kubeobj.Kind, kubeobj)
 								}
@@ -160,6 +167,22 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 				}
 			}
 		}
+	}
+}
+
+func cleanupDeploymentObjects(kubeClient *kubernetes.Clientset, namespace string, sel map[string]string) {
+	rsList, err := kubeClient.ExtensionsV1beta1().ReplicaSets(namespace).List(meta_v1.ListOptions{LabelSelector: labels.Set(sel).AsSelector().String()})
+	logErr("Getting replicaset for deployment ", err)
+	for _, rs := range rsList.Items {
+		err = kubeClient.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.Name, nil)
+		logErr(fmt.Sprintf("Cleaning replicaset %v for deployment", rs.Name), err)
+	}
+
+	podList, err := kubeClient.CoreV1().Pods(namespace).List(meta_v1.ListOptions{LabelSelector: labels.Set(sel).AsSelector().String()})
+	logErr("Getting pods for deployment ", err)
+	for _, pod := range podList.Items {
+		err = kubeClient.CoreV1().Pods(namespace).Delete(pod.Name, nil)
+		logErr(fmt.Sprintf("Cleaning pod %v for deployment", pod.Name), err)
 	}
 }
 
