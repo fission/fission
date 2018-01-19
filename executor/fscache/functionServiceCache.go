@@ -216,6 +216,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 		return nil, err
 	}
 
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 	return nil, nil
 }
 
@@ -249,6 +250,10 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
 	fsc.byFunctionUID.Delete(fsvc.Function.UID)
+
+	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
+	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Now().Sub(fsvc.Ctime).Seconds())
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
 }
 
 func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {

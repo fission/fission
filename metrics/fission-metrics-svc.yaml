@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: router-metrics
-  namespace: fission
+  namespace: default
   labels:
     svc: router-metrics
   annotations:
@@ -21,7 +21,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: poolmgr-metrics
-  namespace: fission
+  namespace: default
   labels:
     svc: poolmgr-metrics
   annotations:
@@ -33,4 +33,4 @@ spec:
   - port: 8080
     targetPort: 8080
   selector:
-    svc: poolmgr
+    svc: executor

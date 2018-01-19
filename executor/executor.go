@@ -207,6 +207,7 @@ func dumpStackTrace() {
 
 func serveMetric() {
 	// Expose the registered metrics via HTTP.
+	metricAddr := ":8080"
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(metricAddr, nil))
 }
