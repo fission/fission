@@ -8,7 +8,28 @@
 
 set -euo pipefail
 
-ROOT=$(dirname $0)/..
+ROOT_RELPATH=$(dirname $0)/..
+pushd $ROOT_RELPATH
+ROOT=$(pwd)
+popd
+
+export TEST_REPORT=""
+
+report_msg() {
+    TEST_REPORT="$TEST_REPORT\n$1"
+}
+report_test_passed() {
+    report_msg "--- PASSED $1"
+}
+report_test_failed() {
+    report_msg "*** FAILED $1"
+}
+report_test_skipped() {
+    report_msg "### SKIPPED $1"
+}
+show_test_report() {
+    echo -e "------\n$TEST_REPORT\n------"
+}
 
 helm_setup() {
     helm init
@@ -29,7 +50,7 @@ gcloud_login() {
     then
 	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
     fi
-    
+
     gcloud auth activate-service-account --key-file $KEY
 }
 
@@ -41,7 +62,7 @@ build_and_push_fission_bundle() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -54,7 +75,7 @@ build_and_push_fetcher() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -94,7 +115,7 @@ build_and_push_env_runtime() {
     docker build -t $image_tag .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -109,7 +130,7 @@ build_and_push_env_builder() {
     docker build -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
 
     gcloud_login
-    
+
     gcloud docker -- push $image_tag
     popd
 }
@@ -150,7 +171,7 @@ helm_install_fission() {
 
     echo "Deleting old releases"
     helm list -q|xargs helm_uninstall_fission
-    
+
     echo "Installing fission"
     helm install		\
 	 --wait			\
@@ -160,7 +181,7 @@ helm_install_fission() {
 	 --namespace $ns        \
 	 --debug                \
 	 $ROOT/charts/fission-all
-    
+
     helm list
 }
 
@@ -188,15 +209,19 @@ wait_for_services() {
     wait_for_service $id router
 }
 
-helm_uninstall_fission() {
+helm_uninstall_fission() {(set +e
+    id=$1
+
     if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
     then
 	echo "Fission uninstallation skipped"
 	return
     fi
     echo "Uninstalling fission"
-    helm delete --purge $1
-}
+    helm delete --purge $id
+
+    kubectl delete ns f-$id
+)}
 export -f helm_uninstall_fission
 
 set_environment() {
@@ -235,7 +260,7 @@ dump_fission_logs() {
     component=$3
 
     echo --- $component logs ---
-    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs 
+    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs
     echo --- end $component logs ---
 }
 
@@ -268,7 +293,7 @@ dump_all_fission_resources() {
     ns=$1
 
     echo "--- All objects in the fission namespace $ns ---"
-    kubectl -n $ns get all 
+    kubectl -n $ns get all
     echo "--- End objects in the fission namespace $ns ---"
 }
 
@@ -304,16 +329,31 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-        
-    for file in $ROOT/test/tests/test_*.sh
+
+    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
+
+    for file in $test_files
     do
-	echo ------- Running $file -------
-	if $file
+	testname=${file#$ROOT/test/tests}
+	testpath=$file
+
+	if grep "^#test:disabled" $file
 	then
-	    echo SUCCESS: $file
+	    report_test_skipped $testname
+	    echo ------- Skipped $testname -------
 	else
-	    echo FAILED: $file
-	    export FAILURES=$(($FAILURES+1))
+	    echo ------- Running $testname -------
+	    pushd $(dirname $testpath)
+	    if $testpath
+	    then
+		echo SUCCESS: $testname
+		report_test_passed $testname
+	    else
+		echo FAILED: $testname
+		export FAILURES=$(($FAILURES+1))
+		report_test_failed $testname
+	    fi
+	    popd
 	fi
     done
 }
@@ -345,6 +385,8 @@ install_and_test() {
     run_all_tests $id
 
     dump_logs $id
+
+    show_test_report
 
     if [ $FAILURES -ne 0 ]
     then

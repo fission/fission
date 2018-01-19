@@ -21,6 +21,21 @@ func TestFunctionServiceCache(t *testing.T) {
 	var fsvc *FuncSvc
 	now := time.Now()
 
+	objects := []api.ObjectReference{
+		{
+			Kind:       "pod",
+			Name:       "xxx",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+		{
+			Kind:       "pod",
+			Name:       "xxx2",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+	}
+
 	fsvc = &FuncSvc{
 		Function: &metav1.ObjectMeta{
 			Name: "foo",
@@ -39,15 +54,10 @@ func TestFunctionServiceCache(t *testing.T) {
 				Builder: fission.Builder{},
 			},
 		},
-		Address: "xxx",
-		KubernetesObject: api.ObjectReference{
-			Kind:       "pod",
-			Name:       "xxx",
-			APIVersion: "v1",
-			Namespace:  "fission-function",
-		},
-		Ctime: now,
-		Atime: now,
+		Address:           "xxx",
+		KubernetesObjects: objects,
+		Ctime:             now,
+		Atime:             now,
 	}
 	err, _ := fsc.Add(*fsvc)
 	if err != nil {
@@ -62,7 +72,7 @@ func TestFunctionServiceCache(t *testing.T) {
 	}
 	fsvc.Atime = f.Atime
 	fsvc.Ctime = f.Ctime
-	if *f != *fsvc {
+	if f.Address != fsvc.Address {
 		fsc.Log()
 		log.Panicf("Incorrect fsvc \n(expected: %#v)\n (found: %#v)", fsvc, f)
 	}
@@ -73,7 +83,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to touch fsvc: %v", err)
 	}
 
-	deleted, err := fsc.DeleteByKubeObject(fsvc.KubernetesObject, 0)
+	deleted, err := fsc.DeleteOld(fsvc, 0)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to delete fsvc: %v", err)
