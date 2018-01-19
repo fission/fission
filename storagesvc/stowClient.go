@@ -10,6 +10,8 @@ import (
 	"errors"
 	"os"
 	"net/http"
+	"time"
+	"github.com/influxdata/influxdb/services/continuous_querier"
 )
 
 type (
@@ -31,9 +33,7 @@ type (
 
 const (
 	StorageTypeLocal StorageType = "local"
-	PaginationSize int = 50 // TODO: TBD before fixing. any benefit making this configurable during runtime?
-	CursorStart string = ""
-	ContainerPrefix string = ""
+	PaginationSize int = 50 // TODO: TBD before finalizing it. any benefit making this configurable during runtime?
 )
 
 var (
@@ -91,9 +91,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	stowClient.container = con
 
 	return stowClient, nil
-
 }
-
 
 func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, error) {
 	// This is not the item ID (that's returned by Put)
@@ -111,6 +109,7 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	return item.ID(), nil
 }
 
+// TODO : Come back and test this.
 func (client *StowClient) getFileIntoResponseWriter(fileId string, w http.ResponseWriter) error {
 	item, err := client.container.Item(fileId)
 	if err != nil {
@@ -141,23 +140,47 @@ func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
 }
 
-func (client *StowClient) getItems() ([]string, error){
-	var cursor string
+type filter func(stow.Item, interface{}) bool
+
+func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam interface{}) ([]string, error){
+	cursor := stow.CursorStart
 	var items []stow.Item
 	var err error
+
 	archiveIDList := make([]string, 0)
 
-	for cursor = CursorStart; !stow.IsCursorEnd(cursor);{
-		items, cursor, err = client.container.Items(ContainerPrefix, cursor, PaginationSize)
+	for  {
+
+		log.Printf("In loop, getting Items in archive storage..containerName: %s", client.config.containerName)
+
+		items, cursor, err = client.container.Items(stow.NoPrefix, cursor, PaginationSize)
 		if err != nil {
 			log.Printf("Error in getItems: %v", err)
 			return nil, err
 		}
+		log.Printf("Length of items returned : %d", len(items))
 		for _, item := range items {
+			isFilterable := filterFunc(item, filterFuncParam)
+			if isFilterable {
+				continue
+			}
 			// if item.LastMod() > one hour ago
 			archiveIDList = append(archiveIDList, item.ID())
+		}
+		if stow.IsCursorEnd(cursor) {
+			break
 		}
 	}
 
 	return archiveIDList, nil
+}
+
+func filterItemCreatedAMinuteAgo (item stow.Item, currentTime interface{}) bool {
+	itemLastModTime, _ := item.LastMod()
+	// handle assertion error
+	if currentTime.(time.Time{}).Sub(itemLastModTime) < 1 * time.Minute {
+		log.Printf("skipping archive:%s created less than a minute ago: %v", item.ID(), item.LastMod())
+		return true
+	}
+	return false
 }
