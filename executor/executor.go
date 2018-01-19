@@ -18,12 +18,15 @@ package executor
 
 import (
 	"log"
+	"net/http"
+	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
@@ -202,8 +205,14 @@ func dumpStackTrace() {
 	debug.PrintStack()
 }
 
-// StartExecutor Starts executor and the executor components such as Poolmgr,
-// deploymgr and potential future executor types
+func serveMetric() {
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(metricAddr, nil))
+}
+
+// StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
+// deploymgr and potential future backends
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
@@ -238,6 +247,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 
 	go api.Serve(port)
+	go serveMetric()
 
 	return nil
 }
