@@ -193,10 +193,12 @@ func envList(c *cli.Context) error {
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY")
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Poolsize)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Poolsize,
+			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
+			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory())
 	}
 	w.Flush()
 

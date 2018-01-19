@@ -392,10 +392,13 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "BACKEND")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "BACKEND", "MINSCALE", "MAXSCALE")
 	for _, f := range fns {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name, f.Spec.InvokeStrategy.ExecutionStrategy.Backend)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
+			f.Spec.InvokeStrategy.ExecutionStrategy.Backend,
+			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
+			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
 	}
 	w.Flush()
 
