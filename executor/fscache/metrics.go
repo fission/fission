@@ -1,4 +1,4 @@
-package executor
+package fscache
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,19 +49,19 @@ func init() {
 	prometheus.MustRegister(funcIsAlive)
 }
 
-func increaseColdStarts(funcname, funcuid string) {
+func (fsc *FunctionServiceCache) IncreaseColdStarts(funcname, funcuid string) {
 	coldStarts.WithLabelValues(funcname, funcuid).Inc()
 }
 
-func observeFuncRunningTime(funcname, funcuid string, running float64) {
+func (fsc *FunctionServiceCache) observeFuncRunningTime(funcname, funcuid string, running float64) {
 	funcRunningSummary.WithLabelValues(funcname, funcuid).Observe(running)
 }
 
-func observeFuncAliveTime(funcname, funcuid string, alive float64) {
+func (fsc *FunctionServiceCache) observeFuncAliveTime(funcname, funcuid string, alive float64) {
 	funcAliveSummary.WithLabelValues(funcname, funcuid).Observe(alive)
 }
 
-func setFuncAlive(funcname, funcuid string, isAlive bool) {
+func (fsc *FunctionServiceCache) setFuncAlive(funcname, funcuid string, isAlive bool) {
 	count := 0
 	if isAlive {
 		count = 1

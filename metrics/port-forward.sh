@@ -14,4 +14,4 @@ fi
 
 kubectl get pods -l app=$app -o name --namespace default | \
         sed 's/^.*\///' | \
-        xargs -I{} kubectl port-forward {} $port:$port -n default
+        xargs -I{} kubectl port-forward {} $port:$port -n default &
