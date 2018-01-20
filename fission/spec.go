@@ -57,10 +57,9 @@ How to use these specs
 These specs are handled with the 'fission spec' command.  See 'fission spec --help'.
 
 'fission spec apply' will "apply" all resources specified in this directory to your
-cluster.  That means it checks if these resources already exist, creates the ones that
-don't exist, and updates the ones that need updating.  And, it deletes resources that
-were created from these specs, but don't exist in the spec directory anymore (unless you
-pass --delete=false).
+cluster.  That means it checks what resources exist on your cluster, what resources are
+specified in the specs directory, and reconciles the difference by creating, updating or
+deleting resources on the cluster.
 
 'fission spec apply' will also package up your source code (or compiled binaries) and
 upload the archives to the cluster if needed.  It uses 'ArchiveUploadSpec' resources in
@@ -73,14 +72,15 @@ You can add YAMLs to this directory by writing them manually, but it's easier to
 them.  Use 'fission function create --spec' to generate a function spec,
 'fission environment create --spec' to generate an environment spec, and so on.
 
-You can edit most YAMLs in this directory, except 'fission-config.yaml', which contains a
-UID that you should never change.
+You can edit any of the files in this directory, except 'fission-deployment-config.yaml',
+which contains a UID that you should never change.  To apply your changes simply use
+'fission spec apply'.
 
-fission-config.yaml
--------------------
+fission-deployment-config.yaml
+------------------------------
 
-fission-config.yaml contains a UID.  This UID is what fission uses to correlate resources
-on the cluster to resources in this directory.
+fission-deployment-config.yaml contains a UID.  This UID is what fission uses to correlate
+resources on the cluster to resources in this directory.
 
 All resources created by 'fission spec apply' are annotated with this UID.  Resources on
 the cluster that are _not_ annotated with this UID are never modified or deleted by
@@ -134,7 +134,7 @@ func writeDeploymentConfig(specDir string, dc *DeploymentConfig) error {
 		"# See the README in this directory for background and usage information.\n" +
 		"# Do not edit the UID below: that will break 'fission spec apply'\n")
 
-	err = ioutil.WriteFile(filepath.Join(specDir, "fission-config.yaml"), append(msg, y...), 0644)
+	err = ioutil.WriteFile(filepath.Join(specDir, "fission-deployment-config.yaml"), append(msg, y...), 0644)
 	if err != nil {
 		return err
 	}
@@ -384,9 +384,16 @@ func specApply(c *cli.Context) error {
 
 	deleteResources := c.Bool("delete")
 	watchResources := c.Bool("watch")
+	waitForBuild := c.Bool("wait")
 
 	var watcher *fsnotify.Watcher
 	var pbw *packageBuildWatcher
+
+	if watchResources || waitForBuild {
+		// init package build watcher
+		pbw = makePackageBuildWatcher(fclient)
+	}
+
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
@@ -405,9 +412,6 @@ func specApply(c *cli.Context) error {
 			return nil
 		})
 		checkErr(err, "scan files to watch")
-
-		// init package build watcher
-		pbw = makePackageBuildWatcher(fclient)
 	}
 
 	for {
@@ -420,14 +424,25 @@ func specApply(c *cli.Context) error {
 		checkErr(err, "apply specs")
 		printApplyStatus(as)
 
+		var ctx context.Context
+		var pkgWatchCancel context.CancelFunc
+		if watchResources || waitForBuild {
+			// watch package builds
+			ctx, pkgWatchCancel = context.WithCancel(context.Background())
+			pbw.addPackages(pkgMeta)
+		}
+
+		if watchResources {
+			// if we're watching for files, we don't need to wait for builds to complete
+			go pbw.watch(ctx)
+		} else if waitForBuild {
+			// synchronously wait for build if --wait was specified
+			pbw.watch(ctx)
+		}
+
 		if !watchResources {
 			break
 		}
-
-		// watch package builds
-		ctx, pkgWatchCancel := context.WithCancel(context.Background())
-		pbw.addPackages(pkgMeta)
-		go pbw.watch(ctx)
 
 		// listen for file watch events
 		fmt.Println("Watching files for changes...")
@@ -1369,7 +1384,7 @@ func specSave(resource interface{}, specFile string) error {
 	specDir := "specs"
 
 	// verify
-	if _, err := os.Stat(filepath.Join(specDir, "fission-config.yaml")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(specDir, "fission-deployment-config.yaml")); os.IsNotExist(err) {
 		return errors.Wrap(err, "Couldn't find specs, run `fission spec init` first")
 	}
 

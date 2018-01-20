@@ -117,7 +117,7 @@ func fnCreate(c *cli.Context) error {
 	specFile := ""
 	if c.Bool("spec") {
 		spec = true
-		specFile = fmt.Sprintf("%v.yaml", fnName)
+		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
 
 	fnList, err := client.FunctionList()

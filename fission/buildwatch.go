@@ -29,6 +29,7 @@ import (
 )
 
 type (
+	// packageBuildWatcher is used to watch a set of in-progress builds.
 	packageBuildWatcher struct {
 		// fission client
 		fclient *client.Client
