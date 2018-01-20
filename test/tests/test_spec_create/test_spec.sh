@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#test:disabled
+
 set -euo pipefail
 
 fn=spec-$(date +%N)
