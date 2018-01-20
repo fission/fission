@@ -31,11 +31,13 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
+	*functionMetricsMap
 	fissionClient     *crd.FissionClient
 	executor          *executorClient.Client
 	resolver          *functionReferenceResolver
@@ -48,10 +50,11 @@ type HTTPTriggerSet struct {
 	funcController    k8sCache.Controller
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
+func makeHTTPTriggerSet(fmap *functionServiceMap, fmetrics *functionMetricsMap, fissionClient *crd.FissionClient,
 	executor *executorClient.Client, crdClient *rest.RESTClient) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
 		functionServiceMap: fmap,
+		functionMetricsMap: fmetrics,
 		triggers:           []crd.HTTPTrigger{},
 		fissionClient:      fissionClient,
 		executor:           executor,
@@ -90,6 +93,7 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
+	muxRouter.Handle("/metrics", promhttp.Handler())
 
 	// HTTP triggers setup by the user
 	homeHandled := false
@@ -113,6 +117,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
+			fmetrics: ts.functionMetricsMap,
 			function: rr.functionMetadata,
 			executor: ts.executor,
 		}
@@ -143,6 +148,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		m := function.Metadata
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
+			fmetrics: ts.functionMetricsMap,
 			function: &m,
 			executor: ts.executor,
 		}

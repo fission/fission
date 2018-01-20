@@ -1,5 +1,5 @@
-hash: 7c938e591b0602b9fd3412aeffd3f1438fc77eaea80c8d9dd03431adb0e1e1c9
-updated: 2017-12-13T16:13:45.935783+08:00
+hash: 7f97ea60fe14ccd372c9ec2bb8aed7ea1dd03da7a89b86e6abc81349186cbb7f
+updated: 2017-12-27T09:19:26.67830069-08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -13,8 +13,12 @@ imports:
   - autorest/adal
   - autorest/azure
   - autorest/date
+- name: github.com/beorn7/perks
+  version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
+  subpackages:
+  - quantile
 - name: github.com/coreos/etcd
-  version: 3ac54be402ffe4e6df505814456d4931508aaf21
+  version: 0fd3df0b95bf79241eb27af3d8f2c4821d04775a
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
@@ -84,7 +88,7 @@ imports:
 - name: github.com/gorilla/mux
   version: 7f08801859139f86dfafd1c296e2cba9a80d292e
 - name: github.com/graymeta/stow
-  version: 1c51f76db54d79c9db24cb131011632eb586196c
+  version: abb68c488872b06c5453865fa59f4818b4ea13a4
   subpackages:
   - local
 - name: github.com/hashicorp/golang-lru
@@ -109,6 +113,10 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: fc2b8d3a73c4867e51861bbdd5ae3c1f0869dd6a
+  subpackages:
+  - pbutil
 - name: github.com/mholt/archiver
   version: 26cf5bb32d07aa4e8d0de15f56ce516f4641d7df
 - name: github.com/nats-io/go-nats
@@ -129,17 +137,36 @@ imports:
 - name: github.com/nwaples/rardecode
   version: e06696f847aeda6f39a8f0b7cdff193b7690aef6
 - name: github.com/pierrec/lz4
-  version: 08c27939df1bd95e881e2c2367a749964ad1fceb
+  version: 2fcda4cb7018ce05a25959d2fe08c83e3329f169
 - name: github.com/pierrec/xxHash
   version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
   subpackages:
   - xxHash32
+- name: github.com/prometheus/client_golang
+  version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 13ba4ddd0caa9c28ca7b7bffe1dfa9ed8d5ef207
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 65c1f6f8f0fc1e2185eb9863a3bc751496404259
+  subpackages:
+  - xfs
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
 - name: github.com/robfig/cron
-  version: 736158dc09e10f1911ca3a1e1b01f11b566ce5db
+  version: 2315d5715e36303a941d907f038da7f7c44c773b
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sirupsen/logrus
@@ -196,8 +223,10 @@ imports:
   - unicode/norm
   - width
 - name: google.golang.org/appengine
-  version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
+  version: 9d8544a6b2c7df9cff240fcf92d7b2f59bc13416
+  repo: https://github.com/golang/appengine
   subpackages:
+  - cloudsql
   - internal
   - internal/app_identity
   - internal/base
