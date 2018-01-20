@@ -95,4 +95,4 @@ def setup_logger(loglevel):
 #
 setup_logger(logging.DEBUG)
 app.logger.info("Starting server")
-app.run(host='0.0.0.0', port='8888')
+app.run(host='0.0.0.0', port=8888)
