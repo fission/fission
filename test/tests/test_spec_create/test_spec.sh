@@ -34,13 +34,13 @@ trap "fission env delete --name $env" EXIT
 fission env list | grep python
 
 # generate function spec
-fission fn create --spec --name $fn --env $env --code hello.py
+fission fn create --spec --name $fn --env $env --code $(dirname $0)/hello.py
 
 # verify that function spec exists and has ArchiveUploadSpec, Package and Function
-[ -f specs/$fn.yaml ]
-grep ArchiveUploadSpec specs/$fn.yaml
-grep Package specs/$fn.yaml
-grep Function specs/$fn.yaml
+[ -f specs/function-$fn.yaml ]
+grep ArchiveUploadSpec specs/*.yaml
+grep Package specs/*.yaml
+grep Function specs/*.yaml
 
 # create function
 fission spec apply
