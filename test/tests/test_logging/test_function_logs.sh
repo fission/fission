@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#test:disabled
 
 set -euo pipefail
 
@@ -12,6 +11,8 @@ function cleanup {
     echo "Cleanup route"
     var=$(fission route list | grep $fn | awk '{print $1;}')
     fission route delete --name $var
+    echo "delete logfile"
+    rm "/tmp/logfile"
 }
 
 # Create a hello world function in nodejs, test it with an http trigger
@@ -31,7 +32,7 @@ fission route create --function $fn --url /$fn --method GET
 trap cleanup EXIT
 
 echo "Waiting for router to catch up"
-sleep 3
+sleep 15
 
 echo "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4
@@ -43,11 +44,18 @@ echo "Grabbing logs, should have 4 calls in logs"
 
 sleep 15
 
-logs=$(fission function logs --name $fn --detail)
+fission function logs --name $fn --detail > /tmp/logfile
+
+size=$(wc -c </tmp/logfile)
+if [ $size = 0 ]
+then
+    fission function logs --name $fn --detail > /tmp/logfile
+fi
+
 echo "---function logs---"
-echo $logs
+cat /tmp/logfile
 echo "------"
-num=(cat "$logs" | grep 'log test' | wc -l)
+num=$(grep 'log test' /tmp/logfile | wc -l)
 echo $num logs found
 
 if [ $num -ne 4 ]
