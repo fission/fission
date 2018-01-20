@@ -11,7 +11,7 @@ fission spec init
 # verify init
 [ -d specs ]
 [ -f specs/README ]
-[ -f specs/fission-config.yaml ]
+[ -f specs/fission-deployment-config.yaml ]
 
 # TODO replace with `fission env create --spec`
 cat > specs/env.yaml <<EOF
