@@ -269,15 +269,13 @@ helm_uninstall_fission() {(set +e
 )}
 export -f helm_uninstall_fission
 
-set_environment() {
+port_forward_services() {
     id=$1
     ns=f-$id
 
-    export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
-    export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
-
-    # set path to include cli
-    export PATH=$ROOT/fission:$PATH
+    kubectl get pods -l svc="router" -o name --namespace $ns | \
+        sed 's/^.*\///' | \
+        xargs -I{} kubectl port-forward {} $port:$port -n $ns &
 }
 
 dump_builder_pod_logs() {
@@ -474,7 +472,7 @@ install_and_test() {
     fi
 
     wait_for_services $id
-    set_environment $id
+    port_forward_services $id
 
     run_all_tests $id
 
