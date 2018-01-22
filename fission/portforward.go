@@ -19,6 +19,7 @@ func findFreePort() (string, error) {
 		return "", err
 	}
 	defer listener.Close()
+	os.Stdout.WriteString("returning a free port")
 	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), nil
 }
 
