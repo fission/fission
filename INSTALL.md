@@ -1,2 +1,2 @@
 These instructions are replaced by:
-http://fission.io/docs/v0.2.1/install/
+http://fission.io/docs/0.4.0/installation/
