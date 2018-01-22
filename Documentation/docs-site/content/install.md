@@ -72,7 +72,7 @@ $ helm init
 
 ### Install Fission
 
-#### Minikube
+#### Minikube, Docker for Mac/Windows
 
 ```
 $ helm install --namespace fission --set serviceType=NodePort https://github.com/fission/fission/releases/download/0.4.1/fission-all-0.4.1.tgz
@@ -133,6 +133,16 @@ If you're using minikube, use these commands:
   $ export FISSION_URL=http://$(minikube ip):31313
   $ export FISSION_ROUTER=$(minikube ip):31314
 ```
+
+#### Docker for Mac/Windows
+
+If you're using Docker for Mac or Windows, use the following commands:
+
+```
+  $ export FISSION_URL=http://localhost:31313
+  $ export FISSION_ROUTER=localhost:31314
+```
+
 #### Cloud setups
 
 Save the external IP addresses of controller and router services in
