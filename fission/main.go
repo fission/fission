@@ -47,7 +47,7 @@ func main() {
 
 
 	for {
-		os.Stdout.WriteString("calling DialTimeout on controller port to see when it has bound ")
+		//os.Stdout.WriteString("calling DialTimeout on controller port to see when it has bound ")
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
 			os.Stdout.WriteString("closing connection made to localcontrollerport ")
