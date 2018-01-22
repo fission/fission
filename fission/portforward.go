@@ -13,6 +13,7 @@ import (
 
 func findFreePort() (string, error) {
 
+	os.Stdout.WriteString("finding a free port")
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return "", err
