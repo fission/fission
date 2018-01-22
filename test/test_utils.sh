@@ -471,9 +471,7 @@ install_and_test() {
 	exit 1
     fi
 
-    wait_for_services $id
     port_forward_services $id
-
     run_all_tests $id
 
     dump_logs $id
