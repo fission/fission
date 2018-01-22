@@ -13,13 +13,13 @@ import (
 
 func findFreePort() (string, error) {
 
-	os.Stdout.WriteString("finding a free port")
+	os.Stdout.WriteString("finding a free port ")
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return "", err
 	}
 	defer listener.Close()
-	os.Stdout.WriteString("returning a free port")
+	os.Stdout.WriteString("returning a free port ")
 	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), nil
 }
 

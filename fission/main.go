@@ -37,7 +37,9 @@ func main() {
 	}
 
 	go func() {
+		os.Stdout.WriteString("running port-forward on controller ")
 		err := runportForward("controller", LocalControllerPort)
+		os.Stdout.WriteString("runportForward Method called on controller port ")
 		if err != nil {
 			fatal(fmt.Sprintf("%v", err))
 		}
@@ -45,8 +47,10 @@ func main() {
 
 
 	for {
+		os.Stdout.WriteString("calling DialTimeout on controller port to see when it has bound ")
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
+			os.Stdout.WriteString("closing connection made to localcontrollerport ")
 			conn.Close()
 			break
 		}
