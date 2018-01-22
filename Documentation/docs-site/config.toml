@@ -1,4 +1,35 @@
-baseURL = "http://fission.io/docs/0.3.0"
-languageCode = "en-us"
+baseURL = "http://fission.io/docs/0.4.0"
+languageCode = "en-US"
+defaultContentLanguage = "en"
+
 title = "Fission: Serverless Functions for Kubernetes"
-theme = "docdock"
+theme = "learn"
+metaDataFormat = "yaml"
+defaultContentLanguageInSubdir= true
+
+[params]
+  editURL = "https://github.com/fission/fission/edit/master/Documentation/docs-site/content/"
+  description = "Documentation for Fission"
+  author = "Fission"
+  showVisitedLinks = true
+  themeVariant = "fission"
+
+[outputs]
+home = [ "HTML", "RSS", "JSON"]
+
+[Languages]
+[Languages.en]
+title = "Serverless Functions for Kubernetes"
+weight = 1
+languageName = "English"
+
+[[Languages.en.menu.shortcuts]] 
+name = "<i class='fa fa-fw fa-github'></i> Github repo"
+identifier = "ds"
+url = "https://github.com/fission/fission"
+weight = 10
+
+[[Languages.en.menu.shortcuts]]
+name = "<i class='fa fa-fw fa-bullhorn'></i> Credits"
+url = "https://github.com/fission/fission/graphs/contributors"
+weight = 11

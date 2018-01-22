@@ -18,7 +18,7 @@ check_hugo() {
 generate_hugo_docs() {
     pushd $DOCS_SITE
 
-    hugo -t docdock
+    hugo
     
     popd
 }

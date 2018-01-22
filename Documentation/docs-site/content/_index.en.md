@@ -1,8 +1,10 @@
+---
+title: Fission
+weight: 1
+---
+
 Fission: Serverless Functions for Kubernetes
 ============================================
-[![Build Status](https://travis-ci.org/fission/fission.svg?branch=master)](https://travis-ci.org/fission/fission)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
-[![Fission Slack](http://slack.fission.io/badge.svg)](http://slack.fission.io)
 
 [fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
 
@@ -49,18 +51,20 @@ running a function.
 
 The following environments are currently available:
  
- | Environment                          | Image                     |
- | ------------------------------------ | ------------------------- |
- | Binary (for executables or scripts)  | `fission/binary-env`      |
- | Go                                   | `fission/go-env`          |
- | .NET                                 | `fission/dotnet-env`      |
- | .NET 2.0                             | `fission/dotnet20-env`    |
- | NodeJS (Alpine)                      | `fission/node-env`        |
- | NodeJS (Debian)                      | `fission/node-env-debian` |
- | Perl                                 | `fission/perl-env`        |
- | PHP 7                                | `fission/php-env`         |
- | Python 3                             | `fission/python-env`      |
- | Ruby                                 | `fission/ruby-env`        |
+
+| Environment                          | Image                     |
+| ------------------------------------ | ------------------------- |
+| Binary (for executables or scripts)  | `fission/binary-env`      |
+| Go                                   | `fission/go-env`          |
+| .NET                                 | `fission/dotnet-env`      |
+| .NET 2.0                             | `fission/dotnet20-env`    |
+| NodeJS (Alpine)                      | `fission/node-env`        |
+| NodeJS (Debian)                      | `fission/node-env-debian` |
+| Perl                                 | `fission/perl-env`        |
+| PHP 7                                | `fission/php-env`         |
+| Python 3                             | `fission/python-env`      |
+| Ruby                                 | `fission/ruby-env`        |
+
 
 You can also extend environments or create entirely new
 ones if you want.  (An environment is essentially just a container
@@ -93,25 +97,3 @@ Usage
 ```
 
 See the [examples](examples) directory for more.
-
-Running Fission on your Cluster
-===============================
-
-See the [installation guide](http://fission.io/docs/0.4.0/installation/).
-
-Compiling Fission
-=================
-
-See the [compilation guide](http://fission.io/docs/0.4.0/compilation/).
-
-Status
-======
-
-Fission is in early alpha.  It's not suitable for production use just
-yet.  
-
-Reach us on [slack](http://slack.fission.io) or
-[twitter](https://twitter.com/fissionio).
-
-Fission is a project by [Platform9 Systems](https://platform9.com/fission/)
-and [many contributors](https://github.com/fission/fission/graphs/contributors).
