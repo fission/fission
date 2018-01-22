@@ -272,11 +272,14 @@ export -f helm_uninstall_fission
 port_forward_services() {
     id=$1
     ns=f-$id
+    port=8888
 
     kubectl get pods -l svc="router" -o name --namespace $ns | \
         sed 's/^.*\///' | \
         xargs -I{} kubectl port-forward {} $port:$port -n $ns &
 
+    export FISSION_ROUTER="127.0.0.1:"
+    FISSION_ROUTER+="$port"
     export PATH=$ROOT/fission:$PATH
 }
 
