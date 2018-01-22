@@ -45,7 +45,7 @@ func main() {
 
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Second)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
 			conn.Close()
 			break
