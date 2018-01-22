@@ -1,7 +1,7 @@
 package storagesvc
 
 import (
-	"log"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"mime/multipart"
 	"github.com/satori/go.uuid"
@@ -11,7 +11,6 @@ import (
 	"os"
 	"net/http"
 	"time"
-	"github.com/influxdata/influxdb/services/continuous_querier"
 )
 
 type (
@@ -33,7 +32,7 @@ type (
 
 const (
 	StorageTypeLocal StorageType = "local"
-	PaginationSize int = 50 // TODO: TBD before finalizing it. any benefit making this configurable during runtime?
+	PaginationSize int = 10
 )
 
 var (
@@ -63,7 +62,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	cfg := stow.ConfigMap{"path": config.localPath}
 	loc, err := stow.Dial("local", cfg)
 	if err != nil {
-		log.Printf("Error initializing storage: %v", err)
+		log.WithError(err).Error("Error initializing storage")
 		return nil, err
 	}
 	stowClient.location = loc
@@ -85,7 +84,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 		}
 	}
 	if err != nil {
-		log.Printf("Error initializing storage: %v", err)
+		log.WithError(err).Error("Error initializing storage")
 		return nil, err
 	}
 	stowClient.container = con
@@ -93,6 +92,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	return stowClient, nil
 }
 
+// This method writes the file on the storage
 func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, error) {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
@@ -101,19 +101,18 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	// save the file to the storage backend
 	item, err := client.container.Put(uploadName, file, int64(fileSize), nil)
 	if err != nil {
-		log.Printf("Error writing file:%s on storage: '%v'", uploadName, err)
+		log.WithError(err).Errorf("Error writing file: %s on storage", uploadName)
 		return "", ErrWritingFile
 	}
 
-	log.Printf("Successfully wrote file:%s on storage", uploadName)
+	log.Debugf("Successfully wrote file:%s on storage", uploadName)
 	return item.ID(), nil
 }
 
-// TODO : Come back and test this.
-func (client *StowClient) getFileIntoResponseWriter(fileId string, w http.ResponseWriter) error {
+// This method gets the file contents into http response
+func (client *StowClient) getFileIntoResponse(fileId string, w http.ResponseWriter) error {
 	item, err := client.container.Item(fileId)
 	if err != nil {
-		log.Printf("Error getting item id '%v': %v", fileId, err)
 		if err == stow.ErrNotFound {
 			return ErrNotFound
 		} else {
@@ -123,25 +122,28 @@ func (client *StowClient) getFileIntoResponseWriter(fileId string, w http.Respon
 
 	f, err := item.Open()
 	if err != nil {
-		log.Printf("Error opening item %v: %v", fileId, err)
 		return ErrOpeningItem
 	}
 	defer f.Close()
+
 	_, err = io.Copy(w, f)
 	if err != nil {
-		log.Printf("Error writing item %v: %v to http response", fileId, err)
 		return ErrWritingFileIntoResponse
 	}
 
+	log.Debugf("successfully wrote file: %s into httpresponse", fileId)
 	return nil
 }
 
+// This method deletes the file from storage
 func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
 }
 
+// Filter defines an interface to filter out items from a set of items
 type filter func(stow.Item, interface{}) bool
 
+// This method returns all items in a container, filtering out items based on the filter function passed to it
 func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam interface{}) ([]string, error){
 	cursor := stow.CursorStart
 	var items []stow.Item
@@ -150,23 +152,20 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 	archiveIDList := make([]string, 0)
 
 	for  {
-
-		log.Printf("In loop, getting Items in archive storage..containerName: %s", client.config.containerName)
-
 		items, cursor, err = client.container.Items(stow.NoPrefix, cursor, PaginationSize)
 		if err != nil {
-			log.Printf("Error in getItems: %v", err)
+			log.WithError(err).Error("Error getting items from container")
 			return nil, err
 		}
-		log.Printf("Length of items returned : %d", len(items))
+
 		for _, item := range items {
-			isFilterable := filterFunc(item, filterFuncParam)
-			if isFilterable {
+			isItemFilterable := filterFunc(item, filterFuncParam)
+			if isItemFilterable {
 				continue
 			}
-			// if item.LastMod() > one hour ago
 			archiveIDList = append(archiveIDList, item.ID())
 		}
+
 		if stow.IsCursorEnd(cursor) {
 			break
 		}
@@ -175,11 +174,12 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 	return archiveIDList, nil
 }
 
+// This function is one type of filter function that filters out items created less than a minute ago.
+// More filter functions can be written if needed, as long as they are of type filter
 func filterItemCreatedAMinuteAgo (item stow.Item, currentTime interface{}) bool {
 	itemLastModTime, _ := item.LastMod()
-	// handle assertion error
-	if currentTime.(time.Time{}).Sub(itemLastModTime) < 1 * time.Minute {
-		log.Printf("skipping archive:%s created less than a minute ago: %v", item.ID(), item.LastMod())
+	if currentTime.(time.Time).Sub(itemLastModTime) < 1 * time.Minute {
+		log.Debugf("item: %s created less than a minute ago: %v", item.ID(), itemLastModTime)
 		return true
 	}
 	return false

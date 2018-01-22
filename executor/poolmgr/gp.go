@@ -303,8 +303,10 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	var baseUrl string
 	if isv6 == false {
 		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
+		log.Printf("ipv6 fasle : baseUrl : %s", baseUrl)
 	} else if isv6 == true { // We use bracket if the IP is in IPv6.
 		baseUrl = fmt.Sprintf("http://[%v]:8000/", podIP)
+		log.Printf("baseUrl : %s", baseUrl)
 	}
 	return baseUrl
 
@@ -342,6 +344,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 
 	// tell fetcher to get the function.
 	fetcherUrl := gp.getFetcherUrl(podIP)
+	log.Printf("fetcherUrl : %s", fetcherUrl)
 	log.Printf("[%v] calling fetcher to copy function", metadata.Name)
 
 	fn, err := gp.fissionClient.
@@ -368,6 +371,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 		Filename: targetFilename,
 	})
 	if err != nil {
+		log.Printf("fetcher makeclient.fetch returned error : %v", err)
 		return err
 	}
 
