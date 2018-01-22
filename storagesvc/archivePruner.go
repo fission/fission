@@ -2,86 +2,65 @@ package storagesvc
 
 import (
 	"time"
-	"log"
+	log "github.com/sirupsen/logrus"
 )
 
 type ArchivePruner struct {
-	//archiveCache ArchiveCache // TODO: Come back
 	crdClient *CRDClient
 	archiveChan chan(string)
 	stowClient *StowClient
+	pruneInterval int
 }
 
-func MakeArchivePruner(stowClient *StowClient) *ArchivePruner {
-	return &ArchivePruner{
+const defaultPruneInterval int = 60 // in minutes
+
+func MakeArchivePruner(stowClient *StowClient, pruneInterval int) *ArchivePruner {
+	return &ArchivePruner {
 		crdClient: MakeCRDClient(),
 		archiveChan: make(chan string),
 		stowClient: stowClient,
+		pruneInterval: pruneInterval,
 	}
 }
 
+// This method listens to archiveChannel for archive ids that need to be deleted
 func (pruner *ArchivePruner) pruneArchives() {
-	log.Println("starting loop to prune archives..")
+	log.Debug("starting loop to prune archives..")
 	for {
 		select {
 		case archiveID := <- pruner.archiveChan:
-			log.Printf("Sending delete request for archive ID: %s", archiveID)
-			// read archiveIDs from archiveChan and issue a delete request on them
+			log.WithField("archive ID", archiveID).Debug("sending delete request")
 			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
 				// hopefully this archive will be deleted in the next iteration.
-				log.Printf("err: %v deleting archiveID: %s from storage", err, archiveID)
-				// TODO : But there may be issue w.r.t permissions that need verification, perhaps?
-				// Or not, since storageSvc creates the archive, so it shd well have permissions to delete it?
+				log.WithField("archive ID", archiveID).WithError(err).Error("Error deleting archive")
 			}
 		}
 	}
 }
 
+// This method just writes the archive ID into the channel.
 func (pruner *ArchivePruner) insertArchive(archiveID string) {
 	pruner.archiveChan <- archiveID
 }
 
-/*
-  Everytime a function is updated, a new package is created, leaving the pkg that the function referenced earlier as orphan.
-  Also, the archives that are pointed to by these orphan pkgs can be deleted from the storage.
-  This method fetches archives from such orphan pkgs.
-
-  TODO : From earlier discussion, we dont need this. Instead we might have to change the way function update works today and ensure it doesnt leak packages.
-  Just need clarification one more time.
- */
-func (pruner *ArchivePruner) getArchiveFromOrphanedPkgs() {
-	// kubPackages := get all pkgs from kubernetes
-
-	// kubPackages might contain packages created by user less than an hour ago, still not referenced by a function
-	// filter out those pkgs using pkg metadata.
-
-	// funcRefPackages := get all pkgs referenced by functions
-
-	// orphanedPkgs := kubPackages - funcRefPackages
-
-	// for item in orphanedPkgs; extract archiveID, insertArchive(archiveID);
-}
-
-/*
-   A user may have deleted pkgs with kubectl or fission cli. That only deletes crd.Package objects from kubernetes
-   and not the archives that are referenced in them, leaving the archives as orphans.
-   This method reaps those orphaned archives.
- */
-func (pruner *ArchivePruner) getOrphanedArchives() {
-	log.Println("getting orphaned archives..")
+// A user may have deleted pkgs with kubectl or fission cli. That only deletes crd.Package objects from kubernetes
+// and not the archives that are referenced by them, leaving the archives as orphans.
+// This method reaps the orphaned archives.
+func (pruner *ArchivePruner) getOrphanArchives() {
+	log.Debug("get orphan archives")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
-	// pkgs := get all pkgs from kubernetes
+	// get all pkgs from kubernetes
 	pkgs, err := pruner.crdClient.getPkgList()
 	if err != nil {
 		// Safe to just silence the error here. Hoping next iteration will succeed.
-		log.Printf("Error getting pkg list from kubernetes: %v", err)
+		log.WithError(err).Error("Error getting package list from kubernetes")
 		return
 	}
 
-	// for item in pkgs; extract archiveID, append(archivesInPkgs, archiveID)
+	// extract archives referenced by these pkgs
 	for _, pkg := range pkgs {
 		if pkg.Spec.Deployment.URL != "" {
 			archiveID = utilGetQueryParamValue(pkg.Spec.Deployment.URL, "id")
@@ -93,33 +72,41 @@ func (pruner *ArchivePruner) getOrphanedArchives() {
 		}
 	}
 
-	utilDumpListContents(archivesRefByPkgs, "archives referenced by packages")
+	log.WithField("list", "archives referenced by packages").Debugf("%s", archivesRefByPkgs)
 
 	// get all archives on storage
-	// out of all the archives on storage, there may be some just created but not referenced by packages yet.
-	// Need to filter them out.
+	// out of them, there may be some just created but not referenced by packages yet.
+	// need to filter them out.
 	archivesInStorage, err := pruner.stowClient.getItemIDsWithFilter(filterItemCreatedAMinuteAgo, time.Now())
-	utilDumpListContents(archivesInStorage, "archives in storage")
+	if err != nil {
+		// Safe to just silence the error here. Hoping next iteration will succeed.
+		log.WithError(err).Error("Error getting items from storage")
+		return
+	}
+	log.WithField("list", "archives in storage").Debugf("%s", archivesInStorage)
 
-	// orphanedArchives := archivesInStorage - archivesInPkgs
+	// difference of the two lists gives us the list of orphan archives. This is just a brute force approach.
+	// need to do something more optimal at scale.
 	orphanedArchives := utilGetDifferenceOfLists(archivesInStorage, archivesRefByPkgs)
-	utilDumpListContents(orphanedArchives, "archives left orphan")
+	log.WithField("list", "orphan archives").Debugf("%s", orphanedArchives)
 
-	// for item in orphanedArchives; insertArchive(item);
+	// send each orphan archive away for deletion
 	for _, archiveID = range orphanedArchives {
 		pruner.insertArchive(archiveID)
 	}
 }
 
+// This method starts a go routine that listens to a channel for archive IDs that need to deleted.
+// Also wakes up at regular intervals to make a list of archive IDs that need to be reaped
+// and sends them over to the channel for deletion
 func (pruner *ArchivePruner) Start() {
-	ticker := time.NewTicker(60 * time.Second) // TODO : Interval configurable in helm chart. Fed in to the pod through env variable.
+	ticker := time.NewTicker(time.Duration(pruner.pruneInterval) * time.Second)
 	go pruner.pruneArchives()
 	for {
 		select {
 		case <- ticker.C:
-			// These methods fetch unused archive IDs and send them to archiveChannel
-			go pruner.getArchiveFromOrphanedPkgs()
-			go pruner.getOrphanedArchives()
+			// This method fetches unused archive IDs and sends them to archiveChannel for deletion
+			go pruner.getOrphanArchives()
 		}
 	}
 }

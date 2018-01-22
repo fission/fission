@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"strconv"
@@ -59,27 +59,27 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
-		log.Printf("Missing X-File-Size")
+		log.Error("Missing X-File-Size")
 		http.Error(w, "missing X-File-Size header", 400)
 		return
 	}
 
 	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
-		log.Printf("Error parsing x-file-size: '%v'", fileSizeS)
+		log.WithError(err).Errorf("Error parsing x-file-size: '%v'", fileSizeS)
 		http.Error(w, "missing or bad X-File-Size header", 400)
 		return
 	}
 
 	// TODO: allow headers to add more metadata (e.g. environment
 	// and function metadata)
-	log.Printf("Handling upload for %v", handler.Filename)
+	log.Infof("Handling upload for %v", handler.Filename)
 	//fileMetadata := make(map[string]interface{})
 	//fileMetadata["filename"] = handler.Filename
 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
-		log.Printf("Error saving uploaded file: '%v'", err)
+		log.WithError(err).Error("Error saving uploaded file")
 		http.Error(w, "Error saving uploaded file", 500) // TODO : This was 400. I think it shd be 500.  TBD
 		return
 	}
@@ -132,15 +132,15 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 
 	// Get the file (called "item" in stow's jargon), open it,
 	// stream it to response
-	err = ss.storageClient.getFileIntoResponseWriter(fileId, w)
+	err = ss.storageClient.getFileIntoResponse(fileId, w)
 	if err != nil {
-		log.Printf("Error getting item id '%v': %v", fileId, err)
+		log.WithError(err).Errorf("Error getting item id '%v'", fileId)
 		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", 404)
 		} else if err == ErrRetrievingItem  {
-			http.Error(w, "Error retrieving item", 500) // TODO : TBD between 400 n 500. cud it be 503?
+			http.Error(w, "Error retrieving item", 400)
 		} else if err == ErrOpeningItem {
-			http.Error(w, "Error opening item", 500) // TODO : TBD between 400 n 500.
+			http.Error(w, "Error opening item", 400)
 		} else if err == ErrWritingFileIntoResponse {
 			http.Error(w, "Error writing response", 500)
 		}
@@ -155,7 +155,6 @@ func MakeStorageService(storageClient *StowClient, port int) *StorageService {
 	}
 }
 
-
 func (ss *StorageService) Start(port int) {
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
@@ -167,19 +166,27 @@ func (ss *StorageService) Start(port int) {
 }
 
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) *StorageService {
-	// storage
+	// initialize logger
+	log.SetLevel(log.DebugLevel)
+
+	// create a storage client
 	storageClient, err := MakeStowClient(storageType, storagePath, containerName)
 	if err != nil {
 		log.Panicf("Error initializing storage: %v", err)
 	}
 
-	// http handlers
+	// create http handlers
 	storageService := MakeStorageService(storageClient, port)
 	go storageService.Start(port)
 
-	// TODO : Time Interval configurable for pruner
-	pruner := MakeArchivePruner(storageClient)
+	// get the prune interval and start the archive pruner
+	pruneInterval, err := strconv.Atoi(os.Getenv("PRUNE_INTERVAL"))
+	if err != nil {
+		pruneInterval = defaultPruneInterval
+	}
+	pruner := MakeArchivePruner(storageClient, pruneInterval)
 	go pruner.Start()
 
+	log.Debug("Storage service started..")
 	return storageService
 }
