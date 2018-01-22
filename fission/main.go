@@ -43,14 +43,13 @@ func main() {
 		}
 	}()
 
-
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
 			conn.Close()
 			break
 		}
-		time.Sleep(time.Millisecond*50)
+		time.Sleep(time.Millisecond * 50)
 	}
 
 	app.Flags = []cli.Flag{
