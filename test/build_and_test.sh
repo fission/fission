@@ -16,6 +16,7 @@ FETCHER_IMAGE=$REPO/fetcher
 FLUENTD_IMAGE=gcr.io/fission-ci/fluentd
 BUILDER_IMAGE=$REPO/builder
 TAG=test
+PRUNE_INTERVAL=1
 
 dump_system_info
 
@@ -35,4 +36,4 @@ build_and_push_fluentd $FLUENTD_IMAGE:$TAG
 
 build_fission_cli
 
-install_and_test $IMAGE $TAG $FETCHER_IMAGE $TAG $FLUENTD_IMAGE $TAG
+install_and_test $IMAGE $TAG $FETCHER_IMAGE $TAG $FLUENTD_IMAGE $TAG $PRUNE_INTERVAL
