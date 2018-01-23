@@ -1,9 +1,8 @@
 package storagesvc
 
-
 import (
-	"net/url"
 	"log"
+	"net/url"
 )
 
 func utilGetQueryParamValue(urlString string, queryParam string) string {

@@ -1,8 +1,8 @@
 package storagesvc
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"github.com/fission/fission/crd"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type CRDClient struct {
@@ -19,7 +19,7 @@ func MakeCRDClient() *CRDClient {
 
 // This method fetches the pkg list from kubernetes.
 // More methods can be added here as needed.
-func (cc *CRDClient) getPkgList() ([]crd.Package, error){
+func (cc *CRDClient) getPkgList() ([]crd.Package, error) {
 	pkgList, err := cc.client.Packages(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
