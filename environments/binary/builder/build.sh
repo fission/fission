@@ -4,9 +4,9 @@ apk update
 
 CWD=$(pwd)
 
-if [ -f ${SRC_PKG}/setup.sh ]; then
+if [ -f ${SRC_PKG}/build.sh ]; then
     cd ${SRC_PKG}
-    ./setup.sh
+    ./build.sh
     cd ${CWD}
 fi
 
