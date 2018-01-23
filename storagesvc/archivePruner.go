@@ -25,11 +25,11 @@ func MakeArchivePruner(stowClient *StowClient, pruneInterval int) *ArchivePruner
 
 // This method listens to archiveChannel for archive ids that need to be deleted
 func (pruner *ArchivePruner) pruneArchives() {
-	log.Debug("starting loop to prune archives..")
+	log.Info("listening to archiveChannel to prune archives..")
 	for {
 		select {
 		case archiveID := <- pruner.archiveChan:
-			log.WithField("archive ID", archiveID).Debug("sending delete request")
+			log.WithField("archive ID", archiveID).Info("sending delete request")
 			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
 				// hopefully this archive will be deleted in the next iteration.
@@ -48,7 +48,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 // and not the archives that are referenced by them, leaving the archives as orphans.
 // This method reaps the orphaned archives.
 func (pruner *ArchivePruner) getOrphanArchives() {
-	log.Debug("get orphan archives")
+	log.Info("getting orphan archives")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
