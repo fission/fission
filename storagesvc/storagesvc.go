@@ -187,6 +187,6 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	pruner := MakeArchivePruner(storageClient, pruneInterval)
 	go pruner.Start()
 
-	log.Debug("Storage service started..")
+	log.Info("Storage service started..")
 	return storageService
 }
