@@ -19,11 +19,22 @@ func findFreePort() (string, error) {
 	}
 
 	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	file, err := listener.(*net.TCPListener).File()
+
+	if err != nil {
+		return "", nil
+	}
+
 	err = listener.Close()
-	time.Sleep(2 * time.Second)
 	if err != nil {
 		return "", err
 	}
+
+	err = file.Close()
+	if err != nil {
+		return "", err
+	}
+
 	return port, nil
 }
 
