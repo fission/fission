@@ -1,20 +1,20 @@
 package storagesvc
 
 import (
+	"errors"
+	"github.com/graymeta/stow"
+	_ "github.com/graymeta/stow/local"
+	"github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"mime/multipart"
-	"github.com/satori/go.uuid"
-	"github.com/graymeta/stow"
-	_ "github.com/graymeta/stow/local"
-	"errors"
-	"os"
 	"net/http"
+	"os"
 	"time"
 )
 
 type (
-	StorageType   string
+	StorageType string
 
 	storageConfig struct {
 		storageType   StorageType
@@ -32,14 +32,14 @@ type (
 
 const (
 	StorageTypeLocal StorageType = "local"
-	PaginationSize int = 10
+	PaginationSize   int         = 10
 )
 
 var (
-	ErrNotFound = errors.New("not found")
-	ErrRetrievingItem = errors.New("not able to retrieve item")
-	ErrOpeningItem = errors.New("not able to open item")
-	ErrWritingFile = errors.New("not able to write file")
+	ErrNotFound                = errors.New("not found")
+	ErrRetrievingItem          = errors.New("not able to retrieve item")
+	ErrOpeningItem             = errors.New("not able to open item")
+	ErrWritingFile             = errors.New("not able to write file")
 	ErrWritingFileIntoResponse = errors.New("not able to copy item into http response")
 )
 
@@ -57,7 +57,6 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	stowClient := &StowClient{
 		config: config,
 	}
-
 
 	cfg := stow.ConfigMap{"path": config.localPath}
 	loc, err := stow.Dial("local", cfg)
@@ -144,14 +143,14 @@ func (client *StowClient) removeFileByID(itemID string) error {
 type filter func(stow.Item, interface{}) bool
 
 // This method returns all items in a container, filtering out items based on the filter function passed to it
-func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam interface{}) ([]string, error){
+func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam interface{}) ([]string, error) {
 	cursor := stow.CursorStart
 	var items []stow.Item
 	var err error
 
 	archiveIDList := make([]string, 0)
 
-	for  {
+	for {
 		items, cursor, err = client.container.Items(stow.NoPrefix, cursor, PaginationSize)
 		if err != nil {
 			log.WithError(err).Error("Error getting items from container")
@@ -176,9 +175,9 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 
 // This function is one type of filter function that filters out items created less than a minute ago.
 // More filter functions can be written if needed, as long as they are of type filter
-func filterItemCreatedAMinuteAgo (item stow.Item, currentTime interface{}) bool {
+func filterItemCreatedAMinuteAgo(item stow.Item, currentTime interface{}) bool {
 	itemLastModTime, _ := item.LastMod()
-	if currentTime.(time.Time).Sub(itemLastModTime) < 1 * time.Minute {
+	if currentTime.(time.Time).Sub(itemLastModTime) < 1*time.Minute {
 		log.Debugf("item: %s created less than a minute ago: %v", item.ID(), itemLastModTime)
 		return true
 	}

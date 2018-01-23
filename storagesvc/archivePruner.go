@@ -1,24 +1,24 @@
 package storagesvc
 
 import (
-	"time"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type ArchivePruner struct {
-	crdClient *CRDClient
-	archiveChan chan(string)
-	stowClient *StowClient
+	crdClient     *CRDClient
+	archiveChan   chan (string)
+	stowClient    *StowClient
 	pruneInterval int
 }
 
 const defaultPruneInterval int = 60 // in minutes
 
 func MakeArchivePruner(stowClient *StowClient, pruneInterval int) *ArchivePruner {
-	return &ArchivePruner {
-		crdClient: MakeCRDClient(),
-		archiveChan: make(chan string),
-		stowClient: stowClient,
+	return &ArchivePruner{
+		crdClient:     MakeCRDClient(),
+		archiveChan:   make(chan string),
+		stowClient:    stowClient,
 		pruneInterval: pruneInterval,
 	}
 }
@@ -28,7 +28,7 @@ func (pruner *ArchivePruner) pruneArchives() {
 	log.Info("listening to archiveChannel to prune archives..")
 	for {
 		select {
-		case archiveID := <- pruner.archiveChan:
+		case archiveID := <-pruner.archiveChan:
 			log.WithField("archive ID", archiveID).Info("sending delete request")
 			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
@@ -66,7 +66,7 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 			archiveID = utilGetQueryParamValue(pkg.Spec.Deployment.URL, "id")
 			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
 		}
-		if pkg.Spec.Source.URL != ""{
+		if pkg.Spec.Source.URL != "" {
 			archiveID = utilGetQueryParamValue(pkg.Spec.Source.URL, "id")
 			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
 		}
@@ -104,7 +104,7 @@ func (pruner *ArchivePruner) Start() {
 	go pruner.pruneArchives()
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			// This method fetches unused archive IDs and sends them to archiveChannel for deletion
 			go pruner.getOrphanArchives()
 		}

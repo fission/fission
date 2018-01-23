@@ -33,7 +33,7 @@ import (
 type (
 	StorageService struct {
 		storageClient *StowClient
-		port      int
+		port          int
 	}
 
 	UploadResponse struct {
@@ -137,7 +137,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 		log.WithError(err).Errorf("Error getting item id '%v'", fileId)
 		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", 404)
-		} else if err == ErrRetrievingItem  {
+		} else if err == ErrRetrievingItem {
 			http.Error(w, "Error retrieving item", 400)
 		} else if err == ErrOpeningItem {
 			http.Error(w, "Error opening item", 400)
@@ -151,7 +151,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 func MakeStorageService(storageClient *StowClient, port int) *StorageService {
 	return &StorageService{
 		storageClient: storageClient,
-		port: port,
+		port:          port,
 	}
 }
 
