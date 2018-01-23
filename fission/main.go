@@ -55,7 +55,6 @@ func main() {
 		}
 	}()
 
-
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
