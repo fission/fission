@@ -288,7 +288,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 
 		if ev.Type == watch.Error {
 			e := errors.FromObject(ev.Object)
-			log.Println("Watch error, retrying in a second: %v", e)
+			log.Printf("Watch error, retrying in a second: %v", e)
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""
 			time.Sleep(time.Second)

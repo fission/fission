@@ -67,6 +67,15 @@ func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
 	return pods, nil
 }
 
+func makeIndexMap(cols []string) map[string]int {
+	indexMap := make(map[string]int, len(cols))
+	for i := range cols {
+		indexMap[cols[i]] = i
+	}
+
+	return indexMap
+}
+
 func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	timestamp := filter.Since.UnixNano()
 	var queryCmd string
@@ -93,26 +102,39 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	}
 	for _, r := range response.Results {
 		for _, series := range r.Series {
+
+			//create map of columns to row indeces
+			indexMap := makeIndexMap(series.Columns)
+
+			container := indexMap["docker_container_id"]
+			functionName := indexMap["kubernetes_labels_functionName"]
+			funcuid := indexMap["kubernetes_labels_functionUid"]
+			logMessage := indexMap["log"]
+			nameSpace := indexMap["kubernetes_namespace_name"]
+			podName := indexMap["kubernetes_pod_name"]
+			stream := indexMap["stream"]
+			seq := indexMap["_seq"]
+
 			for _, row := range series.Values {
 				t, err := time.Parse(time.RFC3339, row[0].(string))
 				if err != nil {
 					log.Fatal(err)
 				}
-				seqNum, err := strconv.Atoi(row[1].(string))
+				seqNum, err := strconv.Atoi(row[seq].(string))
 				if err != nil {
 					return logEntries, err
 				}
 				logEntries = append(logEntries, LogEntry{
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
 					Timestamp: t,
-					Container: row[2].(string),                            //docker_container_id
-					FuncName:  row[8].(string),                            //kubernetes_labels_functionName
-					FuncUid:   row[3].(string),                            //funcuid
-					Message:   strings.TrimSuffix(row[17].(string), "\n"), //log field
-					Namespace: row[14].(string),                           //kubernetes_namespace_name
-					Pod:       row[15].(string),                           //kubernetes_pod_name
-					Stream:    row[18].(string),                           //stream
-					Sequence:  seqNum,                                     //sequence tag
+					Container: row[container].(string),                            //docker_container_id
+					FuncName:  row[functionName].(string),                         //kubernetes_labels_functionName
+					FuncUid:   row[funcuid].(string),                              //funcuid
+					Message:   strings.TrimSuffix(row[logMessage].(string), "\n"), //log field
+					Namespace: row[nameSpace].(string),                            //kubernetes_namespace_name
+					Pod:       row[podName].(string),                              //kubernetes_pod_name
+					Stream:    row[stream].(string),                               //stream
+					Sequence:  seqNum,                                             //sequence tag
 				})
 			}
 		}

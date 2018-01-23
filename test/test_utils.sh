@@ -168,10 +168,10 @@ helm_install_fission() {
 
     helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,pruneInterval=$
 
-    timeout 30 helm_setup
+    timeout 30 bash -c "helm_setup"
 
     echo "Deleting old releases"
-    helm list -q|xargs helm_uninstall_fission
+    helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     echo "Installing fission"
     helm install		\
