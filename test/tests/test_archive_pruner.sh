@@ -9,7 +9,12 @@ url=""
 kubectl_pf_pid=""
 
 cleanup() {
-    rm -rf test-deploy-pkg.zip test_dir /tmp/file
+    if [ -e "test-deploy-pkg.zip" ]; then
+        rm -rf test-deploy-pkg.zip test_dir
+    fi
+    if [ -e "/tmp/file" ]; then
+        rm -rf /tmp/file
+    fi
     if [ "$kubectl_pf_pid" != "" ]; then
         kill -9 $kubectl_pf_pid
     fi
@@ -55,14 +60,13 @@ get_archive_url_from_package() {
     check_return_status $?
 }
 
-
 kubectl_port_forward() {
     controller_pod=`kubectl get pods --all-namespaces | grep "controller" | tr -s ' '| cut -d" " -f2`
     controller_ns=`kubectl get pods --all-namespaces | grep "controller" | tr -s ' '| cut -d" " -f1`
-    remote_port=`kubect get svc controller -n $controller_ns -ojsonpath='{.spec.ports.nodePort}'`
+    remote_port=`kubectl get svc controller -n $controller_ns -ojsonpath='{.spec.ports[0].nodePort}'`
     local_port=35565
     echo "controller pod : $controller_pod, controller_ns: $controller_ns, remote_port : $remote_port"
-    kubectl port-forward $controller_pod $local_port:$remote_port &
+    kubectl port-forward $controller_pod $local_port:$remote_port 2>&1 > /dev/null &
     kubectl_pf_pid=$!
     echo "kubectl port forward process id : $kubectl_pf_pid"
 }
@@ -109,7 +113,7 @@ main() {
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    echo "http_status : $http_status"
+    echo "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "200" ]; then
         echo "Archive $url_1 absent on storage, while expected to be present"
         cleanup
@@ -118,21 +122,20 @@ main() {
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    echo "http_status : $http_status"
+    echo "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "200" ]; then
         echo "Archive $url_2 absent on storage, while expected to be present"
         cleanup
         exit 1
     fi
 
-    # give it some time to get recycled by the archivePruner
     # archivePruner is set to run every minute for test. In production, its set to run every hour.
     echo "waiting for packages to get recycled"
     sleep 120
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    echo "http_status : $http_status"
+    echo "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "404" ]; then
         echo "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
         cleanup
@@ -141,7 +144,7 @@ main() {
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    echo "http_status : $http_status"
+    echo "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "404" ]; then
         echo "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
         cleanup
