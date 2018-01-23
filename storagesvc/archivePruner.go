@@ -100,7 +100,7 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 // Also wakes up at regular intervals to make a list of archive IDs that need to be reaped
 // and sends them over to the channel for deletion
 func (pruner *ArchivePruner) Start() {
-	ticker := time.NewTicker(time.Duration(pruner.pruneInterval) * time.Second)
+	ticker := time.NewTicker(time.Duration(pruner.pruneInterval) * time.Minute)
 	go pruner.pruneArchives()
 	for {
 		select {
