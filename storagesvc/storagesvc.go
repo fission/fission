@@ -167,7 +167,7 @@ func (ss *StorageService) Start(port int) {
 
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) *StorageService {
 	// initialize logger
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.InfoLevel)
 
 	// create a storage client
 	storageClient, err := MakeStowClient(storageType, storagePath, containerName)
