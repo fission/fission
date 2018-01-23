@@ -16,11 +16,11 @@ It provides methods to:
 * write a file to storage
 * retrieve a file from storage
 * delete a file from storage
-* (TBD : need one more to get all files stored in a container storage)
+* get all files on storage
 
 ## ArchivePruner
 This acts like a cron job to clean up orphaned archives from storage.
-TODO : Fill more details once complete.
+By default configured to run every hour. The value can be set in Values.yaml to any preferred interval.
 
 
 
