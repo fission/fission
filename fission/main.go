@@ -36,6 +36,18 @@ func main() {
 		fatal(fmt.Sprintf("Error finding unused port :%v", err))
 	}
 
+	for {
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
+		if conn != nil {
+			fmt.Println("socket has not closed yet!!!!!")
+			conn.Close()
+
+		} else {
+			break
+		}
+		time.Sleep(time.Millisecond * 50)
+	}
+
 	go func() {
 		err := runportForward("controller", LocalControllerPort)
 		if err != nil {
@@ -43,11 +55,13 @@ func main() {
 		}
 	}()
 
+
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
 			conn.Close()
 			break
+
 		}
 		time.Sleep(time.Millisecond * 50)
 	}

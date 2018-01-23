@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"time"
 )
 
 func findFreePort() (string, error) {
