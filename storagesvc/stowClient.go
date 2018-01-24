@@ -1,16 +1,33 @@
+/*
+Copyright 2017 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package storagesvc
 
 import (
 	"errors"
-	"github.com/graymeta/stow"
-	_ "github.com/graymeta/stow/local"
-	"github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/graymeta/stow"
+	_ "github.com/graymeta/stow/local"
+	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -37,10 +54,10 @@ const (
 
 var (
 	ErrNotFound                = errors.New("not found")
-	ErrRetrievingItem          = errors.New("not able to retrieve item")
-	ErrOpeningItem             = errors.New("not able to open item")
-	ErrWritingFile             = errors.New("not able to write file")
-	ErrWritingFileIntoResponse = errors.New("not able to copy item into http response")
+	ErrRetrievingItem          = errors.New("unable to retrieve item")
+	ErrOpeningItem             = errors.New("unable to open item")
+	ErrWritingFile             = errors.New("unable to write file")
+	ErrWritingFileIntoResponse = errors.New("unable to copy item into http response")
 )
 
 func MakeStowClient(storageType StorageType, storagePath string, containerName string) (*StowClient, error) {
@@ -173,7 +190,7 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 	return archiveIDList, nil
 }
 
-// This function is one type of filter function that filters out items created less than a minute ago.
+// filterItemCreatedAMinuteAgo is one type of filter function that filters out items created less than a minute ago.
 // More filter functions can be written if needed, as long as they are of type filter
 func filterItemCreatedAMinuteAgo(item stow.Item, currentTime interface{}) bool {
 	itemLastModTime, _ := item.LastMod()

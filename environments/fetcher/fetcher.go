@@ -130,7 +130,6 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("just got in fetch handler")
 	if r.Method != "POST" {
 		http.Error(w, "only POST is supported on this endpoint", 405)
 		return
@@ -142,7 +141,6 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("elapsed time in fetch request = %v", elapsed)
 	}()
 
-	log.Println("parsing request")
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {

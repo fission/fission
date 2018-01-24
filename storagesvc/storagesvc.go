@@ -20,14 +20,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/graymeta/stow/local"
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -80,7 +81,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
 		log.WithError(err).Error("Error saving uploaded file")
-		http.Error(w, "Error saving uploaded file", 500) // TODO : This was 400. I think it shd be 500.  TBD
+		http.Error(w, "Error saving uploaded file", 500)
 		return
 	}
 
@@ -172,7 +173,7 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	// create a storage client
 	storageClient, err := MakeStowClient(storageType, storagePath, containerName)
 	if err != nil {
-		log.Panicf("Error initializing storage: %v", err)
+		log.Panicf("Error creating stowClient: %v", err)
 	}
 
 	// create http handlers
@@ -184,9 +185,12 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	if err != nil {
 		pruneInterval = defaultPruneInterval
 	}
-	pruner := MakeArchivePruner(storageClient, pruneInterval)
+	pruner, err := MakeArchivePruner(storageClient, time.Duration(pruneInterval))
+	if err != nil {
+		log.Panicf("Error creating archivePruner: %v", err)
+	}
 	go pruner.Start()
 
-	log.Info("Storage service started..")
+	log.Info("Storage service started")
 	return storageService
 }
