@@ -19,8 +19,8 @@ package storagesvc
 import (
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	log "github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/crd"
 )
@@ -37,7 +37,7 @@ const defaultPruneInterval int = 60 // in minutes
 func MakeArchivePruner(stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
 	crdClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	return &ArchivePruner{
@@ -45,7 +45,7 @@ func MakeArchivePruner(stowClient *StowClient, pruneInterval time.Duration) (*Ar
 		archiveChan:   make(chan string),
 		stowClient:    stowClient,
 		pruneInterval: pruneInterval,
-	}
+	}, nil
 }
 
 // pruneArchives listens to archiveChannel for archive ids that need to be deleted
