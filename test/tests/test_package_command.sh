@@ -35,11 +35,14 @@ checkFunctionResponse() {
 }
 
 waitEnvBuilder() {
+    env=$1
+    envRV=$(kubectl -n default get environments ${env} -o jsonpath='{.metadata.resourceVersion}')
+
     echo "Waiting for env builder to catch up"
 
     while true; do
       JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' \
-        && kubectl -n fission-builder get pod -o jsonpath="$JSONPATH" | grep "Ready=True" | grep -i "$1"
+        && kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} -o jsonpath="$JSONPATH" | grep "Ready=True" | grep -i "$1"
       if [[ $? -eq 0 ]]; then
           break
       fi
