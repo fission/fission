@@ -1,3 +1,19 @@
+/*
+Copyright 2017 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package storagesvc
 
 import (
@@ -5,15 +21,16 @@ import (
 	"net/url"
 )
 
-func utilGetQueryParamValue(urlString string, queryParam string) string {
+func getQueryParamValue(urlString string, queryParam string) (string, error) {
 	url, err := url.Parse(urlString)
 	if err != nil {
 		log.Printf("Error parsing URL string: %s into URL", urlString)
+		return "", err
 	}
-	return url.Query().Get(queryParam)
+	return url.Query().Get(queryParam), nil
 }
 
-func utilGetDifferenceOfLists(firstList []string, secondList []string) []string {
+func getDifferenceOfLists(firstList []string, secondList []string) []string {
 	tempMap := make(map[string]int)
 	differenceList := make([]string, 0)
 
@@ -33,9 +50,4 @@ func utilGetDifferenceOfLists(firstList []string, secondList []string) []string 
 	}
 
 	return differenceList
-}
-
-func utilDumpListContents(list []string, listDescription string) {
-	log.Printf("Dumping list %s", listDescription)
-	log.Printf("%s", list)
 }
