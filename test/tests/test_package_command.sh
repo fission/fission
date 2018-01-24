@@ -40,6 +40,9 @@ waitEnvBuilder() {
 
     echo "Waiting for env builder to catch up"
 
+    kubectl -n fission-builder get pod -o yaml
+    kubectl get pod --all-namespaces
+
     while true; do
       JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' \
         && kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} -o jsonpath="$JSONPATH" | grep "Ready=True" | grep -i "$1"
