@@ -108,7 +108,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	return stowClient, nil
 }
 
-// This method writes the file on the storage
+// putFile writes the file on the storage
 func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, error) {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
@@ -125,8 +125,8 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	return item.ID(), nil
 }
 
-// This method gets the file contents into http response
-func (client *StowClient) getFileIntoResponse(fileId string, w http.ResponseWriter) error {
+// copyFileToStream gets the file contents into a stream
+func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 	item, err := client.container.Item(fileId)
 	if err != nil {
 		if err == stow.ErrNotFound {
@@ -151,12 +151,12 @@ func (client *StowClient) getFileIntoResponse(fileId string, w http.ResponseWrit
 	return nil
 }
 
-// This method deletes the file from storage
+// removeFileByID deletes the file from storage
 func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
 }
 
-// Filter defines an interface to filter out items from a set of items
+// filter defines an interface to filter out items from a set of items
 type filter func(stow.Item, interface{}) bool
 
 // This method returns all items in a container, filtering out items based on the filter function passed to it

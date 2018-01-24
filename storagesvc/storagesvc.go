@@ -133,7 +133,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 
 	// Get the file (called "item" in stow's jargon), open it,
 	// stream it to response
-	err = ss.storageClient.getFileIntoResponse(fileId, w)
+	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
 		log.WithError(err).Errorf("Error getting item id '%v'", fileId)
 		if err == ErrNotFound {
