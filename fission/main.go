@@ -40,7 +40,6 @@ func main() {
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
 		if conn != nil {
-			os.Stdout.WriteString("socket has not closed yet!!!!!")
 			conn.Close()
 
 		} else {
@@ -48,8 +47,11 @@ func main() {
 		}
 		time.Sleep(time.Millisecond * 50)
 	}
+
 	timeAfter := time.Since(timeBefore)
-	fmt.Println("Number of milliseconds spent waiting for listener to close: %v", timeAfter.Seconds()/1000)
+	if timeAfter.Seconds()/1000 >= 100 {
+		fatal(fmt.Sprintf("Too much lag in CLI due to lag in listener.Close()"))
+	}
 
 	go func() {
 		err := runportForward("controller", LocalControllerPort)
