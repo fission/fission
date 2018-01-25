@@ -66,3 +66,6 @@ persistence:
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
 analytics: true
+
+## Enable Heapster only in clusters where heapster does not exist already
+heapsterEnabled: false

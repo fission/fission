@@ -138,6 +138,8 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 									Value: strconv.Itoa(env.Spec.Version),
 								},
 							},
+							// TBD Use smaller default resources, for now needed to make HPA work
+							Resources: env.Spec.Resources, 
 							ReadinessProbe: &apiv1.Probe{
 								Handler: apiv1.Handler{
 									Exec: &apiv1.ExecAction{
