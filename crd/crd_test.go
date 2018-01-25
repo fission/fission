@@ -128,7 +128,7 @@ func functionTests(crdClient *rest.RESTClient) {
 		if wf.Spec.Environment.Name != function.Spec.Environment.Name {
 			log.Panicf("Bad object from watch: %#v", wf)
 		}
-		log.Printf("watch event took %v", time.Now().Sub(start))
+		log.Printf("watch event took %v", time.Since(start))
 		recvd = true
 	}
 
@@ -221,7 +221,7 @@ func environmentTests(crdClient *rest.RESTClient) {
 		if obj.Spec.Runtime.Image != environment.Spec.Runtime.Image {
 			log.Panicf("Bad object from watch: %#v", obj)
 		}
-		log.Printf("watch event took %v", time.Now().Sub(start))
+		log.Printf("watch event took %v", time.Since(start))
 		recvd = true
 	}
 
@@ -313,7 +313,7 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 		if obj.Spec.Method != httpTrigger.Spec.Method {
 			log.Panicf("Bad object from watch: %#v", obj)
 		}
-		log.Printf("watch event took %v", time.Now().Sub(start))
+		log.Printf("watch event took %v", time.Since(start))
 		recvd = true
 	}
 
@@ -408,7 +408,7 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 		if obj.Spec.Type != kubernetesWatchTrigger.Spec.Type {
 			log.Panicf("Bad object from watch: %#v", obj)
 		}
-		log.Printf("watch event took %v", time.Now().Sub(start))
+		log.Printf("watch event took %v", time.Since(start))
 		recvd = true
 	}
 

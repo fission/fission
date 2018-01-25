@@ -137,7 +137,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 	defer func() {
-		elapsed := time.Now().Sub(startTime)
+		elapsed := time.Since(startTime)
 		log.Printf("elapsed time in fetch request = %v", elapsed)
 	}()
 
@@ -251,7 +251,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 	defer func() {
-		elapsed := time.Now().Sub(startTime)
+		elapsed := time.Since(startTime)
 		log.Printf("elapsed time in upload request = %v", elapsed)
 	}()
 
