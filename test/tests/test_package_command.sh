@@ -57,7 +57,7 @@ echo "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 trap "fission env delete --name python" EXIT
 
-timeout 180s bash -c waitEnvBuilder python
+timeout 180s bash -c "waitEnvBuilder python"
 
 echo "Creating pacakage with source archive"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
