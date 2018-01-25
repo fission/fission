@@ -61,6 +61,10 @@ def loadv2():
 
     return ""
 
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    return "", 200
+
 @app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])
 def f():
     if userfunc == None:
