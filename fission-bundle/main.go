@@ -60,8 +60,9 @@ func runStorageSvc(port int, filePath string) {
 	if len(subdir) == 0 {
 		subdir = "fission-functions"
 	}
+	enableArchivePruner := true
 	storagesvc.RunStorageService(storagesvc.StorageTypeLocal,
-		filePath, subdir, port)
+		filePath, subdir, port, enableArchivePruner)
 }
 
 func runBuilderMgr(storageSvcUrl string, envBuilderNamespace string) {

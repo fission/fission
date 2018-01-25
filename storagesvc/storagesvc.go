@@ -166,30 +166,33 @@ func (ss *StorageService) Start(port int) {
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }
 
-func RunStorageService(storageType StorageType, storagePath string, containerName string, port int) *StorageService {
+func RunStorageService(storageType StorageType, storagePath string, containerName string, port int, enablePruner bool) *StorageService {
 	// initialize logger
 	log.SetLevel(log.InfoLevel)
 
 	// create a storage client
 	storageClient, err := MakeStowClient(storageType, storagePath, containerName)
 	if err != nil {
-		log.Panicf("Error creating stowClient: %v", err)
+		log.Fatalf("Error creating stowClient: %v", err)
 	}
 
 	// create http handlers
 	storageService := MakeStorageService(storageClient, port)
 	go storageService.Start(port)
 
-	// get the prune interval and start the archive pruner
-	pruneInterval, err := strconv.Atoi(os.Getenv("PRUNE_INTERVAL"))
-	if err != nil {
-		pruneInterval = defaultPruneInterval
+	// had to introduce this param to prevent storagesvc unit test from needing to talk to kubernetes
+	if enablePruner {
+		// get the prune interval and start the archive pruner
+		pruneInterval, err := strconv.Atoi(os.Getenv("PRUNE_INTERVAL"))
+		if err != nil {
+			pruneInterval = defaultPruneInterval
+		}
+		pruner, err := MakeArchivePruner(storageClient, time.Duration(pruneInterval))
+		if err != nil {
+			log.Fatalf("Error creating archivePruner: %v", err)
+		}
+		go pruner.Start()
 	}
-	pruner, err := MakeArchivePruner(storageClient, time.Duration(pruneInterval))
-	if err != nil {
-		log.Panicf("Error creating archivePruner: %v", err)
-	}
-	go pruner.Start()
 
 	log.Info("Storage service started")
 	return storageService

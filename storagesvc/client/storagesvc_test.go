@@ -49,10 +49,11 @@ func MakeTestFile(size int) *os.File {
 func TestStorageService(t *testing.T) {
 	testId := uniuri.NewLen(8)
 	port := 8080
+	enableArchivePruner := false
 
-	log.Printf("starting storage svc")
+	log.Println("starting storage svc")
 	_ = storagesvc.RunStorageService(
-		storagesvc.StorageTypeLocal, "/tmp", testId, port)
+		storagesvc.StorageTypeLocal, "/tmp", testId, port, enableArchivePruner)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
@@ -82,7 +83,7 @@ func TestStorageService(t *testing.T) {
 	contents2, err := ioutil.ReadFile(retrievedfile.Name())
 	panicIf(err)
 	if !bytes.Equal(contents1, contents2) {
-		log.Panicf("Contents don't match")
+		log.Panic("Contents don't match")
 	}
 
 	// delete uploaded file
@@ -92,7 +93,7 @@ func TestStorageService(t *testing.T) {
 	// make sure download fails
 	err = client.Download(fileId, "xxx")
 	if err == nil {
-		log.Panicf("Download succeeded but file isn't supposed to exist")
+		log.Panic("Download succeeded but file isn't supposed to exist")
 	}
 
 	// cleanup /tmp
