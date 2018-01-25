@@ -175,14 +175,14 @@ Options:
 		runMessageQueueMgr(routerUrl)
 	}
 
+	if arguments["--builderMgr"] == true {
+		runBuilderMgr(storageSvcUrl, envBuilderNs)
+	}
+
 	if arguments["--storageServicePort"] != nil {
 		port := getPort(arguments["--storageServicePort"])
 		filePath := arguments["--filePath"].(string)
 		runStorageSvc(port, filePath)
-	}
-
-	if arguments["--builderMgr"] != nil {
-		runBuilderMgr(storageSvcUrl, envBuilderNs)
 	}
 
 	select {}
