@@ -163,7 +163,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 			initalTimeout: 50 * time.Millisecond,
 		},
 	}
-	delay := time.Now().Sub(reqStartTime)
+	delay := time.Since(reqStartTime)
 	if delay > 100*time.Millisecond {
 		log.Printf("Request delay for %v: %v", serviceUrl, delay)
 	}

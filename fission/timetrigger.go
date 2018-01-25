@@ -133,7 +133,7 @@ func ttList(c *cli.Context) error {
 
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
 	for _, tt := range tts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\n",
 			tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}
 	w.Flush()

@@ -78,7 +78,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 	defer func() {
-		elapsed := time.Now().Sub(startTime)
+		elapsed := time.Since(startTime)
 		log.Printf("elapsed time in build request = %v", elapsed)
 	}()
 
@@ -173,7 +173,7 @@ func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath s
 
 	var buildLogs string
 
-	fmt.Println("\n=== Build Logs ===")
+	fmt.Printf("\n=== Build Logs ===")
 	// Init logs
 	fmt.Printf("command=%v\n", command)
 	fmt.Printf("env=%v\n", cmd.Env)
@@ -205,7 +205,7 @@ func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath s
 		fmt.Println(cmdErr)
 		return buildLogs, cmdErr
 	}
-	fmt.Println("==================\n")
+	fmt.Printf("==================\n")
 
 	return buildLogs, nil
 }

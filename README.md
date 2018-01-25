@@ -97,12 +97,12 @@ See the [examples](examples) directory for more.
 Running Fission on your Cluster
 ===============================
 
-See the [installation guide](http://fission.io/docs/0.4.0/install/).
+See the [installation guide](http://fission.io/docs/0.4.0/installation/).
 
 Compiling Fission
 =================
 
-See the [compilation guide](Compiling.md).
+See the [compilation guide](http://fission.io/docs/0.4.0/compilation/).
 
 Status
 ======
