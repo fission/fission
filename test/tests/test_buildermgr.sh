@@ -9,8 +9,8 @@ set -euo pipefail
 # 2. package watcher triggers the build if any changes to packages
 
 ROOT=$(dirname $0)/../..
-PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python3-env:test
-PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python3-env-builder:test
+PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
+PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
 
 fn=python-srcbuild-$(date +%s)
 
@@ -36,16 +36,18 @@ waitBuild() {
 export -f waitBuild
 
 waitEnvBuilder() {
+    env=$1
+    envRV=$(kubectl -n default get environments ${env} -o jsonpath='{.metadata.resourceVersion}')
+
     echo "Waiting for env builder to catch up"
 
     while true; do
-      kubectl --namespace fission-builder get pod|grep python|grep Running
+      kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} \
+        -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' | grep "Ready=True" | grep -i "$1"
       if [[ $? -eq 0 ]]; then
           break
       fi
     done
-
-    sleep 10
 }
 export -f waitEnvBuilder
 
@@ -57,7 +59,7 @@ echo "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 trap "fission env delete --name python" EXIT
 
-timeout 180s bash -c waitEnvBuilder
+timeout 180s bash -c "waitEnvBuilder python"
 
 echo "Creating source pacakage"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/

@@ -38,5 +38,8 @@ func main() {
 	builder := builder.MakeBuilder(dir)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	http.ListenAndServe(":8001", mux)
 }
