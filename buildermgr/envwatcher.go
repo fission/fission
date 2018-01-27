@@ -471,7 +471,6 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 									},
 								},
 							},
-							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
 							Env: env.Spec.Builder.Env,
 						},
 						{
@@ -499,7 +498,6 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 									},
 								},
 							},
-							Env: fission.K8sEnvVars(env.Spec.Builder.Env),
 							Env: env.Spec.Builder.Env,
 						},
 					},
