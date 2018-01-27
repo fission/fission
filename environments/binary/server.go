@@ -53,7 +53,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		codePath = request.FilePath
 		switch mode := fileStat.Mode(); {
 		case mode.IsDir():
-			codePath = request.FilePath + "/" + request.FunctionName
+			codePath = filepath.Join(request.FilePath, request.FunctionName)
 		}
 	}
 
