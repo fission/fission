@@ -16,7 +16,7 @@ FETCHER_IMAGE=$REPO/fetcher
 FLUENTD_IMAGE=gcr.io/fission-ci/fluentd
 BUILDER_IMAGE=$REPO/builder
 TAG=test
-PRUNE_INTERVAL=1
+PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
 
 dump_system_info
 

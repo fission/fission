@@ -20,44 +20,32 @@ cleanup() {
     fi
 }
 
-check_return_status() {
-    if [ $1 -ne 0 ]; then
-        echo "Error"
-        cleanup
-        exit 1
-    fi
-}
-
 create_archive() {
     echo "Creating an archive"
     mkdir test_dir
     if [ `uname` == "Darwin" ] ; then
-        mkfile 512m test_dir/dynamically_generated_file
+        mkfile 1m test_dir/dynamically_generated_file
     else
         # Linux
-        truncate -s 512M test_dir/dynamically_generated_file
+        truncate -s 1M test_dir/dynamically_generated_file
     fi
     printf 'def main():\n    return "Hello, world!"' > test_dir/hello.py
     zip -jr test-deploy-pkg.zip test_dir/
-    check_return_status $?
 }
 
 create_package() {
     echo "Creating package"
     pkg=$(fission package create --deploy "test-deploy-pkg.zip" --env python| cut -f2 -d' '| tr -d \')
-    check_return_status $?
 }
 
 delete_package() {
     echo "Deleting package: $1"
     fission package delete --name $1
-    check_return_status $?
 }
 
 get_archive_url_from_package() {
     echo "Getting archive URL from package: $1"
     url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
-    check_return_status $?
 }
 
 kubectl_port_forward() {
@@ -75,15 +63,17 @@ get_archive_from_storage() {
     http_status=`curl -sw "%{http_code}" $1 -o /tmp/file`
 }
 
-#1. create an archives with large files such that total size of archive is > 256KB
-#2. create 2 pkgs referencing those archives
-#3. delete both the packages
-#4. sleep for 30 seconds
+#1. declare trap to cleanup for all the required signals
+#2. create an archives with large files such that total size of archive is > 256KB
+#3. create 2 pkgs referencing those archives
+#4. delete both the packages
 #5. verify archives are not recycled . this handles the case where archives are just created but not referenced by pkgs yet.
-#6. sleep for one minute
+#6. sleep for two minutes
 #7. now verify that both get deleted.
-#8. cleanup
 main() {
+    # trap
+    trap cleanup EXIT
+
     # create a huge archive
     create_archive
     echo "created archive test-deploy-pkg.zip"
@@ -116,7 +106,6 @@ main() {
     echo "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "200" ]; then
         echo "Archive $url_1 absent on storage, while expected to be present"
-        cleanup
         exit 1
     fi
 
@@ -125,7 +114,6 @@ main() {
     echo "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "200" ]; then
         echo "Archive $url_2 absent on storage, while expected to be present"
-        cleanup
         exit 1
     fi
 
@@ -138,7 +126,6 @@ main() {
     echo "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "404" ]; then
         echo "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
-        cleanup
         exit 1
     fi
 
@@ -147,12 +134,10 @@ main() {
     echo "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "404" ]; then
         echo "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
-        cleanup
         exit 1
     fi
 
     echo "Test archive pruner PASSED"
-    cleanup
 }
 
 main

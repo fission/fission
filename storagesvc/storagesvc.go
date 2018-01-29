@@ -180,7 +180,7 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	storageService := MakeStorageService(storageClient, port)
 	go storageService.Start(port)
 
-	// had to introduce this param to prevent storagesvc unit test from needing to talk to kubernetes
+	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {
 		// get the prune interval and start the archive pruner
 		pruneInterval, err := strconv.Atoi(os.Getenv("PRUNE_INTERVAL"))
