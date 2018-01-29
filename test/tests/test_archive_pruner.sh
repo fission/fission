@@ -23,12 +23,7 @@ cleanup() {
 create_archive() {
     echo "Creating an archive"
     mkdir test_dir
-    if [ `uname` == "Darwin" ] ; then
-        mkfile 1m test_dir/dynamically_generated_file
-    else
-        # Linux
-        truncate -s 1M test_dir/dynamically_generated_file
-    fi
+    dd if=/dev/urandom of=test_dir/dynamically_generated_file bs=256k count=1
     printf 'def main():\n    return "Hello, world!"' > test_dir/hello.py
     zip -jr test-deploy-pkg.zip test_dir/
 }
