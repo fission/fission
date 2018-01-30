@@ -272,6 +272,7 @@ func fnUpdate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
+	removeOrphan := c.Bool("removeorphan")
 
 	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
 		len(entrypoint) == 0 && len(buildcmd) == 0 {
@@ -295,13 +296,12 @@ func fnUpdate(c *cli.Context) error {
 		Name:      pkgName,
 	})
 	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
-
 	pkgMetadata := &pkg.Metadata
 
-	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
-		checkErr(err, "get function list")
+	fnList, err := getFunctionsByPackage(client, function.Spec.Package.PackageRef.Name)
+	checkErr(err, "get function list")
 
+	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
 		if !force && len(fnList) > 1 {
 			fatal("Package is used by multiple functions, use --force to force update")
 		}
@@ -319,6 +319,14 @@ func fnUpdate(c *cli.Context) error {
 				_, err := client.FunctionUpdate(&fn)
 				checkErr(err, "update function")
 			}
+		}
+	} else if len(pkgName) != 0 && removeOrphan {
+		// this case when user wants to update package reference in the function to an entirely different package.
+		// we don't want to leak the pkg referenced earlier by this function, if not used by any other function
+		if len(fnList) == 1 {
+			err = deletePackage(client, function.Spec.Package.PackageRef.Name)
+			checkErr(err, fmt.Sprintf("error deleting package: %v referenced earlier by this function", function.Spec.Package.PackageRef.Name))
+			fmt.Printf("Deleted package %s referenced earlier by this functions\n", function.Spec.Package.PackageRef.Name)
 		}
 	}
 

@@ -28,7 +28,6 @@ import (
 )
 
 func (c *Client) FunctionCreate(f *crd.Function) (*metav1.ObjectMeta, error) {
-
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err

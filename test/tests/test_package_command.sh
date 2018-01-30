@@ -83,10 +83,16 @@ mkdir testDir
 touch testDir/__init__.py
 printf 'def main():\n    return "Hello, world!"' > testDir/hello.py
 zip -jr demo-deploy-pkg.zip testDir/
+oldPkgName=$pkgName
 pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut -f2 -d' '| tr -d \')
 
 echo "Updating function " $fn
-fission fn update --name $fn --pkg $pkgName --entrypoint "hello.main"
+fission fn update --name $fn --pkg $pkgName --entrypoint "hello.main" --removeorphan
+response=`fission package info --name $oldPkgName| wc -l| tr -d ' '`
+if [ $response -gt 0 ]; then
+    echo "Package $oldPkgName should have been deleted from kubernetes"
+    exit 1
+fi
 trap "fission fn delete --name $fn" EXIT
 
 echo "Waiting for router to update cache"
