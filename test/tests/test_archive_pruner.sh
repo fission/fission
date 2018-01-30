@@ -20,6 +20,7 @@ cleanup() {
     fi
 }
 
+
 create_archive() {
     echo "Creating an archive"
     mkdir test_dir
