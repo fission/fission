@@ -13,4 +13,6 @@ def main():
     # back to the list
     item = request.form['text']
     redisConnection.rpush('guestbook', item)
-    return redirect('/guestbook', code=303)
+    r = redirect('/guestbook', code=303)
+    r.autocorrect_location_header = False
+    return r
