@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
@@ -56,124 +57,128 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		return existingDepl, err
 	}
 
-	fetchReq := &fetcher.FetchRequest{
-		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Package: metav1.ObjectMeta{
-			Namespace: fn.Spec.Package.PackageRef.Namespace,
-			Name:      fn.Spec.Package.PackageRef.Name,
-		},
-		Filename: targetFilename,
-	}
-
-	loadReq := fission.FunctionLoadRequest{
-		FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
-		FunctionName:     fn.Spec.Package.FunctionName,
-		FunctionMetadata: &fn.Metadata,
-	}
-
-	fetchPayload, err := json.Marshal(fetchReq)
-	if err != nil {
-		return nil, err
-	}
-	loadPayload, err := json.Marshal(loadReq)
-	if err != nil {
-		return nil, err
-	}
-
-	deployment := &v1beta1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: deployLabels,
-			Name:   deployName,
-		},
-		Spec: v1beta1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: deployLabels,
+	if err != nil && k8s_err.IsNotFound(err) {
+		fetchReq := &fetcher.FetchRequest{
+			FetchType: fetcher.FETCH_DEPLOYMENT,
+			Package: metav1.ObjectMeta{
+				Namespace: fn.Spec.Package.PackageRef.Namespace,
+				Name:      fn.Spec.Package.PackageRef.Name,
 			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: deployLabels,
-				},
-				Spec: apiv1.PodSpec{
-					Volumes: []apiv1.Volume{
-						{
-							Name: userfunc,
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-					Containers: []apiv1.Container{
-						{
-							Name:                   fn.Metadata.Name,
-							Image:                  env.Spec.Runtime.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
-							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      userfunc,
-									MountPath: deploy.sharedMountPath,
-								},
-							},
-							Resources: env.Spec.Resources,
-						},
-						{
-							Name:                   "fetcher",
-							Image:                  deploy.fetcherImg,
-							ImagePullPolicy:        deploy.fetcherImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      userfunc,
-									MountPath: deploy.sharedMountPath,
-								},
-							},
-							Command: []string{"/fetcher", "-specialize-on-startup",
-								"-fetch-request", string(fetchPayload),
-								"-load-request", string(loadPayload),
-								deploy.sharedMountPath},
-							Env: []apiv1.EnvVar{
-								{
-									Name:  envVersion,
-									Value: strconv.Itoa(env.Spec.Version),
-								},
-							},
-							// TBD Use smaller default resources, for now needed to make HPA work
-							Resources: env.Spec.Resources,
-							ReadinessProbe: &apiv1.Probe{
-								Handler: apiv1.Handler{
-									Exec: &apiv1.ExecAction{
-										Command: []string{"cat", "/tmp/ready"},
-									},
-								},
-								InitialDelaySeconds: 1,
-								PeriodSeconds:       1,
-							},
-						},
-					},
-					ServiceAccountName: "fission-fetcher",
-				},
-			},
-		},
-	}
-	depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
-	if err != nil {
-		log.Printf("Error while creating deployment: %v", err)
-		return nil, err
-	}
+			Filename: targetFilename,
+		}
 
-	for i := 0; i < 120; i++ {
-		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+		loadReq := fission.FunctionLoadRequest{
+			FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
+			FunctionName:     fn.Spec.Package.FunctionName,
+			FunctionMetadata: &fn.Metadata,
+		}
+
+		fetchPayload, err := json.Marshal(fetchReq)
 		if err != nil {
 			return nil, err
 		}
-		//TODO check for imagePullerror
-		if latestDepl.Status.ReadyReplicas == replicas {
-			return latestDepl, err
+		loadPayload, err := json.Marshal(loadReq)
+		if err != nil {
+			return nil, err
 		}
-		time.Sleep(time.Second)
+
+		deployment := &v1beta1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: deployLabels,
+				Name:   deployName,
+			},
+			Spec: v1beta1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: deployLabels,
+				},
+				Template: apiv1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: deployLabels,
+					},
+					Spec: apiv1.PodSpec{
+						Volumes: []apiv1.Volume{
+							{
+								Name: userfunc,
+								VolumeSource: apiv1.VolumeSource{
+									EmptyDir: &apiv1.EmptyDirVolumeSource{},
+								},
+							},
+						},
+						Containers: []apiv1.Container{
+							{
+								Name:                   fn.Metadata.Name,
+								Image:                  env.Spec.Runtime.Image,
+								ImagePullPolicy:        apiv1.PullIfNotPresent,
+								TerminationMessagePath: "/dev/termination-log",
+								VolumeMounts: []apiv1.VolumeMount{
+									{
+										Name:      userfunc,
+										MountPath: deploy.sharedMountPath,
+									},
+								},
+								Resources: env.Spec.Resources,
+							},
+							{
+								Name:                   "fetcher",
+								Image:                  deploy.fetcherImg,
+								ImagePullPolicy:        deploy.fetcherImagePullPolicy,
+								TerminationMessagePath: "/dev/termination-log",
+								VolumeMounts: []apiv1.VolumeMount{
+									{
+										Name:      userfunc,
+										MountPath: deploy.sharedMountPath,
+									},
+								},
+								Command: []string{"/fetcher", "-specialize-on-startup",
+									"-fetch-request", string(fetchPayload),
+									"-load-request", string(loadPayload),
+									deploy.sharedMountPath},
+								Env: []apiv1.EnvVar{
+									{
+										Name:  envVersion,
+										Value: strconv.Itoa(env.Spec.Version),
+									},
+								},
+								// TBD Use smaller default resources, for now needed to make HPA work
+								Resources: env.Spec.Resources,
+								ReadinessProbe: &apiv1.Probe{
+									Handler: apiv1.Handler{
+										Exec: &apiv1.ExecAction{
+											Command: []string{"cat", "/tmp/ready"},
+										},
+									},
+									InitialDelaySeconds: 1,
+									PeriodSeconds:       1,
+								},
+							},
+						},
+						ServiceAccountName: "fission-fetcher",
+					},
+				},
+			},
+		}
+		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
+		if err != nil {
+			log.Printf("Error while creating deployment: %v", err)
+			return nil, err
+		}
+
+		for i := 0; i < 120; i++ {
+			latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil, err
+			}
+			//TODO check for imagePullerror
+			if latestDepl.Status.ReadyReplicas == replicas {
+				return latestDepl, err
+			}
+			time.Sleep(time.Second)
+		}
+		return nil, errors.New("Failed to create deployment within timeout window")
 	}
-	return nil, errors.New("Failed to create deployment within timeout window")
+
+	return nil, err
 
 }
 
@@ -201,28 +206,33 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		return existingHpa, err
 	}
 
-	hpa := asv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      hpaName,
-			Namespace: deploy.namespace,
-			Labels:    depl.Labels,
-		},
-		Spec: asv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: asv1.CrossVersionObjectReference{
-				Kind:       DeploymentKind,
-				Name:       depl.ObjectMeta.Name,
-				APIVersion: DeploymentVersion,
+	if err != nil && k8s_err.IsNotFound(err) {
+		hpa := asv1.HorizontalPodAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      hpaName,
+				Namespace: deploy.namespace,
+				Labels:    depl.Labels,
 			},
-			MinReplicas: &minRepl,
-			MaxReplicas: maxRepl,
-		},
+			Spec: asv1.HorizontalPodAutoscalerSpec{
+				ScaleTargetRef: asv1.CrossVersionObjectReference{
+					Kind:       DeploymentKind,
+					Name:       depl.ObjectMeta.Name,
+					APIVersion: DeploymentVersion,
+				},
+				MinReplicas: &minRepl,
+				MaxReplicas: maxRepl,
+			},
+		}
+
+		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Create(&hpa)
+		if err != nil {
+			return nil, err
+		}
+		return cHpa, nil
 	}
 
-	cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Create(&hpa)
-	if err != nil {
-		return nil, err
-	}
-	return cHpa, nil
+	return nil, err
+
 }
 
 func (deploy NewDeploy) deleteHpa(ns string, name string) error {
@@ -236,35 +246,40 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 	if err == nil {
 		return existingSvc, err
 	}
-	service := &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   svcName,
-			Labels: deployLabels,
-		},
-		Spec: apiv1.ServiceSpec{
-			Ports: []apiv1.ServicePort{
-				{
-					Name:       "runtime-env-port",
-					Port:       int32(80),
-					TargetPort: intstr.FromInt(8888),
-				},
-				{
-					Name:       "fetcher-port",
-					Port:       int32(8000),
-					TargetPort: intstr.FromInt(8000),
-				},
+
+	if err != nil && k8s_err.IsNotFound(err) {
+		service := &apiv1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   svcName,
+				Labels: deployLabels,
 			},
-			Selector: deployLabels,
-			Type:     apiv1.ServiceTypeClusterIP,
-		},
+			Spec: apiv1.ServiceSpec{
+				Ports: []apiv1.ServicePort{
+					{
+						Name:       "runtime-env-port",
+						Port:       int32(80),
+						TargetPort: intstr.FromInt(8888),
+					},
+					{
+						Name:       "fetcher-port",
+						Port:       int32(8000),
+						TargetPort: intstr.FromInt(8000),
+					},
+				},
+				Selector: deployLabels,
+				Type:     apiv1.ServiceTypeClusterIP,
+			},
+		}
+
+		svc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Create(service)
+		if err != nil {
+			return nil, err
+		}
+
+		return svc, nil
 	}
 
-	svc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Create(service)
-	if err != nil {
-		return nil, err
-	}
-
-	return svc, nil
+	return nil, err
 }
 
 func (deploy *NewDeploy) deleteSvc(ns string, name string) error {

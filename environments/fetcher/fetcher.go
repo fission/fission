@@ -160,6 +160,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	code, err := fetcher.Fetch(req)
 	if err != nil {
 		http.Error(w, err.Error(), code)
+		return
 	}
 
 	// all done

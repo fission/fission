@@ -123,6 +123,7 @@ func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string
 			err = fission.MakeErrorFromHTTP(resp)
 		}
 		log.Printf("Failed to specialize pod: %v", err)
+		return
 	}
 
 }

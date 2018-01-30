@@ -32,7 +32,7 @@ import (
 	"github.com/fission/fission/executor/fscache"
 )
 
-// cleanupService cleans up resources created by old backend instances
+// cleanupObjects cleans up resources created by old backend instances
 func cleanupObjects(kubernetesClient *kubernetes.Clientset,
 	namespace string,
 	instanceId string) {
