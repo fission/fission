@@ -21,16 +21,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/fission/fission/crd"
 )
 
 func (c *Client) FunctionCreate(f *crd.Function) (*metav1.ObjectMeta, error) {
-
 	reqbody, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
@@ -126,16 +123,8 @@ func (c *Client) FunctionDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) FunctionList(labelSelector map[string]string) ([]crd.Function, error) {
-	var relativeUrl string
-	if labelSelector != nil {
-		t := url.QueryEscape(labels.Set(labelSelector).AsSelector().String())
-		relativeUrl = fmt.Sprintf("functions?labelSelector=%s", t)
-	} else {
-		relativeUrl = "functions"
-	}
-
-	resp, err := http.Get(c.url(relativeUrl))
+func (c *Client) FunctionList() ([]crd.Function, error) {
+	resp, err := http.Get(c.url("functions"))
 	if err != nil {
 		return nil, err
 	}

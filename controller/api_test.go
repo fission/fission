@@ -114,7 +114,7 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 	defer g.client.FunctionDelete(m2)
 
-	funcs, err := g.client.FunctionList(nil)
+	funcs, err := g.client.FunctionList()
 	panicIf(err)
 	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but found %v", len(funcs)))
 

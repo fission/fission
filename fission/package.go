@@ -33,12 +33,18 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-func getFunctionsByPackage(client *client.Client, labelSelector map[string]string) ([]crd.Function, error) {
-	fnList, err := client.FunctionList(labelSelector)
+func getFunctionsByPackage(client *client.Client, pkgName string) ([]crd.Function, error) {
+	fnList, err := client.FunctionList()
 	if err != nil {
 		return nil, err
 	}
-	return fnList, nil
+	fns := []crd.Function{}
+	for _, fn := range fnList {
+		if fn.Spec.Package.PackageRef.Name == pkgName {
+			fns = append(fns, fn)
+		}
+	}
+	return fns, nil
 }
 
 func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
@@ -126,9 +132,7 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "get package")
 
-	labelSelector := make(map[string]string)
-	labelSelector["package"] = pkgName
-	fnList, err := getFunctionsByPackage(client, labelSelector)
+	fnList, err := getFunctionsByPackage(client, pkgName)
 	checkErr(err, "get function list")
 
 	if !force && len(fnList) > 1 {
@@ -290,32 +294,17 @@ func pkgInfo(c *cli.Context) error {
 	return nil
 }
 
-func isOrphanPackage(client *client.Client, pkgName string) bool {
-	labelSelector := make(map[string]string)
-	labelSelector["package"] = pkgName
-	fnList, err := getFunctionsByPackage(client, labelSelector)
-	checkErr(err, fmt.Sprintf("Error getting functions using package :%s", pkgName))
-	if len(fnList) == 0 {
-		return true
-	}
-	return false
-}
-
 func deleteOrphanPkgs(client *client.Client) error {
 	pkgList, err := client.PackageList()
 	if err != nil {
 		return err
 	}
 
-	// label functions first
-	err = labelFunctions(client)
-	if err != nil {
-		return err
-	}
-
 	// range through all packages and find out the ones not referenced by any function
 	for _, pkg := range pkgList {
-		if isOrphanPackage(client, pkg.Metadata.Name) {
+		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+		checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+		if len(fnList) == 0 {
 			err = deletePackage(client, pkg.Metadata.Name)
 			if err != nil {
 				return err
@@ -338,11 +327,10 @@ func pkgList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
 
 	if listOrphans {
-		// Take this opportunity to label all functions. There may be a few functions created in older fission releases not having label.
-		err = labelFunctions(client)
-		checkErr(err, "Error labeling functions")
 		for _, pkg := range pkgList {
-			if isOrphanPackage(client, pkg.Metadata.Name) {
+			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+			checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			if len(fnList) == 0 {
 				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
 			}
 		}
@@ -375,6 +363,11 @@ func pkgDelete(c *cli.Context) error {
 		return nil
 	}
 
+	if len(pkgName) == 0 && deleteOrphans {
+		fmt.Println("Need either --name argument or --orphan flag")
+		return nil
+	}
+
 	if len(pkgName) != 0 {
 		force := c.Bool("f")
 
@@ -384,9 +377,7 @@ func pkgDelete(c *cli.Context) error {
 		})
 		checkErr(err, "find package")
 
-		labelSelector := make(map[string]string)
-		labelSelector["package"] = pkgName
-		fnList, err := getFunctionsByPackage(client, labelSelector)
+		fnList, err := getFunctionsByPackage(client, pkgName)
 
 		if !force && len(fnList) > 0 {
 			fatal("Package is used by at least one function, use -f to force delete")
@@ -397,7 +388,8 @@ func pkgDelete(c *cli.Context) error {
 			return err
 		}
 		fmt.Printf("Package '%v' deleted\n", pkgName)
-	} else if deleteOrphans {
+	} else {
+		// delete request for orphan packages
 		err := deleteOrphanPkgs(client)
 		checkErr(err, "error deleting orphan packages")
 		fmt.Println("Orphan packages deleted")

@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/logdb"
 )
@@ -77,7 +76,7 @@ func fnCreate(c *cli.Context) error {
 		fatal("Need --name argument.")
 	}
 
-	fnList, err := client.FunctionList(nil)
+	fnList, err := client.FunctionList()
 	checkErr(err, "get function list")
 	// check function existence before creating package
 	for _, fn := range fnList {
@@ -136,16 +135,10 @@ func fnCreate(c *cli.Context) error {
 		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 	}
 
-	// labels for grouping functions based on environment and packages
-	labels := make(map[string]string)
-	labels["package"] = pkgMetadata.Name
-	labels["environment"] = envName
-
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
 			Namespace: metav1.NamespaceDefault,
-			Labels:    labels,
 		},
 		Spec: fission.FunctionSpec{
 			Environment: fission.EnvironmentReference{
@@ -250,15 +243,6 @@ func fnGetMeta(c *cli.Context) error {
 func fnUpdate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
-	// This is for updating existing functions with labels
-	label := c.Bool("label")
-	if label {
-		err := labelFunctions(client)
-		checkErr(err, "Error labeling functions")
-		fmt.Println("Updated labels on all functions")
-		return nil
-	}
-
 	if len(c.String("package")) > 0 {
 		fatal("--package is deprecated, please use --deploy instead.")
 	}
@@ -288,12 +272,7 @@ func fnUpdate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
-
-	// get existing labels on the function. If not present, then create it.
-	labels := function.Metadata.Labels
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+	removeOrphan := c.Bool("removeorphan")
 
 	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
 		len(entrypoint) == 0 && len(buildcmd) == 0 {
@@ -301,7 +280,6 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	if len(envName) > 0 {
-		labels["environment"] = envName
 		function.Spec.Environment.Name = envName
 	}
 
@@ -320,10 +298,7 @@ func fnUpdate(c *cli.Context) error {
 	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 	pkgMetadata := &pkg.Metadata
 
-	// listing all functions sharing this package using label selectors.
-	labelSelector := make(map[string]string)
-	labelSelector["package"] = function.Spec.Package.PackageRef.Name
-	fnList, err := getFunctionsByPackage(client, labelSelector)
+	fnList, err := getFunctionsByPackage(client, function.Spec.Package.PackageRef.Name)
 	checkErr(err, "get function list")
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
@@ -345,7 +320,7 @@ func fnUpdate(c *cli.Context) error {
 				checkErr(err, "update function")
 			}
 		}
-	} else if len(pkgName) != 0 {
+	} else if len(pkgName) != 0 && removeOrphan {
 		// this case when user wants to update package reference in the function to an entirely different package.
 		// we don't want to leak the pkg referenced earlier by this function, if not used by any other function
 		if len(fnList) == 1 {
@@ -353,13 +328,7 @@ func fnUpdate(c *cli.Context) error {
 			checkErr(err, fmt.Sprintf("error deleting package: %v referenced earlier by this function", function.Spec.Package.PackageRef.Name))
 			fmt.Printf("Deleted package %s referenced earlier by this functions\n", function.Spec.Package.PackageRef.Name)
 		}
-
-		// update the package label on function, pointing it to new package
-		labels["package"] = pkgMetadata.Name
 	}
-
-	// Finally assign the labels to the function object
-	function.Metadata.Labels = labels
 
 	// update function spec with new package metadata
 	function.Spec.Package.PackageRef = fission.PackageRef{
@@ -398,7 +367,7 @@ func fnDelete(c *cli.Context) error {
 func fnList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
-	fns, err := client.FunctionList(nil)
+	fns, err := client.FunctionList()
 	checkErr(err, "list functions")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -563,27 +532,5 @@ func fnTest(c *cli.Context) error {
 		fnLogs(c)
 	}
 
-	return nil
-}
-
-func labelFunctions(client *client.Client) error {
-	fns, err := client.FunctionList(nil)
-	if err != nil {
-		return err
-	}
-
-	for _, fn := range fns {
-		labels := fn.Metadata.Labels
-		if labels == nil {
-			labels = make(map[string]string)
-			labels["package"] = fn.Spec.Package.PackageRef.Name
-			labels["environment"] = fn.Spec.Environment.Name
-			fn.Metadata.Labels = labels
-			_, err := client.FunctionUpdate(&fn)
-			if err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
