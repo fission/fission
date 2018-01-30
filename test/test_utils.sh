@@ -161,11 +161,12 @@ helm_install_fission() {
     controllerNodeport=$6
     routerNodeport=$7
     fluentdImage=$8
+    pruneInterval=$9
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,pruneInterval=$
 
     timeout 30 bash -c "helm_setup"
 
@@ -368,6 +369,7 @@ install_and_test() {
     fetcherImageTag=$4
     fluentdImage=$5
     fluentdImageTag=$6
+    pruneInterval=$7
 
     controllerPort=31234
     routerPort=31235
@@ -376,7 +378,7 @@ install_and_test() {
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage:$fluentdImageTag
+    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage:$fluentdImageTag $pruneInterval
     then
 	dump_logs $id
 	exit 1

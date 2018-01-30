@@ -66,3 +66,8 @@ persistence:
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
 analytics: true
+
+## Archive pruner is a garbage collector for archives on the fission storage service.
+## This interval configures the frequency at which it runs inside the storagesvc pod.
+## The value is in minutes.
+pruneInterval: 60
