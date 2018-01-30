@@ -180,7 +180,6 @@ func (api *API) Serve(port int) {
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
-	r.HandleFunc("/proxy/buildermgr/v1/build", api.BuilderManagerBuildProxy)
 	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 

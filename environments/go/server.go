@@ -141,7 +141,12 @@ func specializeHandlerV2(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Done")
 }
 
+func readinessProbeHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func main() {
+	http.HandleFunc("/healthz", readinessProbeHandler)
 	http.HandleFunc("/specialize", specializeHandler)
 	http.HandleFunc("/v2/specialize", specializeHandlerV2)
 

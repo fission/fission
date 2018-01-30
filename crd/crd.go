@@ -32,10 +32,10 @@ const (
 // needed. (Note that this creates the CRD type; it doesn't create any
 // _instances_ of that type.)
 func ensureCRD(clientset *apiextensionsclient.Clientset, crd *apiextensionsv1beta1.CustomResourceDefinition) error {
-	_, err := clientset.Apiextensions().CustomResourceDefinitions().Get(crd.ObjectMeta.Name, metav1.GetOptions{})
+	_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crd.ObjectMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			_, err := clientset.Apiextensions().CustomResourceDefinitions().Create(crd)
+			_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 			if err != nil {
 				return err
 			}

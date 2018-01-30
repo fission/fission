@@ -207,6 +207,9 @@ wait_for_services() {
 
     wait_for_service $id controller
     wait_for_service $id router
+
+    echo Waiting for service is routable...
+    sleep 10
 }
 
 helm_uninstall_fission() {(set +e

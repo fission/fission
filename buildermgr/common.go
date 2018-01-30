@@ -34,48 +34,20 @@ import (
 )
 
 // buildPackage helps to build source package into deployment package.
-// Following is steps buildPackage takes to complete the build process.
-// 1. Check package status
-// 2. Update package status to running state
-// 3. Send fetch request to fetcher to fetch source package.
-// 4. Send build request to builder to start a build.
-// 5. Send upload request to fetcher to upload deployment package.
-// 6. Update package status to succeed state
-// 7. Update package resource in package ref of functions that share the same package
-// *. Update package status to failed state,if any one of steps above failed
+// Following is the steps buildPackage function takes to complete the whole process.
+// 1. Send fetch request to fetcher to fetch source package.
+// 2. Send build request to builder to start a build.
+// 3. Send upload request to fetcher to upload deployment package.
+// 4. Return upload response and build logs.
+// *. Return build logs and error if any one of steps above failed.
 func buildPackage(fissionClient *crd.FissionClient, builderNamespace string,
-	storageSvcUrl string, pkg *crd.Package) (buildLogs string, err error) {
-
-	// Only do build for pending packages
-	if pkg.Status.BuildStatus != fission.BuildStatusPending {
-		e := "package is not in pending state"
-		log.Println(e)
-		return e, fission.MakeError(http.StatusBadRequest, e)
-	}
-
-	// update package status to running state, so that
-	// we can know what status a package is through cli.
-	newPkgRV, err := updatePackage(fissionClient, pkg, fission.BuildStatusRunning, "", nil)
-
-	// Kubernetes checks resource version before applying
-	// new resource config. The update operation will be
-	// rejected if the resource version in metadata is lower
-	// than the latest version. Set resource version with
-	// latest return from updatePackage.
-	pkg.Metadata.ResourceVersion = newPkgRV
-	if err != nil {
-		e := fmt.Sprintf("Error setting package pending state: %v", err)
-		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
-	}
+	storageSvcUrl string, pkg *crd.Package) (uploadResp *fetcher.UploadResponse, buildLogs string, err error) {
 
 	env, err := fissionClient.Environments(metav1.NamespaceDefault).Get(pkg.Spec.Environment.Name)
 	if err != nil {
 		e := fmt.Sprintf("Error getting environment CRD info: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
+		return nil, e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	svcName := fmt.Sprintf("%v-%v.%v", env.Metadata.Name, env.Metadata.ResourceVersion, builderNamespace)
@@ -94,8 +66,7 @@ func buildPackage(fissionClient *crd.FissionClient, builderNamespace string,
 	if err != nil {
 		e := fmt.Sprintf("Error fetching source package: %v", err)
 		log.Println(e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, e, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
+		return nil, e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	buildCmd := pkg.Spec.BuildCommand
@@ -119,8 +90,7 @@ func buildPackage(fissionClient *crd.FissionClient, builderNamespace string,
 			buildLogs = buildResp.BuildLogs
 		}
 		buildLogs += fmt.Sprintf("%v\n", e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
+		return nil, buildResp.BuildLogs, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	log.Printf("Build succeed, source package: %v, deployment package: %v", srcPkgFilename, buildResp.ArtifactFilename)
@@ -132,65 +102,20 @@ func buildPackage(fissionClient *crd.FissionClient, builderNamespace string,
 
 	log.Printf("Start uploading deployment package: %v", buildResp.ArtifactFilename)
 	// ask fetcher to upload the deployment package
-	uploadResp, err := fetcherC.Upload(uploadReq)
+	uploadResp, err = fetcherC.Upload(uploadReq)
 	if err != nil {
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
 		log.Println(e)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
+		return nil, buildResp.BuildLogs, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
-	log.Printf("Start updating info of package: %v", pkg.Metadata.Name)
-	// update package status and also build logs
-	newPkgRV, err = updatePackage(fissionClient, pkg,
-		fission.BuildStatusSucceeded, buildResp.BuildLogs, uploadResp)
-	pkg.Metadata.ResourceVersion = newPkgRV
-	if err != nil {
-		e := fmt.Sprintf("Error creating deployment package CRD resource: %v", err)
-		log.Println(e)
-		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
-	}
-
-	fnList, err := fissionClient.
-		Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
-	if err != nil {
-		e := fmt.Sprintf("Error getting function list: %v", err)
-		log.Println(e)
-		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
-		updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-		return e, fission.MakeError(http.StatusInternalServerError, e)
-	}
-
-	// A package may be used by multiple functions. Update
-	// functions with old package resource version
-	for _, fn := range fnList.Items {
-		if fn.Spec.Package.PackageRef.Name == pkg.Metadata.Name &&
-			fn.Spec.Package.PackageRef.Namespace == pkg.Metadata.Namespace &&
-			fn.Spec.Package.PackageRef.ResourceVersion != pkg.Metadata.ResourceVersion {
-			fn.Spec.Package.PackageRef.ResourceVersion = newPkgRV
-			// update CRD
-			_, err = fissionClient.Functions(fn.Metadata.Namespace).Update(&fn)
-			if err != nil {
-				e := fmt.Sprintf("Error updating function package resource version: %v", err)
-				log.Println(e)
-				buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
-				updatePackage(fissionClient, pkg, fission.BuildStatusFailed, buildResp.BuildLogs, nil)
-				return e, fission.MakeError(http.StatusInternalServerError, e)
-			}
-		}
-	}
-
-	log.Printf("Completed build request for package: %v", pkg.Metadata.Name)
-
-	return buildResp.BuildLogs, nil
+	return uploadResp, buildResp.BuildLogs, nil
 }
 
 func updatePackage(fissionClient *crd.FissionClient,
 	pkg *crd.Package, status fission.BuildStatus, buildLogs string,
-	uploadResp *fetcher.UploadResponse) (string, error) {
+	uploadResp *fetcher.UploadResponse) (*crd.Package, error) {
 
 	pkg.Status = fission.PackageStatus{
 		BuildStatus: status,
@@ -209,9 +134,9 @@ func updatePackage(fissionClient *crd.FissionClient,
 	pkg, err := fissionClient.Packages(metav1.NamespaceDefault).Update(pkg)
 	if err != nil {
 		log.Printf("Error updating package: %v", err)
-		return "", err
+		return nil, err
 	}
 
 	// return resource version for function to update function package ref
-	return pkg.Metadata.ResourceVersion, nil
+	return pkg, nil
 }

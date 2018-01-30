@@ -8,8 +8,8 @@ set -euo pipefail
 # able to work.
 
 ROOT=$(dirname $0)/../..
-PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python3-env:test
-PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python3-env-builder:test
+PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
+PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
 
 fn=python-srcbuild-$(date +%s)
 
@@ -34,6 +34,22 @@ checkFunctionResponse() {
     echo $response | grep -i "$2"
 }
 
+waitEnvBuilder() {
+    env=$1
+    envRV=$(kubectl -n default get environments ${env} -o jsonpath='{.metadata.resourceVersion}')
+
+    echo "Waiting for env builder to catch up"
+
+    while true; do
+      kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} \
+        -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' | grep "Ready=True" | grep -i "$1"
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+    done
+}
+export -f waitEnvBuilder
+
 echo "Pre-test cleanup"
 fission env delete --name python || true
 
@@ -41,8 +57,7 @@ echo "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 trap "fission env delete --name python" EXIT
 
-echo "Waiting for env builder to catch up"
-sleep 30
+timeout 180s bash -c "waitEnvBuilder python"
 
 echo "Creating pacakage with source archive"
 zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/

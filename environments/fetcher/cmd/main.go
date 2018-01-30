@@ -39,15 +39,18 @@ func main() {
 		}
 	}
 
-	f := fetcher.MakeFetcher(dir)
+	fetcher := fetcher.MakeFetcher(dir)
 
 	if *specializeOnStart {
-		specializePod(f, fetchPayload, loadPayload)
+		specializePod(fetcher, fetchPayload, loadPayload)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", f.FetchHandler)
-	mux.HandleFunc("/upload", f.UploadHandler)
+	mux.HandleFunc("/", fetcher.FetchHandler)
+	mux.HandleFunc("/upload", fetcher.UploadHandler)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	http.ListenAndServe(":8000", mux)
 }
 
