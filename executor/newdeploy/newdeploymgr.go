@@ -149,38 +149,20 @@ func (deploy *NewDeploy) service() {
 		switch req.reqType {
 		case FnCreate:
 			fsvc, err := deploy.fnCreate(req.fn)
-			if err == nil {
-				req.responseChannel <- &fnResponse{
-					error: err,
-					fSvc:  fsvc,
-				}
-				continue
+			req.responseChannel <- &fnResponse{
+				error: err,
+				fSvc:  fsvc,
 			}
-			if err != nil {
-				req.responseChannel <- &fnResponse{
-					error: err,
-					fSvc:  nil,
-				}
-				continue
-			}
+			continue
 		case FnUpdate:
 			// TBD
 		case FnDelete:
 			_, err := deploy.fnDelete(req.fn)
-			if err == nil {
-				req.responseChannel <- &fnResponse{
-					error: err,
-					fSvc:  nil,
-				}
-				continue
+			req.responseChannel <- &fnResponse{
+				error: err,
+				fSvc:  nil,
 			}
-			if err != nil {
-				req.responseChannel <- &fnResponse{
-					error: err,
-					fSvc:  nil,
-				}
-				continue
-			}
+			continue
 		}
 	}
 }
@@ -204,21 +186,23 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 }
 
 func (deploy *NewDeploy) createFunction(fn *crd.Function) {
-	if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
-		// Eager creation of function if minScale is greater than 0
-		if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 {
-			log.Printf("Eagerly creating newDeploy objects for function")
-			c := make(chan *fnResponse)
-			deploy.requestChannel <- &fnRequest{
-				fn:              fn,
-				reqType:         FnCreate,
-				responseChannel: c,
-			}
-			resp := <-c
-			if resp.error != nil {
-				log.Printf("Error eager creating function: %v", resp.error)
-			}
-		}
+	if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend != fission.BackendTypeNewdeploy {
+		return
+	}
+	if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale <= 0 {
+		return
+	}
+	// Eager creation of function if minScale is greater than 0
+	log.Printf("Eagerly creating newDeploy objects for function")
+	c := make(chan *fnResponse)
+	deploy.requestChannel <- &fnRequest{
+		fn:              fn,
+		reqType:         FnCreate,
+		responseChannel: c,
+	}
+	resp := <-c
+	if resp.error != nil {
+		log.Printf("Error eager creating function: %v", resp.error)
 	}
 }
 
@@ -309,10 +293,12 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	}
 
 	fsvc = &fscache.FuncSvc{
+		Name:              objName,
 		Function:          &fn.Metadata,
 		Environment:       env,
 		Address:           svcAddress,
 		KubernetesObjects: kubeObjRefs,
+		Backend:           fscache.NEWDEPLOY,
 	}
 
 	_, err = deploy.fsCache.Add(*fsvc)
@@ -326,7 +312,6 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	var delError error
-	objName := deploy.getObjName(fn)
 
 	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
 	if err != nil {
@@ -339,6 +324,7 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 			delError = err
 		}
 	}
+	objName := fsvc.Name
 
 	err = deploy.deleteDeployment(deploy.namespace, objName)
 	if err != nil {
@@ -365,8 +351,7 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 }
 
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
-	return fmt.Sprintf("%v-%v-%v",
-		fn.Metadata.Namespace,
+	return fmt.Sprintf("%v-%v",
 		fn.Metadata.Name,
 		deploy.instanceID)
 }

@@ -71,7 +71,7 @@ func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string
 
 	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
 	if err != nil {
-		log.Fatalf("Error parsing environment version %v, error: %v", envVersion, err)
+		log.Fatalf("Error parsing environment version %v, error: %v", os.Getenv("ENV_VERSION"), err)
 	}
 
 	maxRetries := 30

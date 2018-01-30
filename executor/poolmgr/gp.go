@@ -588,6 +588,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 	}
 
 	fsvc := &fscache.FuncSvc{
+		Name:              pod.ObjectMeta.Name,
 		Function:          m,
 		Environment:       gp.env,
 		Address:           svcHost,

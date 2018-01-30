@@ -44,6 +44,7 @@ const (
 
 type (
 	FuncSvc struct {
+		Name              string                // Name of object
 		Function          *metav1.ObjectMeta    // function this pod/service is for
 		Environment       *crd.Environment      // function's environment
 		Address           string                // Host:Port or IP:Port that the function's service can be reached at.

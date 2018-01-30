@@ -68,4 +68,4 @@ persistence:
 analytics: true
 
 ## Enable Heapster only in clusters where heapster does not exist already
-heapsterEnabled: false
+heapster: false

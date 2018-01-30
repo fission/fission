@@ -194,7 +194,8 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	fsCache := fscache.MakeFunctionServiceCache()
 
 	poolID := strings.ToLower(uniuri.NewLen(8))
-	cleanupService(kubernetesClient, fissionClient, fsCache, functionNamespace, poolID)
+	cleanupObjects(kubernetesClient, functionNamespace, poolID)
+	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, poolID)

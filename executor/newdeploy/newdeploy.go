@@ -246,7 +246,13 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 				{
 					Name:       "runtime-env-port",
 					Port:       int32(80),
-					TargetPort: intstr.FromInt(8888)},
+					TargetPort: intstr.FromInt(8888),
+				},
+				{
+					Name:       "fetcher-port",
+					Port:       int32(8000),
+					TargetPort: intstr.FromInt(8000),
+				},
 			},
 			Selector: deployLabels,
 			Type:     apiv1.ServiceTypeClusterIP,
