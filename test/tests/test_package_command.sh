@@ -83,6 +83,7 @@ mkdir testDir
 touch testDir/__init__.py
 printf 'def main():\n    return "Hello, world!"' > testDir/hello.py
 zip -jr demo-deploy-pkg.zip testDir/
+oldPkgName=$pkgName
 pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut -f2 -d' '| tr -d \')
 
 log "Updating function " $fn
