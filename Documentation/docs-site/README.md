@@ -1,8 +1,11 @@
 # Fission Documentation Website
 
 ## Development
+
+* [Hugo Installation Guide](https://gohugo.io/getting-started/installing/)
+* Local Preview
+
 ```
-brew install hugo
-hugo server --buildDrafts --disableFastRender
+$ hugo server --buildDrafts --disableFastRender
 ```
 
