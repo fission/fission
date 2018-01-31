@@ -42,6 +42,7 @@ builderNamespace: fission-builder
 logger:
   influxdbAdmin: "admin"
   fluentdImage: fission/fluentd
+  fluentdImageTag: 0.4.1
 
 ## Message queue trigger config
 ### NATS Streaming
