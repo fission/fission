@@ -399,7 +399,7 @@ func fnUpdate(c *cli.Context) error {
 
 	pkgMetadata := &pkg.Metadata
 
-	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+	fnList, err := getFunctionsByPackage(client, function.Spec.Package.PackageRef.Name)
 	checkErr(err, "get function list")
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {

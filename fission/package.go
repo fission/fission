@@ -338,7 +338,7 @@ func pkgDelete(c *cli.Context) error {
 		fmt.Println("Need --name argument or --orphan flag.")
 		return nil
 	}
-	if len(pkgName) == 0 && deleteOrphans {
+	if len(pkgName) != 0 && deleteOrphans {
 		fmt.Println("Need either --name argument or --orphan flag")
 		return nil
 	}
