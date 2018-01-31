@@ -452,14 +452,31 @@ func fnDelete(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	removeOrphanPkg := c.String("removeorphan")
+
+	function, err := client.FunctionGet(&metav1.ObjectMeta{
+		Name:      fnName,
+		Namespace: metav1.NamespaceDefault,
+	})
+	checkErr(err, "get function")
+
+	fnList, err := getFunctionsByPackage(client, function.Spec.Package.PackageRef.Name)
+	checkErr(err, "get function list")
 
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
 		Namespace: metav1.NamespaceDefault,
 	}
 
-	err := client.FunctionDelete(m)
+	err = client.FunctionDelete(m)
 	checkErr(err, fmt.Sprintf("delete function '%v'", fnName))
+
+	if len(fnList) == 1 && removeOrphanPkg {
+		// when the package that was referenced by this function is not referenced by any other function and user provided flag to delete the package, we need to delete it.
+		err = deletePackage(client, function.Spec.Package.PackageRef.Name)
+		checkErr(err, fmt.Sprintf("Error deleting package %s referenced by this function", function.Spec.Package.PackageRef.Name))
+		fmt.Printf("Deleted package %s referenced by this function\n", function.Spec.Package.PackageRef.Name)
+	}
 
 	fmt.Printf("function '%v' deleted\n", fnName)
 	return err
