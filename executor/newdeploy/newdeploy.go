@@ -48,7 +48,7 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
-	replicas := int32(1)
+	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	targetFilename := "user"
 	userfunc := "userfunc"
 
@@ -200,6 +200,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		minRepl = 1
 	}
 	maxRepl := int32(execStrategy.MaxScale)
+	targetCPU := int32(execStrategy.TargetCPU)
 
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
@@ -219,8 +220,9 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 					Name:       depl.ObjectMeta.Name,
 					APIVersion: DeploymentVersion,
 				},
-				MinReplicas: &minRepl,
-				MaxReplicas: maxRepl,
+				MinReplicas:                    &minRepl,
+				MaxReplicas:                    maxRepl,
+				TargetCPUUtilizationPercentage: &targetCPU,
 			},
 		}
 

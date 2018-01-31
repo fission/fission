@@ -64,7 +64,7 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, backend string) fission.InvokeStrategy {
+func getInvokeStrategy(minScale int, maxScale int, backend string, targetcpu int) fission.InvokeStrategy {
 
 	if maxScale == 0 {
 		maxScale = 1
@@ -72,6 +72,10 @@ func getInvokeStrategy(minScale int, maxScale int, backend string) fission.Invok
 
 	if minScale > maxScale {
 		fatal("Maxscale must be higher than or equal to minscale")
+	}
+
+	if targetcpu < 0 || targetcpu > 100 {
+		fatal("TargetCPU must be a percentage value between 0-100")
 	}
 
 	var fnBackend fission.BackendType
@@ -91,9 +95,10 @@ func getInvokeStrategy(minScale int, maxScale int, backend string) fission.Invok
 	strategy := fission.InvokeStrategy{
 		StrategyType: fission.StrategyTypeExecution,
 		ExecutionStrategy: fission.ExecutionStrategy{
-			Backend:  fnBackend,
-			MinScale: minScale,
-			MaxScale: maxScale,
+			Backend:   fnBackend,
+			MinScale:  minScale,
+			MaxScale:  maxScale,
+			TargetCPU: targetcpu,
 		},
 	}
 	return strategy
@@ -172,7 +177,7 @@ func fnCreate(c *cli.Context) error {
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"))
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Int("targetcpu"))
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
@@ -405,13 +410,14 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "BACKEND", "MINSCALE", "MAXSCALE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "BACKEND", "MINSCALE", "MAXSCALE", "TARGETCPU")
 	for _, f := range fns {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.Backend,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
-			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
+			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
+			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPU)
 	}
 	w.Flush()
 
