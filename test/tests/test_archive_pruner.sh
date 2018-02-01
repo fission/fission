@@ -5,7 +5,6 @@ set -euo pipefail
 pkg=""
 http_status=""
 url=""
-kubectl_pf_pid=""
 
 cleanup() {
     if [ -e "test-deploy-pkg.zip" ]; then
@@ -13,9 +12,6 @@ cleanup() {
     fi
     if [ -e "/tmp/file" ]; then
         rm -rf /tmp/file
-    fi
-    if [ "$kubectl_pf_pid" != "" ]; then
-        kill -9 $kubectl_pf_pid
     fi
 }
 
@@ -40,17 +36,6 @@ delete_package() {
 get_archive_url_from_package() {
     echo "Getting archive URL from package: $1"
     url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
-}
-
-kubectl_port_forward() {
-    controller_pod=`kubectl get pods --all-namespaces | grep "controller" | tr -s ' '| cut -d" " -f2`
-    controller_ns=`kubectl get pods --all-namespaces | grep "controller" | tr -s ' '| cut -d" " -f1`
-    remote_port=`kubectl get svc controller -n $controller_ns -ojsonpath='{.spec.ports[0].nodePort}'`
-    local_port=35565
-    echo "controller pod : $controller_pod, controller_ns: $controller_ns, remote_port : $remote_port"
-    kubectl port-forward $controller_pod $local_port:$remote_port 2>&1 > /dev/null &
-    kubectl_pf_pid=$!
-    echo "kubectl port forward process id : $kubectl_pf_pid"
 }
 
 get_archive_from_storage() {
@@ -89,11 +74,6 @@ main() {
     delete_package $pkg_1
     delete_package $pkg_2
     echo "deleted packages : $pkg_1 $pkg_2"
-
-    # to find out if archive is present or absent on the storage, we can curl the archive url
-    # very soon, the controller (proxying for storage http requests) will not have a public IP.
-    # so, in any case, do a port forward of controller pod before executing curl get of archive url.
-    kubectl_port_forward
 
     # curl on the archive url
     get_archive_from_storage $url_1
