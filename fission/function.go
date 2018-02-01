@@ -74,10 +74,6 @@ func getInvokeStrategy(minScale int, maxScale int, backend string, targetcpu int
 		fatal("Maxscale must be higher than or equal to minscale")
 	}
 
-	if targetcpu < 0 || targetcpu > 100 {
-		fatal("TargetCPU must be a percentage value between 0-100")
-	}
-
 	var fnBackend fission.BackendType
 	switch backend {
 	case "":
@@ -177,7 +173,18 @@ func fnCreate(c *cli.Context) error {
 
 	//TODO Warn user about resources at fn level overriding the env resources
 	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), c.Int("targetcpu"))
+
+	var targetCPU int
+	if c.IsSet("targetcpu") {
+		targetCPU = c.Int("targetcpu")
+		if targetCPU <= 0 || targetCPU > 100 {
+			fatal("TargetCPU must be a value between 1 - 100")
+		}
+	} else {
+		targetCPU = 80
+	}
+
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), targetCPU)
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{

@@ -43,7 +43,7 @@ func main() {
 	maxMem := cli.StringFlag{Name: "maxmemory", Usage: "Maximum memory to be assigned to pod (In megabyte)"}
 	minScale := cli.StringFlag{Name: "minscale", Usage: "Minmum number of pods (Uses resource inputs to configure HPA)"}
 	maxScale := cli.StringFlag{Name: "maxscale", Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
-	targetcpu := cli.StringFlag{Name: "targetcpu", Usage: "Target average CPU across pods for scaling (In percentage)"}
+	targetcpu := cli.StringFlag{Name: "targetcpu", Usage: "Target average CPU across pods for scaling (In percentage, default 80)"}
 
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
