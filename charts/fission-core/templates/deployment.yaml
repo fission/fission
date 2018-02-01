@@ -287,6 +287,9 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+        env:
+        - name: PRUNE_INTERVAL
+          value: "{{.Values.pruneInterval}}"
         volumeMounts:
         - name: fission-storage
           mountPath: /fission
