@@ -162,7 +162,7 @@ helm_install_fission() {
     routerNodeport=$7
     fluentdImage=$8
     fluentdImageTag=$9
-    pruneInterval=$10
+    pruneInterval="${10}"
 
     echo "pruneInterval inside helm_install_fission : $pruneInterval"
 
