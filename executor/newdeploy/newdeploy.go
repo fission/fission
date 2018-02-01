@@ -49,6 +49,9 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	if replicas == 0 {
+		replicas = 1
+	}
 	targetFilename := "user"
 	userfunc := "userfunc"
 
