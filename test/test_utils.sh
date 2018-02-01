@@ -164,8 +164,6 @@ helm_install_fission() {
     fluentdImageTag=$9
     pruneInterval="${10}"
 
-    echo "pruneInterval inside helm_install_fission : $pruneInterval"
-
     ns=f-$id
     fns=f-func-$id
 
@@ -377,7 +375,6 @@ install_and_test() {
     controllerPort=31234
     routerPort=31235
 
-    echo "pruneInterval : $pruneInterval"
     clean_tpr_crd_resources
 
     id=$(generate_test_id)
