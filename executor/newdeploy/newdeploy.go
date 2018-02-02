@@ -67,7 +67,9 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 				Namespace: fn.Spec.Package.PackageRef.Namespace,
 				Name:      fn.Spec.Package.PackageRef.Name,
 			},
-			Filename: targetFilename,
+			Filename:      targetFilename,
+			SecretList:    fn.Spec.SecretList,
+			ConfigMapList: fn.Spec.ConfigMapList,
 		}
 
 		loadReq := fission.FunctionLoadRequest{
@@ -136,6 +138,8 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 								Command: []string{"/fetcher", "-specialize-on-startup",
 									"-fetch-request", string(fetchPayload),
 									"-load-request", string(loadPayload),
+									"-secret-dir", deploy.sharedSecretPath,
+									"-cfgmap-dir", deploy.sharedCfgMapPath,
 									deploy.sharedMountPath},
 								Env: []apiv1.EnvVar{
 									{
