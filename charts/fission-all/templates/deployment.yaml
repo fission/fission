@@ -25,7 +25,7 @@ metadata:
 
 ---
 kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-admin
   namespace: {{ .Release.Namespace }}
@@ -40,7 +40,7 @@ roleRef:
 
 ---
 kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-function-admin
   namespace: {{ .Values.functionNamespace }}
@@ -55,7 +55,7 @@ roleRef:
 
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-crd
 subjects:
@@ -76,7 +76,7 @@ metadata:
 
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-fetcher-crd
 subjects:
@@ -97,7 +97,7 @@ metadata:
 
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-builder-crd
 subjects:
