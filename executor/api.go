@@ -17,6 +17,7 @@ limitations under the License.
 package executor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -104,5 +105,8 @@ func (executor *Executor) Serve(port int) {
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting executor at port %v", port)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	executor.ndm.Run(ctx)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }

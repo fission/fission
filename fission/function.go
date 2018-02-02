@@ -64,6 +64,42 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
+func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) fission.InvokeStrategy {
+
+	if maxScale == 0 {
+		maxScale = 1
+	}
+
+	if minScale > maxScale {
+		fatal("Maxscale must be higher than or equal to minscale")
+	}
+
+	var fnExecutor fission.ExecutorType
+	switch executorType {
+	case "":
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypePoolmgr:
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypeNewdeploy:
+		fnExecutor = fission.ExecutorTypeNewdeploy
+	default:
+		fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+	}
+
+	// Right now a simple single case strategy implementation
+	// This will potentially get more sophisticated once we have more strategies in place
+	strategy := fission.InvokeStrategy{
+		StrategyType: fission.StrategyTypeExecution,
+		ExecutionStrategy: fission.ExecutionStrategy{
+			ExecutorType:     fnExecutor,
+			MinScale:         minScale,
+			MaxScale:         maxScale,
+			TargetCPUPercent: targetcpu,
+		},
+	}
+	return strategy
+}
+
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
@@ -149,6 +185,21 @@ func fnCreate(c *cli.Context) error {
 		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd)
 	}
 
+	//TODO Warn user about resources at fn level overriding the env resources
+	resourceReq := getResourceReq(c.Int("mincpu"), c.Int("maxcpu"), c.Int("minmemory"), c.Int("maxmemory"))
+
+	var targetCPU int
+	if c.IsSet("targetcpu") {
+		targetCPU = c.Int("targetcpu")
+		if targetCPU <= 0 || targetCPU > 100 {
+			fatal("TargetCPU must be a value between 1 - 100")
+		}
+	} else {
+		targetCPU = 80
+	}
+
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), targetCPU)
+
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
@@ -167,10 +218,10 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
-
-			SecretList: []fission.SecretReference{},
-
-			ConfigMapList: []fission.ConfigMapReference{},
+			SecretList:     []fission.SecretReference{},
+			ConfigMapList:  []fission.ConfigMapReference{},
+			Resources:      resourceReq,
+			InvokeStrategy: invokeStrategy,
 		},
 	}
 
@@ -397,10 +448,14 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "TARGETCPU")
 	for _, f := range fns {
-		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
+			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
+			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
+			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
+			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
 	}
 	w.Flush()
 

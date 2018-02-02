@@ -162,21 +162,17 @@ func verifyChecksum(path string, checksum *fission.Checksum) error {
 	return nil
 }
 
-func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string, w http.ResponseWriter) {
-
+func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 	for key, val := range dataMap {
-
 		writeFilePath := filepath.Join(dirPath, key)
 		err := ioutil.WriteFile(writeFilePath, val, 0600)
-
 		if err != nil {
 			e := fmt.Sprintf("Failed to write file %v: %v", writeFilePath, err)
 			log.Printf(e)
-			http.Error(w, e, http.StatusInternalServerError)
-			return
+			return errors.New(e)
 		}
 	}
-	return
+	return nil
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
@@ -205,8 +201,29 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	log.Printf("fetcher received fetch request and started downloading: %v", req)
 
+	log.Printf("fetcher received fetch request and started downloading: %v", req)
+	code, err := fetcher.Fetch(req)
+	if err != nil {
+		http.Error(w, err.Error(), code)
+		return
+	}
+
+	log.Printf("Checking secrets/cfgmaps")
+	code, err = fetcher.FetchSecretsAndCfgMaps(req.SecretList, req.ConfigMapList)
+	if err != nil {
+		http.Error(w, err.Error(), code)
+		return
+	}
+
+	log.Printf("Completed fetch request")
+	// all done
+	w.WriteHeader(http.StatusOK)
+}
+
+// Fetch takes FetchRequest and makes the fetch call
+// It returns the HTTP code and error if any
+func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
@@ -216,8 +233,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 			log.Printf(e)
-			http.Error(w, e, http.StatusBadRequest)
-			return
+			return 400, errors.New(e)
 		}
 	} else {
 		// get pkg
@@ -225,8 +241,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
-			http.Error(w, e, http.StatusInternalServerError)
-			return
+			return 500, errors.New(e)
 		}
 
 		var archive *fission.Archive
@@ -235,7 +250,6 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		} else if req.FetchType == FETCH_DEPLOYMENT {
 			archive = &pkg.Spec.Deployment
 		}
-
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
@@ -243,26 +257,22 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
-				http.Error(w, e, http.StatusInternalServerError)
-				return
+				return 500, errors.New(e)
 			}
 		} else {
 			// download and verify
-
 			err = downloadUrl(archive.URL, tmpPath)
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
-				http.Error(w, e, http.StatusBadRequest)
-				return
+				return 400, errors.New(e)
 			}
 
 			err = verifyChecksum(tmpPath, &archive.Checksum)
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)
-				http.Error(w, e, http.StatusBadRequest)
-				return
+				return 400, errors.New(e)
 			}
 		}
 	}
@@ -271,26 +281,30 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	if archiver.Zip.Match(tmpPath) {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
-		err = fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			log.Println(err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return 500, err
 		}
 		tmpPath = tmpUnarchivePath
 	}
 
 	// move tmp file to requested filename
-	err = fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	err := fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, err.Error(), 500)
-		return
+		return 500, err
 	}
 
-	log.Printf("Checking secrets/cfgmaps")
-	if len(req.SecretList) > 0 {
-		for _, secret := range req.SecretList {
+	log.Printf("Successfully placed at %v", filepath.Join(fetcher.sharedVolumePath, req.Filename))
+	return 200, nil
+}
+
+// FetchSecretsAndCfgMaps fetches secrets and configmaps specified by user
+// It returns the HTTP code and error if any
+func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fission.SecretReference, cfgmaps []fission.ConfigMapReference) (int, error) {
+	if len(secrets) > 0 {
+		for _, secret := range secrets {
 			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 
 			if err != nil {
@@ -302,8 +316,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 					httpCode = http.StatusNotFound
 				}
 
-				http.Error(w, e, httpCode)
-				return
+				return httpCode, errors.New(e)
 			}
 
 			secretPath := secret.Namespace + "/" + secret.Name
@@ -312,15 +325,17 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", secretDir, err)
 				log.Printf(e)
-				http.Error(w, e, http.StatusInternalServerError)
-				return
+				return http.StatusInternalServerError, errors.New(e)
 			}
-			writeSecretOrConfigMap(data.Data, secretDir, w)
+			err = writeSecretOrConfigMap(data.Data, secretDir)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
 		}
 	}
 
-	if len(req.ConfigMapList) > 0 {
-		for _, config := range req.ConfigMapList {
+	if len(cfgmaps) > 0 {
+		for _, config := range cfgmaps {
 			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(config.Name, metav1.GetOptions{})
 
 			if err != nil {
@@ -332,8 +347,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 					httpCode = http.StatusNotFound
 				}
 
-				http.Error(w, e, httpCode)
-				return
+				return httpCode, errors.New(e)
 			}
 
 			configPath := config.Namespace + "/" + config.Name
@@ -342,19 +356,20 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", configDir, err)
 				log.Printf(e)
-				http.Error(w, e, http.StatusInternalServerError)
-				return
+				return http.StatusInternalServerError, errors.New(e)
 			}
 			configMap := make(map[string][]byte)
 			for key, val := range data.Data {
 				configMap[key] = []byte(val)
 			}
-			writeSecretOrConfigMap(configMap, configDir, w)
+			err = writeSecretOrConfigMap(configMap, configDir)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
 		}
 	}
-	log.Printf("Completed fetch request")
-	// all done
-	w.WriteHeader(http.StatusOK)
+
+	return http.StatusOK, nil
 }
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {

@@ -18,6 +18,7 @@ package fission
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/pkg/api/v1"
 )
 
 type (
@@ -112,6 +113,12 @@ type (
 		FunctionName string `json:"functionName"`
 	}
 
+	//ExecutorType is the primary executor for an environment
+	ExecutorType string
+
+	//StrategyType is the strategy to be used for function execution
+	StrategyType string
+
 	// FunctionSpec describes the contents of the function.
 	FunctionSpec struct {
 		// Environment is the build and runtime environment that this function is
@@ -124,6 +131,45 @@ type (
 
 		SecretList    []SecretReference    `json:"secrets"`
 		ConfigMapList []ConfigMapReference `json:"configmaps"`
+
+		// cpu and memory resources as per K8S standards
+		Resources v1.ResourceRequirements `json:"resources"`
+
+		// InvokeStrategy is a set of controls which affect how function executes
+		InvokeStrategy InvokeStrategy
+	}
+
+	/*InvokeStrategy is a set of controls over how the function executes.
+	It affects the performance and resource usage of the function.
+
+	An InvokeStategy is of one of two types: ExecutionStrategy, which controls low-level
+	parameters such as which ExecutorType to use, when to autoscale, minimum and maximum
+	number of running instances, etc. A higher-level AbstractInvokeStrategy will also be
+	supported; this strategy would specify the target request rate of the function,
+	the target latency statistics, and the target cost (in terms of compute resources).
+	*/
+	InvokeStrategy struct {
+		ExecutionStrategy ExecutionStrategy
+		StrategyType      StrategyType
+	}
+
+	/*ExecutionStrategy specifies low-level parameters for function execution,
+	such as the number of instances.
+
+	MinScale affects the cold start behaviour for a function. If MinScale is 0 then the
+	deployment is created on first invocation of function and is good for requests of
+	asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are
+	created at the time of creation of function. This ensures faster response during first
+	invocation at the cost of consuming resources.
+
+	MaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent
+	and resources allocated to the function pod.
+	*/
+	ExecutionStrategy struct {
+		ExecutorType     ExecutorType
+		MinScale         int
+		MaxScale         int
+		TargetCPUPercent int
 	}
 
 	FunctionReferenceType string
@@ -187,6 +233,12 @@ type (
 		// Optional
 		// Defaults to 'Single'
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer"`
+
+		// Request and limit resources for the environment
+		Resources v1.ResourceRequirements `json:"resources"`
+
+		// The initial pool size for environment
+		Poolsize int `json:"poolsize"`
 	}
 
 	AllowedFunctionsPerContainer string
@@ -262,6 +314,8 @@ type (
 	}
 )
 
+const EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
+
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
@@ -286,6 +340,15 @@ const (
 const (
 	AllowedFunctionsPerContainerSingle   = "single"
 	AllowedFunctionsPerContainerInfinite = "infinite"
+)
+
+const (
+	ExecutorTypePoolmgr   = "poolmgr"
+	ExecutorTypeNewdeploy = "newdeploy"
+)
+
+const (
+	StrategyTypeExecution = "execution"
 )
 
 const (

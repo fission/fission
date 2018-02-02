@@ -89,7 +89,7 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[crd.CacheKey(&req.env.Metadata)]
 			if !ok {
-				var poolSize int32 = 3 // TODO configurable/autoscalable
+				var poolSize = int32(req.env.Spec.Poolsize)
 				switch req.env.Spec.AllowedFunctionsPerContainer {
 				case fission.AllowedFunctionsPerContainerInfinite:
 					poolSize = 1
@@ -107,13 +107,17 @@ func (gpm *GenericPoolManager) service() {
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
 			latestEnvSet := make(map[string]bool)
+			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
 				latestEnvSet[crd.CacheKey(&env.Metadata)] = true
+				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = env.Spec.Poolsize
 			}
 			for key, pool := range gpm.pools {
 				_, ok := latestEnvSet[key]
-				if !ok {
-					// Env no longer exists -- remove our cache
+				poolsize := latestEnvPoolsize[key]
+				if !ok || poolsize == 0 {
+					// Env no longer exists or pool size changed to zero
+
 					log.Printf("Destroying generic pool for environment [%v]", key)
 					delete(gpm.pools, key)
 
@@ -160,9 +164,13 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
 		for i := range envs.Items {
-			_, err := gpm.GetPool(&envs.Items[i])
-			if err != nil {
-				log.Printf("eager-create pool failed: %v", err)
+			env := envs.Items[i]
+			// Create pool only if poolsize greater than zero
+			if env.Spec.Poolsize > 0 {
+				_, err := gpm.GetPool(&envs.Items[i])
+				if err != nil {
+					log.Printf("eager-create pool failed: %v", err)
+				}
 			}
 		}
 

@@ -18,22 +18,25 @@ package executor
 
 import (
 	"log"
-	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
+	"github.com/fission/fission/executor/newdeploy"
 	"github.com/fission/fission/executor/poolmgr"
 )
 
 type (
 	Executor struct {
 		gpm           *poolmgr.GenericPoolManager
+		ndm           *newdeploy.NewDeploy
 		functionEnv   *cache.Cache
 		fissionClient *crd.FissionClient
 		fsCache       *fscache.FunctionServiceCache
@@ -52,9 +55,10 @@ type (
 	}
 )
 
-func MakeExecutor(gpm *poolmgr.GenericPoolManager, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
+func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		gpm:           gpm,
+		ndm:           ndm,
 		functionEnv:   cache.MakeCache(10*time.Second, 0),
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
@@ -114,18 +118,27 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
-func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
-	log.Printf("[%v] No cached function service found, creating one", m.Name)
+func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
-	env, err := executor.getFunctionEnv(m)
+	// from Func -> get Env
+	log.Printf("[%v] getting environment for function", meta.Name)
+	env, err := executor.getFunctionEnv(meta)
 	if err != nil {
 		return nil, err
 	}
-	// Appropriate backend handles the service creation
-	backend := os.Getenv("EXECUTOR_BACKEND")
-	switch backend {
-	case "DEPLOY":
-		return nil, nil
+
+	fn, err := executor.fissionClient.
+		Functions(meta.Namespace).
+		Get(meta.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	switch fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
+	case fission.ExecutorTypeNewdeploy:
+		fs, err := executor.ndm.GetFuncSvc(meta)
+		return fs, err
 	default:
 		pool, err := executor.gpm.GetPool(env)
 		if err != nil {
@@ -133,12 +146,9 @@ func (executor *Executor) createServiceForFunction(m *metav1.ObjectMeta) (*fscac
 		}
 		// from GenericPool -> get one function container
 		// (this also adds to the cache)
-		log.Printf("[%v] getting function service from pool", m.Name)
-		fsvc, err := pool.GetFuncSvc(m)
-		if err != nil {
-			return nil, err
-		}
-		return fsvc, nil
+		log.Printf("[%v] getting function service from pool", meta.Name)
+		fsvc, err := pool.GetFuncSvc(meta)
+		return fsvc, err
 	}
 }
 
@@ -171,24 +181,31 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 	return env, nil
 }
 
-// StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
-// deploymgr and potential future backends
+// StartExecutor Starts executor and the executor components such as Poolmgr,
+// deploymgr and potential future executor types
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+	restClient := fissionClient.GetCrdClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
 		return err
 	}
 
-	instanceID := uniuri.NewLen(8)
-	poolmgr.CleanupOldPoolmgrResources(kubernetesClient, functionNamespace, instanceID)
-
 	fsCache := fscache.MakeFunctionServiceCache()
+
+	poolID := strings.ToLower(uniuri.NewLen(8))
+	cleanupObjects(kubernetesClient, functionNamespace, poolID)
+	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
-		functionNamespace, fsCache, instanceID)
+		functionNamespace, fsCache, poolID)
 
-	api := MakeExecutor(gpm, fissionClient, fsCache)
+	ndm := newdeploy.MakeNewDeploy(
+		fissionClient, kubernetesClient, restClient,
+		functionNamespace, fsCache, poolID)
+
+	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
+
 	go api.Serve(port)
 
 	return nil

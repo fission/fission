@@ -1,19 +1,53 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
-	"github.com/fission/fission/environments/fetcher"
+	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/environments/fetcher"
 )
 
 // Usage: fetcher <shared volume path>
 func main() {
-	flag.Parse()
-	funcDir := flag.Arg(0)
-	secretDir := flag.Arg(1)
-	configDir := flag.Arg(2)
+	flag.Usage = fetcherUsage
+	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
+	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
+	loadPayload := flag.String("load-request", "", "JSON payload for Load request")
+	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
+	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")
 
-	fetcher := fetcher.MakeFetcher(funcDir, secretDir, configDir)
+	flag.Parse()
+	if flag.NArg() == 0 {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	dir := flag.Arg(0)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(dir, os.ModeDir|0700)
+			if err != nil {
+				log.Fatalf("Error creating directory: %v", err)
+			}
+		}
+	}
+
+	fetcher := fetcher.MakeFetcher(dir, *secretDir, *configDir)
+
+	if *specializeOnStart {
+		specializePod(fetcher, fetchPayload, loadPayload)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", fetcher.FetchHandler)
 	mux.HandleFunc("/upload", fetcher.UploadHandler)
@@ -21,4 +55,87 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	http.ListenAndServe(":8000", mux)
+}
+
+func fetcherUsage() {
+	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path> \n")
+}
+
+func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
+	// Fetch code
+	var fetchReq fetcher.FetchRequest
+	err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
+	if err != nil {
+		log.Fatalf("Error parsing fetch request: %v", err)
+	}
+	_, err = f.Fetch(fetchReq)
+	if err != nil {
+		log.Fatalf("Error fetching: %v", err)
+	}
+
+	_, err = f.FetchSecretsAndCfgMaps(fetchReq.SecretList, fetchReq.ConfigMapList)
+	if err != nil {
+		log.Fatalf("Error fetching secerts/configmaps: %v", err)
+		return
+	}
+
+	// Specialize the pod
+
+	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
+	if err != nil {
+		log.Fatalf("Error parsing environment version %v, error: %v", os.Getenv("ENV_VERSION"), err)
+	}
+
+	maxRetries := 30
+	var contentType string
+	var specializeURL string
+	var reader *bytes.Reader
+
+	if envVersion == 2 {
+		contentType = "application/json"
+		specializeURL = "http://localhost:8888/v2/specialize"
+		reader = bytes.NewReader([]byte(*loadPayload))
+	} else {
+		contentType = "text/plain"
+		specializeURL = "http://localhost:8888/specialize"
+		reader = bytes.NewReader([]byte{})
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Post(specializeURL, contentType, reader)
+		if err == nil && resp.StatusCode < 300 {
+			// Success
+			resp.Body.Close()
+			//On Success creates a file which is used as a readiness probe by Kubernetes for this container/pod
+			file, err := os.OpenFile("/tmp/ready", os.O_RDONLY|os.O_CREATE, 0666)
+			if err != nil {
+				log.Fatalf("Error creating readiness file: %v", err)
+			}
+			err = file.Close()
+			if err != nil {
+				log.Fatalf("Error closing readiness file: %v", err)
+			}
+			break
+		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						continue
+					}
+				}
+			}
+		}
+
+		if err == nil {
+			err = fission.MakeErrorFromHTTP(resp)
+		}
+		log.Printf("Failed to specialize pod: %v", err)
+		return
+	}
+
 }
