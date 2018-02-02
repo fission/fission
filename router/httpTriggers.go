@@ -36,6 +36,7 @@ import (
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
+
 	fissionClient     *crd.FissionClient
 	executor          *executorClient.Client
 	resolver          *functionReferenceResolver

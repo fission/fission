@@ -29,7 +29,7 @@ import (
 )
 
 type fscRequestType int
-type backendType int
+type executorType int
 
 const (
 	TOUCH fscRequestType = iota
@@ -38,17 +38,18 @@ const (
 )
 
 const (
-	POOLMGR backendType = iota
+	POOLMGR executorType = iota
 	NEWDEPLOY
 )
 
 type (
 	FuncSvc struct {
+		Name              string                // Name of object
 		Function          *metav1.ObjectMeta    // function this pod/service is for
 		Environment       *crd.Environment      // function's environment
 		Address           string                // Host:Port or IP:Port that the function's service can be reached at.
 		KubernetesObjects []api.ObjectReference // Kubernetes Objects (within the function namespace)
-		Backend           backendType
+		Executor          executorType
 
 		Ctime time.Time
 		Atime time.Time
@@ -135,20 +136,19 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-// TODO: error should be second return
-func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
+func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if existing != nil {
 			f := existing.(*FuncSvc)
 			err2 := fsc.TouchByAddress(f.Address)
 			if err2 != nil {
-				return err2, nil
+				return nil, err2
 			}
 			fCopy := *f
-			return err, &fCopy
+			return &fCopy, err
 		}
-		return err, nil
+		return nil, err
 	}
 	now := time.Now()
 	fsvc.Ctime = now
@@ -164,7 +164,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 			}
 		}
 		log.Printf("error caching fsvc: %v", err)
-		return err, nil
+		return nil, err
 	}
 	return nil, nil
 }
