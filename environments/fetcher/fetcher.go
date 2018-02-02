@@ -16,6 +16,7 @@ import (
 
 	"github.com/mholt/archiver"
 	"github.com/satori/go.uuid"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -66,22 +67,29 @@ const (
 	FETCH_URL // remove this?
 )
 
-func MakeDir(volumePath string) {
-	if _, err := os.Stat(volumePath); err != nil {
+func makeDir(dirPath string, perm os.FileMode) error {
+	if _, err := os.Stat(dirPath); err != nil {
 		if os.IsNotExist(err) {
-			err = os.MkdirAll(volumePath, os.ModeDir|0700)
+			err = os.MkdirAll(dirPath, perm)
 			if err != nil {
-				log.Fatalf("Error creating %v: %v", volumePath, err)
+				return err
 			}
 		}
 	}
-	return
+	return nil
+}
+
+func makeVolumeDir(dirPath string) {
+	err := makeDir(dirPath, os.ModeDir|0700)
+	if err != nil {
+		log.Fatalf("Error creating %v: %v", dirPath, err)
+	}
 }
 
 func MakeFetcher(sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) *Fetcher {
-	MakeDir(sharedVolumePath)
-	MakeDir(sharedSecretPath)
-	MakeDir(sharedConfigPath)
+	makeVolumeDir(sharedVolumePath)
+	makeVolumeDir(sharedSecretPath)
+	makeVolumeDir(sharedConfigPath)
 
 	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
@@ -164,7 +172,7 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string, w http.Re
 		if err != nil {
 			e := fmt.Sprintf("Failed to write file %v: %v", writeFilePath, err)
 			log.Printf(e)
-			http.Error(w, e, 500)
+			http.Error(w, e, http.StatusInternalServerError)
 			return
 		}
 	}
@@ -173,7 +181,7 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string, w http.Re
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "only POST is supported on this endpoint", 405)
+		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -187,14 +195,14 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading request body")
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req FetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	log.Printf("fetcher received fetch request and started downloading: %v", req)
@@ -208,7 +216,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 			log.Printf(e)
-			http.Error(w, e, 400)
+			http.Error(w, e, http.StatusBadRequest)
 			return
 		}
 	} else {
@@ -217,7 +225,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
-			http.Error(w, e, 500)
+			http.Error(w, e, http.StatusInternalServerError)
 			return
 		}
 
@@ -235,7 +243,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
-				http.Error(w, e, 500)
+				http.Error(w, e, http.StatusInternalServerError)
 				return
 			}
 		} else {
@@ -245,7 +253,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
-				http.Error(w, e, 400)
+				http.Error(w, e, http.StatusBadRequest)
 				return
 			}
 
@@ -253,7 +261,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)
-				http.Error(w, e, 400)
+				http.Error(w, e, http.StatusBadRequest)
 				return
 			}
 		}
@@ -266,7 +274,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		err = fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			log.Println(err.Error())
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		tmpPath = tmpUnarchivePath
@@ -288,17 +296,23 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to get secret from kubeapi: %v", err)
 				log.Printf(e)
-				http.Error(w, e, 400)
+
+				httpCode := http.StatusInternalServerError
+				if k8serr.IsNotFound(err) {
+					httpCode = http.StatusNotFound
+				}
+
+				http.Error(w, e, httpCode)
 				return
 			}
 
 			secretPath := secret.Namespace + "/" + secret.Name
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
-			err = os.MkdirAll(secretDir, 0700)
+			err = makeDir(secretDir, os.ModeDir|0644)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", secretDir, err)
 				log.Printf(e)
-				http.Error(w, e, 500)
+				http.Error(w, e, http.StatusInternalServerError)
 				return
 			}
 			writeSecretOrConfigMap(data.Data, secretDir, w)
@@ -312,17 +326,23 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to get configmap from kubeapi: %v", err)
 				log.Printf(e)
-				http.Error(w, e, 400)
+
+				httpCode := http.StatusInternalServerError
+				if k8serr.IsNotFound(err) {
+					httpCode = http.StatusNotFound
+				}
+
+				http.Error(w, e, httpCode)
 				return
 			}
 
 			configPath := config.Namespace + "/" + config.Name
 			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
-			err = os.MkdirAll(configDir, 0700)
+			err = makeDir(configDir, os.ModeDir|0644)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", configDir, err)
 				log.Printf(e)
-				http.Error(w, e, 500)
+				http.Error(w, e, http.StatusInternalServerError)
 				return
 			}
 			configMap := make(map[string][]byte)
@@ -339,7 +359,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "only POST is supported on this endpoint", 405)
+		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -353,7 +373,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading request body")
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -361,7 +381,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	log.Printf("fetcher received upload request: %v", req)
@@ -374,7 +394,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		e := fmt.Sprintf("Error archiving zip file: %v", err)
 		log.Println(e)
-		http.Error(w, e, 500)
+		http.Error(w, e, http.StatusInternalServerError)
 		return
 	}
 
@@ -385,7 +405,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		e := fmt.Sprintf("Error uploading zip file: %v", err)
 		log.Println(e)
-		http.Error(w, e, 500)
+		http.Error(w, e, http.StatusInternalServerError)
 		return
 	}
 
@@ -393,7 +413,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		e := fmt.Sprintf("Error calculating checksum of zip file: %v", err)
 		log.Println(e)
-		http.Error(w, e, 500)
+		http.Error(w, e, http.StatusInternalServerError)
 		return
 	}
 
@@ -406,7 +426,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		e := fmt.Sprintf("Error encoding upload response: %v", err)
 		log.Println(e)
-		http.Error(w, e, 500)
+		http.Error(w, e, http.StatusInternalServerError)
 		return
 	}
 
