@@ -135,8 +135,8 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		return nil, err
 	}
 
-	switch fn.Spec.InvokeStrategy.ExecutionStrategy.Backend {
-	case fission.BackendTypeNewdeploy:
+	switch fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
+	case fission.ExecutorTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta)
 		return fs, err
 	default:
@@ -181,8 +181,8 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 	return env, nil
 }
 
-// StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
-// deploymgr and potential future backends
+// StartExecutor Starts executor and the executor components such as Poolmgr,
+// deploymgr and potential future executor types
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	restClient := fissionClient.GetCrdClient()

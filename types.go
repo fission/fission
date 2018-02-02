@@ -103,8 +103,8 @@ type (
 		FunctionName string `json:"functionName"`
 	}
 
-	//BackendType is the primary backend for an environment
-	BackendType string
+	//ExecutorType is the primary executor for an environment
+	ExecutorType string
 
 	//StrategyType is the strategy to be used for function execution
 	StrategyType string
@@ -122,23 +122,41 @@ type (
 		// cpu and memory resources as per K8S standards
 		Resources v1.ResourceRequirements `json:"resources"`
 
-		// InvokeStrategy decides the backend selection and execution parameters
+		// InvokeStrategy is a set of controls which affect how function executes
 		InvokeStrategy InvokeStrategy
 	}
 
-	// InvokeStrategy defines the type of strategy and parameters of the strategy
-	// User should set only one strategy
+	/*InvokeStrategy is a set of controls over how the function executes.
+	It affects the performance and resource usage of the function.
+
+	An InvokeStategy is of one of two types: ExecutionStrategy, which controls low-level
+	parameters such as which ExecutorType to use, when to autoscale, minimum and maximum
+	number of running instances, etc. A higher-level AbstractInvokeStrategy will also be
+	supported; this strategy would specify the target request rate of the function,
+	the target latency statistics, and the target cost (in terms of compute resources).
+	*/
 	InvokeStrategy struct {
 		ExecutionStrategy ExecutionStrategy
 		StrategyType      StrategyType
 	}
 
-	//ExecutionStrategy decides the scale & immediate/delayed creation
+	/*ExecutionStrategy specifies low-level parameters for function execution,
+	such as the number of instances.
+
+	MinScale affects the cold start behaviour for a function. If MinScale is 0 then the
+	deployment is created on first invocation of function and is good for requests of
+	asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are
+	created at the time of creation of function. This ensures faster response during first
+	invocation at the cost of consuming resources.
+
+	MaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent
+	and resources allocated to the function pod.
+	*/
 	ExecutionStrategy struct {
-		Backend   BackendType
-		MinScale  int
-		MaxScale  int
-		TargetCPU int
+		ExecutorType     ExecutorType
+		MinScale         int
+		MaxScale         int
+		TargetCPUPercent int
 	}
 
 	FunctionReferenceType string
@@ -312,8 +330,8 @@ const (
 )
 
 const (
-	BackendTypePoolmgr   = "poolmgr"
-	BackendTypeNewdeploy = "newdeploy"
+	ExecutorTypePoolmgr   = "poolmgr"
+	ExecutorTypeNewdeploy = "newdeploy"
 )
 
 const (

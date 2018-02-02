@@ -7,7 +7,7 @@ ROOT=$(dirname $0)/../..
 fn=nodejs-hello-$(date +%N)
 
 # Create a hello world function in nodejs, test it with an http trigger
-echo "Poolmgr Backend: Pre-test cleanup"
+echo "Poolmgr ExecutorType: Pre-test cleanup"
 fission env delete --name nodejs || true
 
 echo "Creating nodejs env"
@@ -15,7 +15,7 @@ fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 1
 trap "fission env delete --name nodejs" EXIT
 
 echo "Creating function"
-fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js --backend poolmgr
+fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js --executortype poolmgr
 trap "fission fn delete --name $fn" EXIT
 
 echo "Creating route"
@@ -33,4 +33,4 @@ echo $response | grep -i hello
 # crappy cleanup, improve this later
 kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
 
-echo "Poolmgr Backend: All done."
+echo "Poolmgr ExecutorType: All done."

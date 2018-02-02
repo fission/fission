@@ -29,7 +29,7 @@ import (
 )
 
 type fscRequestType int
-type backendType int
+type executorType int
 
 const (
 	TOUCH fscRequestType = iota
@@ -38,7 +38,7 @@ const (
 )
 
 const (
-	POOLMGR backendType = iota
+	POOLMGR executorType = iota
 	NEWDEPLOY
 )
 
@@ -49,7 +49,7 @@ type (
 		Environment       *crd.Environment      // function's environment
 		Address           string                // Host:Port or IP:Port that the function's service can be reached at.
 		KubernetesObjects []api.ObjectReference // Kubernetes Objects (within the function namespace)
-		Backend           backendType
+		Executor          executorType
 
 		Ctime time.Time
 		Atime time.Time

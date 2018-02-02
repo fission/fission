@@ -64,7 +64,7 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, backend string, targetcpu int) fission.InvokeStrategy {
+func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) fission.InvokeStrategy {
 
 	if maxScale == 0 {
 		maxScale = 1
@@ -74,16 +74,16 @@ func getInvokeStrategy(minScale int, maxScale int, backend string, targetcpu int
 		fatal("Maxscale must be higher than or equal to minscale")
 	}
 
-	var fnBackend fission.BackendType
-	switch backend {
+	var fnExecutor fission.ExecutorType
+	switch executorType {
 	case "":
-		fnBackend = fission.BackendTypePoolmgr
-	case fission.BackendTypePoolmgr:
-		fnBackend = fission.BackendTypePoolmgr
-	case fission.BackendTypeNewdeploy:
-		fnBackend = fission.BackendTypeNewdeploy
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypePoolmgr:
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypeNewdeploy:
+		fnExecutor = fission.ExecutorTypeNewdeploy
 	default:
-		fatal("Backend must be one of 'poolmgr' or 'newdeploy', default to 'poolmgr'")
+		fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 	}
 
 	// Right now a simple single case strategy implementation
@@ -91,10 +91,10 @@ func getInvokeStrategy(minScale int, maxScale int, backend string, targetcpu int
 	strategy := fission.InvokeStrategy{
 		StrategyType: fission.StrategyTypeExecution,
 		ExecutionStrategy: fission.ExecutionStrategy{
-			Backend:   fnBackend,
-			MinScale:  minScale,
-			MaxScale:  maxScale,
-			TargetCPU: targetcpu,
+			ExecutorType:     fnExecutor,
+			MinScale:         minScale,
+			MaxScale:         maxScale,
+			TargetCPUPercent: targetcpu,
 		},
 	}
 	return strategy
@@ -184,7 +184,7 @@ func fnCreate(c *cli.Context) error {
 		targetCPU = 80
 	}
 
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("backend"), targetCPU)
+	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), targetCPU)
 
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
@@ -417,14 +417,14 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "BACKEND", "MINSCALE", "MAXSCALE", "TARGETCPU")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "TARGETCPU")
 	for _, f := range fns {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
-			f.Spec.InvokeStrategy.ExecutionStrategy.Backend,
+			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
-			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPU)
+			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
 	}
 	w.Flush()
 

@@ -84,7 +84,7 @@ func MakeNewDeploy(
 	instanceID string,
 ) *NewDeploy {
 
-	log.Printf("Creating NewDeploy Backend")
+	log.Printf("Creating NewDeploy ExecutorType")
 
 	fetcherImg := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImg) == 0 {
@@ -186,7 +186,7 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 }
 
 func (deploy *NewDeploy) createFunction(fn *crd.Function) {
-	if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend != fission.BackendTypeNewdeploy {
+	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy {
 		return
 	}
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale <= 0 {
@@ -207,7 +207,7 @@ func (deploy *NewDeploy) createFunction(fn *crd.Function) {
 }
 
 func (deploy *NewDeploy) deleteFunction(fn *crd.Function) {
-	if fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
+	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 		c := make(chan *fnResponse)
 		deploy.requestChannel <- &fnRequest{
 			fn:              fn,
@@ -242,7 +242,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		"functionName":                    fn.Metadata.Name,
 		"functionUid":                     string(fn.Metadata.UID),
 		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		"backend":                         fission.BackendTypeNewdeploy,
+		"executorType":                    fission.ExecutorTypeNewdeploy,
 	}
 
 	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
@@ -298,7 +298,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		Environment:       env,
 		Address:           svcAddress,
 		KubernetesObjects: kubeObjRefs,
-		Backend:           fscache.NEWDEPLOY,
+		Executor:          fscache.NEWDEPLOY,
 	}
 
 	_, err = deploy.fsCache.Add(*fsvc)

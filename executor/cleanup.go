@@ -32,7 +32,7 @@ import (
 	"github.com/fission/fission/executor/fscache"
 )
 
-// cleanupObjects cleans up resources created by old backend instances
+// cleanupObjects cleans up resources created by old executortype instances
 func cleanupObjects(kubernetesClient *kubernetes.Clientset,
 	namespace string,
 	instanceId string) {
@@ -122,8 +122,8 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 					continue
 				}
 
-				// Ignore functions of NewDeploy backend with MinScale > 0
-				if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 && fn.Spec.InvokeStrategy.ExecutionStrategy.Backend == fission.BackendTypeNewdeploy {
+				// Ignore functions of NewDeploy ExecutorType with MinScale > 0
+				if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 && fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 					continue
 				}
 				deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)

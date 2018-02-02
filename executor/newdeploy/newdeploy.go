@@ -203,7 +203,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		minRepl = 1
 	}
 	maxRepl := int32(execStrategy.MaxScale)
-	targetCPU := int32(execStrategy.TargetCPU)
+	targetCPU := int32(execStrategy.TargetCPUPercent)
 
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {

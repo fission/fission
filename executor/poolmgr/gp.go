@@ -146,7 +146,7 @@ func MakeGenericPool(
 		"environmentName":                 gp.env.Metadata.Name,
 		"environmentUid":                  string(gp.env.Metadata.UID),
 		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		"backend":                         fission.BackendTypePoolmgr,
+		"executorType":                    fission.ExecutorTypePoolmgr,
 	}
 
 	// create the pool
@@ -593,7 +593,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 		Environment:       gp.env,
 		Address:           svcHost,
 		KubernetesObjects: kubeObjRefs,
-		Backend:           fscache.POOLMGR,
+		Executor:          fscache.POOLMGR,
 		Ctime:             time.Now(),
 		Atime:             time.Now(),
 	}
