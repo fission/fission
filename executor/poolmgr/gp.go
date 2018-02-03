@@ -137,7 +137,7 @@ func MakeGenericPool(
 		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
 		sharedMountPath:  "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
 		sharedSecretPath: "/secrets",
-		sharedCfgMapPath: "/config",
+		sharedCfgMapPath: "/configs",
 	}
 
 	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)

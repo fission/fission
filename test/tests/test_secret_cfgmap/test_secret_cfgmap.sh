@@ -66,7 +66,7 @@ echo "test secret passed"
 
 echo "Creating configmap"
 kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY=TESTVALUE -n default
-trap "kubectl delete confignap ${fn_cfgmap} -n default" EXIT
+trap "kubectl delete configmap ${fn_cfgmap} -n default" EXIT
 
 echo "creating function with configmap"
 fission fn create --name ${fn_cfgmap} --env python --code cfgmap.py --configmap ${fn_cfgmap}

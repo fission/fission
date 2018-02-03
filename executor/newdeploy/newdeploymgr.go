@@ -110,7 +110,7 @@ func MakeNewDeploy(
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
 		sharedMountPath:        "/userfunc",
 		sharedSecretPath:       "/secrets",
-		sharedCfgMapPath:       "/config",
+		sharedCfgMapPath:       "/configs",
 
 		requestChannel: make(chan *fnRequest),
 	}
