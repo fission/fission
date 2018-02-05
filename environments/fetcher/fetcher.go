@@ -307,7 +307,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fission.SecretReference
 				return httpCode, errors.New(e)
 			}
 
-			secretPath := secret.Namespace + "/" + secret.Name
+			secretPath := filepath.Join(secret.Namespace, secret.Name)
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
 			err = os.MkdirAll(secretDir, os.ModeDir|0644)
 			if err != nil {
@@ -338,7 +338,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fission.SecretReference
 				return httpCode, errors.New(e)
 			}
 
-			configPath := config.Namespace + "/" + config.Name
+			configPath := filepath.Join(config.Namespace, config.Name)
 			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
 			err = os.MkdirAll(configDir, os.ModeDir|0644)
 			if err != nil {

@@ -129,8 +129,8 @@ func fnCreate(c *cli.Context) error {
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 
-	secretNameSpace := c.String("secretns")
-	cfgMapNameSpace := c.String("configmapns")
+	secretNameSpace := c.String("secretNamespace")
+	cfgMapNameSpace := c.String("configmapNamespace")
 
 	if len(secretNameSpace) == 0 && len(secretName) > 0 {
 		secretNameSpace = metav1.NamespaceDefault
