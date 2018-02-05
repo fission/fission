@@ -218,8 +218,8 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
-			SecretList:     []fission.SecretReference{},
-			ConfigMapList:  []fission.ConfigMapReference{},
+			Secrets:        []fission.SecretReference{},
+			ConfigMaps:     []fission.ConfigMapReference{},
 			Resources:      resourceReq,
 			InvokeStrategy: invokeStrategy,
 		},
@@ -230,7 +230,7 @@ func fnCreate(c *cli.Context) error {
 			Name:      secretName,
 			Namespace: secretNameSpace,
 		}
-		function.Spec.SecretList = append(function.Spec.SecretList, newSecret)
+		function.Spec.Secrets = append(function.Spec.Secrets, newSecret)
 	}
 
 	if len(cfgMapName) > 0 {
@@ -238,7 +238,7 @@ func fnCreate(c *cli.Context) error {
 			Name:      cfgMapName,
 			Namespace: cfgMapNameSpace,
 		}
-		function.Spec.ConfigMapList = append(function.Spec.ConfigMapList, newCfgMap)
+		function.Spec.ConfigMaps = append(function.Spec.ConfigMaps, newCfgMap)
 	}
 
 	_, err = client.FunctionCreate(function)

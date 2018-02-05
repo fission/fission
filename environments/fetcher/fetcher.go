@@ -34,8 +34,8 @@ type (
 		Url           string                       `json:"url"`
 		StorageSvcUrl string                       `json:"storagesvcurl"`
 		Filename      string                       `json:"filename"`
-		SecretList    []fission.SecretReference    `json:"secretList"`
-		ConfigMapList []fission.ConfigMapReference `json:"configMapList"`
+		Secrets       []fission.SecretReference    `json:"secretList"`
+		ConfigMaps    []fission.ConfigMapReference `json:"configMapList"`
 	}
 
 	// UploadRequest send from builder manager describes which
@@ -210,7 +210,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Checking secrets/cfgmaps")
-	code, err = fetcher.FetchSecretsAndCfgMaps(req.SecretList, req.ConfigMapList)
+	code, err = fetcher.FetchSecretsAndCfgMaps(req.Secrets, req.ConfigMaps)
 	if err != nil {
 		http.Error(w, err.Error(), code)
 		return

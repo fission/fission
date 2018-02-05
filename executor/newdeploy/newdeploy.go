@@ -67,9 +67,9 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 				Namespace: fn.Spec.Package.PackageRef.Namespace,
 				Name:      fn.Spec.Package.PackageRef.Name,
 			},
-			Filename:      targetFilename,
-			SecretList:    fn.Spec.SecretList,
-			ConfigMapList: fn.Spec.ConfigMapList,
+			Filename:   targetFilename,
+			Secrets:    fn.Spec.Secrets,
+			ConfigMaps: fn.Spec.ConfigMaps,
 		}
 
 		loadReq := fission.FunctionLoadRequest{
