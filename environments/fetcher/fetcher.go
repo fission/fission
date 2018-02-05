@@ -67,20 +67,8 @@ const (
 	FETCH_URL // remove this?
 )
 
-func makeDir(dirPath string, perm os.FileMode) error {
-	if _, err := os.Stat(dirPath); err != nil {
-		if os.IsNotExist(err) {
-			err = os.MkdirAll(dirPath, perm)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func makeVolumeDir(dirPath string) {
-	err := makeDir(dirPath, os.ModeDir|0700)
+	err := os.MkdirAll(dirPath, os.ModeDir|0700)
 	if err != nil {
 		log.Fatalf("Error creating %v: %v", dirPath, err)
 	}
@@ -321,7 +309,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fission.SecretReference
 
 			secretPath := secret.Namespace + "/" + secret.Name
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
-			err = makeDir(secretDir, os.ModeDir|0644)
+			err = os.MkdirAll(secretDir, os.ModeDir|0644)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", secretDir, err)
 				log.Printf(e)
@@ -352,7 +340,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fission.SecretReference
 
 			configPath := config.Namespace + "/" + config.Name
 			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
-			err = makeDir(configDir, os.ModeDir|0644)
+			err = os.MkdirAll(configDir, os.ModeDir|0644)
 			if err != nil {
 				e := fmt.Sprintf("Failed to create directory %v: %v", configDir, err)
 				log.Printf(e)
