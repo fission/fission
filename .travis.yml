@@ -28,7 +28,7 @@ env:
 
 script:
   - cd ${TRAVIS_BUILD_DIR}
-  - glide install
+  - glide install -v
   - ./fission-bundle/build.sh
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
