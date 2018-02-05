@@ -74,14 +74,14 @@ func makeVolumeDir(dirPath string) {
 	}
 }
 
-func MakeFetcher(sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) *Fetcher {
+func MakeFetcher(sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
 	makeVolumeDir(sharedVolumePath)
 	makeVolumeDir(sharedSecretPath)
 	makeVolumeDir(sharedConfigPath)
 
 	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	return &Fetcher{
 		sharedVolumePath: sharedVolumePath,
@@ -89,7 +89,7 @@ func MakeFetcher(sharedVolumePath string, sharedSecretPath string, sharedConfigP
 		sharedConfigPath: sharedConfigPath,
 		fissionClient:    fissionClient,
 		kubeClient:       kubeClient,
-	}
+	}, nil
 }
 
 func downloadUrl(url string, localPath string) error {

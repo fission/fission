@@ -128,8 +128,13 @@ func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request
 	api.respondWithError(w, err)
 }
 
+func (api *API) HealthHandler (w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (api *API) Serve(port int) {
 	r := mux.NewRouter()
+	r.HandleFunc("/healthz", api.HealthHandler).Methods("GET")
 	// Give a useful error message if an older CLI attempts to make a request
 	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)
 	r.HandleFunc("/", api.HomeHandler)

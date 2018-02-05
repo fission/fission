@@ -99,10 +99,15 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (executor *Executor) Serve(port int) {
 	r := mux.NewRouter()
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
+	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
 	address := fmt.Sprintf(":%v", port)
 	log.Printf("starting executor at port %v", port)
 	ctx, cancel := context.WithCancel(context.Background())

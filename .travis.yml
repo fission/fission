@@ -18,6 +18,7 @@ services:
 before_install:
   - sudo apt-get update
   - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+  - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 
 install:
   - go get github.com/Masterminds/glide

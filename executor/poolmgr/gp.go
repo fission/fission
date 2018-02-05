@@ -519,6 +519,32 @@ func (gp *GenericPool) createPool() error {
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
 								gp.sharedMountPath},
+							ReadinessProbe: &apiv1.Probe {
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       2,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000, // TODO : Find out the correct port.
+										},
+									},
+								},
+							},
+							LivenessProbe: &apiv1.Probe {
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       5,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000, // TODO : Find out the correct port.
+										},
+									},
+								},
+							},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",

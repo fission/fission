@@ -42,7 +42,10 @@ func main() {
 		}
 	}
 
-	fetcher := fetcher.MakeFetcher(dir, *secretDir, *configDir)
+	fetcher, err := fetcher.MakeFetcher(dir, *secretDir, *configDir)
+	if err != nil {
+		log.Fatalf("Error making fetcher: %v", err)
+	}
 
 	if *specializeOnStart {
 		specializePod(fetcher, fetchPayload, loadPayload)
@@ -54,6 +57,8 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	log.Println("Fetcher ready to receive requests")
 	http.ListenAndServe(":8000", mux)
 }
 

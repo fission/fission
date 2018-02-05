@@ -129,6 +129,18 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888"]
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: "8888"
+          initialDelaySeconds: 5
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: "8888"
+          initialDelaySeconds: 16
+          periodSeconds: 5
       serviceAccount: fission-svc
 
 ---
@@ -151,6 +163,18 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
+        readinessProbe:
+          httpGet:
+            path: "/router-healthz"
+            port: "8888"
+          initialDelaySeconds: 5
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: "/router-healthz"
+            port: "8888"
+          initialDelaySeconds: 16
+          periodSeconds: 5
       serviceAccount: fission-svc
 
 ---
@@ -194,6 +218,18 @@ spec:
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: "8888"
+          initialDelaySeconds: 5
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: "8888"
+          initialDelaySeconds: 16
+          periodSeconds: 5
       serviceAccount: fission-svc
 
 ---

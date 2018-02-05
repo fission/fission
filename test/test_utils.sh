@@ -177,7 +177,7 @@ helm_install_fission() {
     echo "Installing fission"
     helm install		\
 	 --wait			\
-	 --timeout 600	        \
+	 --timeout 540	        \
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
@@ -190,28 +190,61 @@ helm_install_fission() {
 wait_for_service() {
     id=$1
     svc=$2
+    health_endpoint=$3
 
     ns=f-$id
+    retry=0
+    max_retries=5
     while true
     do
-	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-	if [ ! -z $ip ]
-	then
-	    break
-	fi
-	echo Waiting for service $svc...
-	sleep 1
+        retry=$((retry+1))
+        if ((retry == max_retries)); then
+            echo "Waiting for $svc to be routable exceeded max retries. Quitting.."
+            exit 1
+        fi
+        ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+        if [ -z $ip ]; then
+            continue
+        fi
+        echo "IP for $svc : $ip"
+        http_status=`curl -sw "%{http_code}" "http://$ip/$health_endpoint"`
+        echo "http_status for svc $svc : $http_status"
+        if [ "$http_status" -ne "200" ]; then
+            echo "Service $svc returned response other than 200. waiting for 200 after backing off for 1 second"
+            sleep 1
+        else
+            break
+        fi
     done
 }
 
 wait_for_services() {
     id=$1
 
-    wait_for_service $id controller
-    wait_for_service $id router
+    wait_for_service $id controller "healthz"
+    wait_for_service $id router "router-healthz"
 
-    echo Waiting for service is routable...
-    sleep 10
+    echo "Controller and router services are routable"
+}
+
+dump_kubernetes_events() {
+    id=$1
+    ns=f-$id
+    fns=f-func-$id
+    echo "--- kubectl events $fns ---"
+    kubectl get events -n $fns
+    echo "--- end kubectl events $fns ---"
+
+    echo "--- kubectl events $ns ---"
+    kubectl get events -n $ns
+    echo "--- end kubectl events $ns ---"
+}
+
+dump_tiller_logs() {
+    echo "--- tiller logs ---"
+    tiller_pod=`kubectl get pods -n kube-system | grep tiller| tr -s " "| cut -d" " -f1`
+    kubectl logs $tiller_pod -n kube-system
+    echo "--- end tiller logs ---"
 }
 
 helm_uninstall_fission() {(set +e
@@ -226,6 +259,8 @@ helm_uninstall_fission() {(set +e
     helm delete --purge $id
 
     kubectl delete ns f-$id
+    dump_kubernetes_events $id
+    dump_tiller_logs
 )}
 export -f helm_uninstall_fission
 
