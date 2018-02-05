@@ -255,12 +255,13 @@ helm_uninstall_fission() {(set +e
 	echo "Fission uninstallation skipped"
 	return
     fi
-    echo "Uninstalling fission"
-    helm delete --purge $id
 
-    kubectl delete ns f-$id
     dump_kubernetes_events $id
     dump_tiller_logs
+
+    echo "Uninstalling fission"
+    helm delete --purge $id
+    kubectl delete ns f-$id
 )}
 export -f helm_uninstall_fission
 

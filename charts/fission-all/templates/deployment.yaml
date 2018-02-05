@@ -169,7 +169,7 @@ spec:
             port: "8888"
           initialDelaySeconds: 5
           periodSeconds: 2
-         livenessProbe:
+        livenessProbe:
           httpGet:
             path: "/router-healthz"
             port: "8888"
@@ -226,7 +226,7 @@ spec:
             port: "8888"
           initialDelaySeconds: 5
           periodSeconds: 2
-         livenessProbe:
+        livenessProbe:
           httpGet:
             path: "/healthz"
             port: "8888"
