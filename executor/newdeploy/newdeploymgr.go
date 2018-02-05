@@ -48,6 +48,8 @@ type (
 		fetcherImagePullPolicy apiv1.PullPolicy
 		namespace              string
 		sharedMountPath        string
+		sharedSecretPath       string
+		sharedCfgMapPath       string
 
 		fsCache        *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
 		requestChannel chan *fnRequest
@@ -107,6 +109,8 @@ func MakeNewDeploy(
 		fetcherImg:             fetcherImg,
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
 		sharedMountPath:        "/userfunc",
+		sharedSecretPath:       "/secrets",
+		sharedCfgMapPath:       "/configs",
 
 		requestChannel: make(chan *fnRequest),
 	}

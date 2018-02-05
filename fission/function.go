@@ -126,6 +126,20 @@ func fnCreate(c *cli.Context) error {
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
 
+	secretName := c.String("secret")
+	cfgMapName := c.String("configmap")
+
+	secretNameSpace := c.String("secretNamespace")
+	cfgMapNameSpace := c.String("configmapNamespace")
+
+	if len(secretNameSpace) == 0 && len(secretName) > 0 {
+		secretNameSpace = metav1.NamespaceDefault
+	}
+
+	if len(cfgMapNameSpace) == 0 && len(cfgMapName) > 0 {
+		cfgMapNameSpace = metav1.NamespaceDefault
+	}
+
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -204,9 +218,27 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
+			Secrets:        []fission.SecretReference{},
+			ConfigMaps:     []fission.ConfigMapReference{},
 			Resources:      resourceReq,
 			InvokeStrategy: invokeStrategy,
 		},
+	}
+
+	if len(secretName) > 0 {
+		newSecret := fission.SecretReference{
+			Name:      secretName,
+			Namespace: secretNameSpace,
+		}
+		function.Spec.Secrets = append(function.Spec.Secrets, newSecret)
+	}
+
+	if len(cfgMapName) > 0 {
+		newCfgMap := fission.ConfigMapReference{
+			Name:      cfgMapName,
+			Namespace: cfgMapNameSpace,
+		}
+		function.Spec.ConfigMaps = append(function.Spec.ConfigMaps, newCfgMap)
 	}
 
 	_, err = client.FunctionCreate(function)
@@ -338,7 +370,6 @@ func fnUpdate(c *cli.Context) error {
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
 	}
-
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}

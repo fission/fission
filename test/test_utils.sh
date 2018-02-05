@@ -240,6 +240,25 @@ set_environment() {
     export PATH=$ROOT/fission:$PATH
 }
 
+dump_builder_pod_logs() {
+    bns=$1
+    builderPods=$(kubectl -n $bns get pod -o name)
+    
+    for p in $builderPods
+    do
+    echo "--- builder pod logs $p ---"
+    containers=$(kubectl -n $bns get $p -o jsonpath={.spec.containers[*].name} --ignore-not-found)
+    for c in $containers
+    do
+        echo "--- builder pod logs $p: container $c ---"
+        kubectl -n $bns logs $p $c || true
+        echo "--- end builder pod logs $p: container $c ---"
+    done
+    echo "--- end builder pod logs $p ---"
+    done
+
+}
+
 dump_function_pod_logs() {
     ns=$1
     fns=$2
@@ -248,11 +267,11 @@ dump_function_pod_logs() {
     for p in $functionPods
     do
 	echo "--- function pod logs $p ---"
-	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name})
+	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name} --ignore-not-found)
 	for c in $containers
 	do
 	    echo "--- function pod logs $p: container $c ---"
-	    kubectl -n $fns logs $p $c
+	    kubectl -n $fns logs $p $c || true
 	    echo "--- end function pod logs $p: container $c ---"
 	done
 	echo "--- end function pod logs $p ---"
@@ -265,7 +284,7 @@ dump_fission_logs() {
     component=$3
 
     echo --- $component logs ---
-    kubectl -n $ns get pod -o name  | grep $component | xargs kubectl -n $ns logs
+    kubectl -n $ns get pod -o name | grep $component | xargs kubectl -n $ns logs
     echo --- end $component logs ---
 }
 
@@ -316,6 +335,7 @@ dump_logs() {
 
     ns=f-$id
     fns=f-func-$id
+    bns=fission-builder
 
     dump_all_fission_resources $ns
     dump_env_pods $fns
@@ -324,6 +344,7 @@ dump_logs() {
     dump_fission_logs $ns $fns buildermgr
     dump_fission_logs $ns $fns executor
     dump_function_pod_logs $ns $fns
+    dump_builder_pod_logs $bns
     dump_fission_crds
 }
 

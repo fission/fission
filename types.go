@@ -67,6 +67,16 @@ type (
 		Name      string `json:"name"`
 	}
 
+	SecretReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
+	ConfigMapReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
 	BuildStatus string
 
 	PackageSpec struct {
@@ -118,6 +128,9 @@ type (
 
 		// Reference to a package containing deployment and optionally the source
 		Package FunctionPackageRef `json:"package"`
+
+		Secrets    []SecretReference    `json:"secrets"`
+		ConfigMaps []ConfigMapReference `json:"configmaps"`
 
 		// cpu and memory resources as per K8S standards
 		Resources v1.ResourceRequirements `json:"resources"`

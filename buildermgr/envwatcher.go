@@ -417,7 +417,9 @@ func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string) 
 }
 
 func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*v1beta1.Deployment, error) {
-	sharedMountPath := "/package"
+	sharedMountPath := "/packages"
+	sharedCfgMapPath := "/configs"
+	sharedSecretPath := "/secrets"
 	name := envw.getCacheKey(env.Metadata.Name, env.Metadata.ResourceVersion)
 	sel := envw.getLabels(env.Metadata.Name, env.Metadata.ResourceVersion)
 	var replicas int32 = 1
@@ -483,7 +485,10 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 									MountPath: sharedMountPath,
 								},
 							},
-							Command: []string{"/fetcher", sharedMountPath},
+							Command: []string{"/fetcher",
+								"-secret-dir", sharedSecretPath,
+								"-cfgmap-dir", sharedCfgMapPath,
+								sharedMountPath},
 							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
 								PeriodSeconds:       2,

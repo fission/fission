@@ -20,9 +20,12 @@ import (
 // Usage: fetcher <shared volume path>
 func main() {
 	flag.Usage = fetcherUsage
+	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
 	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
 	loadPayload := flag.String("load-request", "", "JSON payload for Load request")
-	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
+	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
+	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")
+
 	flag.Parse()
 	if flag.NArg() == 0 {
 		flag.Usage()
@@ -39,7 +42,7 @@ func main() {
 		}
 	}
 
-	fetcher := fetcher.MakeFetcher(dir)
+	fetcher := fetcher.MakeFetcher(dir, *secretDir, *configDir)
 
 	if *specializeOnStart {
 		specializePod(fetcher, fetchPayload, loadPayload)
@@ -55,7 +58,7 @@ func main() {
 }
 
 func fetcherUsage() {
-	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] <shared volume path> \n")
+	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path> \n")
 }
 
 func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
@@ -68,6 +71,12 @@ func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string
 	_, err = f.Fetch(fetchReq)
 	if err != nil {
 		log.Fatalf("Error fetching: %v", err)
+	}
+
+	_, err = f.FetchSecretsAndCfgMaps(fetchReq.Secrets, fetchReq.ConfigMaps)
+	if err != nil {
+		log.Fatalf("Error fetching secerts/configmaps: %v", err)
+		return
 	}
 
 	// Specialize the pod
