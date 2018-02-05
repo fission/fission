@@ -13,6 +13,24 @@ anything else Dancer2 offers. You can also use Dancer2 and use its DSL.
 
 =cut
 
+use utf8;
+use strict;
+use warnings;
+
+# Get more helper functions (status and send_as below)
+use Dancer2;
+
 return sub {
-    return 'Hello, ' . (shift->param('name') // 'world');
+    my ($request) = @_;
+
+    my ($name) = $request->query_parameters->{'name'} // 'world';
+
+    # set status code by name
+    status 'i_m_a_teapot';
+
+    # send message as JSON
+    send_as JSON => {
+        msg => "Hello, $name",
+        auth => $request->header('Authorization'), # read request header
+    };
 };
