@@ -25,9 +25,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/dchest/uniuri"
 	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -104,13 +107,49 @@ func fileSize(filePath string) int64 {
 	return info.Size()
 }
 
+func fileChecksum(fileName string) (*fission.Checksum, error) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %v: %v", fileName, err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate checksum for %v", fileName)
+	}
+
+	return &fission.Checksum{
+		Type: fission.ChecksumTypeSHA256,
+		Sum:  hex.EncodeToString(h.Sum(nil)),
+	}, nil
+}
+
 // upload a file and return a fission.Archive
-func createArchive(client *client.Client, fileName string) *fission.Archive {
+func createArchive(client *client.Client, fileName string, specFile string) *fission.Archive {
 	var archive fission.Archive
 
 	// fetch archive from arbitrary url if fileName is a url
 	if strings.HasPrefix(fileName, "http://") || strings.HasPrefix(fileName, "https://") {
 		fileName = downloadToTempFile(fileName)
+	}
+
+	if len(specFile) > 0 {
+		// create an ArchiveUploadSpec and reference it from the archive
+		aus := &ArchiveUploadSpec{
+			Name:         kubifyName(path.Base(fileName)),
+			IncludeGlobs: []string{fileName},
+		}
+		// save the uploadspec
+		err := specSave(*aus, specFile)
+		checkErr(err, fmt.Sprintf("write spec file %v", specFile))
+		// create the archive
+		ar := &fission.Archive{
+			Type: fission.ArchiveTypeUrl,
+			URL:  fmt.Sprintf("%v%v", ARCHIVE_URL_PREFIX, aus.Name),
+		}
+		return ar
 	}
 
 	if fileSize(fileName) < fission.ArchiveLiteralSizeLimit {
@@ -130,26 +169,15 @@ func createArchive(client *client.Client, fileName string) *fission.Archive {
 		archive.Type = fission.ArchiveTypeUrl
 		archive.URL = archiveUrl
 
-		f, err := os.Open(fileName)
-		if err != nil {
-			checkErr(err, fmt.Sprintf("find file %v", fileName))
-		}
-		defer f.Close()
+		csum, err := fileChecksum(fileName)
+		checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
 
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
-		}
-
-		archive.Checksum = fission.Checksum{
-			Type: fission.ChecksumTypeSHA256,
-			Sum:  hex.EncodeToString(h.Sum(nil)),
-		}
+		archive.Checksum = *csum
 	}
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
+func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string, specFile string) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: metav1.NamespaceDefault,
@@ -158,20 +186,28 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 	}
 	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
 
+	var pkgName string
 	if len(deployArchiveName) > 0 {
-		pkgSpec.Deployment = *createArchive(client, deployArchiveName)
+		if len(specFile) > 0 { // we should do this in all cases, i think
+			pkgStatus = fission.BuildStatusNone
+		}
+		pkgSpec.Deployment = *createArchive(client, deployArchiveName, specFile)
+		pkgName = kubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveName), uniuri.NewLen(4)))
 	}
 	if len(srcArchiveName) > 0 {
-		pkgSpec.Source = *createArchive(client, srcArchiveName)
+		pkgSpec.Source = *createArchive(client, srcArchiveName, specFile)
 		// set pending status to package
 		pkgStatus = fission.BuildStatusPending
+		pkgName = kubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveName), uniuri.NewLen(4)))
 	}
 
 	if len(buildcmd) > 0 {
 		pkgSpec.BuildCommand = buildcmd
 	}
 
-	pkgName := strings.ToLower(uuid.NewV4().String())
+	if len(pkgName) == 0 {
+		pkgName = strings.ToLower(uuid.NewV4().String())
+	}
 	pkg := &crd.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,
@@ -182,9 +218,16 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 			BuildStatus: pkgStatus,
 		},
 	}
-	pkgMetadata, err := client.PackageCreate(pkg)
-	checkErr(err, "create package")
-	return pkgMetadata
+
+	if len(specFile) > 0 {
+		err := specSave(*pkg, specFile)
+		checkErr(err, "save package spec")
+		return &pkg.Metadata
+	} else {
+		pkgMetadata, err := client.PackageCreate(pkg)
+		checkErr(err, "create package")
+		return pkgMetadata
+	}
 }
 
 func getContents(filePath string) []byte {
@@ -262,4 +305,40 @@ func downloadURL(fileUrl string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
 	}
 	return resp.Body, nil
+}
+
+// make a kubernetes compliant name out of an arbitrary string
+func kubifyName(old string) string {
+	// Kubernetes maximum name length (for some names; others can be 253 chars)
+	maxLen := 63
+
+	newName := strings.ToLower(old)
+
+	// replace disallowed chars with '-'
+	inv, err := regexp.Compile("[^-a-z0-9]")
+	checkErr(err, "compile regexp")
+	newName = string(inv.ReplaceAll([]byte(newName), []byte("-")))
+
+	// trim leading non-alphabetic
+	leadingnonalpha, err := regexp.Compile("^[^a-z]+")
+	checkErr(err, "compile regexp")
+	newName = string(leadingnonalpha.ReplaceAll([]byte(newName), []byte{}))
+
+	// trim trailing
+	trailing, err := regexp.Compile("[^a-z0-9]+$")
+	checkErr(err, "compile regexp")
+	newName = string(trailing.ReplaceAll([]byte(newName), []byte{}))
+
+	// truncate to length
+	if len(newName) > maxLen {
+		newName = newName[0:maxLen]
+	}
+
+	// if we removed everything, call this thing "default". maybe
+	// we should generate a unique name...
+	if len(newName) == 0 {
+		newName = "default"
+	}
+
+	return newName
 }
