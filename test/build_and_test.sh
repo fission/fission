@@ -36,4 +36,4 @@ build_and_push_fluentd $FLUENTD_IMAGE:$TAG
 
 build_fission_cli
 
-install_and_test $IMAGE $TAG $FETCHER_IMAGE $TAG $FLUENTD_IMAGE $TAG $PRUNE_INTERVAL | while read line; do echo -e "$(tstamp)\t$line"; done
+install_and_test $IMAGE $TAG $FETCHER_IMAGE $TAG $FLUENTD_IMAGE $TAG $PRUNE_INTERVAL
