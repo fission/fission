@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,7 +38,6 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
-	"io/ioutil"
 )
 
 const SPEC_API_VERSION = "fission.io/v1"
@@ -420,7 +420,7 @@ func specApply(c *cli.Context) error {
 		checkErr(err, "read specs")
 
 		// make changes to the cluster based on the specs
-		pkgMeta, as, err := apply(fclient, specDir, fr, deleteResources)
+		pkgMetas, as, err := applyResources(fclient, specDir, fr, deleteResources)
 		checkErr(err, "apply specs")
 		printApplyStatus(as)
 
@@ -429,7 +429,7 @@ func specApply(c *cli.Context) error {
 		if watchResources || waitForBuild {
 			// watch package builds
 			ctx, pkgWatchCancel = context.WithCancel(context.Background())
-			pbw.addPackages(pkgMeta)
+			pbw.addPackages(pkgMetas)
 		}
 
 		if watchResources {
@@ -441,6 +441,7 @@ func specApply(c *cli.Context) error {
 		}
 
 		if !watchResources {
+			pkgWatchCancel()
 			break
 		}
 
@@ -533,7 +534,7 @@ func specDestroy(c *cli.Context) error {
 	emptyFr.deploymentConfig = fr.deploymentConfig
 
 	// "apply" the empty state
-	_, _, err = apply(fclient, specDir, &emptyFr, true)
+	_, _, err = applyResources(fclient, specDir, &emptyFr, true)
 	checkErr(err, "delete resources")
 
 	return nil
@@ -608,8 +609,8 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 	return nil
 }
 
-// apply applies the given set of fission resources.
-func apply(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]resourceApplyStatus, error) {
+// applyResources applies the given set of fission resources.
+func applyResources(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]resourceApplyStatus, error) {
 
 	applyStatus := make(map[string]resourceApplyStatus)
 
