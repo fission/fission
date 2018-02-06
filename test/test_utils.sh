@@ -206,7 +206,7 @@ wait_for_service() {
         if [ -z $ip ]; then
             continue
         fi
-        echo "IP for $svc : $ip"
+        echo "IP for $svc : $ip, healthendpoint : $health_endpoint"
         http_status=`curl -sw "%{http_code}" "http://$ip/$health_endpoint"`
         echo "http_status for svc $svc : $http_status"
         if [ "$http_status" -ne "200" ]; then
@@ -258,9 +258,6 @@ helm_uninstall_fission() {(set +e
 	echo "Fission uninstallation skipped"
 	return
     fi
-
-    dump_kubernetes_events $id
-    dump_tiller_logs
 
     echo "Uninstalling fission"
     helm delete --purge $id
@@ -442,6 +439,8 @@ install_and_test() {
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
 	dump_logs $id
+	dump_kubernetes_events $id
+    dump_tiller_logs
 	exit 1
     fi
 
