@@ -171,8 +171,8 @@ helm_install_fission() {
 
     timeout 30 bash -c "helm_setup"
 
-#    echo "Deleting old releases"
-#    helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
+    echo "Deleting old releases"
+    helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     echo "Installing fission"
     helm install		\
