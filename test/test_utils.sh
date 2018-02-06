@@ -243,7 +243,7 @@ dump_kubernetes_events() {
 dump_tiller_logs() {
     echo "--- tiller logs ---"
     tiller_pod=`kubectl get pods -n kube-system | grep tiller| tr -s " "| cut -d" " -f1`
-    kubectl logs $tiller_pod -n kube-system
+    kubectl logs $tiller_pod --since=30m -n kube-system
     echo "--- end tiller logs ---"
 }
 
