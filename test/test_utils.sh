@@ -171,8 +171,8 @@ helm_install_fission() {
 
     timeout 30 bash -c "helm_setup"
 
-    echo "Deleting old releases"
-    helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
+#    echo "Deleting old releases"
+#    helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     echo "Installing fission"
     helm install		\
@@ -379,7 +379,7 @@ dump_logs() {
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns buildermgr
     dump_fission_logs $ns $fns executor
-    dump_fission_logs $ns $fn storagsvc
+    dump_fission_logs $ns $fns storagsvc
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
