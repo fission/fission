@@ -239,6 +239,7 @@ dump_kubernetes_events() {
     kubectl get events -n $ns
     echo "--- end kubectl events $ns ---"
 }
+export -f dump_kubernetes_events
 
 dump_tiller_logs() {
     echo "--- tiller logs ---"
@@ -246,6 +247,8 @@ dump_tiller_logs() {
     kubectl logs $tiller_pod --since=30m -n kube-system
     echo "--- end tiller logs ---"
 }
+export -f dump_tiller_logs
+
 
 helm_uninstall_fission() {(set +e
     id=$1
