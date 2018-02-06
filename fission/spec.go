@@ -424,13 +424,12 @@ func specApply(c *cli.Context) error {
 		checkErr(err, "apply specs")
 		printApplyStatus(as)
 
-		var ctx context.Context
-		var pkgWatchCancel context.CancelFunc
 		if watchResources || waitForBuild {
 			// watch package builds
-			ctx, pkgWatchCancel = context.WithCancel(context.Background())
 			pbw.addPackages(pkgMetas)
 		}
+
+		ctx, pkgWatchCancel := context.WithCancel(context.Background())
 
 		if watchResources {
 			// if we're watching for files, we don't need to wait for builds to complete
