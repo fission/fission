@@ -420,7 +420,7 @@ func specApply(c *cli.Context) error {
 		checkErr(err, "read specs")
 
 		// make changes to the cluster based on the specs
-		pkgMeta, as, err := apply(fclient, specDir, fr, deleteResources)
+		pkgMetas, as, err := apply(fclient, specDir, fr, deleteResources)
 		checkErr(err, "apply specs")
 		printApplyStatus(as)
 
@@ -429,7 +429,7 @@ func specApply(c *cli.Context) error {
 		if watchResources || waitForBuild {
 			// watch package builds
 			ctx, pkgWatchCancel = context.WithCancel(context.Background())
-			pbw.addPackages(pkgMeta)
+			pbw.addPackages(pkgMetas)
 		}
 
 		if watchResources {
