@@ -128,7 +128,7 @@ func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request
 	api.respondWithError(w, err)
 }
 
-func (api *API) HealthHandler (w http.ResponseWriter, r *http.Request) {
+func (api *API) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 

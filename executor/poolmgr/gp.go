@@ -519,7 +519,7 @@ func (gp *GenericPool) createPool() error {
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
 								gp.sharedMountPath},
-							ReadinessProbe: &apiv1.Probe {
+							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
 								PeriodSeconds:       2,
 								Handler: apiv1.Handler{
@@ -532,7 +532,7 @@ func (gp *GenericPool) createPool() error {
 									},
 								},
 							},
-							LivenessProbe: &apiv1.Probe {
+							LivenessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
 								PeriodSeconds:       5,
 								Handler: apiv1.Handler{
