@@ -149,6 +149,10 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func MakeStorageService(storageClient *StowClient, port int) *StorageService {
 	return &StorageService{
 		storageClient: storageClient,
@@ -161,6 +165,7 @@ func (ss *StorageService) Start(port int) {
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
+	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	address := fmt.Sprintf(":%v", port)
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))

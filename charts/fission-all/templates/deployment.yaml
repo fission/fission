@@ -559,6 +559,18 @@ spec:
         volumeMounts:
         - name: fission-storage
           mountPath: /fission
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8000
+          initialDelaySeconds: 16
+          periodSeconds: 5
       serviceAccount: fission-svc
       volumes:
       - name: fission-storage
