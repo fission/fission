@@ -435,7 +435,7 @@ install_and_test() {
     clean_tpr_crd_resources
 
     id=$(generate_test_id)
-    trap "helm_uninstall_fission $id" EXIT
+    #trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
 	dump_logs $id
