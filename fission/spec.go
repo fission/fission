@@ -34,10 +34,11 @@ import (
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"io/ioutil"
+
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
-	"io/ioutil"
 )
 
 const SPEC_API_VERSION = "fission.io/v1"
@@ -441,6 +442,7 @@ func specApply(c *cli.Context) error {
 		}
 
 		if !watchResources {
+			pkgWatchCancel()
 			break
 		}
 
