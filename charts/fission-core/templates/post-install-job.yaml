@@ -13,7 +13,8 @@ metadata:
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
-    "helm.sh/hook": post-install
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
 spec:
   template:
     metadata:
@@ -26,5 +27,5 @@ spec:
       containers:
         - name: post-install-job
           image: "fission/alpinecurl"
-          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-install\", \"chartName\": \"{{ .Chart.Name }}\", \"chartName\": \"{{ .Chart.Version }}\"}' https://g.fission.sh/analytics || true"]
+          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-install\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.sh/analytics || true"]
 {{ end }}
