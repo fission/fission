@@ -305,9 +305,10 @@ attach_github_release_charts() {
 generate_changelog() {
     version=$1
 
-    echo "#${version}" > new_CHANGELOG.md
+    echo "# ${version}" > new_CHANGELOG.md
     echo
     echo "[Documentation](http://fission.io/docs/${version}/)" >> new_CHANGELOG.md
+    echo
 
     create_downloads_table ${version} >> new_CHANGELOG.md
 

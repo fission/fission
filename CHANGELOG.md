@@ -1,7 +1,6 @@
-#0.5.0
+# 0.5.0
 [Documentation](http://fission.io/docs/0.5.0/)
 ## Downloads for 0.5.0
-
 
 filename | sha256 hash
 -------- | -----------
