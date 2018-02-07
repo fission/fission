@@ -20,19 +20,19 @@ PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The
 
 dump_system_info
 
-#build_and_push_fission_bundle $IMAGE:$TAG
-#
-#build_and_push_fetcher $FETCHER_IMAGE:$TAG
-#
-#build_and_push_builder $BUILDER_IMAGE:$TAG
-#
-#ENV='python'
-#
-#build_and_push_env_runtime $ENV $REPO/$ENV-env:$TAG
-#
-#build_and_push_env_builder $ENV $REPO/$ENV-env-builder:$TAG $BUILDER_IMAGE:$TAG
-#
-#build_and_push_fluentd $FLUENTD_IMAGE:$TAG
+build_and_push_fission_bundle $IMAGE:$TAG
+
+build_and_push_fetcher $FETCHER_IMAGE:$TAG
+
+build_and_push_builder $BUILDER_IMAGE:$TAG
+
+ENV='python'
+
+build_and_push_env_runtime $ENV $REPO/$ENV-env:$TAG
+
+build_and_push_env_builder $ENV $REPO/$ENV-env-builder:$TAG $BUILDER_IMAGE:$TAG
+
+build_and_push_fluentd $FLUENTD_IMAGE:$TAG
 
 build_fission_cli
 
