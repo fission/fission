@@ -264,9 +264,9 @@ helm_uninstall_fission() {(set +e
 
     echo "Uninstalling fission"
     helm delete --purge $id
-    kubectl delete ns f-$id || true
-    kubectl delete ns f-func-$id || true
-    kubectl delete ns fission-builder || true
+#    kubectl delete ns f-$id || true
+#    kubectl delete ns f-func-$id || true
+#    kubectl delete ns fission-builder || true
 )}
 export -f helm_uninstall_fission
 
