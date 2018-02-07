@@ -1,5 +1,5 @@
 ---
-title: "Tutorial"
+title: "Tutorials"
 weight: 40
 ---
 

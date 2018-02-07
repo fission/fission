@@ -4,7 +4,7 @@ draft: false
 weight: 41
 ---
 
-From fission v0.5.0 and later, functions are able to access [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) and [ConfigMap](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) specified by users.
+From fission v0.5.0 and later, functions are able to access [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) and [ConfigMaps](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) specified by users.
 
 ### Create Secret and ConfigMap
 
@@ -15,7 +15,7 @@ $ kubectl -n default create secret generic foo --from-literal=TEST_KEY="TESTVALU
 $ kubectl -n default create configmap bar --from-literal=TEST_KEY=TESTVALUE
 ```
 
-Or create both of them with following YAML.
+Or use `kubectl create -f <filename.yaml>` to create these from a YAML file.
 
 ``` yaml
 apiVersion: v1
@@ -39,7 +39,7 @@ data:
 
 ### Access Secret and ConfigMap
 
-Since content of Secret and ConfigMap are Key-Value pairs, functions can access them with following paths:
+Since content of Secret and ConfigMap are key-value pairs, functions can access them with following paths:
 
 ``` bash
 # Secret path
@@ -93,7 +93,7 @@ $ fission route create --function leaker --url /leaker --method GET
 ```
 
 
-Try to access function, and the output should look like following.
+Try to access the function, the output should look like following.
 
 ``` bash
 $ curl http://$FISSION_ROUTER/leaker
