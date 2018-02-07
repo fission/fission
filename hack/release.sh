@@ -8,10 +8,11 @@ BUILDDIR=$(realpath $DIR)/build
 
 # Ensure we're on the master branch
 check_branch() {
+    version=$1
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
-    if [ $curr_branch != "master" ]
+    if [ $curr_branch != "v${version}" ]
     then
-	echo "Not on master branch."
+	echo "Not on v${version} branch."
 	exit 1
     fi
 }
@@ -301,17 +302,59 @@ attach_github_release_charts() {
 
 }
 
+generate_changelog() {
+    version=$1
+
+    echo "#${version}" > new_CHANGELOG.md
+    echo
+    echo "[Documentation](http://fission.io/docs/${version}/)" >> new_CHANGELOG.md
+
+    create_downloads_table ${version} >> new_CHANGELOG.md
+
+    # generate changelog from github
+    github_changelog_generator fission/fission -t ${GITHUB_TOKEN} --future-release ${version} --no-issues -o tmp_CHANGELOG.md
+    sed -i '' -e '$ d' tmp_CHANGELOG.md
+
+    # concatenate two files
+    cat tmp_CHANGELOG.md >> new_CHANGELOG.md
+    mv new_CHANGELOG.md ${DIR}/CHANGELOG.md
+
+    rm tmp_CHANGELOG.md
+}
+
+create_downloads_table () {
+  release_tag=$1
+  url_prefix="https://github.com/fission/fission/releases/download"
+
+  echo "## Downloads for ${version}"
+  echo
+
+  files=$(find build -name '*' -type f)
+
+  echo
+  echo "filename | sha256 hash"
+  echo "-------- | -----------"
+  for file in $files; do
+    echo "[${file##*/}]($url_prefix/$release_tag/${file##*/}) | \`$(shasum -a 256 $file | cut -d' ' -f 1)\`"
+  done
+  echo
+}
+export -f create_downloads_table
+
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
-check_branch
-check_clean
+
 version=$1
+check_branch $version
+check_clean
 
 build_all $version
 push_all $version
-build_and_push_all_envs $version 
+build_and_push_all_envs $version
 build_charts $version
 
 tag_and_release $version
 attach_github_release_cli $version
 attach_github_release_charts $version
+
+generate_changelog $version
