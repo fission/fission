@@ -39,14 +39,15 @@ build_cli() {
     arch="amd64" # parameterize if/when we need to
     
     pushd $DIR/fission
-    GOOS=$os GOARCH=$arch go build .
 
-    if [ "$os" == "windows" ]
+    if [ "$osName" == "windows" ]
     then
-	binary=fission.exe
+	binary=fission-cli-${osName}.exe
     else
-	binary=fission
+	binary=fission-cli-${osName}
     fi
+
+    GOOS=$os GOARCH=$arch go build -o $binary .
 
     outdir=$BUILDDIR/cli/$osName/
     mkdir -p $outdir
@@ -256,7 +257,7 @@ attach_github_release_cli() {
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-osx \
-	   --file $BUILDDIR/cli/osx/fission
+	   --file $BUILDDIR/cli/osx/fission-cli-osx
 
     echo "Uploading linux cli"
     gothub upload \
@@ -265,7 +266,7 @@ attach_github_release_cli() {
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-linux \
-	   --file $BUILDDIR/cli/linux/fission
+	   --file $BUILDDIR/cli/linux/fission-cli-linux
 
     echo "Uploading windows cli"
     gothub upload \
@@ -274,7 +275,7 @@ attach_github_release_cli() {
 	   --repo fission \
 	   --tag $gittag \
 	   --name fission-cli-windows.exe \
-	   --file $BUILDDIR/cli/windows/fission.exe
+	   --file $BUILDDIR/cli/windows/fission-cli-windows.exe
 }
 
 attach_github_release_charts() {
