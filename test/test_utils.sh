@@ -174,6 +174,9 @@ helm_install_fission() {
     echo "Deleting old releases"
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
+    # deleting ns does take a while after command is issued.
+    sleep 45
+
     echo "Installing fission"
     helm install		\
 	 --wait			\
@@ -261,7 +264,9 @@ helm_uninstall_fission() {(set +e
 
     echo "Uninstalling fission"
     helm delete --purge $id
-    kubectl delete ns f-$id
+    kubectl delete ns f-$id || true
+    kubectl delete ns f-func-$id || true
+    kubectl delete ns fission-builder || true
 )}
 export -f helm_uninstall_fission
 
