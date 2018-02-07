@@ -60,6 +60,7 @@ var (
 )
 
 func MakeStowClient(storageType StorageType, storagePath string, containerName string) (*StowClient, error) {
+	log.Infof("start : MakeStowClient")
 	if storageType != StorageTypeLocal {
 		return nil, errors.New("Storage types other than 'local' are not implemented")
 	}
@@ -104,6 +105,7 @@ func MakeStowClient(storageType StorageType, storagePath string, containerName s
 	}
 	stowClient.container = con
 
+	log.Infof("end : MakeStowClient")
 	return stowClient, nil
 }
 
