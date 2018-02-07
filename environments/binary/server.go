@@ -11,8 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/fission/fission"
 )
 
 const (
@@ -22,10 +20,29 @@ const (
 
 var specialized bool
 
-type BinaryServer struct {
-	fetchedCodePath  string
-	internalCodePath string
-}
+type (
+	BinaryServer struct {
+		fetchedCodePath  string
+		internalCodePath string
+	}
+
+	FunctionLoadRequest struct {
+		// FilePath is an absolute filesystem path to the
+		// function. What exactly is stored here is
+		// env-specific. Optional.
+		FilePath string `json:"filepath"`
+
+		// FunctionName has an environment-specific meaning;
+		// usually, it defines a function within a module
+		// containing multiple functions. Optional; default is
+		// environment-specific.
+		FunctionName string `json:"functionName"`
+
+		// URL to expose this function at. Optional; defaults
+		// to "/".
+		URL string `json:"url"`
+	}
+)
 
 func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
 	if specialized {
@@ -34,7 +51,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	request := fission.FunctionLoadRequest{}
+	request := FunctionLoadRequest{}
 
 	codePath := bs.fetchedCodePath
 	err := json.NewDecoder(r.Body).Decode(&request)
