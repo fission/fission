@@ -18,13 +18,13 @@ package executor
 
 import (
 	"log"
-	"strings"
-	"sync"
-	"time"
 	"os"
 	"os/signal"
-	"syscall"
 	"runtime/debug"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/dchest/uniuri"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -194,12 +194,12 @@ func dumpStackTrace() {
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
 	// register signal handler for dumping stack trace.
 	c := make(chan os.Signal, 1)
-    	signal.Notify(c, syscall.SIGTERM)
-    	go func() {
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
 		<-c
 		dumpStackTrace()
 		os.Exit(1)
-    	}()
+	}()
 
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	restClient := fissionClient.GetCrdClient()

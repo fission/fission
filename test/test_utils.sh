@@ -59,7 +59,7 @@ build_and_push_fission_bundle() {
 
     pushd $ROOT/fission-bundle
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -72,7 +72,7 @@ build_and_push_fetcher() {
 
     pushd $ROOT/environments/fetcher/cmd
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -86,7 +86,7 @@ build_and_push_builder() {
 
     pushd $ROOT/builder/cmd
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -98,7 +98,7 @@ build_and_push_fluentd(){
     image_tag=$1
 
     pushd $ROOT/logger/fluentd
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -112,7 +112,7 @@ build_and_push_env_runtime() {
     image_tag=$2
 
     pushd $ROOT/environments/$env/
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -127,7 +127,7 @@ build_and_push_env_builder() {
 
     pushd $ROOT/environments/$env/builder
 
-    docker build -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
+    docker build -q -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
 
     gcloud_login
 
@@ -461,7 +461,7 @@ install_and_test() {
     clean_tpr_crd_resources
 
     id=$(generate_test_id)
-    #trap "helm_uninstall_fission $id" EXIT
+    trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
 	describe_all_pods $id

@@ -45,10 +45,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 	"os/signal"
-	"syscall"
 	"runtime/debug"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -81,12 +81,12 @@ func dumpStackTrace() {
 func Start(port int, executorUrl string) {
 	// register signal handler for dumping stack trace.
 	c := make(chan os.Signal, 1)
-    	signal.Notify(c, syscall.SIGTERM)
-    	go func() {
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
 		<-c
 		dumpStackTrace()
 		os.Exit(1)
-    	}()
+	}()
 
 	fmap := makeFunctionServiceMap(time.Minute)
 

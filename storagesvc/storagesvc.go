@@ -22,11 +22,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
-	"time"
 	"os/signal"
-	"syscall"
 	"runtime/debug"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -181,12 +181,12 @@ func dumpStackTrace() {
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int, enablePruner bool) *StorageService {
 	// register signal handler for dumping stack trace.
 	c := make(chan os.Signal, 1)
-    	signal.Notify(c, syscall.SIGTERM)
-    	go func() {
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
 		<-c
 		dumpStackTrace()
 		os.Exit(1)
-    	}()
+	}()
 
 	// initialize logger
 	log.SetLevel(log.InfoLevel)
