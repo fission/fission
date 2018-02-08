@@ -16,5 +16,4 @@ then
     cd $d
     cp ${SRC_PKG} ./function.go
     go build -buildmode=plugin -i -o ${DEPLOY_PKG} .
-    cd /
 fi
