@@ -184,7 +184,6 @@ helm_install_fission() {
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 --debug                \
 	 $ROOT/charts/fission-all
 
     helm list
@@ -373,8 +372,8 @@ dump_all_fission_resources() {
     ns=$1
 
     echo "--- All objects in the fission namespace $ns ---"
-    kubectl -n $ns get all
     kubectl -n $ns get pods -o wide
+    kubectl -n $ns get svc
     echo "--- End objects in the fission namespace $ns ---"
 }
 
@@ -406,11 +405,11 @@ dump_logs() {
     dump_fission_crds
 }
 
-DATE='date +%Y/%m/%d:%H:%M:%S'
 echo_log() {
-    echo `$DATE`" $1"
+    echo `date +%Y/%m/%d:%H:%M:%S`" $1"
 }
 
+export -f echo_log
 export FAILURES=0
 
 run_all_tests() {
@@ -465,7 +464,7 @@ install_and_test() {
     #trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
-	dump_logs $id
+	describe_all_pods $id
 	dump_kubernetes_events $id
     dump_tiller_logs
 	exit 1
@@ -483,7 +482,7 @@ install_and_test() {
     if [ $FAILURES -ne 0 ]
     then
     # describe each pod in fission ns and function namespace
-
+    describe_all_pods $id
 	exit 1
     fi
 }
