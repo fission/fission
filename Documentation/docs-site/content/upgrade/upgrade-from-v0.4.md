@@ -40,5 +40,5 @@ Upgrade fission with a command similar to this:
 $ helm list
 
 # upgrade to 0.5.0
-$ helm upgrade <release_name> https://github.com/fission/fission/releases/download/0.5.0/fission-all-0.5.0.tgz --namespace fission
+$ helm upgrade <release_name> https://github.com/fission/fission/releases/download/0.5.0/fission-all-0.5.0.tgz
 ```
