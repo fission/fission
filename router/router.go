@@ -46,6 +46,9 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"os/signal"
+	"syscall"
+	"runtime/debug"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -71,7 +74,20 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 	http.ListenAndServe(url, handlers.LoggingHandler(os.Stdout, mr))
 }
 
+func dumpStackTrace() {
+	debug.PrintStack()
+}
+
 func Start(port int, executorUrl string) {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+    	signal.Notify(c, syscall.SIGTERM)
+    	go func() {
+		<-c
+		dumpStackTrace()
+		os.Exit(1)
+    	}()
+
 	fmap := makeFunctionServiceMap(time.Minute)
 
 	fissionClient, _, _, err := crd.MakeFissionClient()

@@ -62,5 +62,5 @@ if [ $num -ne 4 ]
 then
     echo "Test Failed: expected 4, found $num logs"
 fi
- 
+
 echo "All done."

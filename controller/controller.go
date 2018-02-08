@@ -18,11 +18,28 @@ package controller
 
 import (
 	"log"
+	"os/signal"
+	"syscall"
+	"os"
+	"runtime/debug"
 
 	"github.com/fission/fission/crd"
 )
 
+func dumpStackTrace() {
+	debug.PrintStack()
+}
+
 func Start(port int) {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+    	signal.Notify(c, syscall.SIGTERM)
+    	go func() {
+		<-c
+		dumpStackTrace()
+		os.Exit(1)
+    	}()
+
 	fc, _, apiExtClient, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Failed to connect to K8s API: %v", err)

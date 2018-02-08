@@ -21,6 +21,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
+	"runtime/debug"
 
 	"github.com/dchest/uniuri"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -181,9 +185,22 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 	return env, nil
 }
 
+func dumpStackTrace() {
+	debug.PrintStack()
+}
+
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+    	signal.Notify(c, syscall.SIGTERM)
+    	go func() {
+		<-c
+		dumpStackTrace()
+		os.Exit(1)
+    	}()
+
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	restClient := fissionClient.GetCrdClient()
 	if err != nil {

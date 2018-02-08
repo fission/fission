@@ -264,9 +264,7 @@ helm_uninstall_fission() {(set +e
 
     echo "Uninstalling fission"
     helm delete --purge $id
-#    kubectl delete ns f-$id || true
-#    kubectl delete ns f-func-$id || true
-#    kubectl delete ns fission-builder || true
+    kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission
 
@@ -284,7 +282,7 @@ set_environment() {
 dump_builder_pod_logs() {
     bns=$1
     builderPods=$(kubectl -n $bns get pod -o name)
-    
+
     for p in $builderPods
     do
     echo "--- builder pod logs $p ---"
@@ -359,6 +357,7 @@ dump_all_fission_resources() {
 
     echo "--- All objects in the fission namespace $ns ---"
     kubectl -n $ns get all
+    kubectl -n $ns get pods -o wide
     echo "--- End objects in the fission namespace $ns ---"
 }
 

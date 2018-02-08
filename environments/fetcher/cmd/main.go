@@ -12,13 +12,29 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"os/signal"
+	"syscall"
+	"runtime/debug"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
 
+func dumpStackTrace() {
+	debug.PrintStack()
+}
+
 // Usage: fetcher <shared volume path>
 func main() {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+    	signal.Notify(c, syscall.SIGTERM)
+    	go func() {
+		<-c
+		dumpStackTrace()
+		os.Exit(1)
+    	}()
+
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
 	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
