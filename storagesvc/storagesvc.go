@@ -184,6 +184,7 @@ func RunStorageService(storageType StorageType, storagePath string, containerNam
 	signal.Notify(c, syscall.SIGTERM)
 	go func() {
 		<-c
+		log.Println("Recived SIGTERM : Dumping stack trace")
 		dumpStackTrace()
 		os.Exit(1)
 	}()

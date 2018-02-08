@@ -208,7 +208,6 @@ wait_for_service() {
         if [ -z $ip ]; then
             continue
         fi
-        echo "IP for $svc : $ip, healthendpoint : $health_endpoint"
         http_status=`curl -sw "%{http_code}" "http://$ip/$health_endpoint"`
         echo "http_status for svc $svc : $http_status"
         if [ "$http_status" -ne "200" ]; then
@@ -223,10 +222,10 @@ wait_for_service() {
 wait_for_services() {
     id=$1
 
+    echo "\n--- wait for controller and router services to be routable ---"
     wait_for_service $id controller "healthz"
     wait_for_service $id router "router-healthz"
-
-    echo "Controller and router services are routable"
+    echo "\n--- end wait for controller and router services to be routable ---"
 }
 
 dump_kubernetes_events() {
@@ -373,6 +372,7 @@ dump_all_fission_resources() {
 
     echo "--- All objects in the fission namespace $ns ---"
     kubectl -n $ns get pods -o wide
+    echo ""
     kubectl -n $ns get svc
     echo "--- End objects in the fission namespace $ns ---"
 }
