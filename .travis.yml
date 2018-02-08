@@ -2,6 +2,10 @@ sudo: required
 
 dist: trusty
 
+branches:
+  only:
+  - master
+
 language: go
 
 go:
@@ -14,10 +18,6 @@ cache:
 
 services:
   - docker
-
-#branches:
-#  only:
-#  - master
 
 before_install:
   - sudo apt-get update

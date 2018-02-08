@@ -197,7 +197,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	signal.Notify(c, syscall.SIGTERM)
 	go func() {
 		<-c
-		log.Println("Recived SIGTERM : Dumping stack trace")
+		log.Println("Received SIGTERM : Dumping stack trace")
 		dumpStackTrace()
 		os.Exit(1)
 	}()
