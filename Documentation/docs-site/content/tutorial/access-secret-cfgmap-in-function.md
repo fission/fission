@@ -39,8 +39,6 @@ data:
 
 ### Access Secret and ConfigMap
 
-** NOTICE **: Due to current design constraints, the value of Secret and ConfigMap that functions access to may not consistent with the latest value. For now, you can recreate the function to update the value of Secret and ConfigMap.
-
 Since content of Secret and ConfigMap are key-value pairs, functions can access them with following paths:
 
 ``` bash
@@ -103,4 +101,5 @@ ConfigMap: TESTVALUE
 Secret: TESTVALUE
 ```
 
+Note: If the Secret or ConfigMap value is updated, the function may not get the updated value for some time; it may get a cached older value.
 
