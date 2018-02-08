@@ -352,6 +352,23 @@ dump_env_pods() {
     echo --- End environment pods ---
 }
 
+describe_pods_ns() {
+    echo "--- describe pods $1---"
+    kubect describe pods -n $1
+    echo "--- End describe pods $1 ---"
+}
+
+describe_all_pods() {
+    id=$1
+    ns=f-$id
+    fns=f-func-$id
+    bns=fission-builder
+
+    describe_pods_ns $ns
+    describe_pods_ns $fns
+    describe_pods_ns $bns
+}
+
 dump_all_fission_resources() {
     ns=$1
 
@@ -387,6 +404,11 @@ dump_logs() {
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
+}
+
+DATE='date +%Y/%m/%d:%H:%M:%S'
+echo_log() {
+    echo `$DATE`" $1"
 }
 
 export FAILURES=0
@@ -460,6 +482,8 @@ install_and_test() {
 
     if [ $FAILURES -ne 0 ]
     then
+    # describe each pod in fission ns and function namespace
+
 	exit 1
     fi
 }
