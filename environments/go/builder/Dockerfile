@@ -8,7 +8,6 @@ FROM golang:${GO_VERSION}
 COPY --from=0 /builder /builder
 
 ENV GOPATH /usr
-RUN go get github.com/fission/fission
 
 ADD build.sh /usr/local/bin/build
 

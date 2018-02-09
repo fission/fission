@@ -48,7 +48,7 @@ build_cli() {
 	binary=fission-cli-${osName}
     fi
 
-    GOOS=$os GOARCH=$arch go build -o $binary .
+    GOOS=$os GOARCH=$arch go build -gcflags=-trimpath=$GOPATH -asmflags=-trimpath=$GOPATH -o $binary .
 
     outdir=$BUILDDIR/cli/$osName/
     mkdir -p $outdir
