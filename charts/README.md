@@ -39,7 +39,7 @@ The following table lists the configurable parameters of the Fission chart and t
 
 | Parameter           | Description                                | Default                  |
 | ------------------- | ------------------------------------------ | ------------------------ |
-| `serviceType`       | Type of service to use                     | `LoadBalancer`.          |
+| `serviceType`       | Type of service to use                     | `LoadBalancer`           |
 | `image`             | Fission image                              | `fission/fission-bundle` |
 | `imageTag`          | Fission image tag                          | `alpha20170124`          |
 | `fetcherImage`      | Fission fetcher image                      | `fission/fetcher`        |
@@ -49,18 +49,18 @@ The following table lists the configurable parameters of the Fission chart and t
 | `functionNamespace` | Namespace for Fission functions            | `fission-function`       |
 | `builderNamespace`  | Namespace for Fission environment builders | `fission-builder`        |
 
-
 * Extra configuration for `fission-all`
 
-| Parameter              | Description                 | Default                    |
-| ---------------------- | --------------------------- | -------------------------- |
-| `logger.influxdbAdmin` | Log database admin username | `admin`.                   |
-| `logger.fluentdImage`  | Logger fluentd image        | `fission/fluentd`          |
-| `fissionUiImage`       | Fission ui image            | `fission/fission-ui:0.1.0` |
-| `nats.authToken`       | Nats streaming auth token   | `defaultFissionAuthToken`  |
-| `nats.clusterID`       | Nats streaming clusterID    | `fissionMQTrigger`         |
-
-
+| Parameter                       | Description                 | Default                                                    |
+| ------------------------------- | --------------------------- | ---------------------------------------------------------- |
+| `logger.influxdbAdmin`          | Log database admin username | `admin`                                                    |
+| `logger.fluentdImage`           | Logger fluentd image        | `fission/fluentd`                                          |
+| `fissionUiImage`                | Fission ui image            | `fission/fission-ui:0.1.0`                                 |
+| `messageQueue`                  | Message queue type          | `nats-streaming`                                           |
+| `nats.authToken`                | Nats streaming auth token   | `defaultFissionAuthToken`                                  |
+| `nats.clusterID`                | Nats streaming clusterID    | `fissionMQTrigger`                                         |
+| `azureStorageQueue.accountName` | Azure storage account name  | None (required if `messageQueue` is `azure-storage-queue`) |
+| `azureStorageQueue.key`         | Azure storage access key    | None (required if `messageQueue` is `azure-storage-queue`) |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 

@@ -18,6 +18,7 @@ package messageQueue
 
 import (
 	"errors"
+	"regexp"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -28,12 +29,17 @@ import (
 
 const (
 	NATS string = "nats-streaming"
+	ASQ  string = "azure-storage-queue"
 )
 
 const (
 	ADD_TRIGGER requestType = iota
 	DELETE_TRIGGER
 	GET_ALL_TRIGGERS
+)
+
+var (
+	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
 )
 
 type (
@@ -87,6 +93,8 @@ func MakeMessageQueueTriggerManager(fissionClient *crd.FissionClient, routerUrl 
 	switch mqConfig.MQType {
 	case NATS:
 		messageQueue, err = makeNatsMessageQueue(routerUrl, mqConfig)
+	case ASQ:
+		messageQueue, err = newAzureStorageConnection(routerUrl, mqConfig)
 	default:
 		err = errors.New("No matched message queue type found")
 	}
@@ -222,6 +230,8 @@ func IsTopicValid(mqType string, topic string) bool {
 	switch mqType {
 	case NATS:
 		return isTopicValidForNats(topic)
+	case ASQ:
+		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
 	}
 	return false
 }

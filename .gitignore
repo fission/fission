@@ -1,4 +1,6 @@
 fission-bundle/fission-bundle
+fission/fission
+
 # Pycharm IDE
 .idea
 environments/php7/vendor/

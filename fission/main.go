@@ -108,7 +108,7 @@ func main() {
 	// Message queue trigger
 	mqtNameFlag := cli.StringFlag{Name: "name", Usage: "Message queue Trigger name"}
 	mqtFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
-	mqtMQTypeFlag := cli.StringFlag{Name: "mqtype", Usage: "Message queue type, e.g. nats-streaming  (optional; uses \"nats-streaming\" if unspecified)"}
+	mqtMQTypeFlag := cli.StringFlag{Name: "mqtype", Usage: "Message queue type, e.g. nats-streaming, azure-storage-queue  (optional; uses \"nats-streaming\" if unspecified)"}
 	mqtTopicFlag := cli.StringFlag{Name: "topic", Usage: "Message queue Topic the trigger listens on"}
 	mqtRespTopicFlag := cli.StringFlag{Name: "resptopic", Usage: "Topic that the function response is sent on (optional; response discarded if unspecified)"}
 	mqtMsgContentType := cli.StringFlag{Name: "contenttype, c", Usage: "Content type of messages that publish to the topic (optional; uses \"application/json\" if unspecified)"}
