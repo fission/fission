@@ -6,9 +6,9 @@ filename | sha256 hash
 -------- | -----------
 [fission-core-0.5.0.tgz](https://github.com/fission/fission/releases/download/0.5.0/fission-core-0.5.0.tgz) | `6ee668de0870a52d16a051bb5d60c12e523a87c54269b321bdab6dd97f883ee4`
 [fission-all-0.5.0.tgz](https://github.com/fission/fission/releases/download/0.5.0/fission-all-0.5.0.tgz) | `2f72fe4ba836d84e60538ecf401a508384bb194c979688be69f1370af0c071bb`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-osx) | `9f2d3a4c752148c41a0dfe0e38bfa62a5c5b38c5c3410d50cf5b117c4b695718`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-linux) | `055117623753d20bb47932a108cfc5f56b9777434833c9f54dea16a430818969`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-windows.exe) | `f34f8a989481d80cab0e4ee87f8b56856616ff02c412b1398bdab88662f96c19`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-osx) | `1b7de8a5bbf7710ba66997003e7a63f9887ef89d7f7e027c31a78f2f51a11536`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-linux) | `7bbff6d166daf16f6e08b82753cbd6bd0d407e12372a0c6612b6f1a11ed39e09`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-windows.exe) | `5db18472bd071daf39ad681c6ad3b4fd4e89ccb243f81e7ea67785e0c7b2f209`
 
 # Change Log
 
