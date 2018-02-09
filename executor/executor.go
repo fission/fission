@@ -18,12 +18,9 @@ package executor
 
 import (
 	"log"
-	"os"
-	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -192,15 +189,8 @@ func dumpStackTrace() {
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
-	// register signal handler for dumping stack trace.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Received SIGTERM : Dumping stack trace")
-		dumpStackTrace()
-		os.Exit(1)
-	}()
+	// setup a signal handler for SIGTERM
+	fission.SetupStackTraceHandler()
 
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	restClient := fissionClient.GetCrdClient()

@@ -18,28 +18,14 @@ package controller
 
 import (
 	"log"
-	"os"
-	"os/signal"
-	"runtime/debug"
-	"syscall"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 )
 
-func dumpStackTrace() {
-	debug.PrintStack()
-}
-
 func Start(port int) {
-	// register signal handler for dumping stack trace.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Received SIGTERM : Dumping stack trace")
-		dumpStackTrace()
-		os.Exit(1)
-	}()
+	// setup a signal handler for SIGTERM
+	fission.SetupStackTraceHandler()
 
 	fc, _, apiExtClient, err := crd.MakeFissionClient()
 	if err != nil {

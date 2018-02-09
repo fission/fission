@@ -174,8 +174,11 @@ helm_install_fission() {
     echo "Deleting old releases"
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
-    # deleting ns does take a while after command is issued.
-    sleep 45
+    # deleting ns does take a while after command is issued
+    while `kubectl get ns| grep fission-builder`
+    do
+        sleep 5
+    done
 
     echo "Installing fission"
     helm install		\
@@ -352,7 +355,7 @@ dump_env_pods() {
 
 describe_pods_ns() {
     echo "--- describe pods $1---"
-    kubect describe pods -n $1
+    kubectl describe pods -n $1
     echo "--- End describe pods $1 ---"
 }
 
@@ -405,11 +408,11 @@ dump_logs() {
     dump_fission_crds
 }
 
-echo_log() {
+log() {
     echo `date +%Y/%m/%d:%H:%M:%S`" $1"
 }
 
-export -f echo_log
+export -f log
 export FAILURES=0
 
 run_all_tests() {
@@ -464,9 +467,9 @@ install_and_test() {
     trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
-	describe_all_pods $id
-	dump_kubernetes_events $id
-    dump_tiller_logs
+        describe_all_pods $id
+        dump_kubernetes_events $id
+        dump_tiller_logs
 	exit 1
     fi
 
@@ -481,8 +484,8 @@ install_and_test() {
 
     if [ $FAILURES -ne 0 ]
     then
-    # describe each pod in fission ns and function namespace
-    describe_all_pods $id
+        # describe each pod in fission ns and function namespace
+        describe_all_pods $id
 	exit 1
     fi
 }

@@ -22,12 +22,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"runtime/debug"
 	"strconv"
-	"syscall"
 	"time"
 
+	"github.com/fission/fission"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/graymeta/stow/local"
@@ -174,20 +172,9 @@ func (ss *StorageService) Start(port int) {
 	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
 }
 
-func dumpStackTrace() {
-	debug.PrintStack()
-}
-
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int, enablePruner bool) *StorageService {
-	// register signal handler for dumping stack trace.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Received SIGTERM : Dumping stack trace")
-		dumpStackTrace()
-		os.Exit(1)
-	}()
+	// setup a signal handler for SIGTERM
+	fission.SetupStackTraceHandler()
 
 	// initialize logger
 	log.SetLevel(log.InfoLevel)

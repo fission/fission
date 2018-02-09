@@ -16,7 +16,7 @@ cleanup() {
 }
 
 create_archive() {
-    echo_log "Creating an archive"
+    log "Creating an archive"
     mkdir test_dir
     dd if=/dev/urandom of=test_dir/dynamically_generated_file bs=256k count=1
     printf 'def main():\n    return "Hello, world!"' > test_dir/hello.py
@@ -24,17 +24,17 @@ create_archive() {
 }
 
 create_package() {
-    echo_log "Creating package"
+    log "Creating package"
     pkg=$(fission package create --deploy "test-deploy-pkg.zip" --env python| cut -f2 -d' '| tr -d \')
 }
 
 delete_package() {
-    echo_log "Deleting package: $1"
+    log "Deleting package: $1"
     fission package delete --name $1
 }
 
 get_archive_url_from_package() {
-    echo_log "Getting archive URL from package: $1"
+    log "Getting archive URL from package: $1"
     url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
@@ -55,63 +55,63 @@ main() {
 
     # create a huge archive
     create_archive
-    echo_log "created archive test-deploy-pkg.zip"
+    log "created archive test-deploy-pkg.zip"
 
     # create packages with the huge archive
     create_package
     pkg_1=$pkg
     get_archive_url_from_package $pkg_1
     url_1=$url
-    echo_log "pkg: $pkg_1, archive_url : $url_1"
+    log "pkg: $pkg_1, archive_url : $url_1"
 
     create_package
     pkg_2=$pkg
     get_archive_url_from_package $pkg_2
     url_2=$url
-    echo_log "pkg: $pkg_2, archive_url : $url_2"
+    log "pkg: $pkg_2, archive_url : $url_2"
 
     # delete packages
     delete_package $pkg_1
     delete_package $pkg_2
-    echo_log "deleted packages : $pkg_1 $pkg_2"
+    log "deleted packages : $pkg_1 $pkg_2"
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    echo_log "http_status for $url_1 : $http_status"
+    log "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "200" ]; then
-        echo_log "Archive $url_1 absent on storage, while expected to be present"
+        log "Archive $url_1 absent on storage, while expected to be present"
         exit 1
     fi
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    echo_log "http_status for $url_2 : $http_status"
+    log "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "200" ]; then
-        echo_log "Archive $url_2 absent on storage, while expected to be present"
+        log "Archive $url_2 absent on storage, while expected to be present"
         exit 1
     fi
 
     # archivePruner is set to run every minute for test. In production, its set to run every hour.
-    echo_log "waiting for packages to get recycled"
+    log "waiting for packages to get recycled"
     sleep 120
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    echo_log "http_status for $url_1 : $http_status"
+    log "http_status for $url_1 : $http_status"
     if [ "$http_status" -ne "404" ]; then
-        echo_log "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
+        log "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
         exit 1
     fi
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    echo_log "http_status for $url_2 : $http_status"
+    log "http_status for $url_2 : $http_status"
     if [ "$http_status" -ne "404" ]; then
-        echo_log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
+        log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
         exit 1
     fi
 
-    echo_log "Test archive pruner PASSED"
+    log "Test archive pruner PASSED"
 }
 
 main
