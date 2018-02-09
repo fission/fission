@@ -183,6 +183,42 @@ build_and_push_all_envs() {
     build_and_push_env_image "$version" "ruby"     "ruby-env"     ""
 }
 
+build_and_push_env_builder_image() {
+    version=$1
+    envdir=$2
+    imgnamebase=$3
+    imgvariant=$4
+
+    if [ -z "$imgvariant" ]
+    then
+        # no variant specified, just use the base name
+        imgname=$imgnamebase
+        dockerfile="Dockerfile"
+    else
+        # variant specified - append variant to image name and assume dockerfile
+        # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
+        imgname="$imgname-$imgvariant"
+        dockerfile="Dockerfile-$imgvariant"
+    fi
+    echo "Building $envdir -> $imgname:$version using $dockerfile"
+
+    pushd $DIR/environments/$envdir/builder
+    docker build -t fission/$imgname:$version -f $dockerfile .
+    docker tag fission/$imgname:$version fission/$imgname:latest
+    docker push fission/$imgname:$version
+    docker push fission/$imgname:latest
+    popd
+}
+
+build_and_push_all_env_builders() {
+    version=$1
+
+    # call with version, env dir, image name base, image name variant
+    build_and_push_env_builder_image "$version" "python"   "python-builder"   ""
+    build_and_push_env_builder_image "$version" "binary"   "binary-builder"   ""
+    build_and_push_env_builder_image "$version" "go"       "go-builder"       ""
+}
+
 build_charts() {
     version=$1
     mkdir -p $BUILDDIR/charts
@@ -352,6 +388,7 @@ check_clean
 build_all $version
 push_all $version
 build_and_push_all_envs $version
+build_and_push_all_env_builders $version
 build_charts $version
 
 tag_and_release $version
