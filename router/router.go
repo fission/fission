@@ -50,6 +50,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 )
@@ -72,6 +73,9 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 }
 
 func Start(port int, executorUrl string) {
+	// setup a signal handler for SIGTERM
+	fission.SetupStackTraceHandler()
+
 	fmap := makeFunctionServiceMap(time.Minute)
 
 	fissionClient, _, _, err := crd.MakeFissionClient()

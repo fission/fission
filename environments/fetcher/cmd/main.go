@@ -10,15 +10,32 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"runtime/debug"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
 
+func dumpStackTrace() {
+	debug.PrintStack()
+}
+
 // Usage: fetcher <shared volume path>
 func main() {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Println("Received SIGTERM : Dumping stack trace")
+		dumpStackTrace()
+		os.Exit(1)
+	}()
+
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
 	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
@@ -42,7 +59,10 @@ func main() {
 		}
 	}
 
-	fetcher := fetcher.MakeFetcher(dir, *secretDir, *configDir)
+	fetcher, err := fetcher.MakeFetcher(dir, *secretDir, *configDir)
+	if err != nil {
+		log.Fatalf("Error making fetcher: %v", err)
+	}
 
 	if *specializeOnStart {
 		specializePod(fetcher, fetchPayload, loadPayload)
@@ -54,6 +74,8 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	log.Println("Fetcher ready to receive requests")
 	http.ListenAndServe(":8000", mux)
 }
 

@@ -89,6 +89,10 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	muxRouter := mux.NewRouter()
 
@@ -149,6 +153,9 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name), fh.handler)
 	}
+
+	// Healthz endpoint for the router.
+	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
 
 	return muxRouter
 }

@@ -19,10 +19,14 @@ package controller
 import (
 	"log"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 )
 
 func Start(port int) {
+	// setup a signal handler for SIGTERM
+	fission.SetupStackTraceHandler()
+
 	fc, _, apiExtClient, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Failed to connect to K8s API: %v", err)

@@ -59,7 +59,7 @@ build_and_push_fission_bundle() {
 
     pushd $ROOT/fission-bundle
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -72,7 +72,7 @@ build_and_push_fetcher() {
 
     pushd $ROOT/environments/fetcher/cmd
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -86,7 +86,7 @@ build_and_push_builder() {
 
     pushd $ROOT/builder/cmd
     ./build.sh
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -98,7 +98,7 @@ build_and_push_fluentd(){
     image_tag=$1
 
     pushd $ROOT/logger/fluentd
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -112,7 +112,7 @@ build_and_push_env_runtime() {
     image_tag=$2
 
     pushd $ROOT/environments/$env/
-    docker build -t $image_tag .
+    docker build -q -t $image_tag .
 
     gcloud_login
 
@@ -127,7 +127,7 @@ build_and_push_env_builder() {
 
     pushd $ROOT/environments/$env/builder
 
-    docker build -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
+    docker build -q -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
 
     gcloud_login
 
@@ -174,14 +174,19 @@ helm_install_fission() {
     echo "Deleting old releases"
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
+    # deleting ns does take a while after command is issued
+    while `kubectl get ns| grep fission-builder`
+    do
+        sleep 5
+    done
+
     echo "Installing fission"
     helm install		\
 	 --wait			\
-	 --timeout 600	        \
+	 --timeout 540	        \
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 --debug                \
 	 $ROOT/charts/fission-all
 
     helm list
@@ -190,29 +195,64 @@ helm_install_fission() {
 wait_for_service() {
     id=$1
     svc=$2
+    health_endpoint=$3
 
     ns=f-$id
+    retry=0
+    max_retries=5
     while true
     do
-	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-	if [ ! -z $ip ]
-	then
-	    break
-	fi
-	echo Waiting for service $svc...
-	sleep 1
+        retry=$((retry+1))
+        if ((retry == max_retries)); then
+            echo "Waiting for $svc to be routable exceeded max retries. Quitting.."
+            exit 1
+        fi
+        ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+        if [ -z $ip ]; then
+            continue
+        fi
+        http_status=`curl -sw "%{http_code}" "http://$ip/$health_endpoint"`
+        echo "http_status for svc $svc : $http_status"
+        if [ "$http_status" -ne "200" ]; then
+            echo "Service $svc returned response other than 200. waiting for 200 after backing off for 1 second"
+            sleep 1
+        else
+            break
+        fi
     done
 }
 
 wait_for_services() {
     id=$1
 
-    wait_for_service $id controller
-    wait_for_service $id router
-
-    echo Waiting for service is routable...
-    sleep 10
+    echo "\n--- wait for controller and router services to be routable ---"
+    wait_for_service $id controller "healthz"
+    wait_for_service $id router "router-healthz"
+    echo "\n--- end wait for controller and router services to be routable ---"
 }
+
+dump_kubernetes_events() {
+    id=$1
+    ns=f-$id
+    fns=f-func-$id
+    echo "--- kubectl events $fns ---"
+    kubectl get events -n $fns
+    echo "--- end kubectl events $fns ---"
+
+    echo "--- kubectl events $ns ---"
+    kubectl get events -n $ns
+    echo "--- end kubectl events $ns ---"
+}
+export -f dump_kubernetes_events
+
+dump_tiller_logs() {
+    echo "--- tiller logs ---"
+    tiller_pod=`kubectl get pods -n kube-system | grep tiller| tr -s " "| cut -d" " -f1`
+    kubectl logs $tiller_pod --since=30m -n kube-system
+    echo "--- end tiller logs ---"
+}
+export -f dump_tiller_logs
+
 
 helm_uninstall_fission() {(set +e
     id=$1
@@ -222,10 +262,10 @@ helm_uninstall_fission() {(set +e
 	echo "Fission uninstallation skipped"
 	return
     fi
+
     echo "Uninstalling fission"
     helm delete --purge $id
-
-    kubectl delete ns f-$id
+    kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission
 
@@ -243,7 +283,7 @@ set_environment() {
 dump_builder_pod_logs() {
     bns=$1
     builderPods=$(kubectl -n $bns get pod -o name)
-    
+
     for p in $builderPods
     do
     echo "--- builder pod logs $p ---"
@@ -313,11 +353,30 @@ dump_env_pods() {
     echo --- End environment pods ---
 }
 
+describe_pods_ns() {
+    echo "--- describe pods $1---"
+    kubectl describe pods -n $1
+    echo "--- End describe pods $1 ---"
+}
+
+describe_all_pods() {
+    id=$1
+    ns=f-$id
+    fns=f-func-$id
+    bns=fission-builder
+
+    describe_pods_ns $ns
+    describe_pods_ns $fns
+    describe_pods_ns $bns
+}
+
 dump_all_fission_resources() {
     ns=$1
 
     echo "--- All objects in the fission namespace $ns ---"
-    kubectl -n $ns get all
+    kubectl -n $ns get pods -o wide
+    echo ""
+    kubectl -n $ns get svc
     echo "--- End objects in the fission namespace $ns ---"
 }
 
@@ -343,11 +402,17 @@ dump_logs() {
     dump_fission_logs $ns $fns router
     dump_fission_logs $ns $fns buildermgr
     dump_fission_logs $ns $fns executor
+    dump_fission_logs $ns $fns storagesvc
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
 }
 
+log() {
+    echo `date +%Y/%m/%d:%H:%M:%S`" $1"
+}
+
+export -f log
 export FAILURES=0
 
 run_all_tests() {
@@ -402,7 +467,9 @@ install_and_test() {
     trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
-	dump_logs $id
+        describe_all_pods $id
+        dump_kubernetes_events $id
+        dump_tiller_logs
 	exit 1
     fi
 
@@ -417,6 +484,8 @@ install_and_test() {
 
     if [ $FAILURES -ne 0 ]
     then
+        # describe each pod in fission ns and function namespace
+        describe_all_pods $id
 	exit 1
     fi
 }

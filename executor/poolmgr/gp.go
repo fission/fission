@@ -519,6 +519,33 @@ func (gp *GenericPool) createPool() error {
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
 								gp.sharedMountPath},
+							ReadinessProbe: &apiv1.Probe{
+								InitialDelaySeconds: 1,
+								PeriodSeconds:       1,
+								FailureThreshold:    30,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000,
+										},
+									},
+								},
+							},
+							LivenessProbe: &apiv1.Probe{
+								InitialDelaySeconds: 35,
+								PeriodSeconds:       5,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000,
+										},
+									},
+								},
+							},
 						},
 					},
 					ServiceAccountName: "fission-fetcher",
@@ -528,6 +555,7 @@ func (gp *GenericPool) createPool() error {
 	}
 	depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Create(deployment)
 	if err != nil {
+		log.Printf("Error creating deployment for %s in kubernetes, err: %v", deployment.Name, err)
 		return err
 	}
 	gp.deployment = depl

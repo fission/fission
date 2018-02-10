@@ -18,9 +18,25 @@ package fission
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"runtime/debug"
+	"syscall"
 )
 
 func UrlForFunction(name string) string {
 	prefix := "/fission-function"
 	return fmt.Sprintf("%v/%v", prefix, name)
+}
+
+func SetupStackTraceHandler() {
+	// register signal handler for dumping stack trace.
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("Received SIGTERM : Dumping stack trace")
+		debug.PrintStack()
+		os.Exit(1)
+	}()
 }
