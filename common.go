@@ -27,6 +27,8 @@ import (
 	"syscall"
 
 	"github.com/gorilla/handlers"
+	"github.com/imdario/mergo"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func UrlForFunction(name string) string {
@@ -65,4 +67,19 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			handlers.LoggingHandler(os.Stdout, next).ServeHTTP(w, r)
 		}
 	})
+}
+
+func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
+	result := &apiv1.Container{}
+	for _, spec := range specs {
+		if spec == nil {
+			continue
+		}
+
+		err := mergo.Merge(result, spec)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return *result
 }
