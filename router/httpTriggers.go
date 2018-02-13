@@ -219,8 +219,6 @@ func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Co
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {
-	log.Printf("Syncing http triggers")
-
 	// get triggers
 	latestTriggers := ts.triggerStore.List()
 	triggers := make([]crd.HTTPTrigger, len(latestTriggers))
