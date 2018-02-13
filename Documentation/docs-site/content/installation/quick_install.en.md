@@ -1,7 +1,8 @@
 ---
-title: "Kubernetes Quick Install"
+title: "Quick Installation"
 date: 2017-09-07T20:10:05-07:00
-weight: 10
+draft: false
+weight: 21
 ---
 
 This is a quick guide to help you get started running Kubernetes on
