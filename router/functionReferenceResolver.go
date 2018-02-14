@@ -18,13 +18,11 @@ package router
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
@@ -39,8 +37,9 @@ type (
 		// FunctionReference -> function metadata
 		refCache *cache.Cache
 
-		stopCh chan struct{}
-		store  k8sCache.Store
+		stopCh           chan struct{}
+		store            k8sCache.Store
+		funcVersionStore k8sCache.Store
 	}
 
 	resolveResultType int
@@ -66,27 +65,13 @@ const (
 	resolveResultSingleFunction = iota
 )
 
-func makeFunctionReferenceResolver(store k8sCache.Store) *functionReferenceResolver {
+func makeFunctionReferenceResolver(store k8sCache.Store, funcVersionStore k8sCache.Store) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		refCache: cache.MakeCache(time.Minute, 0),
-		store:    store,
+		refCache:         cache.MakeCache(time.Minute, 0),
+		store:            store,
+		funcVersionStore: funcVersionStore,
 	}
 	return frr
-}
-
-func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controller) {
-	watchlist := k8sCache.NewListWatchFromClient(crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
-	listWatch := &k8sCache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return watchlist.List(options)
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return watchlist.Watch(options)
-		},
-	}
-	resyncPeriod := 30 * time.Second
-	return k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
-		k8sCache.ResourceEventHandlerFuncs{})
 }
 
 // resolve translates a namespace and a function reference to resolveResult.
@@ -116,6 +101,11 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 		if err != nil {
 			return nil, err
 		}
+	case fission.FunctionReferenceTypeFunctionVersion:
+		rr, err = frr.resolveByVersion(namespace, fr.Name, fr.Version)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("Unrecognized function reference type %v", fr.Type)
 	}
@@ -140,6 +130,61 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 	if !isExist {
 		return nil, fmt.Errorf("function %v does not exist", name)
+	}
+
+	f := obj.(*crd.Function)
+	rr := resolveResult{
+		resolveResultType: resolveResultSingleFunction,
+		functionMetadata:  &f.Metadata,
+	}
+	return &rr, nil
+}
+
+// resolveByVersion looks up function by name and version in a namespace.
+func (frr *functionReferenceResolver) resolveByVersion(namespace, name string, version string) (*resolveResult, error) {
+	if version == "" {
+		return nil, fmt.Errorf("Version cannot be empty for function:%s to be able to resolveByVersion", name)
+	}
+
+	resolvedVersion := version
+
+	// when the version = latest, resolve to the last version created for this function to the actual version number.
+	if strings.EqualFold(version, "latest") {
+		obj, isExist, err := frr.funcVersionStore.Get(&crd.FunctionVersion{
+			Metadata: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !isExist {
+			return nil, fmt.Errorf("functionVersion object %v does not exist in store", name)
+		}
+
+		functionVersion := obj.(*crd.FunctionVersion)
+		// A bit of explanation here: functionVersion.Spec.Versions will always reflect the versions present on the cluster for this function at this moment.
+		// Every time a new version for a function is created, it's appended to the list. Every time a version is deleted, it's removed from the list.
+		// So, in a way the list maintains a chronological order of versions created for a function and the latest version of a function will
+		// be the last element in the list.
+		resolvedVersion = functionVersion.Spec.Versions[len(functionVersion.Spec.Versions)-1]
+	}
+
+	log.Debugf("resolvedVersion for function: %s is %s", name, resolvedVersion)
+
+	// get function from cache
+	obj, isExist, err := frr.store.Get(&crd.Function{
+		Metadata: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("%s-%s", name, resolvedVersion),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !isExist {
+		return nil, fmt.Errorf("function %s-%s does not exist", name, version)
 	}
 
 	f := obj.(*crd.Function)

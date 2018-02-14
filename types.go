@@ -181,9 +181,18 @@ type (
 		//   * Branch or tag of a versioned function
 		//   * A "rolling upgrade" from one version of a function to another
 		Type FunctionReferenceType `json:"type"`
-
 		// Name of the function.
 		Name string `json:"name"`
+		// Version of the function such as v1, v2, v0.0.1 and so on
+		Version string `json:"version, omitempty"`
+	}
+
+	// FunctionVersionSpec keeps track of all versions of a function
+	FunctionVersionSpec struct {
+		// Name indicates the name of the function.
+		Name string `json:"name"`
+		// Versions is a list of all versions created for a function. Can have values like "v1", "v2", "latest" etc.
+		Versions []string `json:"versions"`
 	}
 
 	//
@@ -355,10 +364,13 @@ const (
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = "name"
 
-	// Other function reference types we'd like to support:
 	//   Versioned function, latest version
+	FunctionReferenceTypeFunctionVersion = "version"
+
+	// Other function reference types we'd like to support:
 	//   Versioned function. by semver "latest compatible"
 	//   Set of function references (recursively), by percentage of traffic
+
 )
 
 const (

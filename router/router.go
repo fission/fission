@@ -86,8 +86,8 @@ func Start(port int, executorUrl string) {
 	restClient := fissionClient.GetCrdClient()
 
 	executor := executorClient.MakeClient(executorUrl)
-	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, executor, restClient)
-	resolver := makeFunctionReferenceResolver(fnStore)
+	triggers, _, fnStore, funcVersionStore := makeHTTPTriggerSet(fmap, fissionClient, executor, restClient)
+	resolver := makeFunctionReferenceResolver(fnStore, funcVersionStore)
 
 	log.Printf("Starting router at port %v\n", port)
 	ctx, cancel := context.WithCancel(context.Background())

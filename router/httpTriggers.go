@@ -37,16 +37,18 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
-	fissionClient     *crd.FissionClient
-	executor          *executorClient.Client
-	resolver          *functionReferenceResolver
-	crdClient         *rest.RESTClient
-	triggers          []crd.HTTPTrigger
-	triggerStore      k8sCache.Store
-	triggerController k8sCache.Controller
-	functions         []crd.Function
-	funcStore         k8sCache.Store
-	funcController    k8sCache.Controller
+	fissionClient         *crd.FissionClient
+	executor              *executorClient.Client
+	resolver              *functionReferenceResolver
+	crdClient             *rest.RESTClient
+	triggers              []crd.HTTPTrigger
+	triggerStore          k8sCache.Store
+	triggerController     k8sCache.Controller
+	functions             []crd.Function
+	funcStore             k8sCache.Store
+	funcController        k8sCache.Controller
+	funcVersionStore      k8sCache.Store
+	funcVersionController k8sCache.Controller
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
@@ -58,17 +60,23 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		executor:           executor,
 		crdClient:          crdClient,
 	}
-	var tStore, fnStore k8sCache.Store
-	var tController, fnController k8sCache.Controller
+	var tStore, fnStore, funcVersionStore k8sCache.Store
+	var tController, fnController, funcVersionController k8sCache.Controller
 	if httpTriggerSet.crdClient != nil {
 		tStore, tController = httpTriggerSet.initTriggerController()
 		httpTriggerSet.triggerStore = tStore
 		httpTriggerSet.triggerController = tController
+
 		fnStore, fnController = httpTriggerSet.initFunctionController()
 		httpTriggerSet.funcStore = fnStore
 		httpTriggerSet.funcController = fnController
+
+		funcVersionStore, funcVersionController = httpTriggerSet.initFuncVersionController()
+		httpTriggerSet.funcVersionStore = funcVersionStore
+		httpTriggerSet.funcVersionController = funcVersionController
+
 	}
-	return httpTriggerSet, tStore, fnStore
+	return httpTriggerSet, tStore, fnStore, funcVersionStore
 }
 
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter, resolver *functionReferenceResolver) {
@@ -83,6 +91,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 	}
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
+	go ts.runWatcher(ctx, ts.funcVersionController)
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +218,32 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				ts.syncTriggers()
 			},
 		})
+	return store, controller
+}
+
+
+// We need a listWatch for functionVersion objects. This is needed only for resolving "latest" version of a function to the corresponding version number.
+// Everytime a function version is created, the list in crd.FunctionVersion object is appended.
+// Similarly, when a function version is deleted, the version is removed from the list.
+// So, at any point in time if the user deletes the function version that was the most recent, then "latest" should resolve to the one previously created.
+// So, this list watch will enable watching changes to crd.FunctionVersion object and thereby help resolving "latest" version to the right version of the function.
+// Please look at resolveByVersion function in functionResolver.go for code to resolve "latest" to the right version.
+func (ts *HTTPTriggerSet) initFuncVersionController() (k8sCache.Store, k8sCache.Controller) {
+	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "functionversions", metav1.NamespaceDefault, fields.Everything())
+	store, controller := k8sCache.NewInformer(listWatch, &crd.FunctionVersion{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			ts.syncTriggers()
+		},
+		DeleteFunc: func(obj interface{}) {
+			// TODO : Technically not allowed to delete FunctionVersion object. But this will only affect resolving "latest" version to a function.
+			// Need to think how to handle this better.
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			// TODO : if the refCache has this object, then its supposed to be deleted as part of update.
+			ts.syncTriggers()
+		},
+	})
 	return store, controller
 }
 

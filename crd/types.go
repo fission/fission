@@ -65,6 +65,13 @@ type (
 		Items []Function `json:"items"`
 	}
 
+	// FunctionVersions.
+	FunctionVersion struct {
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ObjectMeta           `json:"metadata"`
+		Spec            fission.FunctionVersionSpec `json:"spec"`
+	}
+
 	// Environments.
 	Environment struct {
 		metav1.TypeMeta `json:",inline"`
