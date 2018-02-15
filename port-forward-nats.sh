@@ -3,7 +3,7 @@
 svc=$1
 if [ -z "$svc" ]
 then
-    svc=router
+    svc=nats-streaming
 fi
 
 port=$2

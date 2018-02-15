@@ -9,7 +9,7 @@ Linux:
 Windows:
   For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/0.5.0/fission-cli-windows.exe
 
-2. Set the FISSION_URL and FISSION_ROUTER environment variables.
+2. Set the FISSION environment variables.
 
 {{- if contains "NodePort" .Values.serviceType }}
   $ export FISSION_URL=http://$(minikube ip):{{ .Values.controllerPort }}
@@ -21,6 +21,12 @@ Windows:
 
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+
+{{- else if contains "ClusterIP" .Values.serviceType }}
+  $ export FISSION_NAMESPACE={{ .Release.Namespace }}
+  $ export KUBECONFIG=${HOME}/.kube/config
+  $ curl -Lo port-forward-router.sh https://github.com/fission/fission/port-forward-router.sh && chmod +x port-forward-router.sh && ./port-forward-router.sh {{ .Release.Namespace }} router 9999
+  $ export FISSION_ROUTER=127.0.0.1:9999
 
 {{- end }}
 

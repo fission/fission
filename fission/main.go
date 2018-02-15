@@ -19,59 +19,33 @@ package main
 import (
 	"os"
 
-	"fmt"
 	"github.com/urfave/cli"
-	"net"
-	"time"
 )
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = "0.4.0"
-	// port forward Controller
-	LocalControllerPort, err := findFreePort()
-	if err != nil {
-		fatal(fmt.Sprintf("Error finding unused port :%v", err))
-	}
+	app.Version = "0.5.0"
 
-	timeBefore := time.Now()
-	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
-		if conn != nil {
-			conn.Close()
-
-		} else {
-			break
+	// fetch the FISSION_URL env variable. If not set, port-forward to controller.
+	var value string
+	fissionUrl := os.Getenv("FISSION_URL")
+	if len(fissionUrl) == 0 {
+		// check here to specify env var for KUBECONFIG and FISSION_NAMESPACE
+		fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+		kubeConfig := os.Getenv("KUBECONFIG")
+		if len(kubeConfig) == 0 || len(fissionNamespace) == 0 {
+			fatal("Environment variables KUBECONFIG and FISSION_NAMESPACE are mandatory if the serviceType is ClusterIP")
 		}
-		time.Sleep(time.Millisecond * 50)
-	}
-
-	timeAfter := time.Since(timeBefore)
-	if timeAfter.Seconds()/1000 >= 100 {
-		fatal(fmt.Sprintf("Too much lag in CLI due to lag in listener.Close()"))
-	}
-
-	go func() {
-		err := runportForward("controller", LocalControllerPort)
-		if err != nil {
-			fatal(fmt.Sprintf("%v", err))
-		}
-	}()
-
-	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalControllerPort), time.Millisecond)
-		if conn != nil {
-			conn.Close()
-			break
-
-		}
-		time.Sleep(time.Millisecond * 50)
+		localPort := controllerPodPortForward(fissionNamespace)
+		value = "http://127.0.0.1:" + localPort
+	} else {
+		value = fissionUrl
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Value: "http://127.0.0.1:" + LocalControllerPort, Usage: "Fission server URL"},
+		cli.StringFlag{Name: "server", Value: value, Usage: "Fission server URL"},
 	}
 
 	// trigger method and url flags (used in function and route CLIs)

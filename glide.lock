@@ -34,6 +34,10 @@ imports:
   subpackages:
   - digest
   - reference
+- name: github.com/docker/spdystream
+  version: 449fdfce4d962303d702fec724ef0ad181c92528
+  subpackages:
+  - spdy
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
 - name: github.com/dsnet/compress
@@ -284,6 +288,10 @@ imports:
   - pkg/util/validation/field
   - pkg/util/wait
   - pkg/util/yaml
+  - pkg/util/httpstream
+  - pkg/util/httpstream/spdy
+  - pkg/util/remotecommand
+  - third_party/forked/golang/netutil
   - pkg/version
   - pkg/watch
   - third_party/forked/golang/reflect
@@ -366,6 +374,8 @@ imports:
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
   - tools/clientcmd/api/v1
+  - tools/portforward
+  - tools/remotecommand
   - tools/metrics
   - transport
   - util/cert

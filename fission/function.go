@@ -609,27 +609,28 @@ func fnTest(c *cli.Context) error {
 		fatal("Need function name to be specified with --name")
 	}
 
-	LocalRouterPort, err := findFreePort()
+	localRouterPort, err := findFreePort()
 	if err != nil {
-		fatal(fmt.Sprintf("Error finding unused port for router :%v", err))
+		fatal(fmt.Sprintf("Error finding unused port for router :%s", err.Error()))
 	}
 
+	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
 	go func() {
-		err := runportForward("router", LocalRouterPort)
+		err := runportForward("router", localRouterPort, fissionNamespace)
 		if err != nil {
-			fatal(fmt.Sprintf("%v", err))
+			fatal(err.Error())
 		}
 	}()
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", LocalRouterPort), time.Second)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", localRouterPort), time.Second)
 		if conn != nil {
 			conn.Close()
 			break
 		}
 	}
 
-	routerURL := "127.0.0.1:" + LocalRouterPort
+	routerURL := "127.0.0.1:" + localRouterPort
 	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
 	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
@@ -643,7 +644,7 @@ func fnTest(c *cli.Context) error {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	checkErr(err, "read log response from pod")
-	fmt.Printf("Error calling function %v: %v %v", fnName, resp.StatusCode, string(body))
+	fmt.Printf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
 	defer resp.Body.Close()
 	err = printPodLogs(c)
 	if err != nil {
