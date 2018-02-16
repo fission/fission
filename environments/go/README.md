@@ -23,13 +23,13 @@ You can add this customized image to fission with "fission env
 create":
 
 ```
-fission env create --name go-runtime --image USER/go-runtime
+fission env create --name go --image USER/go-runtime --builder USER/go-builder --version 2
 ```
 
 Or, if you already have an environment, you can update its image:
 
 ```
-fission env update --name go-runtime --image USER/go-runtime   
+fission env update --name go --image USER/go-runtime --builder USER/go-builder
 ```
 
 After this, fission functions that have the env parameter set to the
