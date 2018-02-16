@@ -1,6 +1,5 @@
 ---
 title: "Upgrading from v0.1 to v0.2.x"
-date: 2017-09-08T16:26:29-07:00
 draft: false
 weight: 31
 ---

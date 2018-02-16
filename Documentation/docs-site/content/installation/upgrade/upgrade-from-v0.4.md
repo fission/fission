@@ -1,6 +1,5 @@
 ---
 title: "Upgrading from v0.4.x to v0.5.0"
-date: 2018-2-08T04:40:29+08:00
 draft: false
 weight: 33
 ---

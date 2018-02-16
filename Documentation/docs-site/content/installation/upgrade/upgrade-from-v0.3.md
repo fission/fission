@@ -1,6 +1,5 @@
 ---
 title: "Upgrading from v0.3 to v0.4.x"
-date: 2017-11-04T03:38:29+08:00
 draft: false
 weight: 32
 ---
