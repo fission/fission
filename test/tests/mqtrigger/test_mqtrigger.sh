@@ -51,7 +51,7 @@ then
     # If this fails on mac os, do "brew install coreutils".
     TIMEOUT=gtimeout 
 fi
-response=$($TIMEOUT 60s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
+response=$($TIMEOUT --verbose 120s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
