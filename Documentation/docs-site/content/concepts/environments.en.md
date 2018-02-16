@@ -1,5 +1,5 @@
 ---
-title: "Environemnt"
+title: "Environment"
 date: 2017-09-07T20:10:05-07:00
 draft: false
 weight: 32
@@ -22,4 +22,4 @@ The following pre-built environments are currently available for use in Fission:
 | Python 3                             | `fission/python-env`      |
 | Ruby                                 | `fission/ruby-env`        |
 
-You can extend above or create your own environment from scratch. 
+To create custom environments you can extend above or create your own environment from scratch. 

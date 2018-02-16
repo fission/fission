@@ -1,6 +1,5 @@
 ---
-title: "Executor"
-date: 2017-09-07T20:10:05-07:00
+title: "Controlling Function Execution"
 draft: false
 weight: 43
 ---

@@ -1,6 +1,5 @@
 ---
-title: "Environemnt"
-date: 2017-09-07T20:10:05-07:00
+title: "Environment"
 draft: false
 weight: 42
 ---
