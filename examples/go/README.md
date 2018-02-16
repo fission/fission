@@ -1,17 +1,23 @@
 # Hello World in Go on Fission
 
-`hello.go` is an very simple fission function that says "Hello, World!".
+`hello.go` contains a very simple fission function that says "Hello, World!".
+
+## Deploying this function on your cluster
 
 ```bash
-# This command creates the environment and function, and waits for the
-# function build.  Look at the YAML files in specs/ for details about
-# how those are specified.
+
+# Create the Fission Go environment and function, and wait for the
+# function to build.  (Take a look at the YAML files in the specs
+# directory for details about how the environment and function are
+# specified.)
+
 $ fission spec apply --wait
 1 environment created
 1 package created
 1 function created
 
-# This run the function and prints its output
-$ fission function test --name hello
+# Now, run the function with the "fission function test" command:
+
+$ fission function test --name hello-go
 Hello, World!
 ```
