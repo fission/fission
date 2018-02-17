@@ -75,7 +75,6 @@ func (c *Client) Upload(filePath string, metadata *map[string]string) (string, e
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
-	// TODO this request will go to controller pod. so works if we have controller svc.
 	req, err := http.NewRequest(http.MethodPost, c.url+"/archive", buf)
 	if err != nil {
 		return "", err

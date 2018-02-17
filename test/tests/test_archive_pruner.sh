@@ -8,7 +8,7 @@ url=""
 
 
 cleanup() {
-    if [ -e "test-deplpoy-pkg.zip" ]; then
+    if [ -e "test-deploy-pkg.zip" ]; then
         rm -rf test-deploy-pkg.zip test_dir
     fi
     if [ -e "/tmp/file" ]; then
