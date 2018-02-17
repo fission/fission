@@ -399,7 +399,7 @@ func fnUpdate(c *cli.Context) error {
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		fnList, err := getFunctionsByPackage(client, function.Spec.Package.PackageRef.Name)
+		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
 		checkErr(err, "get function list")
 
 		if !force && len(fnList) > 1 {
@@ -445,12 +445,12 @@ func fnDelete(c *cli.Context) error {
 	}
 
 	m := &metav1.ObjectMeta{
-  		Name:      fnName,
-  		Namespace: metav1.NamespaceDefault,
-  	}
+		Name:      fnName,
+		Namespace: metav1.NamespaceDefault,
+	}
 
 	err := client.FunctionDelete(m)
-  	checkErr(err, fmt.Sprintf("delete function '%v'", fnName))
+	checkErr(err, fmt.Sprintf("delete function '%v'", fnName))
 
 	fmt.Printf("function '%v' deleted\n", fnName)
 	return err
