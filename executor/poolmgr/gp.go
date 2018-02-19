@@ -32,11 +32,13 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/v1"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
@@ -433,6 +435,11 @@ func (gp *GenericPool) createPool() error {
 	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
 		gp.env.Metadata.Name, gp.env.Metadata.UID, strings.ToLower(gp.poolInstanceId))
 
+	fetcherResources, err := gp.getFetcherResources()
+	if err != nil {
+		return err
+	}
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   poolDeploymentName,
@@ -515,6 +522,7 @@ func (gp *GenericPool) createPool() error {
 									MountPath: gp.sharedCfgMapPath,
 								},
 							},
+							Resources: fetcherResources,
 							Command: []string{"/fetcher",
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
@@ -714,4 +722,28 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	return nil
+}
+
+func (gp *GenericPool) getFetcherResources() (v1.ResourceRequirements, error) {
+	//TBD Hardcoded as of now, should be configurable?
+	mincpu, err := resource.ParseQuantity("5m")
+	minmem, err := resource.ParseQuantity("16Mi")
+	maxcpu, err := resource.ParseQuantity("40m")
+	maxmem, err := resource.ParseQuantity("128Mi")
+
+	if err != nil {
+		return v1.ResourceRequirements{}, err
+	}
+
+	fetcherResources := v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceCPU:    mincpu,
+			v1.ResourceMemory: minmem,
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceCPU:    maxcpu,
+			v1.ResourceMemory: maxmem,
+		},
+	}
+	return fetcherResources, nil
 }

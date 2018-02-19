@@ -25,8 +25,10 @@ import (
 	"time"
 
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/pkg/api/v1"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	asv1 "k8s.io/client-go/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
@@ -44,6 +46,30 @@ const (
 const (
 	envVersion = "ENV_VERSION"
 )
+
+func (deploy *NewDeploy) getFetcherResources() (v1.ResourceRequirements, error) {
+	//TBD Hardcoded as of now, should be configurable?
+	mincpu, err := resource.ParseQuantity("10m")
+	minmem, err := resource.ParseQuantity("16Mi")
+	maxcpu, err := resource.ParseQuantity("40m")
+	maxmem, err := resource.ParseQuantity("128Mi")
+
+	if err != nil {
+		return v1.ResourceRequirements{}, err
+	}
+
+	fetcherResources := v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceCPU:    mincpu,
+			v1.ResourceMemory: minmem,
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceCPU:    maxcpu,
+			v1.ResourceMemory: maxmem,
+		},
+	}
+	return fetcherResources, nil
+}
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
@@ -84,6 +110,12 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		}
 		loadPayload, err := json.Marshal(loadReq)
 		if err != nil {
+			return nil, err
+		}
+
+		fetcherResources, err := deploy.getFetcherResources()
+		if err != nil {
+			log.Printf("Error while parsing fetcher resources: %v", err)
 			return nil, err
 		}
 
@@ -148,7 +180,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 									},
 								},
 								// TBD Use smaller default resources, for now needed to make HPA work
-								Resources: env.Spec.Resources,
+								Resources: fetcherResources,
 								ReadinessProbe: &apiv1.Probe{
 									Handler: apiv1.Handler{
 										Exec: &apiv1.ExecAction{
@@ -212,6 +244,10 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
 		return existingHpa, err
+	}
+
+	if depl == nil {
+		return nil, errors.New("Failed to create HPA, found empty deployment")
 	}
 
 	if err != nil && k8s_err.IsNotFound(err) {
