@@ -271,6 +271,8 @@ func pkgInfo(c *cli.Context) error {
 
 func pkgList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	// option for the user to list all orphan packages (not referenced by any function)
+	listOrphans := c.Bool("orphan")
 
 	pkgList, err := client.PackageList()
 	if err != nil {
@@ -279,47 +281,94 @@ func pkgList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
-	for _, pkg := range pkgList {
-		fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
-			pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+	if listOrphans {
+		for _, pkg := range pkgList {
+			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+			checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			if len(fnList) == 0 {
+				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			}
+		}
+	} else {
+		for _, pkg := range pkgList {
+			fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
+				pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+		}
 	}
+
 	w.Flush()
 
 	return nil
+}
+
+func deleteOrphanPkgs(client *client.Client) error {
+	pkgList, err := client.PackageList()
+	if err != nil {
+		return err
+	}
+
+	// range through all packages and find out the ones not referenced by any function
+	for _, pkg := range pkgList {
+		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+		checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+		if len(fnList) == 0 {
+			err = deletePackage(client, pkg.Metadata.Name)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func deletePackage(client *client.Client, pkgName string) error {
+	return client.PackageDelete(&metav1.ObjectMeta{
+		Namespace: metav1.NamespaceDefault,
+		Name:      pkgName,
+	})
 }
 
 func pkgDelete(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
-	if len(pkgName) == 0 {
-		fmt.Println("Need --name argument.")
+	deleteOrphans := c.Bool("orphan")
+
+	if len(pkgName) == 0 && !deleteOrphans {
+		fmt.Println("Need --name argument or --orphan flag.")
+		return nil
+	}
+	if len(pkgName) != 0 && deleteOrphans {
+		fmt.Println("Need either --name argument or --orphan flag")
 		return nil
 	}
 
-	force := c.Bool("f")
+	if len(pkgName) != 0 {
+		force := c.Bool("f")
 
-	_, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: metav1.NamespaceDefault,
-		Name:      pkgName,
-	})
-	checkErr(err, "find package")
+		_, err := client.PackageGet(&metav1.ObjectMeta{
+			Namespace: metav1.NamespaceDefault,
+			Name:      pkgName,
+		})
+		checkErr(err, "find package")
 
-	fnList, err := getFunctionsByPackage(client, pkgName)
+		fnList, err := getFunctionsByPackage(client, pkgName)
 
-	if !force && len(fnList) > 0 {
-		fatal("Package is used by at least one function, use -f to force delete")
+		if !force && len(fnList) > 0 {
+			fatal("Package is used by at least one function, use -f to force delete")
+		}
+
+		err = deletePackage(client, pkgName)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Package '%v' deleted\n", pkgName)
+	} else {
+		err := deleteOrphanPkgs(client)
+		checkErr(err, "error deleting orphan packages")
+		fmt.Println("Orphan packages deleted")
 	}
-
-	err = client.PackageDelete(&metav1.ObjectMeta{
-		Namespace: metav1.NamespaceDefault,
-		Name:      pkgName,
-	})
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Package '%v' deleted\n", pkgName)
 
 	return nil
 }
