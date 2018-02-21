@@ -588,6 +588,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 			uploadedAr := createArchive(fclient, ar.URL, "")
 			archiveFiles[name] = *uploadedAr
 		}
+		// TODO : How about deleting archives that were there before, but not referenced by spec anymore ( like kubectl apply )
 	}
 
 	// resolve references to urls in packages to be applied
@@ -599,6 +600,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 					return fmt.Errorf("Unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
+
 				ar.Literal = availableAr.Literal
 				ar.URL = availableAr.URL
 				ar.Checksum = availableAr.Checksum
@@ -730,6 +732,7 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 		if err != nil {
 			return nil, err
 		}
+		// TODO : Leaking archiveFiles here. may be delete 'em?
 	}
 
 	// figure out if we're making a literal or a URL-based archive
