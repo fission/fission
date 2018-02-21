@@ -4,11 +4,11 @@ draft: false
 weight: 43
 ---
 
-### Pool executor, low latency
+### Functions with no cold start overhead
 
-### New Deployment executor: Low latency
+### Functions with no idle cost
 
-### New Deployment executor: Non-low latency
+### Functions with some idle cost and low latency
 
 ### Autoscaling
 

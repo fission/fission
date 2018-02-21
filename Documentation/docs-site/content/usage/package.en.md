@@ -1,12 +1,12 @@
 ---
-title: "Package"
+title: "Packaging source code"
 draft: false
 weight: 46
 ---
 
 ### Creating source package
 
-Before you create an environment with associated builder image:
+Before you create a package, you need to create an environment with associated builder image:
 
 ```
 $ fission env create --name pythonsrc --image fission/python-env:latest --builder fission/python-builder:latest --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 2

@@ -1,5 +1,5 @@
 ---
-title: "Secret/configmap in function"
+title: "Accessing Secret/configmap in function"
 draft: false
 weight: 47
 ---

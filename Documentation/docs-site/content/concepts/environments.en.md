@@ -21,4 +21,4 @@ The following pre-built environments are currently available for use in Fission:
 | Python 3                             | `fission/python-env`      |
 | Ruby                                 | `fission/ruby-env`        |
 
-To create custom environments you can extend above or create your own environment from scratch. 
+To create custom environments you can extend one of the environments in the list or create your own environment from scratch.

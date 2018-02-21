@@ -6,7 +6,7 @@ weight: 42
 
 ### Create an environment
 
-You can create an environment from node-env image and specify the resources such as memory and CPU along with poolsize. The poolsize controls how many warm pods are created initially.
+You can create an environment on your cluster from an image for that language. Optionally, you can specify CPU and memory resource limits. You can also specify the number of initially pre-warmed pods, which is called the poolsize.
 
 ```
 fission env create --name node --image fission/node-env:0.4.0 --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 4
@@ -19,7 +19,7 @@ In case of pool based executor, the resources specified for environment are used
 When you create an environment, you can specify a builder image and builder command which will be used for building from source code. You can override the build command when creating a function. For more details on builder and packages you should check out examples in [Functions](../functions) and [packages](../package)
 
 ```
-fission env create --name python --image gcr.io/fission-ci/python-env:test --builder gcr.io/fission-ci/python-env-builder:test
+fission env create --name python --image fission/python-env:latest --builder fission/python-builder:latest
 ```
 
 ### Viweing environment information
