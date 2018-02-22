@@ -4,12 +4,6 @@ draft: false
 weight: 43
 ---
 
-### Functions with no cold start overhead
-
-### Functions with no idle cost
-
-### Functions with some idle cost and low latency
-
 ### Autoscaling
 
 Let's create a function to demonstrate the autoscaling behaviour in Fission. We create a simple function which outputs "Hello World" in using NodeJS. We have kept the CPU request and limit purposefully low to simulate the load and also kept the target CPU percent to 50%. 

@@ -3,7 +3,12 @@ title: "Release notes"
 draft: false
 weight: 22
 ---
+
+- The fission team is on http://slack.fission.io if you have any questions.
+
 ### 0.6.0
+
+
 
 ### 0.5.0
 
@@ -12,7 +17,6 @@ weight: 22
 
 - This release is compatible with Kubernetes 1.7 onwards. 
 - We switched from ThirdPartyResources to CustomResourceDefinitions. ThirdPartyResources are removed in Kubernetes 1.8, so upgrade with caution, using the upgrade guide below.
-- The fission team is on http://slack.fission.io if you have any questions.
 - Upgrade guides:
   - [Upgrade guide from 0.3.0](../upgrade/upgrade-from-v0.3)
   - To upgrade from 0.2.1, please upgrade to 0.3.0 first, following the upgrade guide in the 0.3.0 release.
