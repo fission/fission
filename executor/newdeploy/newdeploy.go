@@ -25,10 +25,8 @@ import (
 	"time"
 
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/pkg/api/v1"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	asv1 "k8s.io/client-go/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
@@ -36,6 +34,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
+	"github.com/fission/fission/executor/util"
 )
 
 const (
@@ -46,30 +45,6 @@ const (
 const (
 	envVersion = "ENV_VERSION"
 )
-
-func (deploy *NewDeploy) getFetcherResources() (v1.ResourceRequirements, error) {
-	//TBD Hardcoded as of now, should be configurable?
-	mincpu, err := resource.ParseQuantity("10m")
-	minmem, err := resource.ParseQuantity("16Mi")
-	maxcpu, err := resource.ParseQuantity("40m")
-	maxmem, err := resource.ParseQuantity("128Mi")
-
-	if err != nil {
-		return v1.ResourceRequirements{}, err
-	}
-
-	fetcherResources := v1.ResourceRequirements{
-		Requests: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceCPU:    mincpu,
-			v1.ResourceMemory: minmem,
-		},
-		Limits: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceCPU:    maxcpu,
-			v1.ResourceMemory: maxmem,
-		},
-	}
-	return fetcherResources, nil
-}
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
@@ -113,7 +88,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		fetcherResources, err := deploy.getFetcherResources()
+		fetcherResources, err := util.GetFetcherResources()
 		if err != nil {
 			log.Printf("Error while parsing fetcher resources: %v", err)
 			return nil, err
@@ -214,7 +189,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			}
 			time.Sleep(time.Second)
 		}
-		return nil, errors.New("Failed to create deployment within timeout window")
+		return nil, errors.New("failed to create deployment within timeout window")
 	}
 
 	return nil, err
@@ -247,7 +222,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	}
 
 	if depl == nil {
-		return nil, errors.New("Failed to create HPA, found empty deployment")
+		return nil, errors.New("failed to create HPA, found empty deployment")
 	}
 
 	if err != nil && k8s_err.IsNotFound(err) {
