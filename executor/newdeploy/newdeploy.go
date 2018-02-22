@@ -56,9 +56,6 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	if replicas == 0 {
 		replicas = 1
 	}
-	targetFilename := "user"
-
-	var gracePeriodSeconds int64 = 6 * 60
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 	if err == nil && existingDepl.Status.ReadyReplicas >= replicas {
@@ -66,190 +63,12 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	}
 
 	if err != nil && k8s_err.IsNotFound(err) {
-		fetchReq := &fetcher.FetchRequest{
-			FetchType: fetcher.FETCH_DEPLOYMENT,
-			Package: metav1.ObjectMeta{
-				Namespace: fn.Spec.Package.PackageRef.Namespace,
-				Name:      fn.Spec.Package.PackageRef.Name,
-			},
-			Filename:   targetFilename,
-			Secrets:    fn.Spec.Secrets,
-			ConfigMaps: fn.Spec.ConfigMaps,
-		}
 
-		loadReq := fission.FunctionLoadRequest{
-			FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
-			FunctionName:     fn.Spec.Package.FunctionName,
-			FunctionMetadata: &fn.Metadata,
-		}
-
-		fetchPayload, err := json.Marshal(fetchReq)
+		deployment, err := deploy.getDeploymentSpec(fn, env, deployName, deployLabels)
 		if err != nil {
 			return nil, err
 		}
 
-		loadPayload, err := json.Marshal(loadReq)
-		if err != nil {
-			return nil, err
-		}
-
-		fetcherResources, err := util.GetFetcherResources()
-		if err != nil {
-			log.Printf("Error while parsing fetcher resources: %v", err)
-			return nil, err
-		}
-
-		podAnnotation := make(map[string]string)
-		if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
-			podAnnotation["sidecar.istio.io/inject"] = "false"
-		}
-
-		deployment := &v1beta1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: deployLabels,
-				Name:   deployName,
-			},
-			Spec: v1beta1.DeploymentSpec{
-				Replicas: &replicas,
-				Selector: &metav1.LabelSelector{
-					MatchLabels: deployLabels,
-				},
-				Template: apiv1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels:      deployLabels,
-						Annotations: podAnnotation,
-					},
-					Spec: apiv1.PodSpec{
-						Volumes: []apiv1.Volume{
-							{
-								Name: fission.SharedVolumeUserfunc,
-								VolumeSource: apiv1.VolumeSource{
-									EmptyDir: &apiv1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: fission.SharedVolumeSecrets,
-								VolumeSource: apiv1.VolumeSource{
-									EmptyDir: &apiv1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: fission.SharedVolumeConfigmaps,
-								VolumeSource: apiv1.VolumeSource{
-									EmptyDir: &apiv1.EmptyDirVolumeSource{},
-								},
-							},
-						},
-						Containers: []apiv1.Container{
-							{
-								Name:                   fn.Metadata.Name,
-								Image:                  env.Spec.Runtime.Image,
-								ImagePullPolicy:        apiv1.PullIfNotPresent,
-								TerminationMessagePath: "/dev/termination-log",
-								VolumeMounts: []apiv1.VolumeMount{
-									{
-										Name:      fission.SharedVolumeUserfunc,
-										MountPath: deploy.sharedMountPath,
-									},
-									{
-										Name:      fission.SharedVolumeSecrets,
-										MountPath: deploy.sharedSecretPath,
-									},
-									{
-										Name:      fission.SharedVolumeConfigmaps,
-										MountPath: deploy.sharedCfgMapPath,
-									},
-								},
-								Resources: env.Spec.Resources,
-								Lifecycle: &apiv1.Lifecycle{
-									PreStop: &apiv1.Handler{
-										Exec: &apiv1.ExecAction{
-											Command: []string{
-												"sleep",
-												fmt.Sprintf("%v", gracePeriodSeconds),
-											},
-										},
-									},
-								},
-							},
-							{
-								Name:                   "fetcher",
-								Image:                  deploy.fetcherImg,
-								ImagePullPolicy:        deploy.fetcherImagePullPolicy,
-								TerminationMessagePath: "/dev/termination-log",
-								VolumeMounts: []apiv1.VolumeMount{
-									{
-										Name:      fission.SharedVolumeUserfunc,
-										MountPath: deploy.sharedMountPath,
-									},
-									{
-										Name:      fission.SharedVolumeSecrets,
-										MountPath: deploy.sharedSecretPath,
-									},
-									{
-										Name:      fission.SharedVolumeConfigmaps,
-										MountPath: deploy.sharedCfgMapPath,
-									},
-								},
-								Command: []string{"/fetcher", "-specialize-on-startup",
-									"-fetch-request", string(fetchPayload),
-									"-load-request", string(loadPayload),
-									"-secret-dir", deploy.sharedSecretPath,
-									"-cfgmap-dir", deploy.sharedCfgMapPath,
-									deploy.sharedMountPath},
-								Lifecycle: &apiv1.Lifecycle{
-									PreStop: &apiv1.Handler{
-										Exec: &apiv1.ExecAction{
-											Command: []string{
-												"sleep",
-												fmt.Sprintf("%v", gracePeriodSeconds),
-											},
-										},
-									},
-								},
-								Env: []apiv1.EnvVar{
-									{
-										Name:  envVersion,
-										Value: strconv.Itoa(env.Spec.Version),
-									},
-								},
-								// TBD Use smaller default resources, for now needed to make HPA work
-								Resources: fetcherResources,
-								ReadinessProbe: &apiv1.Probe{
-									InitialDelaySeconds: 1,
-									PeriodSeconds:       1,
-									FailureThreshold:    30,
-									Handler: apiv1.Handler{
-										HTTPGet: &apiv1.HTTPGetAction{
-											Path: "/healthz",
-											Port: intstr.IntOrString{
-												Type:   intstr.Int,
-												IntVal: 8000,
-											},
-										},
-									},
-								},
-								LivenessProbe: &apiv1.Probe{
-									InitialDelaySeconds: 35,
-									PeriodSeconds:       5,
-									Handler: apiv1.Handler{
-										HTTPGet: &apiv1.HTTPGetAction{
-											Path: "/healthz",
-											Port: intstr.IntOrString{
-												Type:   intstr.Int,
-												IntVal: 8000,
-											},
-										},
-									},
-								},
-							},
-						},
-						ServiceAccountName:            "fission-fetcher",
-						TerminationGracePeriodSeconds: &gracePeriodSeconds,
-					},
-				},
-			},
-		}
 		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
 		if err != nil {
 			log.Printf("Error while creating deployment: %v", err)
@@ -293,6 +112,202 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 		return err
 	}
 	return nil
+}
+
+func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environment,
+	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
+
+	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	if replicas == 0 {
+		replicas = 1
+	}
+	targetFilename := "user"
+	var gracePeriodSeconds int64 = 6 * 60
+
+	fetchReq := &fetcher.FetchRequest{
+		FetchType: fetcher.FETCH_DEPLOYMENT,
+		Package: metav1.ObjectMeta{
+			Namespace: fn.Spec.Package.PackageRef.Namespace,
+			Name:      fn.Spec.Package.PackageRef.Name,
+		},
+		Filename:   targetFilename,
+		Secrets:    fn.Spec.Secrets,
+		ConfigMaps: fn.Spec.ConfigMaps,
+	}
+
+	loadReq := fission.FunctionLoadRequest{
+		FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
+		FunctionName:     fn.Spec.Package.FunctionName,
+		FunctionMetadata: &fn.Metadata,
+	}
+
+	fetchPayload, err := json.Marshal(fetchReq)
+	if err != nil {
+		return nil, err
+	}
+	loadPayload, err := json.Marshal(loadReq)
+	if err != nil {
+		return nil, err
+	}
+
+	fetcherResources, err := util.GetFetcherResources()
+	if err != nil {
+		log.Printf("Error while parsing fetcher resources: %v", err)
+		return nil, err
+	}
+
+	podAnnotation := make(map[string]string)
+	if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
+		podAnnotation["sidecar.istio.io/inject"] = "false"
+	}
+
+	deployment := &v1beta1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: deployLabels,
+			Name:   deployName,
+		},
+		Spec: v1beta1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: deployLabels,
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      deployLabels,
+					Annotations: podAnnotation,
+				},
+				Spec: apiv1.PodSpec{
+					Volumes: []apiv1.Volume{
+						{
+							Name: fission.SharedVolumeUserfunc,
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: fission.SharedVolumeSecrets,
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: fission.SharedVolumeConfigmaps,
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+					Containers: []apiv1.Container{
+						{
+							Name:                   fn.Metadata.Name,
+							Image:                  env.Spec.Runtime.Image,
+							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							TerminationMessagePath: "/dev/termination-log",
+							VolumeMounts: []apiv1.VolumeMount{
+								{
+									Name:      fission.SharedVolumeUserfunc,
+									MountPath: deploy.sharedMountPath,
+								},
+								{
+									Name:      fission.SharedVolumeSecrets,
+									MountPath: deploy.sharedSecretPath,
+								},
+								{
+									Name:      fission.SharedVolumeConfigmaps,
+									MountPath: deploy.sharedCfgMapPath,
+								},
+							},
+							Resources: env.Spec.Resources,
+							Lifecycle: &apiv1.Lifecycle{
+								PreStop: &apiv1.Handler{
+									Exec: &apiv1.ExecAction{
+										Command: []string{
+											"sleep",
+											fmt.Sprintf("%v", gracePeriodSeconds),
+										},
+									},
+								},
+							},
+						},
+						{
+							Name:                   "fetcher",
+							Image:                  deploy.fetcherImg,
+							ImagePullPolicy:        deploy.fetcherImagePullPolicy,
+							TerminationMessagePath: "/dev/termination-log",
+							VolumeMounts: []apiv1.VolumeMount{
+								{
+									Name:      fission.SharedVolumeUserfunc,
+									MountPath: deploy.sharedMountPath,
+								},
+								{
+									Name:      fission.SharedVolumeSecrets,
+									MountPath: deploy.sharedSecretPath,
+								},
+								{
+									Name:      fission.SharedVolumeConfigmaps,
+									MountPath: deploy.sharedCfgMapPath,
+								},
+							},
+							Command: []string{"/fetcher", "-specialize-on-startup",
+								"-fetch-request", string(fetchPayload),
+								"-load-request", string(loadPayload),
+								"-secret-dir", deploy.sharedSecretPath,
+								"-cfgmap-dir", deploy.sharedCfgMapPath,
+								deploy.sharedMountPath},
+							Lifecycle: &apiv1.Lifecycle{
+								PreStop: &apiv1.Handler{
+									Exec: &apiv1.ExecAction{
+										Command: []string{
+											"sleep",
+											fmt.Sprintf("%v", gracePeriodSeconds),
+										},
+									},
+								},
+							},
+							Env: []apiv1.EnvVar{
+								{
+									Name:  envVersion,
+									Value: strconv.Itoa(env.Spec.Version),
+								},
+							},
+							Resources: fetcherResources,
+							ReadinessProbe: &apiv1.Probe{
+								InitialDelaySeconds: 1,
+								PeriodSeconds:       1,
+								FailureThreshold:    30,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000,
+										},
+									},
+								},
+							},
+							LivenessProbe: &apiv1.Probe{
+								InitialDelaySeconds: 35,
+								PeriodSeconds:       5,
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000,
+										},
+									},
+								},
+							},
+						},
+					},
+					ServiceAccountName:            "fission-fetcher",
+					TerminationGracePeriodSeconds: &gracePeriodSeconds,
+				},
+			},
+		},
+	}
+
+	return deployment, nil
 }
 
 func (deploy *NewDeploy) deletePods(fn *crd.Function) error {
