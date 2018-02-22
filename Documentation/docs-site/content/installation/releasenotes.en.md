@@ -6,13 +6,6 @@ weight: 22
 
 - The fission team is on http://slack.fission.io if you have any questions.
 
-### 0.6.0
-
-
-
-### 0.5.0
-
-
 ### 0.4.0
 
 - This release is compatible with Kubernetes 1.7 onwards. 
