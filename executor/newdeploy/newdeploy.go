@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/environments/fetcher"
+	"github.com/fission/fission/executor/util"
 )
 
 const (
@@ -84,6 +85,12 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		}
 		loadPayload, err := json.Marshal(loadReq)
 		if err != nil {
+			return nil, err
+		}
+
+		fetcherResources, err := util.GetFetcherResources()
+		if err != nil {
+			log.Printf("Error while parsing fetcher resources: %v", err)
 			return nil, err
 		}
 
@@ -148,7 +155,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 									},
 								},
 								// TBD Use smaller default resources, for now needed to make HPA work
-								Resources: env.Spec.Resources,
+								Resources: fetcherResources,
 								ReadinessProbe: &apiv1.Probe{
 									Handler: apiv1.Handler{
 										Exec: &apiv1.ExecAction{
@@ -182,7 +189,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			}
 			time.Sleep(time.Second)
 		}
-		return nil, errors.New("Failed to create deployment within timeout window")
+		return nil, errors.New("failed to create deployment within timeout window")
 	}
 
 	return nil, err
@@ -212,6 +219,10 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
 		return existingHpa, err
+	}
+
+	if depl == nil {
+		return nil, errors.New("failed to create HPA, found empty deployment")
 	}
 
 	if err != nil && k8s_err.IsNotFound(err) {

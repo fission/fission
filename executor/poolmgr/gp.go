@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
 	"github.com/fission/fission/executor/fscache"
+	"github.com/fission/fission/executor/util"
 )
 
 const POD_PHASE_RUNNING string = "Running"
@@ -433,6 +434,11 @@ func (gp *GenericPool) createPool() error {
 	poolDeploymentName := fmt.Sprintf("%v-%v-%v",
 		gp.env.Metadata.Name, gp.env.Metadata.UID, strings.ToLower(gp.poolInstanceId))
 
+	fetcherResources, err := util.GetFetcherResources()
+	if err != nil {
+		return err
+	}
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   poolDeploymentName,
@@ -515,6 +521,7 @@ func (gp *GenericPool) createPool() error {
 									MountPath: gp.sharedCfgMapPath,
 								},
 							},
+							Resources: fetcherResources,
 							Command: []string{"/fetcher",
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
