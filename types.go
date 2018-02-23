@@ -314,6 +314,7 @@ type (
 )
 
 const EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
+const POOLMGR_INSTANCEID_LABEL string = "poolmgrInstanceId"
 
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"

@@ -89,14 +89,14 @@ func (gpm *GenericPoolManager) service() {
 			var err error
 			pool, ok := gpm.pools[crd.CacheKey(&req.env.Metadata)]
 			if !ok {
-				var poolSize = int32(req.env.Spec.Poolsize)
+				poolsize := gpm.getEnvPoolsize(req.env)
 				switch req.env.Spec.AllowedFunctionsPerContainer {
 				case fission.AllowedFunctionsPerContainerInfinite:
-					poolSize = 1
+					poolsize = 1
 				}
 
 				pool, err = MakeGenericPool(
-					gpm.fissionClient, gpm.kubernetesClient, req.env, poolSize,
+					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
 					gpm.namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
@@ -110,7 +110,7 @@ func (gpm *GenericPoolManager) service() {
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
 				latestEnvSet[crd.CacheKey(&env.Metadata)] = true
-				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = env.Spec.Poolsize
+				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = int(gpm.getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
 				_, ok := latestEnvSet[key]
@@ -166,7 +166,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		for i := range envs.Items {
 			env := envs.Items[i]
 			// Create pool only if poolsize greater than zero
-			if env.Spec.Poolsize > 0 {
+			if gpm.getEnvPoolsize(&env) > 0 {
 				_, err := gpm.GetPool(&envs.Items[i])
 				if err != nil {
 					log.Printf("eager-create pool failed: %v", err)
@@ -177,4 +177,14 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// Clean up pools whose env was deleted
 		gpm.CleanupPools(envs.Items)
 	}
+}
+
+func (gpm *GenericPoolManager) getEnvPoolsize(env *crd.Environment) int32 {
+	var poolsize int32
+	if env.Spec.Version < 3 {
+		poolsize = 3
+	} else {
+		poolsize = int32(env.Spec.Poolsize)
+	}
+	return poolsize
 }
