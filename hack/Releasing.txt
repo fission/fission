@@ -1,0 +1,66 @@
+Prerequisites
+-------------
+
+1. Get a dockerhub account if you don't have one.  Ask to be added to
+   the fission dockerhub account.
+
+2. Get a Github "personal access token":
+   https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+
+   Save the token to ~/.gh-access-token (make sure that the file is
+   readable only by you)
+
+3. Go toolchain set up.
+
+   The ability to build docker images.
+
+   `docker login`
+
+
+
+Update versions
+---------------
+
+Update the version in the source code, helm charts and docs.
+
+In the sources, the version is present in both CLI and controller:
+   fission/main.go
+   controller/api.go
+
+In each charts, the version is in Chart.yaml, values.yaml and
+templates/NOTES.yaml.
+
+Commit your changes, push them, open a PR, wait for someone to merge
+it (or merge it yourself).
+
+
+Make the release
+----------------
+
+1. cd to the top of the repo and run
+
+   ./hack/release.sh <VERSION>
+
+   This script checks to make sure you're releasing from the master
+   branch, and that your repo is clean (no modified/staged files).
+
+   This will take a while.
+
+2. Generate docs, copy to the right place, push to github
+
+3. Copy over charts, update helm chart index, push to github
+
+4. Manually test one installation, switch from pre-release to release.
+
+
+Update chart repo
+-----------------
+
+
+Update docs website
+-------------------
+
+
+Tell everybody about all the new things!!!
+------------------------------------------
+
