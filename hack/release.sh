@@ -66,6 +66,7 @@ build_fission_bundle_image() {
 
     ./build.sh
     docker build -t $tag .
+    docker tag $tag fission/fission-bundle:latest
    
     popd
 }
@@ -85,6 +86,7 @@ build_fetcher_image() {
 
     ./build.sh
     docker build -t $tag .
+    docker tag $tag fission/fetcher:latest
 
     popd    
 }
@@ -258,7 +260,9 @@ build_all() {
 
 push_all() {
     push_fission_bundle_image $version
+    push_fission_bundle_image latest
     push_fetcher_image $version
+    push_fetcher_image latest
     push_builder_image $version
     push_logger_image $version
 }
