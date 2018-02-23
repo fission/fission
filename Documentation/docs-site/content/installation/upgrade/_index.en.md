@@ -10,4 +10,4 @@ weight: 30
 * [Upgrade guide](upgrade-from-v0.3)
 
 ### From v0.1 to v0.2.x
-* [Upgade guide](upgrade-from-v0.1)
+* [Upgrade guide](upgrade-from-v0.1)
