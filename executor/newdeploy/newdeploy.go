@@ -55,7 +55,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		replicas = 1
 	}
 	targetFilename := "user"
-	userfunc := "userfunc"
+
 	var gracePeriodSeconds int64 = 6 * 60
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
@@ -120,7 +120,19 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 					Spec: apiv1.PodSpec{
 						Volumes: []apiv1.Volume{
 							{
-								Name: userfunc,
+								Name: fission.SharedVolumeUserfunc,
+								VolumeSource: apiv1.VolumeSource{
+									EmptyDir: &apiv1.EmptyDirVolumeSource{},
+								},
+							},
+							{
+								Name: fission.SharedVolumeSecrets,
+								VolumeSource: apiv1.VolumeSource{
+									EmptyDir: &apiv1.EmptyDirVolumeSource{},
+								},
+							},
+							{
+								Name: fission.SharedVolumeConfigmaps,
 								VolumeSource: apiv1.VolumeSource{
 									EmptyDir: &apiv1.EmptyDirVolumeSource{},
 								},
@@ -134,8 +146,16 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 								TerminationMessagePath: "/dev/termination-log",
 								VolumeMounts: []apiv1.VolumeMount{
 									{
-										Name:      userfunc,
+										Name:      fission.SharedVolumeUserfunc,
 										MountPath: deploy.sharedMountPath,
+									},
+									{
+										Name:      fission.SharedVolumeSecrets,
+										MountPath: deploy.sharedSecretPath,
+									},
+									{
+										Name:      fission.SharedVolumeConfigmaps,
+										MountPath: deploy.sharedCfgMapPath,
 									},
 								},
 								Resources: env.Spec.Resources,
@@ -157,8 +177,16 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 								TerminationMessagePath: "/dev/termination-log",
 								VolumeMounts: []apiv1.VolumeMount{
 									{
-										Name:      userfunc,
+										Name:      fission.SharedVolumeUserfunc,
 										MountPath: deploy.sharedMountPath,
+									},
+									{
+										Name:      fission.SharedVolumeSecrets,
+										MountPath: deploy.sharedSecretPath,
+									},
+									{
+										Name:      fission.SharedVolumeConfigmaps,
+										MountPath: deploy.sharedCfgMapPath,
 									},
 								},
 								Command: []string{"/fetcher", "-specialize-on-startup",
