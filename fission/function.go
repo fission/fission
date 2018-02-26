@@ -141,14 +141,6 @@ func fnCreate(c *cli.Context) error {
 	secretNameSpace := c.String("secretNamespace")
 	cfgMapNameSpace := c.String("configmapNamespace")
 
-	if len(secretNameSpace) == 0 && len(secretName) > 0 {
-		secretNameSpace = metav1.NamespaceDefault
-	}
-
-	if len(cfgMapNameSpace) == 0 && len(cfgMapName) > 0 {
-		cfgMapNameSpace = metav1.NamespaceDefault
-	}
-
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -209,6 +201,31 @@ func fnCreate(c *cli.Context) error {
 
 	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), targetCPU)
 
+	var secrets []fission.SecretReference
+	var cfgmaps []fission.ConfigMapReference
+
+	if len(secretName) > 0 {
+		if len(secretNameSpace) == 0 {
+			secretNameSpace = metav1.NamespaceDefault
+		}
+		newSecret := fission.SecretReference{
+			Name:      secretName,
+			Namespace: secretNameSpace,
+		}
+		secrets = []fission.SecretReference{newSecret}
+	}
+
+	if len(cfgMapName) > 0 {
+		if len(cfgMapNameSpace) == 0 {
+			cfgMapNameSpace = metav1.NamespaceDefault
+		}
+		newCfgMap := fission.ConfigMapReference{
+			Name:      cfgMapName,
+			Namespace: cfgMapNameSpace,
+		}
+		cfgmaps = []fission.ConfigMapReference{newCfgMap}
+	}
+
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
@@ -227,27 +244,11 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
-			Secrets:        []fission.SecretReference{},
-			ConfigMaps:     []fission.ConfigMapReference{},
+			Secrets:        secrets,
+			ConfigMaps:     cfgmaps,
 			Resources:      resourceReq,
 			InvokeStrategy: invokeStrategy,
 		},
-	}
-
-	if len(secretName) > 0 {
-		newSecret := fission.SecretReference{
-			Name:      secretName,
-			Namespace: secretNameSpace,
-		}
-		function.Spec.Secrets = append(function.Spec.Secrets, newSecret)
-	}
-
-	if len(cfgMapName) > 0 {
-		newCfgMap := fission.ConfigMapReference{
-			Name:      cfgMapName,
-			Namespace: cfgMapNameSpace,
-		}
-		function.Spec.ConfigMaps = append(function.Spec.ConfigMaps, newCfgMap)
 	}
 
 	// if we're writing a spec, don't create the function
@@ -375,9 +376,43 @@ func fnUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
 
+	secretName := c.String("secret")
+	cfgMapName := c.String("configmap")
+
+	secretNameSpace := c.String("secretNamespace")
+	cfgMapNameSpace := c.String("configmapNamespace")
+
 	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
 		len(entrypoint) == 0 && len(buildcmd) == 0 {
 		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd argument.")
+	}
+
+	if len(secretName) > 0 {
+		if len(function.Spec.Secrets) > 1 {
+			fatal("Please use 'fission spec apply' to update list of secrets")
+		}
+		if len(secretNameSpace) == 0 {
+			secretNameSpace = metav1.NamespaceDefault
+		}
+		newSecret := fission.SecretReference{
+			Name:      secretName,
+			Namespace: secretNameSpace,
+		}
+		function.Spec.Secrets = []fission.SecretReference{newSecret}
+	}
+
+	if len(cfgMapName) > 0 {
+		if len(function.Spec.ConfigMaps) > 1 {
+			fatal("Please use 'fission spec apply' to update list of configmaps")
+		}
+		if len(cfgMapNameSpace) == 0 {
+			cfgMapNameSpace = metav1.NamespaceDefault
+		}
+		newCfgMap := fission.ConfigMapReference{
+			Name:      cfgMapName,
+			Namespace: cfgMapNameSpace,
+		}
+		function.Spec.ConfigMaps = []fission.ConfigMapReference{newCfgMap}
 	}
 
 	if len(envName) > 0 {
