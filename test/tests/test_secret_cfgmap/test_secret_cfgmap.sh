@@ -19,14 +19,20 @@ function cleanup {
     kubectl delete secret -n default ${fn_secret}
     kubectl delete configmap -n default ${fn_cfgmap}
     fission function delete --name ${fn_secret}
+    fission function delete --name ${fn_secret}-1
     fission function delete --name ${fn_cfgmap}
+    fission function delete --name ${fn_cfgmap}-1
     fission function delete --name ${fn}
     var=$(fission route list | grep ${fn_secret} | awk '{print $1;}')
     var2=$(fission route list | grep ${fn_cfgmap} | awk '{print $1;}')
-    var3=$(fission route list | grep ${fn} | awk '{print $1;}')
+    var3=$(fission route list | grep ${fn_secret}-1 | awk '{print $1;}')
+    var4=$(fission route list | grep ${fn_cfgmap}-1 | awk '{print $1;}')
+    var5=$(fission route list | grep ${fn} | awk '{print $1;}')
     fission route delete --name ${var}
     fission route delete --name ${var2}
     fission route delete --name ${var3}
+    fission route delete --name ${var4}
+    fission route delete --name ${var5}
 }
 
 checkFunctionResponse() {
@@ -71,14 +77,18 @@ sleep 5
 
 checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
 
-kubectl patch secrets ${fn_secret} -p '{"data":{"name":"TkVXVkFMCg=="}}' -n default
-fission fn update --name ${fn_secret} --secret ${fn_secret} --executortype newdeploy --minscale 1
-trap "fission fn delete --name ${fn_secret}" EXIT
+log "Creating function with newdeploy executorType and new secret value"
+kubectl patch secrets ${fn_secret} -p '{"data":{"TEST_KEY":"TkVXVkFMCg=="}}' -n default
+fission fn create --name ${fn_secret}-1 --env python --code secret.py --secret ${fn_secret} --executortype newdeploy
+trap "fission fn delete --name ${fn_secret}-1" EXIT
 
-log "Waiting for executor to catch up"
-sleep 10
+log "Creating route"
+fission route create --function ${fn_secret}-1 --url /${fn_secret}-1 --method GET
 
-checkFunctionResponse ${fn_secret} 'NEWVAL' 'secret'
+log "Waiting for router catch up"
+sleep 5
+
+checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'
 
 log "Creating configmap"
 kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
@@ -96,14 +106,18 @@ sleep 5
 
 checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'
 
-kubectl patch configmap ${fn_cfgmap} -p '{"data":{"name":"NEWVAL"}}' -n default
-fission fn update --name ${fn_cfgmap} --configmap ${fn_cfgmap} --executortype newdeploy --minscale 1
-trap "fission fn delete --name ${fn_cfgmap}" EXIT
+log "Creating function with newdeploy executorType and new configmap value"
+kubectl patch configmap ${fn_cfgmap} -p '{"data":{"TEST_KEY":"NEWVAL"}}' -n default
+fission fn create --name ${fn_cfgmap}-1 --env python --code cfgmap.py --configmap ${fn_cfgmap} --executortype newdeploy
+trap "fission fn delete --name ${fn_cfgmap}-1" EXIT
 
-log "Waiting for executor to catch up"
-sleep 10
+log "Creating route"
+fission route create --function ${fn_cfgmap}-1 --url /${fn_cfgmap}-1 --method GET
 
-checkFunctionResponse ${fn_cfgmap} 'NEWVAL' 'configmap'
+log "Waiting for router catch up"
+sleep 5
+
+checkFunctionResponse ${fn_cfgmap}-1 'NEWVAL' 'configmap'
 
 log "testing creating a function without a secret or configmap"
 fission function create --name ${fn} --env python --code empty.py
