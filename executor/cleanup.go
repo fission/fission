@@ -202,6 +202,14 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 			logErr("cleaning up deployment", err)
 			// ignore err
 		}
+		// Backward compatibility with older label name
+		pid, pok := dep.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
+		if pok && pid != instanceId {
+			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
+			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
+			logErr("cleaning up deployment", err)
+			// ignore err
+		}
 	}
 	return nil
 }
@@ -214,6 +222,13 @@ func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instance
 	for _, rs := range rsList.Items {
 		id, ok := rs.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
+			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
+			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
+			logErr("cleaning up replicaset", err)
+		}
+		// Backward compatibility with older label name
+		pid, pok := rs.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
+		if pok && pid != instanceId {
 			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
 			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
 			logErr("cleaning up replicaset", err)
@@ -235,6 +250,15 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 			logErr("cleaning up pod", err)
 			// ignore err
 		}
+		// Backward compatibility with older label name
+		pid, pok := pod.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
+		if pok && pid != instanceId {
+			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
+			err := client.CoreV1().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
+			logErr("cleaning up pod", err)
+			// ignore err
+		}
+
 	}
 	return nil
 }
