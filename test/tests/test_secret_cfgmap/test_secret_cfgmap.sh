@@ -71,7 +71,7 @@ sleep 5
 
 checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
 
-kubectl patch secrets ${fn_secret} -p '{"data":{"name":"TkVXVkFMC"}}' -n default
+kubectl patch secrets ${fn_secret} -p '{"data":{"name":"TkVXVkFMCg=="}}' -n default
 fission fn update --name ${fn_secret} --secret ${fn_secret} --executortype newdeploy --minscale 1
 trap "fission fn delete --name ${fn_secret}" EXIT
 
