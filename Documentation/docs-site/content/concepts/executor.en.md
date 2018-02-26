@@ -22,11 +22,11 @@ New-Deployment executor (Newdeploy) creates a Kubernetes Deployment along with a
 
 Newdeploy executortype can be used for requests with no particular low-latency requirements, such as those invoked asynchronously, minscale can be set to zero. In this case the Kubernetes deployment and other objects will be created on first invocation of the function. Subsequent requests can be served by the same deployment. If there are no requests for certain duration then the idle objects are cleaned up. This mechanism ensures resource consumption only on demand and is a good fit for asynchronous requests.
 
-For requests where latency requirements are stringent, a minscale  greater than zero can be set. This essentially keeps a minscale number of pods ready when you create a function. When the function is invoked, there is no delay since the pod does not have to created. Also minscale ensures that the pods are not cleaned up even if the function is idle. This is great for functions where lower latency is more important than saving resource consumption when functions are idle.
+For requests where latency requirements are stringent, a minscale  greater than zero can be set. This essentially keeps a minscale number of pods ready when you create a function. When the function is invoked, there is no delay since the pod is already created. Also minscale ensures that the pods are not cleaned up even if the function is idle. This is great for functions where lower latency is more important than saving resource consumption when functions are idle.
 
 ### The latency vs. idle-cost tradeoff
 
-The executors allow you as a user to decide between latency and a small idle cost tradeoff. Depending on the need you can choose one of the combinations which is optimal for your use case. In future a more intelligent mechanism dispatch mechanism will enable more complex combinations of executors.
+The executors allow you as a user to decide between latency and a small idle cost tradeoff. Depending on the need you can choose one of the combinations which is optimal for your use case. In future, a more intelligent dispatch mechanism will enable more complex combinations of executors.
 
 | Executor Type | Min Scale| Latency | Idle cost |
 |:---------|:---------:|:---------:|:---------|
@@ -36,4 +36,4 @@ The executors allow you as a user to decide between latency and a small idle cos
 
 ### Autoscaling
 
-The new deployment based executor provides autoscaling for functions based on CPU currently. You can set the intial and maximum CPU for a function and target CPU at which autoscaling will be trigerred. Autoscaling is useful for workloads where you expect intermittant spikes in workloads. It also enables optimal usage of resources to execute functions, by using a baseline capacity with minimum scale and ability to burst upto maximum scale based on spikes in demand.
+The new deployment based executor provides autoscaling for functions based on CPU usage. In future custom metrics will be also supported for scaling the functions. You can set the intial and maximum CPU for a function and target CPU at which autoscaling will be trigerred. Autoscaling is useful for workloads where you expect intermittant spikes in workloads. It also enables optimal usage of resources to execute functions, by using a baseline capacity with minimum scale and ability to burst up to maximum scale based on spikes in demand.
