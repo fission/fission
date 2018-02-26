@@ -337,6 +337,8 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		return
 	}
 
+	changed := false
+
 	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr &&
@@ -357,11 +359,6 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			return
 		}
 
-		deployment, err := deploy.getDeployment(newFn)
-		if err != nil {
-			log.Printf("error getting deployment while updating function: %v", err)
-		}
-
 		hpa, err := deploy.getHpa(newFn)
 		if err != nil {
 			log.Printf("error getting HPA while updating function: %v", err)
@@ -369,8 +366,8 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
 			replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-			deployment.Spec.Replicas = &replicas
 			hpa.Spec.MinReplicas = &replicas
+			changed = true // Will start deployment update
 		}
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
@@ -382,39 +379,15 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
 		}
 
-		err = deploy.updateDeployment(deployment)
-		if err != nil {
-			log.Printf("error updating deployment while updating function: %v", err)
-		}
-
 		err = deploy.updateHpa(hpa)
 		if err != nil {
 			log.Printf("error updating HPA while updating function: %v", err)
 		}
 	}
 
-	env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
-		Get(newFn.Spec.Environment.Name)
-	if err != nil {
-		log.Printf("failed to get environment while updating function: %v", err)
-	}
-
 	if oldFn.Spec.Environment != newFn.Spec.Environment {
-		deployment, err := deploy.getDeployment(newFn)
-		if err != nil {
-			log.Printf("failed to get deployment while updating function: %v", err)
-		}
-		//TBD Assuming first image to be environment, is there a better way?
-		deployment.Spec.Template.Spec.Containers[0].Image = env.Spec.Runtime.Image
-		// TBD This does not account for changes in builder image & resource requirements
-
-		err = deploy.updateDeployment(deployment)
-		if err != nil {
-			log.Printf("failed to update deployment while updating function: %v", err)
-		}
+		changed = true
 	}
-
-	changed := false
 
 	if oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
 		oldFn.Spec.Environment != newFn.Spec.Environment {
@@ -444,6 +417,11 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 	}
 
 	if changed == true {
+		env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
+			Get(newFn.Spec.Environment.Name)
+		if err != nil {
+			log.Printf("failed to get environment while updating function: %v", err)
+		}
 		deployName := deploy.getObjName(oldFn)
 		deployLabels := deploy.getDeployLabels(oldFn, env)
 		log.Printf("updating deployment due to function update")
