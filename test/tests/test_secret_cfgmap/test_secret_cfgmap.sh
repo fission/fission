@@ -29,6 +29,24 @@ function cleanup {
     fission route delete --name ${var3}
 }
 
+checkFunctionResponse() {
+    log "Doing an HTTP GET on the function's route"
+    response=$(curl http://$FISSION_ROUTER/${1})
+    val=${2}
+    type=${3}
+
+    log "Checking for valid response"
+    log ${response}
+
+    if [[ ${response} != ${val} ]]
+    then
+        log "test ${type} failed"
+        cleanup
+        exit 1
+    fi
+    log "test ${type} passed"
+}
+
 # Create a hello world function in nodejs, test it with an http trigger
 log "Pre-test cleanup"
 fission env delete --name python || true
@@ -41,7 +59,6 @@ log "Creating secret"
 kubectl create secret generic ${fn_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
 trap "kubectl delete secret ${fn_secret} -n default" EXIT
 
-
 log "Creating function with secret"
 fission fn create --name ${fn_secret} --env python --code secret.py --secret ${fn_secret}
 trap "fission fn delete --name ${fn_secret}" EXIT
@@ -52,20 +69,19 @@ fission route create --function ${fn_secret} --url /${fn_secret} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-log "HTTP GET on the function's route"
-res=$(curl http://${FISSION_ROUTER}/${fn_secret})
-val='TESTVALUE'
+checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
 
-if [[ ${res} != ${val} ]]
-then
-	log "test secret failed"
-	cleanup
-	exit 1
-fi
-log "test secret passed"
+kubectl patch secrets ${fn_secret} -p '{"data":{"name":"TkVXVkFMC"}}' -n default
+fission fn update --name ${fn_secret} --secret ${fn_secret} --executortype newdeploy --minscale 1
+trap "fission fn delete --name ${fn_secret}" EXIT
+
+log "Waiting for executor to catch up"
+sleep 10
+
+checkFunctionResponse ${fn_secret} 'NEWVAL' 'secret'
 
 log "Creating configmap"
-kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY=TESTVALUE -n default
+kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
 trap "kubectl delete configmap ${fn_cfgmap} -n default" EXIT
 
 log "creating function with configmap"
@@ -78,16 +94,16 @@ fission route create --function ${fn_cfgmap} --url /${fn_cfgmap} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-log "HTTP GET on the function's route"
-rescfg=$(curl http://${FISSION_ROUTER}/${fn_cfgmap})
+checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'
 
-if [ ${rescfg} != ${val} ]
-then
-	log "test cfgmap failed"
-	cleanup
-	exit 1
-fi
-log "test configmap passed"
+kubectl patch configmap ${fn_cfgmap} -p '{"data":{"name":"NEWVAL"}}' -n default
+fission fn update --name ${fn_cfgmap} --configmap ${fn_cfgmap} --executortype newdeploy --minscale 1
+trap "fission fn delete --name ${fn_cfgmap}" EXIT
+
+log "Waiting for executor to catch up"
+sleep 10
+
+checkFunctionResponse ${fn_cfgmap} 'NEWVAL' 'configmap'
 
 log "testing creating a function without a secret or configmap"
 fission function create --name ${fn} --env python --code empty.py
