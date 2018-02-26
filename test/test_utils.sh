@@ -163,11 +163,12 @@ helm_install_fission() {
     fluentdImage=$8
     fluentdImageTag=$9
     pruneInterval="${10}"
+    routerServiceType=${11}
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
 
     timeout 30 bash -c "helm_setup"
 
@@ -420,6 +421,7 @@ install_and_test() {
     fluentdImage=$5
     fluentdImageTag=$6
     pruneInterval=$7
+    routerServiceType=$8
 
     controllerPort=31234
     routerPort=31235
@@ -428,7 +430,7 @@ install_and_test() {
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id

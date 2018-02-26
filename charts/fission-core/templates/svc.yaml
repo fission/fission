@@ -6,11 +6,11 @@ metadata:
     svc: router
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
-  type: {{ .Values.serviceType }}
+  type: {{ .Values.routerServiceType }}
   ports:
   - port: 80
     targetPort: 8888
-{{ if eq .Values.serviceType "NodePort" }}
+{{ if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
 {{ end }}
   selector:

@@ -609,28 +609,31 @@ func fnTest(c *cli.Context) error {
 		fatal("Need function name to be specified with --name")
 	}
 
-	localRouterPort, err := findFreePort()
-	if err != nil {
-		fatal(fmt.Sprintf("Error finding unused port for router :%s", err.Error()))
-	}
-
-	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-	go func() {
-		err := runportForward("router", localRouterPort, fissionNamespace)
+	routerURL := os.Getenv("FISSION_ROUTER")
+	if len(routerURL) == 0 {
+		localRouterPort, err := findFreePort()
 		if err != nil {
-			fatal(err.Error())
+			fatal(fmt.Sprintf("Error finding unused port for router :%s", err.Error()))
 		}
-	}()
 
-	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", localRouterPort), time.Second)
-		if conn != nil {
-			conn.Close()
-			break
+		fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+		go func() {
+			err := runportForward("router", localRouterPort, fissionNamespace)
+			if err != nil {
+				fatal(err.Error())
+			}
+		}()
+
+		for {
+			conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", localRouterPort), time.Second)
+			if conn != nil {
+				conn.Close()
+				break
+			}
 		}
+		routerURL = "127.0.0.1:" + localRouterPort
 	}
 
-	routerURL := "127.0.0.1:" + localRouterPort
 	url := fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnName)
 
 	resp := httpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
