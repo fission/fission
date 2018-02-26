@@ -22,7 +22,7 @@ New-Deployment executor (Newdeploy) creates a Kubernetes Deployment along with a
 
 Newdeploy executortype can be used for requests with no particular low-latency requirements, such as those invoked asynchronously, minscale can be set to zero. In this case the Kubernetes deployment and other objects will be created on first invocation of the function. Subsequent requests can be served by the same deployment. If there are no requests for certain duration then the idle objects are cleaned up. This mechanism ensures resource consumption only on demand and is a good fit for asynchronous requests.
 
-For requests where latency requirements are stringent, a minscale  greater than zero can beset. This essentially keeps a minscale number of pods ready when you create a function. When the function is invoked, there is no delay since the pod does not have to created. Also minscale ensures that the pods are not cleaned up even if the function is idle. This is great for functions where lower latency is more important than saving resource consumption when functions are idle. 
+For requests where latency requirements are stringent, a minscale  greater than zero can be set. This essentially keeps a minscale number of pods ready when you create a function. When the function is invoked, there is no delay since the pod does not have to created. Also minscale ensures that the pods are not cleaned up even if the function is idle. This is great for functions where lower latency is more important than saving resource consumption when functions are idle.
 
 ### The latency vs. idle-cost tradeoff
 
