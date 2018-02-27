@@ -482,7 +482,7 @@ func (gp *GenericPool) createPool() error {
 
 	podAnnotation := make(map[string]string)
 
-	if gp.useIstio && gp.env.Spec.AllowedAccessExternalNetwork {
+	if gp.useIstio && gp.env.Spec.AllowAccessToExternalNetwork {
 		podAnnotation["sidecar.istio.io/inject"] = "false"
 	}
 

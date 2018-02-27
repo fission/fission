@@ -98,7 +98,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		}
 
 		podAnnotation := make(map[string]string)
-		if deploy.useIstio && env.Spec.AllowedAccessExternalNetwork {
+		if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
 			podAnnotation["sidecar.istio.io/inject"] = "false"
 		}
 

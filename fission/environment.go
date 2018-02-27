@@ -87,7 +87,7 @@ func envCreate(c *cli.Context) error {
 			},
 			Poolsize:                     poolsize,
 			Resources:                    resourceReq,
-			AllowedAccessExternalNetwork: envExternalNetwork,
+			AllowAccessToExternalNetwork: envExternalNetwork,
 		},
 	}
 
@@ -163,7 +163,7 @@ func envUpdate(c *cli.Context) error {
 		env.Spec.Poolsize = c.Int("poolsize")
 	}
 
-	env.Spec.AllowedAccessExternalNetwork = envExternalNetwork
+	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
 	checkErr(err, "update environment")

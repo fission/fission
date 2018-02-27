@@ -234,7 +234,7 @@ type (
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
 
 		// Optional, defaults to 'false'
-		AllowedAccessExternalNetwork bool `json:"allowedAccessExternalNetwork,omitempty"`
+		AllowAccessToExternalNetwork bool `json:"allowAccessToExternalNetwork,omitempty"`
 
 		// Request and limit resources for the environment
 		Resources v1.ResourceRequirements `json:"resources"`
