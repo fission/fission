@@ -1,5 +1,5 @@
 ---
-title: "Enable Istio feature"
+title: "Enabling Istio on Fission"
 draft: false
 weight: 42
 ---
@@ -116,10 +116,10 @@ $ kubectl config set-context $(kubectl config current-context) --namespace=$FISS
 Follow the [installation guide](../../installation/) to install fission with flag `enableIstio` true.
 
 ``` bash
-$ helm install --debug --namespace $FISSION_NAMESPACE --set enableIstio=true --name istio-demo <chart-fission-all-url>
+$ helm install --namespace $FISSION_NAMESPACE --set enableIstio=true --name istio-demo <chart-fission-all-url>
 ```
 
-### Create a custom function
+### Create a function
 
 Set environment
 
