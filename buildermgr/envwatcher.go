@@ -538,8 +538,16 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "package",
+									Name:      fission.SharedVolumePackages,
 									MountPath: sharedMountPath,
+								},
+								{
+									Name:      fission.SharedVolumeSecrets,
+									MountPath: sharedCfgMapPath,
+								},
+								{
+									Name:      fission.SharedVolumeConfigmaps,
+									MountPath: sharedCfgMapPath,
 								},
 							},
 							Command: []string{"/fetcher",
