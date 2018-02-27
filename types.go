@@ -356,6 +356,7 @@ const (
 
 const (
 	SharedVolumeUserfunc   = "userfunc"
+	SharedVolumePackages   = "packages"
 	SharedVolumeSecrets    = "secrets"
 	SharedVolumeConfigmaps = "configmaps"
 )
