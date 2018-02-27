@@ -355,6 +355,13 @@ const (
 )
 
 const (
+	SharedVolumeUserfunc   = "userfunc"
+	SharedVolumePackages   = "packages"
+	SharedVolumeSecrets    = "secrets"
+	SharedVolumeConfigmaps = "configmaps"
+)
+
+const (
 	// FunctionReferenceFunctionName means that the function
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = "name"

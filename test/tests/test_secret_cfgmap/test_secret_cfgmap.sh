@@ -18,15 +18,34 @@ function cleanup {
     log "Cleanup everything"
     kubectl delete secret -n default ${fn_secret}
     kubectl delete configmap -n default ${fn_cfgmap}
-    fission function delete --name ${fn_secret}
-    fission function delete --name ${fn_cfgmap}
-    fission function delete --name ${fn}
-    var=$(fission route list | grep ${fn_secret} | awk '{print $1;}')
-    var2=$(fission route list | grep ${fn_cfgmap} | awk '{print $1;}')
-    var3=$(fission route list | grep ${fn} | awk '{print $1;}')
-    fission route delete --name ${var}
-    fission route delete --name ${var2}
-    fission route delete --name ${var3}
+    # delete functions
+    for f in ${fn_secret} ${fn_cfgmap} ${fn}
+    do
+        fission fn list | grep ${f} | awk '{print $1;}' | xargs -I@ bash -c "fission function delete --name @"
+    done
+    # delete routes
+    for r in ${fn_secret} ${fn_cfgmap} ${fn}
+    do
+        fission route list | grep ${r} | awk '{print $1;}' | xargs -I@ bash -c "fission route delete --name @"
+    done
+}
+
+checkFunctionResponse() {
+    log "Doing an HTTP GET on the function's route"
+    response=$(curl http://$FISSION_ROUTER/${1})
+    val=${2}
+    type=${3}
+
+    log "Checking for valid response"
+    log ${response}
+
+    if [[ ${response} != ${val} ]]
+    then
+        log "test ${type} failed"
+        cleanup
+        exit 1
+    fi
+    log "test ${type} passed"
 }
 
 # Create a hello world function in nodejs, test it with an http trigger
@@ -41,7 +60,6 @@ log "Creating secret"
 kubectl create secret generic ${fn_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
 trap "kubectl delete secret ${fn_secret} -n default" EXIT
 
-
 log "Creating function with secret"
 fission fn create --name ${fn_secret} --env python --code secret.py --secret ${fn_secret}
 trap "fission fn delete --name ${fn_secret}" EXIT
@@ -52,20 +70,23 @@ fission route create --function ${fn_secret} --url /${fn_secret} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-log "HTTP GET on the function's route"
-res=$(curl http://${FISSION_ROUTER}/${fn_secret})
-val='TESTVALUE'
+checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
 
-if [[ ${res} != ${val} ]]
-then
-	log "test secret failed"
-	cleanup
-	exit 1
-fi
-log "test secret passed"
+log "Creating function with newdeploy executorType and new secret value"
+kubectl patch secrets ${fn_secret} -p '{"data":{"TEST_KEY":"TkVXVkFMCg=="}}' -n default
+fission fn create --name ${fn_secret}-1 --env python --code secret.py --secret ${fn_secret} --executortype newdeploy
+trap "fission fn delete --name ${fn_secret}-1" EXIT
+
+log "Creating route"
+fission route create --function ${fn_secret}-1 --url /${fn_secret}-1 --method GET
+
+log "Waiting for router catch up"
+sleep 5
+
+checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'
 
 log "Creating configmap"
-kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY=TESTVALUE -n default
+kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
 trap "kubectl delete configmap ${fn_cfgmap} -n default" EXIT
 
 log "creating function with configmap"
@@ -78,16 +99,20 @@ fission route create --function ${fn_cfgmap} --url /${fn_cfgmap} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-log "HTTP GET on the function's route"
-rescfg=$(curl http://${FISSION_ROUTER}/${fn_cfgmap})
+checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'
 
-if [ ${rescfg} != ${val} ]
-then
-	log "test cfgmap failed"
-	cleanup
-	exit 1
-fi
-log "test configmap passed"
+log "Creating function with newdeploy executorType and new configmap value"
+kubectl patch configmap ${fn_cfgmap} -p '{"data":{"TEST_KEY":"NEWVAL"}}' -n default
+fission fn create --name ${fn_cfgmap}-1 --env python --code cfgmap.py --configmap ${fn_cfgmap} --executortype newdeploy
+trap "fission fn delete --name ${fn_cfgmap}-1" EXIT
+
+log "Creating route"
+fission route create --function ${fn_cfgmap}-1 --url /${fn_cfgmap}-1 --method GET
+
+log "Waiting for router catch up"
+sleep 5
+
+checkFunctionResponse ${fn_cfgmap}-1 'NEWVAL' 'configmap'
 
 log "testing creating a function without a secret or configmap"
 fission function create --name ${fn} --env python --code empty.py

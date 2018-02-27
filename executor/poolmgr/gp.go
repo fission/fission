@@ -504,19 +504,19 @@ func (gp *GenericPool) createPool() error {
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{
 						{
-							Name: "userfunc",
+							Name: fission.SharedVolumeUserfunc,
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
 						},
 						{
-							Name: "secrets",
+							Name: fission.SharedVolumeSecrets,
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
 						},
 						{
-							Name: "config",
+							Name: fission.SharedVolumeConfigmaps,
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
@@ -530,15 +530,15 @@ func (gp *GenericPool) createPool() error {
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "userfunc",
+									Name:      fission.SharedVolumeUserfunc,
 									MountPath: gp.sharedMountPath,
 								},
 								{
-									Name:      "secrets",
+									Name:      fission.SharedVolumeSecrets,
 									MountPath: gp.sharedSecretPath,
 								},
 								{
-									Name:      "config",
+									Name:      fission.SharedVolumeConfigmaps,
 									MountPath: gp.sharedCfgMapPath,
 								},
 							},
@@ -567,15 +567,15 @@ func (gp *GenericPool) createPool() error {
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "userfunc",
+									Name:      fission.SharedVolumeUserfunc,
 									MountPath: gp.sharedMountPath,
 								},
 								{
-									Name:      "secrets",
+									Name:      fission.SharedVolumeSecrets,
 									MountPath: gp.sharedSecretPath,
 								},
 								{
-									Name:      "config",
+									Name:      fission.SharedVolumeConfigmaps,
 									MountPath: gp.sharedCfgMapPath,
 								},
 							},

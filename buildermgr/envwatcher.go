@@ -478,7 +478,19 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{
 						{
-							Name: "package",
+							Name: fission.SharedVolumePackages,
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: fission.SharedVolumeSecrets,
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: fission.SharedVolumeConfigmaps,
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{},
 							},
@@ -492,8 +504,16 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "package",
+									Name:      fission.SharedVolumePackages,
 									MountPath: sharedMountPath,
+								},
+								{
+									Name:      fission.SharedVolumeSecrets,
+									MountPath: sharedSecretPath,
+								},
+								{
+									Name:      fission.SharedVolumeConfigmaps,
+									MountPath: sharedCfgMapPath,
 								},
 							},
 							Command: []string{"/builder", sharedMountPath},
@@ -518,8 +538,16 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
-									Name:      "package",
+									Name:      fission.SharedVolumePackages,
 									MountPath: sharedMountPath,
+								},
+								{
+									Name:      fission.SharedVolumeSecrets,
+									MountPath: sharedSecretPath,
+								},
+								{
+									Name:      fission.SharedVolumeConfigmaps,
+									MountPath: sharedCfgMapPath,
 								},
 							},
 							Command: []string{"/fetcher",
