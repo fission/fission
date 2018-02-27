@@ -18,21 +18,16 @@ function cleanup {
     log "Cleanup everything"
     kubectl delete secret -n default ${fn_secret}
     kubectl delete configmap -n default ${fn_cfgmap}
-    fission function delete --name ${fn_secret}
-    fission function delete --name ${fn_secret}-1
-    fission function delete --name ${fn_cfgmap}
-    fission function delete --name ${fn_cfgmap}-1
-    fission function delete --name ${fn}
-    var=$(fission route list | grep ${fn_secret} | awk '{print $1;}')
-    var2=$(fission route list | grep ${fn_cfgmap} | awk '{print $1;}')
-    var3=$(fission route list | grep ${fn_secret}-1 | awk '{print $1;}')
-    var4=$(fission route list | grep ${fn_cfgmap}-1 | awk '{print $1;}')
-    var5=$(fission route list | grep ${fn} | awk '{print $1;}')
-    fission route delete --name ${var}
-    fission route delete --name ${var2}
-    fission route delete --name ${var3}
-    fission route delete --name ${var4}
-    fission route delete --name ${var5}
+    # delete functions
+    for f in ${fn_secret} ${fn_cfgmap} ${fn}
+    do
+        fission fn list | grep ${f} | awk '{print $1;}' | xargs -I@ bash -c "fission function delete --name @"
+    done
+    # delete routes
+    for r in ${fn_secret} ${fn_cfgmap} ${fn}
+    do
+        fission route list | grep ${r} | awk '{print $1;}' | xargs -I@ bash -c "fission route delete --name @"
+    done
 }
 
 checkFunctionResponse() {
