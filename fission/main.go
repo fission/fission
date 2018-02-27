@@ -28,8 +28,24 @@ func main() {
 	app.Usage = "Serverless functions for Kubernetes"
 	app.Version = "0.5.0"
 
+	// fetch the FISSION_URL env variable. If not set, port-forward to controller.
+	var value string
+	fissionUrl := os.Getenv("FISSION_URL")
+	if len(fissionUrl) == 0 {
+		// check here to specify env var for KUBECONFIG and FISSION_NAMESPACE
+		fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+		kubeConfig := os.Getenv("KUBECONFIG")
+		if len(kubeConfig) == 0 || len(fissionNamespace) == 0 {
+			fatal("Environment variables KUBECONFIG and FISSION_NAMESPACE are mandatory if the serviceType is ClusterIP")
+		}
+		localPort := controllerPodPortForward(fissionNamespace)
+		value = "http://127.0.0.1:" + localPort
+	} else {
+		value = fissionUrl
+	}
+
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Usage: "Fission server URL", EnvVar: "FISSION_URL"},
+		cli.StringFlag{Name: "server", Value: value, Usage: "Fission server URL"},
 	}
 
 	// trigger method and url flags (used in function and route CLIs)

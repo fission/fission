@@ -3,8 +3,11 @@
 #
 
 ## Kubernetes configuration
-## For minikube, set this to NodePort, elsewhere use LoadBalancer.
-serviceType: LoadBalancer
+## For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
+serviceType: ClusterIP
+
+## For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
+routerServiceType: LoadBalancer
 
 ## Fission image repository
 image: fission/fission-bundle

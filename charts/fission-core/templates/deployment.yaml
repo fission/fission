@@ -122,6 +122,7 @@ spec:
     metadata:
       labels:
         svc: controller
+        application: fission-api
     spec:
       containers:
       - name: controller

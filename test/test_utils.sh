@@ -163,11 +163,12 @@ helm_install_fission() {
     fluentdImage=$8
     fluentdImageTag=$9
     pruneInterval="${10}"
+    routerServiceType=${11}
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
 
     timeout 30 bash -c "helm_setup"
 
@@ -175,7 +176,7 @@ helm_install_fission() {
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     # deleting ns does take a while after command is issued
-    while `kubectl get ns| grep fission-builder`
+    while `kubectl get ns| grep "fission-builder"`
     do
         sleep 5
     done
@@ -190,45 +191,6 @@ helm_install_fission() {
 	 $ROOT/charts/fission-all
 
     helm list
-}
-
-wait_for_service() {
-    id=$1
-    svc=$2
-    health_endpoint=$3
-
-    ns=f-$id
-    retry=0
-    max_retries=5
-    while true
-    do
-        retry=$((retry+1))
-        if ((retry == max_retries)); then
-            echo "Waiting for $svc to be routable exceeded max retries. Quitting.."
-            exit 1
-        fi
-        ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-        if [ -z $ip ]; then
-            continue
-        fi
-        http_status=`curl -sw "%{http_code}" "http://$ip/$health_endpoint"`
-        echo "http_status for svc $svc : $http_status"
-        if [ "$http_status" -ne "200" ]; then
-            echo "Service $svc returned response other than 200. waiting for 200 after backing off for 1 second"
-            sleep 1
-        else
-            break
-        fi
-    done
-}
-
-wait_for_services() {
-    id=$1
-
-    echo "\n--- wait for controller and router services to be routable ---"
-    wait_for_service $id controller "healthz"
-    wait_for_service $id router "router-healthz"
-    echo "\n--- end wait for controller and router services to be routable ---"
 }
 
 dump_kubernetes_events() {
@@ -269,14 +231,17 @@ helm_uninstall_fission() {(set +e
 )}
 export -f helm_uninstall_fission
 
-set_environment() {
+port_forward_services() {
     id=$1
     ns=f-$id
+    port=8888
 
-    export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
-    export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
+    kubectl get pods -l svc="router" -o name --namespace $ns | \
+        sed 's/^.*\///' | \
+        xargs -I{} kubectl port-forward {} $port:$port -n $ns &
 
-    # set path to include cli
+    export FISSION_ROUTER="127.0.0.1:"
+    FISSION_ROUTER+="$port"
     export PATH=$ROOT/fission:$PATH
 }
 
@@ -296,7 +261,6 @@ dump_builder_pod_logs() {
     done
     echo "--- end builder pod logs $p ---"
     done
-
 }
 
 dump_function_pod_logs() {
@@ -457,6 +421,7 @@ install_and_test() {
     fluentdImage=$5
     fluentdImageTag=$6
     pruneInterval=$7
+    routerServiceType=$8
 
     controllerPort=31234
     routerPort=31235
@@ -465,17 +430,16 @@ install_and_test() {
 
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
-    then
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
+    helm status $id | grep STATUS | grep -i deployed
+    if [ $? -ne 0 ]; then
         describe_all_pods $id
         dump_kubernetes_events $id
         dump_tiller_logs
-	exit 1
+	    exit 1
     fi
 
-    wait_for_services $id
-    set_environment $id
-
+    port_forward_services $id $routerPort
     run_all_tests $id
 
     dump_logs $id
@@ -486,7 +450,7 @@ install_and_test() {
     then
         # describe each pod in fission ns and function namespace
         describe_all_pods $id
-	exit 1
+	    exit 1
     fi
 }
 

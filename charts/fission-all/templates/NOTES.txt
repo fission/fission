@@ -9,18 +9,35 @@ Linux:
 Windows:
   For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/0.5.0/fission-cli-windows.exe
 
-2. Set the FISSION_URL and FISSION_ROUTER environment variables.
+2. Set the FISSION environment variables.
 
 {{- if contains "NodePort" .Values.serviceType }}
   $ export FISSION_URL=http://$(minikube ip):{{ .Values.controllerPort }}
-  $ export FISSION_ROUTER=$(minikube ip):{{ .Values.routerPort }}
 
 {{- else if contains "LoadBalancer" .Values.serviceType }}
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-        You can watch the status of by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fission get svc -w router'
+        You can watch the status of by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fission get svc -w controller'
 
   $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
+
+{{- else if contains "ClusterIP" .Values.serviceType }}
+  $ export FISSION_NAMESPACE={{ .Release.Namespace }}
+  $ export KUBECONFIG=${HOME}/.kube/config
+
+{{- end }}
+
+{{- if contains "NodePort" .Values.routerServiceType }}
+  $ export FISSION_ROUTER=$(minikube ip):{{ .Values.routerPort }}
+
+{{- else if contains "LoadBalancer" .Values.routerServiceType }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status by running 'kubectl --namespace fission get -w svc' and 'kubectl --namespace fission get svc -w router'
   $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+
+{{- else if contains "ClusterIP" .Values.routerServiceType }}
+  $ export KUBECONFIG=${HOME}/.kube/config
+  $ curl -Lo port-forward-router.sh https://github.com/fission/fission/port-forward-router.sh && chmod +x port-forward-router.sh && ./port-forward-router.sh {{ .Release.Namespace }} router 9999
+  $ export FISSION_ROUTER=127.0.0.1:9999
 
 {{- end }}
 

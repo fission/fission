@@ -53,9 +53,11 @@ func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 	if err != nil {
 		return nil
 	}
+
 	// replace in-cluster storage service host with controller server url
-	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage" + u.RequestURI()
+	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage/" + u.RequestURI()
 	reader, err := downloadURL(fileDownloadUrl)
+
 	checkErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
 	return reader
 }
