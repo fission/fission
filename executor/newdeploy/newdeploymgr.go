@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fission/fission"
@@ -50,6 +51,7 @@ type (
 		sharedMountPath        string
 		sharedSecretPath       string
 		sharedCfgMapPath       string
+		useIstio               bool
 
 		fsCache        *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
 		requestChannel chan *fnRequest
@@ -97,6 +99,15 @@ func MakeNewDeploy(
 		fetcherImagePullPolicy = "IfNotPresent"
 	}
 
+	enableIstio := false
+	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
+		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
+		if err != nil {
+			log.Println("Failed to parse ENABLE_ISTIO")
+		}
+		enableIstio = istio
+	}
+
 	nd := &NewDeploy{
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
@@ -111,6 +122,7 @@ func MakeNewDeploy(
 		sharedMountPath:        "/userfunc",
 		sharedSecretPath:       "/secrets",
 		sharedCfgMapPath:       "/configs",
+		useIstio:               enableIstio,
 
 		requestChannel: make(chan *fnRequest),
 	}
@@ -249,18 +261,23 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		"executorType":                    fission.ExecutorTypeNewdeploy,
 	}
 
-	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
-	if err != nil {
-		log.Printf("Error creating the deployment %v: %v", objName, err)
-		return fsvc, err
-	}
-
+	// Envoy(istio-proxy) returns 404 directly before istio pilot
+	// propagates latest Envoy-specific configuration.
+	// Since newdeploy waits for pods of deployment to be ready,
+	// change the order of kubeObject creation (create service first,
+	// then deployment) to take advantage of waiting time.
 	svc, err := deploy.createOrGetSvc(deployLabels, objName)
 	if err != nil {
 		log.Printf("Error creating the service %v: %v", objName, err)
 		return fsvc, err
 	}
-	svcAddress := svc.Spec.ClusterIP
+	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
+
+	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
+	if err != nil {
+		log.Printf("Error creating the deployment %v: %v", objName, err)
+		return fsvc, err
+	}
 
 	hpa, err := deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
 	if err != nil {

@@ -17,6 +17,9 @@ limitations under the License.
 package crd
 
 import (
+	"log"
+	"time"
+
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,14 +35,28 @@ const (
 // needed. (Note that this creates the CRD type; it doesn't create any
 // _instances_ of that type.)
 func ensureCRD(clientset *apiextensionsclient.Clientset, crd *apiextensionsv1beta1.CustomResourceDefinition) error {
-	_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crd.ObjectMeta.Name, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
-			if err != nil {
-				return err
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crd.ObjectMeta.Name, metav1.GetOptions{})
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// crd resource not found error
+				_, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+				if err != nil {
+					return err
+				}
+			} else {
+				// The requests fail to connect to k8s api server before
+				// istio-prxoy is ready to serve traffic. Retry again.
+				log.Printf("Error connecting to kubernetes api service (%v), retrying", err)
+				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+				continue
 			}
 		}
+
+		// resource already exists
+		break
 	}
 	return nil
 }

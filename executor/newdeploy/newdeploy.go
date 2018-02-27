@@ -19,6 +19,7 @@ package newdeploy
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"path/filepath"
 	"strconv"
@@ -55,6 +56,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	}
 	targetFilename := "user"
 	userfunc := "userfunc"
+	var gracePeriodSeconds int64 = 6 * 60
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 	if err == nil && existingDepl.Status.ReadyReplicas >= replicas {
@@ -83,6 +85,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		if err != nil {
 			return nil, err
 		}
+
 		loadPayload, err := json.Marshal(loadReq)
 		if err != nil {
 			return nil, err
@@ -92,6 +95,11 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 		if err != nil {
 			log.Printf("Error while parsing fetcher resources: %v", err)
 			return nil, err
+		}
+
+		podAnnotation := make(map[string]string)
+		if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
+			podAnnotation["sidecar.istio.io/inject"] = "false"
 		}
 
 		deployment := &v1beta1.Deployment{
@@ -106,7 +114,8 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 				},
 				Template: apiv1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: deployLabels,
+						Labels:      deployLabels,
+						Annotations: podAnnotation,
 					},
 					Spec: apiv1.PodSpec{
 						Volumes: []apiv1.Volume{
@@ -130,6 +139,16 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 									},
 								},
 								Resources: env.Spec.Resources,
+								Lifecycle: &apiv1.Lifecycle{
+									PreStop: &apiv1.Handler{
+										Exec: &apiv1.ExecAction{
+											Command: []string{
+												"sleep",
+												fmt.Sprintf("%v", gracePeriodSeconds),
+											},
+										},
+									},
+								},
 							},
 							{
 								Name:                   "fetcher",
@@ -148,6 +167,16 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 									"-secret-dir", deploy.sharedSecretPath,
 									"-cfgmap-dir", deploy.sharedCfgMapPath,
 									deploy.sharedMountPath},
+								Lifecycle: &apiv1.Lifecycle{
+									PreStop: &apiv1.Handler{
+										Exec: &apiv1.ExecAction{
+											Command: []string{
+												"sleep",
+												fmt.Sprintf("%v", gracePeriodSeconds),
+											},
+										},
+									},
+								},
 								Env: []apiv1.EnvVar{
 									{
 										Name:  envVersion,
@@ -157,17 +186,36 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 								// TBD Use smaller default resources, for now needed to make HPA work
 								Resources: fetcherResources,
 								ReadinessProbe: &apiv1.Probe{
-									Handler: apiv1.Handler{
-										Exec: &apiv1.ExecAction{
-											Command: []string{"cat", "/tmp/ready"},
-										},
-									},
 									InitialDelaySeconds: 1,
 									PeriodSeconds:       1,
+									FailureThreshold:    30,
+									Handler: apiv1.Handler{
+										HTTPGet: &apiv1.HTTPGetAction{
+											Path: "/healthz",
+											Port: intstr.IntOrString{
+												Type:   intstr.Int,
+												IntVal: 8000,
+											},
+										},
+									},
+								},
+								LivenessProbe: &apiv1.Probe{
+									InitialDelaySeconds: 35,
+									PeriodSeconds:       5,
+									Handler: apiv1.Handler{
+										HTTPGet: &apiv1.HTTPGetAction{
+											Path: "/healthz",
+											Port: intstr.IntOrString{
+												Type:   intstr.Int,
+												IntVal: 8000,
+											},
+										},
+									},
 								},
 							},
 						},
-						ServiceAccountName: "fission-fetcher",
+						ServiceAccountName:            "fission-fetcher",
+						TerminationGracePeriodSeconds: &gracePeriodSeconds,
 					},
 				},
 			},

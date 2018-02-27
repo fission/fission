@@ -24,6 +24,7 @@ import (
 
 // Start the buildermgr service.
 func Start(storageSvcUrl string, envBuilderNamespace string) error {
+
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
@@ -33,7 +34,8 @@ func Start(storageSvcUrl string, envBuilderNamespace string) error {
 	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
-	pkgWatcher := makePackageWatcher(fissionClient, kubernetesClient.CoreV1().RESTClient(), envBuilderNamespace, storageSvcUrl)
+	pkgWatcher := makePackageWatcher(fissionClient,
+		kubernetesClient.CoreV1().RESTClient(), envBuilderNamespace, storageSvcUrl)
 	go pkgWatcher.watchPackages()
 
 	select {}

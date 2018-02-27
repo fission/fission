@@ -23,6 +23,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/fission/fission"
 	builder "github.com/fission/fission/builder"
@@ -45,10 +46,29 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
-	if err != nil {
+
+	maxRetries := 20
+	var resp *http.Response
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
+
+		if err == nil {
+			if resp.StatusCode == 200 {
+				break
+			}
+			err = fission.MakeErrorFromHTTP(resp)
+		}
+
+		if i < maxRetries-1 {
+			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
+			log.Printf("Error building package (%v), retrying", err)
+			continue
+		}
+
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 
 	rBody, err := ioutil.ReadAll(resp.Body)

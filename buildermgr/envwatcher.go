@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 )
 
@@ -70,11 +72,22 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		fetcherImage           string
 		fetcherImagePullPolicy apiv1.PullPolicy
+		useIstio               bool
 	}
 )
 
 func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, builderNamespace string) *environmentWatcher {
+
+	useIstio := false
+	enableIstio := os.Getenv("ENABLE_ISTIO")
+	if len(enableIstio) > 0 {
+		istio, err := strconv.ParseBool(enableIstio)
+		if err != nil {
+			log.Println("Failed to parse ENABLE_ISTIO, defaults to false")
+		}
+		useIstio = istio
+	}
 
 	fetcherImage := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImage) == 0 {
@@ -104,6 +117,7 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 		kubernetesClient:       kubernetesClient,
 		fetcherImage:           fetcherImage,
 		fetcherImagePullPolicy: pullPolicy,
+		useIstio:               useIstio,
 	}
 
 	go envWatcher.service()
@@ -129,6 +143,11 @@ func (envw *environmentWatcher) watchEnvironments() {
 			ResourceVersion: rv,
 		})
 		if err != nil {
+			if fission.IsNetworkError(err) {
+				log.Printf("Encounter network error, retrying later: %v", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
 			log.Fatalf("Error watching environment list: %v", err)
 		}
 
@@ -152,25 +171,36 @@ func (envw *environmentWatcher) watchEnvironments() {
 }
 
 func (envw *environmentWatcher) sync() {
-	envList, err := envw.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
-	if err != nil {
-		log.Fatalf("Error syncing environment CRD resources: %v", err)
-	}
-
-	// Create environment builders for all environments
-	for i := range envList.Items {
-		env := envList.Items[i]
-
-		if env.Spec.Version == 1 || // builder is not supported with v1 interface
-			len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
-			continue
-		}
-		_, err := envw.getEnvBuilder(&env)
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		envList, err := envw.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
-			log.Printf("Error creating builder for %v: %v", env.Metadata.Name, err)
+			if fission.IsNetworkError(err) {
+				log.Printf("Error syncing environment CRD resources due to network error, retrying later: %v", err)
+				time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
+				continue
+			}
+			log.Fatalf("Error syncing environment CRD resources: %v", err)
 		}
+
+		// Create environment builders for all environments
+		for i := range envList.Items {
+			env := envList.Items[i]
+
+			if env.Spec.Version == 1 || // builder is not supported with v1 interface
+				len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
+				continue
+			}
+			_, err := envw.getEnvBuilder(&env)
+			if err != nil {
+				log.Printf("Error creating builder for %v: %v", env.Metadata.Name, err)
+			}
+		}
+
+		// Remove environment builders no longer needed
+		envw.cleanupEnvBuilders(envList.Items)
+		break
 	}
-	envw.cleanupEnvBuilders(envList.Items)
 }
 
 func (envw *environmentWatcher) service() {
@@ -423,6 +453,12 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 	name := envw.getCacheKey(env.Metadata.Name, env.Metadata.ResourceVersion)
 	sel := envw.getLabels(env.Metadata.Name, env.Metadata.ResourceVersion)
 	var replicas int32 = 1
+
+	podAnnotation := make(map[string]string)
+	if envw.useIstio && env.Spec.AllowAccessToExternalNetwork {
+		podAnnotation["sidecar.istio.io/inject"] = "false"
+	}
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: envw.builderNamespace,
@@ -436,7 +472,8 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 			},
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: sel,
+					Labels:      sel,
+					Annotations: podAnnotation,
 				},
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{

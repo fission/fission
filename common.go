@@ -18,6 +18,7 @@ package fission
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -39,4 +40,15 @@ func SetupStackTraceHandler() {
 		debug.PrintStack()
 		os.Exit(1)
 	}()
+}
+
+// IsNetworkError returns true if an error is a network error, and false otherwise.
+func IsNetworkError(err error) bool {
+	_, ok := err.(net.Error)
+	return ok
+}
+
+// GetFunctionIstioServiceName return service name of function for istio feature
+func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
+	return fmt.Sprintf("istio-%v-%v", fnName, fnNamespace)
 }

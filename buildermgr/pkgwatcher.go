@@ -138,7 +138,8 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, pkg *crd.Package) {
 				break
 			}
 
-			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient, pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
+			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient,
+				pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
