@@ -509,7 +509,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 								},
 								{
 									Name:      fission.SharedVolumeSecrets,
-									MountPath: sharedCfgMapPath,
+									MountPath: sharedSecretPath,
 								},
 								{
 									Name:      fission.SharedVolumeConfigmaps,
@@ -543,7 +543,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment) (*
 								},
 								{
 									Name:      fission.SharedVolumeSecrets,
-									MountPath: sharedCfgMapPath,
+									MountPath: sharedSecretPath,
 								},
 								{
 									Name:      fission.SharedVolumeConfigmaps,
