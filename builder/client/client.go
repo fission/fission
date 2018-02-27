@@ -21,9 +21,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -33,15 +31,13 @@ import (
 
 type (
 	Client struct {
-		url      string
-		useIstio bool
+		url string
 	}
 )
 
-func MakeClient(builderUrl string, useIstio bool) *Client {
+func MakeClient(builderUrl string) *Client {
 	return &Client{
-		url:      strings.TrimSuffix(builderUrl, "/"),
-		useIstio: useIstio,
+		url: strings.TrimSuffix(builderUrl, "/"),
 	}
 }
 
@@ -57,35 +53,14 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	for i := 0; i < maxRetries; i++ {
 		resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
 
-		if err == nil && resp.StatusCode == 200 {
-			break
-		}
-
-		retry := false
-
-		// Only retry for the specific case of a connection error.
-		if urlErr, ok := err.(*url.Error); ok {
-			if netErr, ok := urlErr.Err.(*net.OpError); ok {
-				if netErr.Op == "dial" {
-					if i < maxRetries-1 {
-						retry = true
-					}
-				}
-			}
-		}
-
 		if err == nil {
+			if resp.StatusCode == 200 {
+				break
+			}
 			err = fission.MakeErrorFromHTTP(resp)
 		}
 
-		// https://istio.io/docs/concepts/traffic-management/pilot.html
-		// Istio Pilot convert routing rules to Envoy-specific configurations,
-		// then propagates them to Envoy(istio-proxy) sidecars.
-		// Requests to the endpoints that are not ready to serve traffic will
-		// be rejected by Envoy before the requests go out of the pod. So retry
-		// here until Pilot updates its service discovery cache and new configs
-		// are propagated.
-		if (retry || c.useIstio) && i < maxRetries-1 {
+		if i < maxRetries-1 {
 			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
 			log.Printf("Error building package (%v), retrying", err)
 			continue

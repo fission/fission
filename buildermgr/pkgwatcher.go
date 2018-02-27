@@ -38,12 +38,11 @@ type (
 		podStore         k8sCache.Store
 		builderNamespace string
 		storageSvcUrl    string
-		useIstio         bool
 	}
 )
 
 func makePackageWatcher(fissionClient *crd.FissionClient, getter k8sCache.Getter,
-	builderNamespace string, storageSvcUrl string, useIstio bool) *packageWatcher {
+	builderNamespace string, storageSvcUrl string) *packageWatcher {
 
 	lw := k8sCache.NewListWatchFromClient(getter, "pods", builderNamespace, fields.Everything())
 	store, controller := k8sCache.NewInformer(lw, &apiv1.Pod{}, 30*time.Second, k8sCache.ResourceEventHandlerFuncs{})
@@ -54,7 +53,6 @@ func makePackageWatcher(fissionClient *crd.FissionClient, getter k8sCache.Getter
 		podStore:         store,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
-		useIstio:         useIstio,
 	}
 	return pkgw
 }
@@ -141,7 +139,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, pkg *crd.Package) {
 			}
 
 			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient,
-				pkgw.builderNamespace, pkgw.storageSvcUrl, pkg, pkgw.useIstio)
+				pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)

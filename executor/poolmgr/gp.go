@@ -381,7 +381,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 		targetFilename = string(fn.Metadata.UID)
 	}
 
-	err = fetcherClient.MakeClient(fetcherUrl, gp.useIstio).Fetch(&fetcher.FetchRequest{
+	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Package: metav1.ObjectMeta{
 			Namespace: fn.Spec.Package.PackageRef.Namespace,

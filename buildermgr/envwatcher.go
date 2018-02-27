@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,7 +77,17 @@ type (
 )
 
 func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, builderNamespace string, useIstio bool) *environmentWatcher {
+	kubernetesClient *kubernetes.Clientset, builderNamespace string) *environmentWatcher {
+
+	useIstio := false
+	enableIstio := os.Getenv("ENABLE_ISTIO")
+	if len(enableIstio) > 0 {
+		istio, err := strconv.ParseBool(enableIstio)
+		if err != nil {
+			log.Println("Failed to parse ENABLE_ISTIO, defaults to false")
+		}
+		useIstio = istio
+	}
 
 	fetcherImage := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImage) == 0 {
