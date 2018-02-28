@@ -8,10 +8,11 @@ import (
 	"time"
 
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	//	"k8s.io/client-go/rest"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
-
-	"github.com/fission/fission/crd"
 )
 
 func findFreePort() (string, error) {
@@ -39,28 +40,38 @@ func findFreePort() (string, error) {
 	return port, nil
 }
 
-func runportForward(serviceName string, localPort string, fissionNamespace string) error {
-	//KUBECONFIG needs to be set to the correct path i.e ~/.kube/config
-	config, podClient, _, err := crd.GetKubernetesClient()
+// runPortForward creates a local port forward to the specified pod
+func runPortForward(kubeConfig string, labelSelector string, localPort string, fissionNamespace string) error {
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 	if err != nil {
-		fatal(err.Error())
+		fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
 	}
 
-	//get the podname for the controller
-	podList, err := podClient.CoreV1().Pods(fissionNamespace).List(meta_v1.ListOptions{LabelSelector: "application=fission-api"})
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
+	}
+
+	// get the pod; if there is more than one, always port-forward to the first.
+	podList, err := clientset.CoreV1().Pods(fissionNamespace).
+		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil || len(podList.Items) == 0 {
 		fatal("Error getting controller pod for port-forwarding")
 	}
 
-	// if there are more than one pods, always port-forward to the first pod returned
 	podName := podList.Items[0].Name
 	podNameSpace := podList.Items[0].Namespace
 
-	//get the ControllerPort
-	service, err := podClient.CoreV1().Services(podNameSpace).Get(serviceName, meta_v1.GetOptions{})
+	// get the service and the target port
+	svcs, err := clientset.CoreV1().Services(podNameSpace).
+		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		fatal(fmt.Sprintf("Error getting %v service :%v", serviceName, err.Error()))
+		fatal(fmt.Sprintf("Error getting %v service :%v", labelSelector, err.Error()))
 	}
+	if len(svcs.Items) == 0 {
+		fatal(fmt.Sprintf("Service %v not found", labelSelector))
+	}
+	service := &svcs.Items[0]
 
 	var targetPort string
 	for _, servicePort := range service.Spec.Ports {
@@ -70,15 +81,16 @@ func runportForward(serviceName string, localPort string, fissionNamespace strin
 	stopChannel := make(chan struct{}, 1)
 	readyChannel := make(chan struct{})
 
-	//create request URL
-	req := podClient.CoreV1Client.RESTClient().Post().Resource("pods").Namespace(podNameSpace).Name(podName).SubResource("portforward")
+	// create request URL
+	req := clientset.CoreV1Client.RESTClient().Post().Resource("pods").
+		Namespace(podNameSpace).Name(podName).SubResource("portforward")
 	url := req.URL()
 
-	//create ports slice
+	// create ports slice
 	portCombo := localPort + ":" + targetPort
 	ports := []string{portCombo}
 
-	//actually start the port-forwarding process here
+	// actually start the port-forwarding process here
 	dialer, err := remotecommand.NewExecutor(config, "POST", url)
 	if err != nil {
 		msg := fmt.Sprintf("newexecutor errored out :%v", err.Error())
@@ -94,15 +106,20 @@ func runportForward(serviceName string, localPort string, fissionNamespace strin
 	return fw.ForwardPorts()
 }
 
-func controllerPodPortForward(fissionNamespace string) string {
-	localControllerPort, err := findFreePort()
+// Port forward a free local port to a pod on the cluster. The pod is
+// found in the specified namespace by labelSelector. The pod's port
+// is found by looking for a service in the same namespace and using
+// its targetPort. Once the port forward is started, wait for it to
+// start accepting connections before returning.
+func setupPortForward(kubeConfig, namespace, labelSelector string) string {
+	localPort, err := findFreePort()
 	if err != nil {
 		fatal(fmt.Sprintf("Error finding unused port :%v", err.Error()))
 	}
 
-	timeBefore := time.Now()
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", localControllerPort), time.Millisecond)
+		conn, _ := net.DialTimeout("tcp",
+			net.JoinHostPort("", localPort), time.Millisecond)
 		if conn != nil {
 			conn.Close()
 		} else {
@@ -111,20 +128,16 @@ func controllerPodPortForward(fissionNamespace string) string {
 		time.Sleep(time.Millisecond * 50)
 	}
 
-	timeAfter := time.Since(timeBefore)
-	if timeAfter.Seconds()/1000 >= 100 {
-		fatal(fmt.Sprintln("Lag in connecting to a free port on the localhost"))
-	}
-
 	go func() {
-		err := runportForward("controller", localControllerPort, fissionNamespace)
+		err := runPortForward(kubeConfig, labelSelector, localPort, namespace)
 		if err != nil {
-			fatal(err.Error())
+			fatal(fmt.Sprintf("Error forwarding to controller port: %s", err.Error()))
 		}
 	}()
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("", localControllerPort), time.Millisecond)
+		conn, _ := net.DialTimeout("tcp",
+			net.JoinHostPort("", localPort), time.Millisecond)
 		if conn != nil {
 			conn.Close()
 			break
@@ -132,5 +145,5 @@ func controllerPodPortForward(fissionNamespace string) string {
 		time.Sleep(time.Millisecond * 50)
 	}
 
-	return localControllerPort
+	return localPort
 }

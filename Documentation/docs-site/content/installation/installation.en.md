@@ -119,39 +119,6 @@ $ curl -Lo fission https://github.com/fission/fission/releases/download/0.5.0/fi
 For Windows, you can use the linux binary on WSL. Or you can download
 this windows executable: [fission.exe](https://github.com/fission/fission/releases/download/0.5.0/fission-cli-windows.exe)
 
-### Set environment vars
-
-Set the FISSION_URL and FISSION_ROUTER environment variables.
-FISSION_URL is used by the fission CLI to find the server.
-(FISSION_ROUTER is only needed for the examples below to work.)
-
-#### Minikube
-
-If you're using minikube, use these commands:
-
-```
-  $ export FISSION_URL=http://$(minikube ip):31313
-  $ export FISSION_ROUTER=$(minikube ip):31314
-```
-#### Cloud setups
-
-Save the external IP addresses of controller and router services in
-FISSION_URL and FISSION_ROUTER, respectively.  Wait for services to
-get IP addresses (check this with ```kubectl --namespace fission get
-svc```).  Then:
-
-##### AWS
-```
-  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..hostname}')
-  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..hostname}')
-```
-
-##### GCP
-```
-  $ export FISSION_URL=http://$(kubectl --namespace fission get svc controller -o=jsonpath='{..ip}')
-  $ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
-```
-
 ### Run an example
 
 Finally, you're ready to use Fission!
@@ -163,9 +130,7 @@ $ curl -LO https://raw.githubusercontent.com/fission/fission/master/examples/nod
 
 $ fission function create --name hello --env nodejs --code hello.js
 
-$ fission route create --method GET --url /hello --function hello
-
-$ curl http://$FISSION_ROUTER/hello
+$ fission function test --name hello
 Hello, world!
 ```
 

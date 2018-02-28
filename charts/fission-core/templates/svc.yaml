@@ -4,6 +4,7 @@ metadata:
   name: router
   labels:
     svc: router
+    application: fission-router
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   type: {{ .Values.routerServiceType }}
@@ -23,6 +24,7 @@ metadata:
   name: controller
   labels:
     svc: controller
+    application: fission-api
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   type: {{ .Values.serviceType }}
