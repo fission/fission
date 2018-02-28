@@ -199,9 +199,12 @@ func fnCreate(c *cli.Context) error {
 		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd, specFile)
 	}
 
-	resourceReq := getResourceReq(c)
-
 	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
+	resourceReq := getResourceReq(c)
+	if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
+		invokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr {
+		warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
+	}
 
 	var secrets []fission.SecretReference
 	var cfgmaps []fission.ConfigMapReference
@@ -506,6 +509,10 @@ func fnUpdate(c *cli.Context) error {
 			fnExecutor = fission.ExecutorTypeNewdeploy
 		default:
 			fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+		}
+		if c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory") &&
+			fnExecutor == fission.ExecutorTypePoolmgr {
+			warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fnExecutor
 	}

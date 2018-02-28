@@ -104,7 +104,9 @@ func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) error 
 }
 
 func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
-	deletePropagation := metav1.DeletePropagationForeground
+	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
+	// DeletePropagationForeground not advisable; it markes for deleteion and API can still serve those objects
+	deletePropagation := metav1.DeletePropagationBackground
 	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})

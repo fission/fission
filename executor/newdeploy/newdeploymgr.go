@@ -355,14 +355,14 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			log.Printf("function type changed to new deployment, creating resources: %v", newFn)
 			_, err := deploy.fnCreate(newFn)
 			if err != nil {
-				updateStatus(fmt.Sprintf("error changing the function's type to newdeploy: %v", err))
+				updateStatus(oldFn, err, "error changing the function's type to newdeploy")
 			}
 			return
 		}
 
 		hpa, err := deploy.getHpa(newFn)
 		if err != nil {
-			updateStatus(fmt.Sprintf("error getting HPA while updating function: %v", err))
+			updateStatus(oldFn, err, "error getting HPA while updating function")
 			return
 		}
 
@@ -383,7 +383,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 
 		err = deploy.updateHpa(hpa)
 		if err != nil {
-			updateStatus(fmt.Sprintf("error updating HPA while updating function: %v", err))
+			updateStatus(oldFn, err, "error updating HPA while updating function")
 			return
 		}
 	}
@@ -422,7 +422,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
 			Get(newFn.Spec.Environment.Name)
 		if err != nil {
-			updateStatus(fmt.Sprintf("failed to get environment while updating function: %v", err))
+			updateStatus(oldFn, err, "failed to get environment while updating function")
 			return
 		}
 		deployName := deploy.getObjName(oldFn)
@@ -430,12 +430,12 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		log.Printf("updating deployment due to function update")
 		newDeployment, err := deploy.getDeploymentSpec(newFn, env, deployName, deployLabels)
 		if err != nil {
-			updateStatus(fmt.Sprintf("failed to get new deployment spec while updating function: %v", err))
+			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
 			return
 		}
 		err = deploy.updateDeployment(newDeployment)
 		if err != nil {
-			updateStatus(fmt.Sprintf("failed to update deployment while updating function: %v", err))
+			updateStatus(oldFn, err, "failed to update deployment while updating function")
 			return
 		}
 		return
@@ -501,6 +501,8 @@ func (deploy *NewDeploy) getDeployLabels(fn *crd.Function, env *crd.Environment)
 	}
 }
 
-func updateStatus(message string) {
-	log.Printf(message)
+// updateStatus is a function which updates status of update.
+// Current implementation only logs messages, in future it will update function status
+func updateStatus(fn *crd.Function, err error, message string) {
+	log.Printf(message, err)
 }
