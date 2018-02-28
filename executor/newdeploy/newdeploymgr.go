@@ -24,9 +24,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fission/fission"
-	"github.com/fission/fission/crd"
-	"github.com/fission/fission/executor/fscache"
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +32,10 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/executor/fscache"
 )
 
 type (
@@ -76,7 +78,6 @@ type (
 const (
 	FnCreate requestType = iota
 	FnDelete
-	FnUpdate
 )
 
 func MakeNewDeploy(
@@ -152,8 +153,10 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 			fn := obj.(*crd.Function)
 			deploy.deleteFunction(fn)
 		},
-		UpdateFunc: func(newObj interface{}, oldObj interface{}) {
-			//TBD
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			oldFn := oldObj.(*crd.Function)
+			newFn := newObj.(*crd.Function)
+			deploy.fnUpdate(oldFn, newFn)
 		},
 	})
 	return store, controller
@@ -170,8 +173,6 @@ func (deploy *NewDeploy) service() {
 				fSvc:  fsvc,
 			}
 			continue
-		case FnUpdate:
-			// TBD
 		case FnDelete:
 			_, err := deploy.fnDelete(req.fn)
 			req.responseChannel <- &fnResponse{
@@ -179,6 +180,7 @@ func (deploy *NewDeploy) service() {
 				fSvc:  nil,
 			}
 			continue
+			// Update needs two inputs and will be called directly by controller
 		}
 	}
 }
@@ -252,14 +254,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	objName := deploy.getObjName(fn)
 
-	deployLabels := map[string]string{
-		"environmentName":                 env.Metadata.Name,
-		"environmentUid":                  string(env.Metadata.UID),
-		"functionName":                    fn.Metadata.Name,
-		"functionUid":                     string(fn.Metadata.UID),
-		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		"executorType":                    fission.ExecutorTypeNewdeploy,
-	}
+	deployLabels := deploy.getDeployLabels(fn, env)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
@@ -281,8 +276,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	hpa, err := deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
 	if err != nil {
-		log.Printf("Error creating the HPA %v: %v", objName, err)
-		return fsvc, err
+		return fsvc, errors.Wrap(err, fmt.Sprintf("error creating the HPA %v:", objName))
 	}
 
 	kubeObjRefs := []api.ObjectReference{
@@ -330,6 +324,124 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	return fsvc, nil
 }
 
+func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
+
+	if oldFn.Metadata.ResourceVersion == newFn.Metadata.ResourceVersion {
+		return
+	}
+
+	// Ignoring updates to functions which are not of NewDeployment type
+	if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
+		oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy {
+		return
+	}
+
+	changed := false
+
+	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
+
+		// Executor type is no longer New Deployment
+		if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
+			oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+			log.Printf("function does not use new deployment executor anymore, deleting resources: %v", newFn)
+			// IMP - pass the oldFn, as the new/modified function is not in cache
+			deploy.fnDelete(oldFn)
+			return
+		}
+
+		// Executor type changed to New Deployment from something else
+		if oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
+			newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+			log.Printf("function type changed to new deployment, creating resources: %v", newFn)
+			_, err := deploy.fnCreate(newFn)
+			if err != nil {
+				updateStatus(oldFn, err, "error changing the function's type to newdeploy")
+			}
+			return
+		}
+
+		hpa, err := deploy.getHpa(newFn)
+		if err != nil {
+			updateStatus(oldFn, err, "error getting HPA while updating function")
+			return
+		}
+
+		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
+			replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+			hpa.Spec.MinReplicas = &replicas
+			changed = true // Will start deployment update
+		}
+
+		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
+			hpa.Spec.MaxReplicas = int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
+		}
+
+		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
+			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
+			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+		}
+
+		err = deploy.updateHpa(hpa)
+		if err != nil {
+			updateStatus(oldFn, err, "error updating HPA while updating function")
+			return
+		}
+	}
+
+	if oldFn.Spec.Environment != newFn.Spec.Environment {
+		changed = true
+	}
+
+	if oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef {
+		changed = true
+	}
+
+	// If length of slice has changed then no need to check individual elements
+	if len(oldFn.Spec.Secrets) != len(newFn.Spec.Secrets) {
+		changed = true
+	} else {
+		for i, newSecret := range newFn.Spec.Secrets {
+			if newSecret != oldFn.Spec.Secrets[i] {
+				changed = true
+				break
+			}
+		}
+	}
+	if len(oldFn.Spec.ConfigMaps) != len(newFn.Spec.ConfigMaps) {
+		changed = true
+	} else {
+		for i, newConfig := range newFn.Spec.ConfigMaps {
+			if newConfig != oldFn.Spec.ConfigMaps[i] {
+				changed = true
+				break
+			}
+		}
+	}
+
+	if changed == true {
+		env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
+			Get(newFn.Spec.Environment.Name)
+		if err != nil {
+			updateStatus(oldFn, err, "failed to get environment while updating function")
+			return
+		}
+		deployName := deploy.getObjName(oldFn)
+		deployLabels := deploy.getDeployLabels(oldFn, env)
+		log.Printf("updating deployment due to function update")
+		newDeployment, err := deploy.getDeploymentSpec(newFn, env, deployName, deployLabels)
+		if err != nil {
+			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
+			return
+		}
+		err = deploy.updateDeployment(newDeployment)
+		if err != nil {
+			updateStatus(oldFn, err, "failed to update deployment while updating function")
+			return
+		}
+		return
+	}
+}
+
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	var delError error
@@ -338,12 +450,13 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	if err != nil {
 		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
 		delError = err
-	} else {
-		_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
-		if err != nil {
-			log.Printf("Error deleting the function from cache: %v", fsvc)
-			delError = err
-		}
+		return nil, err
+	}
+
+	_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
+	if err != nil {
+		log.Printf("Error deleting the function from cache: %v", fsvc)
+		delError = err
 	}
 	objName := fsvc.Name
 
@@ -375,4 +488,21 @@ func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
 	return fmt.Sprintf("%v-%v",
 		fn.Metadata.Name,
 		deploy.instanceID)
+}
+
+func (deploy *NewDeploy) getDeployLabels(fn *crd.Function, env *crd.Environment) map[string]string {
+	return map[string]string{
+		"environmentName":                 env.Metadata.Name,
+		"environmentUid":                  string(env.Metadata.UID),
+		"functionName":                    fn.Metadata.Name,
+		"functionUid":                     string(fn.Metadata.UID),
+		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
+		"executorType":                    fission.ExecutorTypeNewdeploy,
+	}
+}
+
+// updateStatus is a function which updates status of update.
+// Current implementation only logs messages, in future it will update function status
+func updateStatus(fn *crd.Function, err error, message string) {
+	log.Printf(message, err)
 }
