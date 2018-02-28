@@ -3,9 +3,6 @@ title: "Accessing Secret/configmap in function"
 draft: false
 weight: 47
 ---
-<!--
-Picked up from previous version, can be improved.
--->
 
 From fission v0.5.0 and later, functions are able to access [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) and [ConfigMaps](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) specified by users.
 
