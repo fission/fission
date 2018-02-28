@@ -2,7 +2,7 @@
 title: "Compiling Fission"
 date: 2017-09-07T20:10:05-07:00
 draft: false
-weight: 1
+weight: 51
 ---
 
 [You only need to do this if you're making Fission changes; if you're
