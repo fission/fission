@@ -33,6 +33,10 @@ func getKubeConfigPath() string {
 	if len(kubeConfig) == 0 {
 		home := os.Getenv("HOME")
 		kubeConfig = filepath.Join(home, ".kube", "config")
+
+		if _, err := os.Stat(kubeConfig); os.IsNotExist(err) {
+			fatal("Couldn't find kubeconfig file. Set the KUBECONFIG environment variable to your kubeconfig's path.")
+		}
 	}
 	return kubeConfig
 }
