@@ -5,10 +5,10 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/portforward"
@@ -52,13 +52,29 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 		fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
 	}
 
-	// get the pod; if there is more than one, always port-forward to the first.
+	// if fission namespace is unset, try to find a fission pod in any namespace
+	if len(fissionNamespace) == 0 {
+		fissionNamespace = meta_v1.NamespaceAll
+	}
+
+	// get the pod; if there is more than one, ask the user to disambiguate
 	podList, err := clientset.CoreV1().Pods(fissionNamespace).
 		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil || len(podList.Items) == 0 {
 		fatal("Error getting controller pod for port-forwarding")
 	}
 
+	// make a useful error message if there is more than one install
+	if len(podList.Items) > 1 {
+		namespaces := make([]string, 0)
+		for _, p := range podList.Items {
+			namespaces = append(namespaces, p.Namespace)
+		}
+		fatal(fmt.Sprintf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+			len(podList.Items), strings.Join(namespaces, " ")))
+	}
+
+	// pick the first pod
 	podName := podList.Items[0].Name
 	podNameSpace := podList.Items[0].Namespace
 
