@@ -45,7 +45,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = "0.5.0"
+	app.Version = "0.6.0"
 
 	// fetch the FISSION_URL env variable. If not set, port-forward to controller.
 	var value string
