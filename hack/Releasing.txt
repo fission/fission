@@ -15,8 +15,7 @@ Prerequisites
    The ability to build docker images.
 
    `docker login`
-
-
+   
 
 Update versions
 ---------------
@@ -30,8 +29,7 @@ In the sources, the version is present in both CLI and controller:
 In each charts, the version is in Chart.yaml, values.yaml and
 templates/NOTES.yaml.
 
-Commit your changes, push them, open a PR, wait for someone to merge
-it (or merge it yourself).
+Commit your changes, push them, open a PR, merge it.
 
 
 Make the release
@@ -50,17 +48,39 @@ Make the release
 
 3. Copy over charts, update helm chart index, push to github
 
-4. Manually test one installation, switch from pre-release to release.
+4. Manually test an installation, just for a sanity check
+
+5. Switch the github release from pre-release to release.
 
 
 Update chart repo
 -----------------
 
+Copy the helm charts over to the fission-charts repo.
 
-Update docs website
--------------------
+Run `index.sh` in that repo.  (Don't edit the index.yaml in this repo
+manually.  index.sh generates it, using the helm repo CLI.)
+
+git add, git commit, and git push your changes.
+
+The chart repo is a github page, so once you push the master branch,
+you're all set.
 
 
-Tell everybody about all the new things!!!
-------------------------------------------
+Update the docs website
+-----------------------
 
+Rebuild the docs website using hugo.
+
+Create a new folder named by version under fission.io/docs.  Copy the
+generated docs public folder into this folder.
+
+Update the 'latest' symlink to point to the new version of the docs.
+
+git add, git commit, git push.
+
+
+Announce the release
+--------------------
+
+Announce the release on #contributors.
