@@ -25,10 +25,6 @@ import (
 
 func getFissionNamespace() string {
 	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-	if len(fissionNamespace) == 0 {
-		// TODO make this smarter, perhaps based on helm releases
-		fissionNamespace = "fission"
-	}
 	return fissionNamespace
 }
 
