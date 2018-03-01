@@ -18,9 +18,28 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/urfave/cli"
 )
+
+func getFissionNamespace() string {
+	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+	if len(fissionNamespace) == 0 {
+		// TODO make this smarter, perhaps based on helm releases
+		fissionNamespace = "fission"
+	}
+	return fissionNamespace
+}
+
+func getKubeConfigPath() string {
+	kubeConfig := os.Getenv("KUBECONFIG")
+	if len(kubeConfig) == 0 {
+		home := os.Getenv("HOME")
+		kubeConfig = filepath.Join(home, ".kube", "config")
+	}
+	return kubeConfig
+}
 
 func main() {
 	app := cli.NewApp()
@@ -32,13 +51,10 @@ func main() {
 	var value string
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
-		// check here to specify env var for KUBECONFIG and FISSION_NAMESPACE
-		fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-		kubeConfig := os.Getenv("KUBECONFIG")
-		if len(kubeConfig) == 0 || len(fissionNamespace) == 0 {
-			fatal("Environment variables KUBECONFIG and FISSION_NAMESPACE are mandatory if the serviceType is ClusterIP")
-		}
-		localPort := controllerPodPortForward(fissionNamespace)
+		fissionNamespace := getFissionNamespace()
+		kubeConfig := getKubeConfigPath()
+		localPort := setupPortForward(
+			kubeConfig, fissionNamespace, "application=fission-api")
 		value = "http://127.0.0.1:" + localPort
 	} else {
 		value = fissionUrl
