@@ -193,6 +193,26 @@ helm_install_fission() {
     helm list
 }
 
+wait_for_components() {
+    id=$1
+    ns=f-$id
+    while true; do
+        pods=$(kubectl -n $ns get pod -o name)
+        readytogo=true
+        for pod in $pods; do
+            kubectl -n $ns get $pod -o jsonpath='{range @.status.conditions[*]}{@.type}={@.status};{end}' | grep 'Ready=True' &> /dev/null
+            if [[ $? -eq 1 ]]; then
+                echo "$pod is not ready"
+                readytogo=false
+            fi
+        done
+        if $readytogo; then
+            return
+        fi
+    done
+}
+export -f wait_for_components
+
 dump_kubernetes_events() {
     id=$1
     ns=f-$id
@@ -437,6 +457,8 @@ install_and_test() {
         dump_kubernetes_events $id
         dump_tiller_logs
 	    exit 1
+    else
+        timeout 60 bash -c "wait_for_components $id"
     fi
 
     port_forward_services $id $routerPort
