@@ -38,6 +38,7 @@ log "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4
 do
     curl -s http://$FISSION_ROUTER/$fn
+    sleep 4
 done
 
 log "Grabbing logs, should have 4 calls in logs"
