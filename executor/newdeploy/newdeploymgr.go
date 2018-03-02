@@ -189,7 +189,7 @@ func (deploy *NewDeploy) service() {
 				fsvc = cachedFnRecord.fsvc
 			} else {
 				fsvc, err = deploy.fnCreate(req.fn)
-				if err != nil {
+				if err == nil {
 					deploy.fnRecords[objName] = &fnRecord{
 						fsvc:     fsvc,
 						function: req.fn,

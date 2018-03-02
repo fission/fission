@@ -56,12 +56,18 @@ update_fn() {
 }
 
 test_fn() {
-    log "Doing an HTTP GET on the function's route"
-    response0=$(curl http://$FISSION_ROUTER/$1)
+    echo "Doing an HTTP GET on the function's route"
+    echo "Checking for valid response"
 
-    log "Checking for valid response"
-    echo $response0 | grep -i $2
+    while true; do
+      response0=$(curl http://$FISSION_ROUTER/$1)
+      echo $response0 | grep -i $2
+      if [[ $? -eq 0 ]]; then
+        break
+      fi
+    done
 }
+export -f test_fn
 
 # This test only tests one path of execution: updating package and checking results of function
 # There might be potential future tests where one can test changes in:
@@ -81,10 +87,10 @@ main() {
     create_env $env
     create_fn $fn_name $env
     create_route $fn_name
-    test_fn $fn_name "world"
+    timeout 60 bash -c "test_fn $fn_name 'world'"
     update_archive
     update_fn $fn_name $env
-    test_fn $fn_name "fission"
+    timeout 60 bash -c "test_fn $fn_name 'fission'"
     log "Update function for new deployment executor passed"
 }
 
