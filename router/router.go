@@ -44,10 +44,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
 	"github.com/fission/fission"
@@ -62,6 +60,7 @@ import (
 func router(ctx context.Context, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) *mutableRouter {
 	muxRouter := mux.NewRouter()
 	mr := NewMutableRouter(muxRouter)
+	muxRouter.Use(fission.LoggingMiddleware)
 	httpTriggerSet.subscribeRouter(ctx, mr, resolver)
 	return mr
 }
@@ -69,7 +68,7 @@ func router(ctx context.Context, httpTriggerSet *HTTPTriggerSet, resolver *funct
 func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) {
 	mr := router(ctx, httpTriggerSet, resolver)
 	url := fmt.Sprintf(":%v", port)
-	http.ListenAndServe(url, handlers.LoggingHandler(os.Stdout, mr))
+	http.ListenAndServe(url, mr)
 }
 
 func Start(port int, executorUrl string) {

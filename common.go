@@ -19,10 +19,14 @@ package fission
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
+
+	"github.com/gorilla/handlers"
 )
 
 func UrlForFunction(name string) string {
@@ -51,4 +55,14 @@ func IsNetworkError(err error) bool {
 // GetFunctionIstioServiceName return service name of function for istio feature
 func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 	return fmt.Sprintf("istio-%v-%v", fnName, fnNamespace)
+}
+
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURI := r.RequestURI
+		if !strings.Contains(requestURI, "healthz") {
+			// Call the next handler, which can be another middleware in the chain, or the final handler.
+			handlers.LoggingHandler(os.Stdout, next).ServeHTTP(w, r)
+		}
+	})
 }
