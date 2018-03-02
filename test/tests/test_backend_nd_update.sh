@@ -65,6 +65,7 @@ test_fn() {
       if [[ $? -eq 0 ]]; then
         break
       fi
+      sleep 1
     done
 }
 export -f test_fn
