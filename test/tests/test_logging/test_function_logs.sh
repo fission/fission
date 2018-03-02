@@ -38,12 +38,11 @@ log "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4
 do
     curl -s http://$FISSION_ROUTER/$fn
-    sleep 4
 done
 
 log "Grabbing logs, should have 4 calls in logs"
 
-sleep 15
+sleep 60
 
 fission function logs --name $fn --detail > /tmp/logfile
 
@@ -62,6 +61,7 @@ log $num logs found
 if [ $num -ne 4 ]
 then
     log "Test Failed: expected 4, found $num logs"
+    exit 1
 fi
 
 log "All done."
