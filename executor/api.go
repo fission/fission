@@ -23,10 +23,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -113,5 +111,6 @@ func (executor *Executor) Serve(port int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executor.ndm.Run(ctx)
-	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+	r.Use(fission.LoggingMiddleware)
+	log.Fatal(http.ListenAndServe(address, r))
 }

@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/fission/fission"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/graymeta/stow/local"
 	log "github.com/sirupsen/logrus"
@@ -169,7 +168,9 @@ func (ss *StorageService) Start(port int) {
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	address := fmt.Sprintf(":%v", port)
-	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+
+	r.Use(fission.LoggingMiddleware)
+	log.Fatal(http.ListenAndServe(address, r))
 }
 
 func RunStorageService(storageType StorageType, storagePath string, containerName string, port int, enablePruner bool) *StorageService {

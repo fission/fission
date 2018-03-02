@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -209,5 +208,6 @@ func (api *API) Serve(port int) {
 	address := fmt.Sprintf(":%v", port)
 
 	log.WithFields(log.Fields{"port": port}).Info("Server started")
-	log.Fatal(http.ListenAndServe(address, handlers.LoggingHandler(os.Stdout, r)))
+	r.Use(fission.LoggingMiddleware)
+	log.Fatal(http.ListenAndServe(address, r))
 }
