@@ -52,13 +52,31 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
+	waitForDeploy := func(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
+		for i := 0; i < 120; i++ {
+			latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil, err
+			}
+			//TODO check for imagePullerror
+			if latestDepl.Status.ReadyReplicas >= replicas {
+				return latestDepl, err
+			}
+			time.Sleep(time.Second)
+		}
+		return nil, errors.New("failed to create deployment within timeout window")
+	}
+
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if replicas == 0 {
 		replicas = 1
 	}
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
-	if err == nil && existingDepl.Status.ReadyReplicas >= replicas {
+	if err == nil {
+		if existingDepl.Status.ReadyReplicas < replicas {
+			existingDepl, err = waitForDeploy(existingDepl, replicas)
+		}
 		return existingDepl, err
 	}
 
@@ -75,18 +93,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		for i := 0; i < 120; i++ {
-			latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
-			if err != nil {
-				return nil, err
-			}
-			//TODO check for imagePullerror
-			if latestDepl.Status.ReadyReplicas == replicas {
-				return latestDepl, err
-			}
-			time.Sleep(time.Second)
-		}
-		return nil, errors.New("failed to create deployment within timeout window")
+		return waitForDeploy(depl, replicas)
 	}
 
 	return nil, err
@@ -98,9 +105,8 @@ func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, e
 	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) error {
-	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
-	return err
+func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) (*v1beta1.Deployment, error) {
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
 }
 
 func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
@@ -400,9 +406,8 @@ func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler
 	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
-	return err
+func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) (*asv1.HorizontalPodAutoscaler, error) {
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
 }
 
 func (deploy *NewDeploy) deleteHpa(ns string, name string) error {

@@ -56,11 +56,17 @@ type (
 		useIstio               bool
 
 		fsCache        *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
+		fnRecords      map[string]*fnRecord
 		requestChannel chan *fnRequest
 
 		functions      []crd.Function
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
+	}
+
+	fnRecord struct {
+		fsvc     *fscache.FuncSvc
+		function *crd.Function
 	}
 
 	fnRequest struct {
@@ -77,6 +83,7 @@ type (
 
 const (
 	FnCreate requestType = iota
+	FnUpdate
 	FnDelete
 )
 
@@ -117,6 +124,7 @@ func MakeNewDeploy(
 
 		namespace: namespace,
 		fsCache:   fsCache,
+		fnRecords: make(map[string]*fnRecord),
 
 		fetcherImg:             fetcherImg,
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
@@ -154,9 +162,8 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 			deploy.deleteFunction(fn)
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			oldFn := oldObj.(*crd.Function)
 			newFn := newObj.(*crd.Function)
-			deploy.fnUpdate(oldFn, newFn)
+			deploy.updateFunction(newFn)
 		},
 	})
 	return store, controller
@@ -165,22 +172,61 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 func (deploy *NewDeploy) service() {
 	for {
 		req := <-deploy.requestChannel
+
+		objName := deploy.getObjName(req.fn)
+		cachedFnRecord, found := deploy.fnRecords[objName]
+
 		switch req.reqType {
 		case FnCreate:
-			fsvc, err := deploy.fnCreate(req.fn)
+			var fsvc *fscache.FuncSvc
+			var err error
+
+			if found {
+				// If the fnRecord exists in cache, means that
+				// the kubeObjects of function are created before.
+				// In this case, return cached fsvc since the
+				// kubeObject have been created.
+				fsvc = cachedFnRecord.fsvc
+			} else {
+				fsvc, err = deploy.fnCreate(req.fn)
+				if err != nil {
+					deploy.fnRecords[objName] = &fnRecord{
+						fsvc:     fsvc,
+						function: req.fn,
+					}
+				}
+			}
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  fsvc,
 			}
 			continue
+		case FnUpdate:
+			var fsvc *fscache.FuncSvc
+			var err error
+			// Update kubeObjects related to the function
+			if found {
+				fsvc, err = deploy.fnUpdate(cachedFnRecord.function, req.fn, cachedFnRecord.fsvc)
+				if err == nil && fsvc != nil {
+					// Update cached fnRecords with latest value
+					deploy.fnRecords[objName] = &fnRecord{
+						fsvc:     fsvc,
+						function: req.fn,
+					}
+				}
+			}
+			req.responseChannel <- &fnResponse{
+				error: err,
+				fSvc:  fsvc,
+			}
 		case FnDelete:
 			_, err := deploy.fnDelete(req.fn)
+			delete(deploy.fnRecords, objName)
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  nil,
 			}
 			continue
-			// Update needs two inputs and will be called directly by controller
 		}
 	}
 }
@@ -221,6 +267,19 @@ func (deploy *NewDeploy) createFunction(fn *crd.Function) {
 	resp := <-c
 	if resp.error != nil {
 		log.Printf("Error eager creating function: %v", resp.error)
+	}
+}
+
+func (deploy *NewDeploy) updateFunction(fn *crd.Function) {
+	c := make(chan *fnResponse)
+	deploy.requestChannel <- &fnRequest{
+		fn:              fn,
+		reqType:         FnUpdate,
+		responseChannel: c,
+	}
+	resp := <-c
+	if resp.error != nil {
+		log.Printf("Error eager updating function: %v", resp.error)
 	}
 }
 
@@ -324,19 +383,19 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	return fsvc, nil
 }
 
-func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
-
-	if oldFn.Metadata.ResourceVersion == newFn.Metadata.ResourceVersion {
-		return
-	}
+func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cachedFsvc *fscache.FuncSvc) (*fscache.FuncSvc, error) {
 
 	// Ignoring updates to functions which are not of NewDeployment type
 	if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
 		oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy {
-		return
+		return nil, nil
 	}
 
-	changed := false
+	if oldFn.Metadata.ResourceVersion == newFn.Metadata.ResourceVersion {
+		return cachedFsvc, nil
+	}
+
+	deployChanged := false
 
 	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
 
@@ -345,85 +404,96 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 			log.Printf("function does not use new deployment executor anymore, deleting resources: %v", newFn)
 			// IMP - pass the oldFn, as the new/modified function is not in cache
-			deploy.fnDelete(oldFn)
-			return
+			_, err := deploy.fnDelete(oldFn)
+			return nil, err
 		}
 
 		// Executor type changed to New Deployment from something else
 		if oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
 			newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 			log.Printf("function type changed to new deployment, creating resources: %v", newFn)
-			_, err := deploy.fnCreate(newFn)
+			fsvc, err := deploy.fnCreate(newFn)
 			if err != nil {
 				updateStatus(oldFn, err, "error changing the function's type to newdeploy")
 			}
-			return
+			return fsvc, err
 		}
 
 		hpa, err := deploy.getHpa(newFn)
 		if err != nil {
 			updateStatus(oldFn, err, "error getting HPA while updating function")
-			return
+			return nil, err
 		}
+
+		hpaChanged := false
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
 			replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 			hpa.Spec.MinReplicas = &replicas
-			changed = true // Will start deployment update
+			deployChanged = true
+			hpaChanged = true
 		}
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
 			hpa.Spec.MaxReplicas = int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
+			hpaChanged = true
 		}
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
 			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
 			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+			hpaChanged = true
 		}
 
-		err = deploy.updateHpa(hpa)
-		if err != nil {
-			updateStatus(oldFn, err, "error updating HPA while updating function")
-			return
+		if hpaChanged {
+			newHpa, err := deploy.updateHpa(hpa)
+			if err != nil {
+				updateStatus(oldFn, err, "error updating HPA while updating function")
+				return nil, err
+			}
+
+			for i, kubeObj := range cachedFsvc.KubernetesObjects {
+				if kubeObj.Kind == "horizontalpodautoscaler" {
+					cachedFsvc.KubernetesObjects[i].ResourceVersion = newHpa.ObjectMeta.ResourceVersion
+					break
+				}
+			}
 		}
 	}
 
-	if oldFn.Spec.Environment != newFn.Spec.Environment {
-		changed = true
-	}
-
-	if oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef {
-		changed = true
+	if oldFn.Spec.Environment != newFn.Spec.Environment ||
+		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef {
+		deployChanged = true
 	}
 
 	// If length of slice has changed then no need to check individual elements
 	if len(oldFn.Spec.Secrets) != len(newFn.Spec.Secrets) {
-		changed = true
+		deployChanged = true
 	} else {
 		for i, newSecret := range newFn.Spec.Secrets {
 			if newSecret != oldFn.Spec.Secrets[i] {
-				changed = true
+				deployChanged = true
 				break
 			}
 		}
 	}
 	if len(oldFn.Spec.ConfigMaps) != len(newFn.Spec.ConfigMaps) {
-		changed = true
+		deployChanged = true
 	} else {
 		for i, newConfig := range newFn.Spec.ConfigMaps {
 			if newConfig != oldFn.Spec.ConfigMaps[i] {
-				changed = true
+				deployChanged = true
 				break
 			}
 		}
 	}
 
-	if changed == true {
+	if deployChanged == true {
 		env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
 			Get(newFn.Spec.Environment.Name)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to get environment while updating function")
-			return
+			return nil, err
 		}
 		deployName := deploy.getObjName(oldFn)
 		deployLabels := deploy.getDeployLabels(oldFn, env)
@@ -431,15 +501,23 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		newDeployment, err := deploy.getDeploymentSpec(newFn, env, deployName, deployLabels)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
-			return
+			return nil, err
 		}
-		err = deploy.updateDeployment(newDeployment)
+		newDepl, err := deploy.updateDeployment(newDeployment)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to update deployment while updating function")
-			return
+			return nil, err
 		}
-		return
+
+		for i, kubeObj := range cachedFsvc.KubernetesObjects {
+			if kubeObj.Kind == "deployment" {
+				cachedFsvc.KubernetesObjects[i].ResourceVersion = newDepl.ObjectMeta.ResourceVersion
+				break
+			}
+		}
 	}
+
+	return cachedFsvc, nil
 }
 
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
