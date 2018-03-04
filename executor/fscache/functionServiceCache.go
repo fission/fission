@@ -205,8 +205,16 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 		return nil, err
 	}
 
+	// Add to byFunctionUID cache. Ignore NameExists errors
+	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
 	if err != nil {
+		if IsNameExistError(err) {
+			err = nil
+		}
+		if err != nil {
+			log.Printf("error caching fsvc by function uid: %v", err)
+		}
 		return nil, err
 	}
 
