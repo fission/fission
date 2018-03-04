@@ -56,17 +56,11 @@ type (
 		useIstio               bool
 
 		fsCache        *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
-		fnRecords      map[string]*fnRecord
 		requestChannel chan *fnRequest
 
 		functions      []crd.Function
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
-	}
-
-	fnRecord struct {
-		fsvc     *fscache.FuncSvc
-		function *crd.Function
 	}
 
 	fnRequest struct {
@@ -124,7 +118,6 @@ func MakeNewDeploy(
 
 		namespace: namespace,
 		fsCache:   fsCache,
-		fnRecords: make(map[string]*fnRecord),
 
 		fetcherImg:             fetcherImg,
 		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
@@ -162,8 +155,9 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 			deploy.deleteFunction(fn)
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			oldFn := oldObj.(*crd.Function)
 			newFn := newObj.(*crd.Function)
-			deploy.updateFunction(newFn)
+			deploy.fnUpdate(oldFn, newFn)
 		},
 	})
 	return store, controller
@@ -172,61 +166,23 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 func (deploy *NewDeploy) service() {
 	for {
 		req := <-deploy.requestChannel
-
-		objName := deploy.getObjName(req.fn)
-		cachedFnRecord, found := deploy.fnRecords[objName]
-
 		switch req.reqType {
 		case FnCreate:
-			var fsvc *fscache.FuncSvc
-			var err error
-
-			if found {
-				// If the fnRecord exists in cache, means that
-				// the kubeObjects of function are created before.
-				// In this case, return cached fsvc since the
-				// kubeObject have been created.
-				fsvc = cachedFnRecord.fsvc
-			} else {
-				fsvc, err = deploy.fnCreate(req.fn)
-				if err == nil {
-					deploy.fnRecords[objName] = &fnRecord{
-						fsvc:     fsvc,
-						function: req.fn,
-					}
-				}
-			}
+			fsvc, err := deploy.fnCreate(req.fn)
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  fsvc,
 			}
 			continue
-		case FnUpdate:
-			var fsvc *fscache.FuncSvc
-			var err error
-			// Update kubeObjects related to the function
-			if found {
-				fsvc, err = deploy.fnUpdate(cachedFnRecord.function, req.fn, cachedFnRecord.fsvc)
-				if err == nil && fsvc != nil {
-					// Update cached fnRecords with latest value
-					deploy.fnRecords[objName] = &fnRecord{
-						fsvc:     fsvc,
-						function: req.fn,
-					}
-				}
-			}
-			req.responseChannel <- &fnResponse{
-				error: err,
-				fSvc:  fsvc,
-			}
 		case FnDelete:
 			_, err := deploy.fnDelete(req.fn)
-			delete(deploy.fnRecords, objName)
+			//delete(deploy.fnRecords, objName)
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  nil,
 			}
 			continue
+			// Update needs two inputs and will be called directly by controller
 		}
 	}
 }
@@ -237,11 +193,27 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 	if err != nil {
 		return nil, err
 	}
+
+	fsvc, err := deploy.fsCache.GetByFunctionUID(metadata.UID)
+
+	// If the function service cache exists, means
+	// the kubeObjects of function are created before.
+	// In this case, return cached fsvc.
+	if err == nil {
+		return fsvc, nil
+	}
+
+	if !fscache.IsNotExistError(err) {
+		log.Printf("error getting function service: %v", err)
+		return nil, err
+	}
+
 	deploy.requestChannel <- &fnRequest{
 		fn:              fn,
 		reqType:         FnCreate,
 		responseChannel: c,
 	}
+
 	resp := <-c
 	if resp.error != nil {
 		return nil, resp.error
@@ -383,16 +355,16 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	return fsvc, nil
 }
 
-func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cachedFsvc *fscache.FuncSvc) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
+
+	if oldFn.Metadata.ResourceVersion == newFn.Metadata.ResourceVersion {
+		return
+	}
 
 	// Ignoring updates to functions which are not of NewDeployment type
 	if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
 		oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy {
-		return nil, nil
-	}
-
-	if oldFn.Metadata.ResourceVersion == newFn.Metadata.ResourceVersion {
-		return cachedFsvc, nil
+		return
 	}
 
 	deployChanged := false
@@ -404,25 +376,25 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cach
 			oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 			log.Printf("function does not use new deployment executor anymore, deleting resources: %v", newFn)
 			// IMP - pass the oldFn, as the new/modified function is not in cache
-			_, err := deploy.fnDelete(oldFn)
-			return nil, err
+			deploy.fnDelete(oldFn)
+			return
 		}
 
 		// Executor type changed to New Deployment from something else
 		if oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
 			newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 			log.Printf("function type changed to new deployment, creating resources: %v", newFn)
-			fsvc, err := deploy.fnCreate(newFn)
+			_, err := deploy.fnCreate(newFn)
 			if err != nil {
 				updateStatus(oldFn, err, "error changing the function's type to newdeploy")
 			}
-			return fsvc, err
+			return
 		}
 
 		hpa, err := deploy.getHpa(newFn)
 		if err != nil {
 			updateStatus(oldFn, err, "error getting HPA while updating function")
-			return nil, err
+			return
 		}
 
 		hpaChanged := false
@@ -446,17 +418,10 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cach
 		}
 
 		if hpaChanged {
-			newHpa, err := deploy.updateHpa(hpa)
+			err := deploy.updateHpa(hpa)
 			if err != nil {
 				updateStatus(oldFn, err, "error updating HPA while updating function")
-				return nil, err
-			}
-
-			for i, kubeObj := range cachedFsvc.KubernetesObjects {
-				if kubeObj.Kind == "horizontalpodautoscaler" {
-					cachedFsvc.KubernetesObjects[i].ResourceVersion = newHpa.ObjectMeta.ResourceVersion
-					break
-				}
+				return
 			}
 		}
 	}
@@ -493,7 +458,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cach
 			Get(newFn.Spec.Environment.Name)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to get environment while updating function")
-			return nil, err
+			return
 		}
 		deployName := deploy.getObjName(oldFn)
 		deployLabels := deploy.getDeployLabels(oldFn, env)
@@ -501,23 +466,14 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function, cach
 		newDeployment, err := deploy.getDeploymentSpec(newFn, env, deployName, deployLabels)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
-			return nil, err
+			return
 		}
-		newDepl, err := deploy.updateDeployment(newDeployment)
+		err = deploy.updateDeployment(newDeployment)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to update deployment while updating function")
-			return nil, err
-		}
-
-		for i, kubeObj := range cachedFsvc.KubernetesObjects {
-			if kubeObj.Kind == "deployment" {
-				cachedFsvc.KubernetesObjects[i].ResourceVersion = newDepl.ObjectMeta.ResourceVersion
-				break
-			}
+			return
 		}
 	}
-
-	return cachedFsvc, nil
 }
 
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
@@ -577,6 +533,20 @@ func (deploy *NewDeploy) getDeployLabels(fn *crd.Function, env *crd.Environment)
 		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
 		"executorType":                    fission.ExecutorTypeNewdeploy,
 	}
+}
+
+// updateKubeObjRefRV update the resource version of kubeObjectRef with
+// given kind and return error if failed to find the reference.
+func (deploy *NewDeploy) updateKubeObjRefRV(fsvc *fscache.FuncSvc, objKind string, rv string) error {
+	kubeObjs := fsvc.KubernetesObjects
+	for i, obj := range kubeObjs {
+		if obj.Kind == objKind {
+			kubeObjs[i].ResourceVersion = rv
+			return nil
+		}
+	}
+	fsvc.KubernetesObjects = kubeObjs
+	return errors.New(fmt.Sprintf("error finding kubernetes object reference with kind: %v", objKind))
 }
 
 // updateStatus is a function which updates status of update.

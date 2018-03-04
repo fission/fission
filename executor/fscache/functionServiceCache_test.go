@@ -70,6 +70,11 @@ func TestFunctionServiceCache(t *testing.T) {
 		fsc.Log()
 		log.Panicf("Failed to get fsvc: %v", err)
 	}
+	f, err = fsc.GetByFunctionUID(fsvc.Function.UID)
+	if err != nil {
+		fsc.Log()
+		log.Panicf("Failed to get fsvc by function uid: %v", err)
+	}
 	fsvc.Atime = f.Atime
 	fsvc.Ctime = f.Ctime
 	if f.Address != fsvc.Address {
@@ -97,5 +102,11 @@ func TestFunctionServiceCache(t *testing.T) {
 	if err == nil {
 		fsc.Log()
 		log.Panicf("found fsvc while expecting empty cache: %v", err)
+	}
+
+	_, err = fsc.GetByFunctionUID(fsvc.Function.UID)
+	if err == nil {
+		fsc.Log()
+		log.Panicf("found fsvc by function uid while expecting empty cache: %v", err)
 	}
 }

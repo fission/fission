@@ -21,6 +21,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/pkg/api"
 
 	"github.com/fission/fission"
@@ -56,8 +57,9 @@ type (
 	}
 
 	FunctionServiceCache struct {
-		byFunction *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress  *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
+		byFunction    *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress     *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID *cache.Cache // function uid -> funcSvc : map[string]*funcSvc
 
 		requestChannel chan *fscRequest
 	}
@@ -76,10 +78,18 @@ type (
 	}
 )
 
+func IsNotExistError(err error) bool {
+	if fe, ok := err.(fission.Error); ok {
+		return fe.Code == fission.ErrorNameExists
+	}
+	return false
+}
+
 func MakeFunctionServiceCache() *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		byFunction:     cache.MakeCache(0, 0),
 		byAddress:      cache.MakeCache(0, 0),
+		byFunctionUID:  cache.MakeCache(0, 0),
 		requestChannel: make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -136,6 +146,27 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
+func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, error) {
+	mI, err := fsc.byFunctionUID.Get(uid)
+	if err != nil {
+		return nil, err
+	}
+
+	m := mI.(metav1.ObjectMeta)
+
+	fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
+	if err != nil {
+		return nil, err
+	}
+
+	// update atime
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
+
+	fsvcCopy := *fsvc
+	return &fsvcCopy, nil
+}
+
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
@@ -158,16 +189,20 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
-		if fe, ok := err.(fission.Error); ok {
-			if fe.Code == fission.ErrorNameExists {
-				err = nil
-			}
+		if IsNotExistError(err) {
+			err = nil
 		}
 		if err != nil {
 			log.Printf("error caching fsvc: %v", err)
 		}
 		return nil, err
 	}
+
+	err, _ = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
+	if err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
@@ -204,6 +239,7 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 
 	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
+	fsc.byFunctionUID.Delete(fsvc.Function.UID)
 
 	return true, nil
 }

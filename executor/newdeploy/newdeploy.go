@@ -105,8 +105,9 @@ func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, e
 	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) (*v1beta1.Deployment, error) {
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
+func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) error {
+	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
+	return err
 }
 
 func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
@@ -406,8 +407,9 @@ func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler
 	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) (*asv1.HorizontalPodAutoscaler, error) {
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
+func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
+	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
+	return err
 }
 
 func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
