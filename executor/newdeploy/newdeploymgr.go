@@ -203,8 +203,8 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 		return fsvc, nil
 	}
 
-	if !fscache.IsNotExistError(err) {
-		log.Printf("error getting function service: %v", err)
+	if !fscache.IsNotFoundError(err) {
+		log.Printf("error getting function service by uid: %v", err)
 		return nil, err
 	}
 

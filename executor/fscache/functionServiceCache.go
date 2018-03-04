@@ -78,7 +78,14 @@ type (
 	}
 )
 
-func IsNotExistError(err error) bool {
+func IsNotFoundError(err error) bool {
+	if fe, ok := err.(fission.Error); ok {
+		return fe.Code == fission.ErrorNotFound
+	}
+	return false
+}
+
+func IsNameExistError(err error) bool {
 	if fe, ok := err.(fission.Error); ok {
 		return fe.Code == fission.ErrorNameExists
 	}
@@ -189,7 +196,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	// because of multiple-specialization. See issue #331.
 	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
-		if IsNotExistError(err) {
+		if IsNameExistError(err) {
 			err = nil
 		}
 		if err != nil {
