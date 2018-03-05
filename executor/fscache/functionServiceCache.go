@@ -59,7 +59,7 @@ type (
 	FunctionServiceCache struct {
 		byFunction    *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
 		byAddress     *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID *cache.Cache // function uid -> funcSvc : map[string]*funcSvc
+		byFunctionUID *cache.Cache // function uid -> function : map[string]metav1.ObjectMeta
 
 		requestChannel chan *fscRequest
 	}
