@@ -136,8 +136,6 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		return nil, err
 	}
 
-	log.Printf("Trying to get function service: %v", fn.Metadata.Name)
-
 	switch fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
 	case fission.ExecutorTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta)

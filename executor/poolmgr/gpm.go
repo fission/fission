@@ -87,7 +87,6 @@ func (gpm *GenericPoolManager) service() {
 		switch req.requestType {
 		case GET_POOL:
 			var err error
-			log.Println("Get pool")
 			pool, ok := gpm.pools[crd.CacheKey(&req.env.Metadata)]
 			if !ok {
 				poolsize := gpm.getEnvPoolsize(req.env)
@@ -114,7 +113,6 @@ func (gpm *GenericPoolManager) service() {
 				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = int(gpm.getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
-				log.Println("Examine pool")
 				_, ok := latestEnvSet[key]
 				poolsize := latestEnvPoolsize[key]
 				if !ok || poolsize == 0 {
