@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -117,31 +118,38 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 			for _, fsvc := range funcSvcs {
 
 				fn, err := fissionClient.Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name)
+				if err == nil {
+					// Ignore functions of NewDeploy ExecutorType with MinScale > 0
+					if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 &&
+						fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+						continue
+					}
+				}
 
-				if err != nil {
+				// Return errors not equal to "is not found" error
+				if err != nil && !errors.IsNotFound(err) {
 					log.Printf("Error getting function: %v", fsvc.Function.Name)
 					continue
 				}
 
-				// Ignore functions of NewDeploy ExecutorType with MinScale > 0
-				if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 && fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
-					continue
-				}
-				deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
-
-				if err != nil {
-					log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
-					log.Printf("Object Name| Object Kind | Object Namespace")
-					for _, kubeobj := range fsvc.KubernetesObjects {
-						log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
+				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
+				// so we ignore the function service cache with newdepoy executor type here.
+				if fsvc.Executor != fscache.NEWDEPLOY {
+					deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
+					if err != nil {
+						log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
+						log.Printf("Object Name| Object Kind | Object Namespace")
+						for _, kubeobj := range fsvc.KubernetesObjects {
+							log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
+						}
 					}
-				}
 
-				if !deleted {
-					continue
-				}
-				for _, kubeobj := range fsvc.KubernetesObjects {
-					deleteKubeobject(kubeClient, &kubeobj)
+					if !deleted {
+						continue
+					}
+					for _, kubeobj := range fsvc.KubernetesObjects {
+						deleteKubeobject(kubeClient, &kubeobj)
+					}
 				}
 			}
 		}
