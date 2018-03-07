@@ -52,21 +52,6 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
-	waitForDeploy := func(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
-		for i := 0; i < 120; i++ {
-			latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
-			if err != nil {
-				return nil, err
-			}
-			//TODO check for imagePullerror
-			if latestDepl.Status.ReadyReplicas >= replicas {
-				return latestDepl, err
-			}
-			time.Sleep(time.Second)
-		}
-		return nil, errors.New("failed to create deployment within timeout window")
-	}
-
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if replicas == 0 {
 		replicas = 1
@@ -75,7 +60,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
 		if existingDepl.Status.ReadyReplicas < replicas {
-			existingDepl, err = waitForDeploy(existingDepl, replicas)
+			existingDepl, err = deploy.waitForDeploy(existingDepl, replicas)
 		}
 		return existingDepl, err
 	}
@@ -93,7 +78,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		return waitForDeploy(depl, replicas)
+		return deploy.waitForDeploy(depl, replicas)
 	}
 
 	return nil, err
@@ -465,4 +450,19 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 		return err
 	}
 	return nil
+}
+
+func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
+	for i := 0; i < 120; i++ {
+		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		//TODO check for imagePullerror
+		if latestDepl.Status.ReadyReplicas >= replicas {
+			return latestDepl, err
+		}
+		time.Sleep(time.Second)
+	}
+	return nil, errors.New("failed to create deployment within timeout window")
 }

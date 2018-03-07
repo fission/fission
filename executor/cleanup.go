@@ -117,6 +117,7 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 			for _, fsvc := range funcSvcs {
 
 				fn, err := fissionClient.Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name)
+
 				if err != nil {
 					log.Printf("Error getting function: %v", fsvc.Function.Name)
 					continue
