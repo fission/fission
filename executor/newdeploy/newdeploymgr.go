@@ -176,7 +176,6 @@ func (deploy *NewDeploy) service() {
 			continue
 		case FnDelete:
 			_, err := deploy.fnDelete(req.fn)
-			//delete(deploy.fnRecords, objName)
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  nil,
