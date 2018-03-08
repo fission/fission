@@ -1,28 +1,38 @@
 ---
-title: "Accessing Secret/configmap in function"
+title: "Accessing Secrets in Functions"
 draft: false
 weight: 47
 ---
 
-From fission v0.5.0 and later, functions are able to access [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) and [ConfigMaps](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) specified by users.
+Functions can access Kubernetes
+[Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+and
+[ConfigMaps](https://kubernetes.io/docs/concepts/storage/volumes/#configmap).
 
-### Create Secret and ConfigMap
+Use secrets for things like API keys, authentication tokens, and so
+on.
 
-You can create Secret and ConfigMap with CLI.
+Use config maps for any other configuration that doesn't need to be a
+secret.
+
+### Create A Secret or a ConfigMap
+
+You can create a Secret or ConfigMap with the Kubernetes CLI:
 
 ``` bash
-$ kubectl -n default create secret generic foo --from-literal=TEST_KEY="TESTVALUE"
-$ kubectl -n default create configmap bar --from-literal=TEST_KEY=TESTVALUE
+$ kubectl -n default create secret generic my-secret --from-literal=TEST_KEY="TESTVALUE"
+
+$ kubectl -n default create configmap my-configmap --from-literal=TEST_KEY="TESTVALUE"
 ```
 
-Or use `kubectl create -f <filename.yaml>` to create these from a YAML file.
+Or, use `kubectl create -f <filename.yaml>` to create these from a YAML file.
 
 ``` yaml
 apiVersion: v1
 kind: Secret
 metadata:
   namespace: default
-  name: foo
+  name: my-secret
 data:
   TEST_KEY: VEVTVFZBTFVF # value after base64 encode
 type: Opaque
@@ -32,14 +42,16 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: default
-  name: bar
+  name: my-configmap
 data:
   TEST_KEY: TESTVALUE
 ```
 
-### Access Secret and ConfigMap
+### Accessing Secrets and ConfigMaps
 
-Since content of Secret and ConfigMap are key-value pairs, functions can access them with following paths:
+Secrets and configmaps are accessed similarly.  Each secret or
+configmap is a set of key value pairs. Fission sets these up as files
+you can read from your function.
 
 ``` bash
 # Secret path
@@ -52,24 +64,25 @@ Since content of Secret and ConfigMap are key-value pairs, functions can access 
 From the previous example, the paths are:
 
 ``` bash
-# secret foo
-/secrets/default/foo/TEST_KEY
+# secret my-secret
+/secrets/default/my-secret/TEST_KEY
 
-# confimap bar
-/configs/default/bar/TEST_KEY
+# confimap my-configmap
+/configs/default/my-configmap/TEST_KEY
 ```
 
-Now, let's create a simple python function (leaker.py) that return value of Secret `foo` and ConfigMap `bar`.
+Now, let's create a simple python function (leaker.py) that returns
+the value of Secret `my-secret` and ConfigMap `my-configmap`.
 
 ``` python
 # leaker.py
 
 def main():
-    path = "/configs/default/bar/TEST_KEY"
+    path = "/configs/default/my-configmap/TEST_KEY"
     f = open(path, "r")
     config = f.read()
 
-    path = "/secrets/default/foo/TEST_KEY"
+    path = "/secrets/default/my-secret/TEST_KEY"
     f = open(path, "r")
     secret = f.read()
 
@@ -79,27 +92,29 @@ def main():
 ```
 
 
-Create environment, function and http trigger.
+Create an environment and a function:
 
 ``` bash
 # create python env
 $ fission env create --name python --image fission/python-env
 
 # create function named "leaker"
-$ fission fn create --name leaker --env python --code leaker.py --secret foo --configmap bar
-
-# create route(http trigger)
-$ fission route create --function leaker --url /leaker --method GET
+$ fission fn create --name leaker --env python --code leaker.py --secret my-secret --configmap my-configmap
 ```
 
 
-Try to access the function, the output should look like following.
+Run the function, and the output should look like this:
 
 ``` bash
-$ curl http://$FISSION_ROUTER/leaker
+$ fission function test --name leaker
 ConfigMap: TESTVALUE
 Secret: TESTVALUE
 ```
 
-Note: If the Secret or ConfigMap value is updated, the function may not get the updated value for some time; it may get a cached older value.
+
+{{% notice note %}}
+If the Secret or ConfigMap value is updated, the function may
+not get the updated value for some time; it may get a cached older
+value.
+{{% /notice %}}
 

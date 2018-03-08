@@ -7,4 +7,5 @@ weight: 30
 
 # Fission Concepts
 
-#### Understanding Fission terminology and concepts
+This is an overview of the few main concepts in Fission: Functions,
+Environments, and Triggers.

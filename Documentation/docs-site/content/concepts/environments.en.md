@@ -1,5 +1,5 @@
 ---
-title: "Environment"
+title: "Environments"
 draft: false
 weight: 32
 ---
