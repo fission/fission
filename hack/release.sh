@@ -8,7 +8,7 @@ BUILDDIR=$(realpath $DIR)/build
 
 # Ensure we're on the master branch
 check_branch() {
-    version=$1
+    local version=$1
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
     if [ $curr_branch != "v${version}" ]
     then
@@ -59,8 +59,8 @@ build_cli() {
 
 # Build fission-bundle image
 build_fission_bundle_image() {
-    version=$1
-    tag=fission/fission-bundle:$version
+    local version=$1
+    local tag=fission/fission-bundle:$version
 
     pushd $DIR/fission-bundle
 
@@ -73,14 +73,14 @@ build_fission_bundle_image() {
 
 # Push fission-bundle image
 push_fission_bundle_image() {
-    version=$1
-    tag=fission/fission-bundle:$version
+    local version=$1
+    local tag=fission/fission-bundle:$version
     docker push $tag
 }
 
 build_fetcher_image() {
-    version=$1
-    tag=fission/fetcher:$version
+    local version=$1
+    local tag=fission/fetcher:$version
 
     pushd $DIR/environments/fetcher/cmd
 
@@ -92,43 +92,45 @@ build_fetcher_image() {
 }
 
 push_fetcher_image() {
-    version=$1
-    tag=fission/fetcher:$version
+    local version=$1
+    local tag=fission/fetcher:$version
     docker push $tag
 }
 
 build_builder_image() {
-    version=$1
-    tag=fission/builder:$version
+    local version=$1
+    local tag=fission/builder:$version
 
     pushd $DIR/builder/cmd
 
     ./build.sh
     docker build -t $tag .
+    docker tag $tag fission/builder:latest
 
     popd
 }
 
 push_builder_image() {
-    version=$1
-    tag=fission/builder:$version
+    local version=$1
+    local tag=fission/builder:$version
     docker push $tag
 }
 
 build_logger_image() {
-    version=$1
-    tag=fission/fluentd:$version
+    local version=$1
+    local tag=fission/fluentd:$version
 
     pushd $DIR/logger/fluentd
 
     docker build -t $tag .
+    docker tag $tag fission/fluentd:latest
 
     popd
 }
 
 push_logger_image() {
-    version=$1
-    tag=fission/fluentd:$version
+    local version=$1
+    local tag=fission/fluentd:$version
     docker push $tag
 }
 
@@ -138,7 +140,7 @@ build_and_push_logger_image() {
 }
 
 build_and_push_env_image() {
-    version=$1
+    local version=$1
     envdir=$2
     imgnamebase=$3
     imgvariant=$4
@@ -169,7 +171,7 @@ build_and_push_env_image() {
 }
 
 build_and_push_all_envs() {
-    version=$1
+    local version=$1
 
     # call with version, env dir, image name base, image name variant
     build_and_push_env_image "$version" "nodejs"   "node-env"     ""
@@ -186,7 +188,7 @@ build_and_push_all_envs() {
 }
 
 build_and_push_env_builder_image() {
-    version=$1
+    local version=$1
     envdir=$2
     imgnamebase=$3
     imgvariant=$4
@@ -213,7 +215,7 @@ build_and_push_env_builder_image() {
 }
 
 build_and_push_all_env_builders() {
-    version=$1
+    local version=$1
 
     # call with version, env dir, image name base, image name variant
     build_and_push_env_builder_image "$version" "python"   "python-builder"   ""
@@ -222,7 +224,7 @@ build_and_push_all_env_builders() {
 }
 
 build_charts() {
-    version=$1
+    local version=$1
     mkdir -p $BUILDDIR/charts
     pushd $DIR/charts
     find . -iname *.~?~ | xargs rm
@@ -235,7 +237,7 @@ build_charts() {
 }
 
 build_all() {
-    version=$1
+    local version=$1
     if [ -z "$version" ]
     then
 	echo "Version unspecified"
@@ -259,17 +261,23 @@ build_all() {
 }
 
 push_all() {
+    local version=$1
     push_fission_bundle_image $version
     push_fission_bundle_image latest
+
     push_fetcher_image $version
     push_fetcher_image latest
+
     push_builder_image $version
+    push_builder_image latest
+
     push_logger_image $version
+    push_logger_image latest
 }
 
 tag_and_release() {
-    version=$1
-    gittag=$version
+    local version=$1
+    local gittag=$version
 
     # tag the release
     git tag $gittag
@@ -288,8 +296,8 @@ tag_and_release() {
 }
 
 attach_github_release_cli() {
-    version=$1
-    gittag=$version
+    local version=$1
+    local gittag=$version
     # cli
     echo "Uploading osx cli"
     gothub upload \
@@ -320,8 +328,8 @@ attach_github_release_cli() {
 }
 
 attach_github_release_charts() {
-    version=$1
-    gittag=$version
+    local version=$1
+    local gittag=$version
 
     # helm charts
     gothub upload \
@@ -343,7 +351,7 @@ attach_github_release_charts() {
 }
 
 generate_changelog() {
-    version=$1
+    local version=$1
 
     echo "# ${version}" > new_CHANGELOG.md
     echo
@@ -364,13 +372,13 @@ generate_changelog() {
 }
 
 create_downloads_table () {
-  release_tag=$1
-  url_prefix="https://github.com/fission/fission/releases/download"
+  local release_tag=$1
+  local url_prefix="https://github.com/fission/fission/releases/download"
 
   echo "## Downloads for ${version}"
   echo
 
-  files=$(find build -name '*' -type f)
+  local files=$(find build -name '*' -type f)
 
   echo
   echo "filename | sha256 hash"
