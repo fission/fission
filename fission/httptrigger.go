@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 )
 
@@ -57,6 +58,17 @@ func getMethod(method string) string {
 	return ""
 }
 
+func checkFunctionExistence(fissionClient *client.Client, fnName string) {
+	meta := &metav1.ObjectMeta{
+		Name:      fnName,
+		Namespace: metav1.NamespaceDefault,
+	}
+	_, err := fissionClient.FunctionGet(meta)
+	if err != nil {
+		fmt.Printf("function '%v' does not exist, use 'fission function create --name %v ...' to create the function\n", fnName, fnName)
+	}
+}
+
 func htCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
@@ -72,6 +84,8 @@ func htCreate(c *cli.Context) error {
 	if len(method) == 0 {
 		method = "GET"
 	}
+
+	checkFunctionExistence(client, fnName)
 
 	// just name triggers by uuid.
 	triggerName := uuid.NewV4().String()
@@ -114,6 +128,8 @@ func htUpdate(c *cli.Context) error {
 	if len(newFn) == 0 {
 		fatal("Nothing to update. Use --function to specify a new function.")
 	}
+
+	checkFunctionExistence(client, newFn)
 
 	ht, err := client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      htName,
