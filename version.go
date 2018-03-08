@@ -34,12 +34,15 @@ type (
 	}
 )
 
-func VersionInfo() string {
-	info := Info{
+func VersionInfo() Info {
+	return Info{
 		GitCommit: GitCommit,
 		BuildDate: BuildDate,
 		Version:   Version,
 	}
+}
+
+func (info Info) String() string {
 	v, _ := json.Marshal(info)
 	return string(v)
 }

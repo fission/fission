@@ -72,7 +72,7 @@ func MakeBuilder(sharedVolumePath string) *Builder {
 
 func (builder *Builder) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, fission.VersionInfo())
+	fmt.Fprintf(w, fission.VersionInfo().String())
 }
 
 func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {

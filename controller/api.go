@@ -137,7 +137,7 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, fission.VersionInfo())
+	fmt.Fprintf(w, fission.VersionInfo().String())
 }
 
 func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {

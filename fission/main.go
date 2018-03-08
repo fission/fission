@@ -80,7 +80,7 @@ func main() {
 	}
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		clientVer := version.VersionInfo()
+		clientVer := version.VersionInfo().String()
 		serverVer := getFissionAPIVersion(value)
 		fmt.Printf("Client Version: %v\nServer Version: %v", clientVer, serverVer)
 	}
@@ -266,7 +266,6 @@ func main() {
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
 		{Name: "tpr2crd", Aliases: []string{}, Usage: "Migrate tool for TPR to CRD", Subcommands: migrateSubCommands},
-		//{Name: "version", Aliases: []string{"v"}, Usage: "Print the client and server version information", Action: getVersionInfo},
 	}
 
 	app.Run(os.Args)
