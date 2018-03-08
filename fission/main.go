@@ -46,18 +46,18 @@ func getKubeConfigPath() string {
 	return kubeConfig
 }
 
-func getFissionAPIVersion(apiUrl string) string {
+func getFissionAPIVersion(apiUrl string) (string, error) {
 	resp, err := http.Get(apiUrl)
 	if err != nil {
-		fatal(fmt.Sprintf("Error connection Fission API server: %v", err))
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fatal(fmt.Sprintf("Error parsing Fission API version: %v", err))
+		return "", err
 	}
-	return strings.TrimRight(string(body), "\n")
+	return strings.TrimRight(string(body), "\n"), nil
 }
 
 func main() {
@@ -81,8 +81,13 @@ func main() {
 
 	cli.VersionPrinter = func(c *cli.Context) {
 		clientVer := version.VersionInfo().String()
-		serverVer := getFissionAPIVersion(value)
-		fmt.Printf("Client Version: %v\nServer Version: %v", clientVer, serverVer)
+		fmt.Printf("Client Version: %v\n", clientVer)
+		serverVer, err := getFissionAPIVersion(value)
+		if err != nil {
+			fmt.Printf("Error getting Fission API version: %v", err)
+		} else {
+			fmt.Printf("Server Version: %v", serverVer)
+		}
 	}
 
 	app.Flags = []cli.Flag{
