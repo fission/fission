@@ -28,15 +28,22 @@ check_clean() {
 
 # Build CLI binaries for mac/linux/windows
 build_all_cli() {
-    build_cli "linux" "linux"
-    build_cli "darwin" "osx"
-    build_cli "windows" "windows"
+    local version=$1
+    local date=$2
+    local gitcommit=$3
+
+    build_cli "linux" "linux" $version $date $gitcommit
+    build_cli "darwin" "osx" $version $date $gitcommit
+    build_cli "windows" "windows" $version $date $gitcommit
 }
 
 # Build cli binary for one OS, and put it in $BUILDDIR/cli/<os>/
 build_cli() {
     os=$1
     osName=$2
+    local version=$3
+    local date=$4
+    local gitcommit=$5
     arch="amd64" # parameterize if/when we need to
     
     pushd $DIR/fission
@@ -48,7 +55,7 @@ build_cli() {
 	binary=fission-cli-${osName}
     fi
 
-    GOOS=$os GOARCH=$arch go build -gcflags=-trimpath=$GOPATH -asmflags=-trimpath=$GOPATH -o $binary .
+    GOOS=$os GOARCH=$arch go build -gcflags=-trimpath=$GOPATH -asmflags=-trimpath=$GOPATH -ldflags "-X github.com/fission/fission.GitCommit=$gitcommit -X github.com/fission/fission.BuildDate=$date -X github.com/fission/fission.Version=$version" -o $binary .
 
     outdir=$BUILDDIR/cli/$osName/
     mkdir -p $outdir
@@ -60,11 +67,14 @@ build_cli() {
 # Build fission-bundle image
 build_fission_bundle_image() {
     local version=$1
+    local date=$2
+    local gitcommit=$3
+
     local tag=fission/fission-bundle:$version
 
     pushd $DIR/fission-bundle
 
-    ./build.sh
+    ./build.sh $version $date $gitcommit
     docker build -t $tag .
     docker tag $tag fission/fission-bundle:latest
    
@@ -238,9 +248,26 @@ build_charts() {
 
 build_all() {
     local version=$1
+
     if [ -z "$version" ]
     then
 	echo "Version unspecified"
+	exit 1
+    fi
+
+    local date=$2
+
+    if [ -z "$date" ]
+    then
+	echo "Build date unspecified"
+	exit 1
+    fi
+
+    local gitcommit=$3
+
+    if [ -z "gitcommit" ]
+    then
+	echo "Git commit unspecified"
 	exit 1
     fi
     
@@ -252,11 +279,11 @@ build_all() {
     
     mkdir -p $BUILDDIR
     
-    build_fission_bundle_image $version
+    build_fission_bundle_image $version $date $gitcommit
     build_fetcher_image $version
     build_builder_image $version
     build_logger_image $version
-    build_all_cli
+    build_all_cli $version $date $gitcommit
     build_charts $version
 }
 
@@ -394,10 +421,13 @@ export GITHUB_TOKEN=$(cat ~/.gh-access-token)
 
 
 version=$1
+date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+gitcommit=$(git rev-parse HEAD)
+
 check_branch $version
 check_clean
 
-build_all $version
+build_all $version $date $gitcommit
 push_all $version
 build_and_push_all_envs $version
 build_and_push_all_env_builders $version
