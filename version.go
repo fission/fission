@@ -34,7 +34,7 @@ type (
 	}
 )
 
-func GetVersionInfo() string {
+func VersionInfo() string {
 	info := Info{
 		GitCommit: GitCommit,
 		BuildDate: BuildDate,

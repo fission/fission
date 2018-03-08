@@ -80,7 +80,7 @@ func main() {
 	}
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		clientVer := version.GetVersionInfo()
+		clientVer := version.VersionInfo()
 		serverVer := getFissionAPIVersion(value)
 		fmt.Printf("Client Version: %v\nServer Version: %v", clientVer, serverVer)
 	}
