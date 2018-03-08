@@ -21,9 +21,9 @@ import (
 )
 
 var (
-	GitCommit string // $(git rev-parse HEAD)
-	BuildDate string // $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-	Version   string
+	GitCommit string // $(git rev-parse HEAD) (1b4716ab84903b2e477135a3dc5afdb07f685cb7)
+	BuildDate string // $(date -u +'%Y-%m-%dT%H:%M:%SZ') (2018-03-08T18:54:38Z)
+	Version   string // fission release version (0.6.0)
 )
 
 type (
