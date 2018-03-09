@@ -98,6 +98,7 @@ textarea:focus, input[type="email"]:focus, input[type="number"]:focus, input[typ
     box-shadow: inset 0 1px 3px rgba(0,0,0,.06),0 0 5px rgba(0,169,218,.7)
 }
 #header-wrapper {
+    /*background: #4a4a4b;*/
     background: #1E022D;
     color: #fff;
     text-align: center;
@@ -445,6 +446,7 @@ textarea:focus, input[type="email"]:focus, input[type="number"]:focus, input[typ
 }
 body {
     font-family: "Work Sans", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;
+    /*font-family: -apple-system,BlinkMacSystemFont,"avenir next",avenir,"helvetica neue",helvetica,ubuntu,roboto,noto,"segoe ui",arial,sans-serif;*/
     font-weight: 300;
     line-height: 1.6;
     font-size: 18px !important;
@@ -457,11 +459,13 @@ h2, h3, h4, h5, h6 {
     letter-spacing: -1px;
 }
 h1 {
-    font-family: "Novacento Sans Wide", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;
-    text-align: center;
-    text-transform: uppercase;
-    color: #222;
-    font-weight: 200;
+    font-family: "Work Sans", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;
+    /*font-family: "Novacento Sans Wide", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;*/
+    /*text-align: center;*/
+    /*text-transform: uppercase;*/
+    color: #5e5e5e;
+    font-weight: 400;
+    letter-spacing: -1px;
 }
 blockquote {
     border-left: 10px solid #F0F2F4;
@@ -1116,8 +1120,10 @@ pre .copy-to-clipboard:hover {
 }
 
 #sidebar #shortcuts h3 {
-    font-family: "Novacento Sans Wide", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;
-    color: white ;
+    /*font-family: "Novacento Sans Wide", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;*/
+    font-family: "Work Sans", "Helvetica", "Tahoma", "Geneva", "Arial", sans-serif;
+    color: #eee;
+    font-weight: 200;
     margin-top:1rem;
     padding-left: 1rem;
 }
