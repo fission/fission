@@ -1,5 +1,5 @@
 ---
-title: "Trigger"
+title: "Triggers"
 draft: false
 weight: 44
 ---
@@ -38,11 +38,16 @@ halfhourly 0 30 * * * hello
 minute     @every 1m  hello
 ```
 
-### Create a MQ Trigger
+### Create a Message Queue Trigger
 
-For creating a MQ based trigger which will invoke the function when a new message arrives in newfile topic, you can use the syntax below. The response of the function execution will be sent to topic newfileresponse. 
+A message queue trigger invokes a function based on messages from an
+message queue.  Currently, NATS and Azure Storage Queue are supported
+queues.  (Kafka support is under development.)
 
 ```
 $ fission mqt create --name hellomsg --function hello --mqtype nats-streaming --topic newfile --resptopic newfileresponse 
 trigger 'hellomsg' created
 ```
+
+You can list or update message queue triggers with `fission mqt list`,
+or `fission mqt update`.

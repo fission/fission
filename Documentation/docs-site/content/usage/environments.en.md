@@ -22,7 +22,7 @@ When you create an environment, you can specify a builder image and builder comm
 fission env create --name python --image fission/python-env:latest --builder fission/python-builder:latest
 ```
 
-### Viweing environment information
+### Viewing environment information
 
 You can list the environments or view information of an individual environment:
 

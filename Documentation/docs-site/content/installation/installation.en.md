@@ -20,19 +20,19 @@ ready. If you already have helm, [skip ahead to the fission install](#install-fi
 Ensure you have the Kubernetes CLI.
 
 You can get the Kubernetes CLI for OSX like this:
-```
+```sh
 $ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/darwin/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin
 ```
 
 Or, for Linux:
-```
+```sh
 $ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin
 ```
 
 Ensure you have access to a cluster; use kubectl to check your
 Kubernetes version:
 
-```
+```sh
 $ kubectl version
 ```
 
@@ -47,7 +47,7 @@ the next section](#install-fission).
 First, you'll need the helm CLI:
 
 On __OS X__:
-```
+```sh
 $ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.0-darwin-amd64.tar.gz
 
 $ tar xzf helm-v2.7.0-darwin-amd64.tar.gz
@@ -56,7 +56,7 @@ $ mv darwin-amd64/helm /usr/local/bin
 ```
 
 On __Linux__:
-```
+```sh
 $ curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.0-linux-amd64.tar.gz
 
 $ tar xzf helm-v2.7.0-linux-amd64.tar.gz
@@ -66,7 +66,7 @@ $ mv linux-amd64/helm /usr/local/bin
 
 Next, install the Helm server on your Kubernetes cluster:
 
-```
+```sh
 $ helm init
 ```
 
@@ -74,7 +74,7 @@ $ helm init
 
 #### Minikube
 
-```
+```sh
 $ helm install --namespace fission --set serviceType=NodePort https://github.com/fission/fission/releases/download/0.6.0/fission-all-0.6.0.tgz
 ```
 
@@ -84,7 +84,7 @@ want to expose anything outside the cluster.
 
 #### Cloud hosted clusters (GKE, AWS, Azure etc.)
 
-```
+```sh
 $ helm install --namespace fission https://github.com/fission/fission/releases/download/0.6.0/fission-all-0.6.0.tgz
 ```
 
@@ -94,7 +94,7 @@ The fission-all helm chart installs a full set of services including
 the NATS message queue, influxDB for logs, etc. If you want a more
 minimal setup, you can install the fission-core chart instead:
 
-```
+```sh
 $ helm install --namespace fission https://github.com/fission/fission/releases/download/0.6.0/fission-core-0.6.0.tgz
 ```
 
@@ -104,13 +104,13 @@ $ helm install --namespace fission https://github.com/fission/fission/releases/d
 
 Get the CLI binary for Mac:
 
-```
+```sh
 $ curl -Lo fission https://github.com/fission/fission/releases/download/0.6.0/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
 #### Linux
 
-```
+```sh
 $ curl -Lo fission https://github.com/fission/fission/releases/download/0.6.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 ```
 
@@ -123,7 +123,7 @@ this windows executable: [fission.exe](https://github.com/fission/fission/releas
 
 Finally, you're ready to use Fission!
 
-```
+```sh
 $ fission env create --name nodejs --image fission/node-env:0.6.0
 
 $ curl -LO https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js
