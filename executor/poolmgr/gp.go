@@ -445,14 +445,15 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 		// Receive response with non-200 http code
 		if err == nil {
 			err = fission.MakeErrorFromHTTP(resp2)
-			// The istio-proxy block all http requests until it's ready
-			// to serve traffic. Retry if istio feature is enabled.
-			if gp.useIstio {
-				retry = true
-			}
 		}
 
-		if retry {
+		// The istio-proxy block all http requests until it's ready
+		// to serve traffic. Retry if istio feature is enabled.
+		if gp.useIstio {
+			retry = true
+		}
+
+		if retry && i < maxRetries-1 {
 			time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
 			log.Printf("Error connecting to pod (%v), retrying", err)
 			continue
