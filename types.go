@@ -263,6 +263,10 @@ type (
 
 		// The initial pool size for environment
 		Poolsize int `json:"poolsize,omitempty"`
+
+		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
+		// Optional, defaults to 360 seconds
+		TerminationGracePeriod int
 	}
 
 	AllowedFunctionsPerContainer string
