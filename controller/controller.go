@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"log"
 
 	"github.com/fission/fission"
@@ -39,7 +40,10 @@ func Start(port int) {
 
 	fc.WaitForCRDs()
 
-	api, err := MakeAPI()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	api, err := MakeAPI(ctx)
 	if err != nil {
 		log.Fatalf("Failed to start controller: %v", err)
 	}
