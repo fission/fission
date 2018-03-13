@@ -16,7 +16,7 @@ TEST_DIR=/tmp/${TEST_ID}
 ENV_SPEC_FILE=${TEST_DIR}/${ENV}.yaml
 FN_FILE=${TEST_DIR}/${FN}.yaml
 
-explain() {
+log_exec() {
     cmd=$@
     echo "> ${cmd}"
     ${cmd}
@@ -86,20 +86,15 @@ spec:
         value: "TEST_BUILDER_ENV_VAR"
 
   runtime:
-    image: fission/python-env:test
-    functionendpointport: 0
     image: gcr.io/fission-ci/python-env:test
-    loadendpointpath: ""
-    loadendpointport: 0
     container:
       env:
       - name: TEST_RUNTIME_ENV_KEY
         value: "TEST_RUNTIME_ENV_VAR"
   version: 2
   poolsize: 1
-  resources: {}
 EOM
-explain kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
+log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
 
 sleep 15
 # Wait for runtime and build env to be deployed
