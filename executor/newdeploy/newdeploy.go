@@ -116,9 +116,9 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 		replicas = 1
 	}
 	targetFilename := "user"
-	var gracePeriodSeconds int64 = 6 * 60
+	gracePeriodSeconds := int64(6 * 60)
 	if env.Spec.TerminationGracePeriod > 0 {
-		gracePeriodSeconds = int64(env.Spec.TerminationGracePeriod)
+		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
 	fetchReq := &fetcher.FetchRequest{

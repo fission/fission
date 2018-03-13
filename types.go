@@ -266,7 +266,7 @@ type (
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
 		// Optional, defaults to 360 seconds
-		TerminationGracePeriod int
+		TerminationGracePeriod int64
 	}
 
 	AllowedFunctionsPerContainer string
