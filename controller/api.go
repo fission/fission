@@ -26,7 +26,9 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -107,6 +109,35 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	code, msg := fission.GetHTTPError(err)
 	log.Errorf("Error: %v: %v", code, msg)
 	http.Error(w, msg, code)
+}
+
+func (api *API) extractQueryParamFromRequest(r *http.Request, queryParam string) string {
+	values := r.URL.Query()
+	paramValue, ok := values[queryParam]
+	if !ok || len(paramValue) == 0 {
+		return ""
+	}
+	return paramValue[0]
+}
+
+// check if namespace exists, if not create it.
+func (api *API) createNsIfNotExists(ns string) error {
+	if ns == metav1.NamespaceDefault {
+		// we dont have to create default ns
+		return nil
+	}
+
+	_, err := api.kubernetesClient.CoreV1Client.Namespaces().Get(ns, metav1.GetOptions{})
+	if err != nil && kerrors.IsNotFound(err) {
+		ns := &apiv1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ns,
+			},
+		}
+		_, err = api.kubernetesClient.CoreV1Client.Namespaces().Create(ns)
+	}
+
+	return err
 }
 
 func (api *API) getLogDBConfig(dbType string) logDBConfig {
@@ -190,6 +221,9 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiDelete).Methods("DELETE")
 
 	r.HandleFunc("/v2/deleteTpr", api.Tpr2crdApi).Methods("DELETE")
+
+	r.HandleFunc("/v2/secrets/{secret}", api.SecretGet).Methods("GET")
+	r.HandleFunc("/v2/configmaps/{configmap}", api.ConfigMapGet).Methods("GET")
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)

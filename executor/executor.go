@@ -127,7 +127,6 @@ func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fiss
 		return "", err
 	}
 	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, nil
-
 }
 
 func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {

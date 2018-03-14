@@ -52,8 +52,11 @@ type (
 		instanceId     string
 		requestChannel chan *request
 
-		enableIstio          bool
-		istioServiceRegister k8sCache.Controller
+		enableIstio    bool
+		funcStore      k8sCache.Store
+		funcController k8sCache.Controller
+		pkgStore       k8sCache.Store
+		pkgController  k8sCache.Controller
 	}
 	request struct {
 		requestType
@@ -92,20 +95,19 @@ func MakeGenericPoolManager(
 			log.Println("Failed to parse ENABLE_ISTIO")
 		}
 		gpm.enableIstio = istio
-
-		if gpm.enableIstio {
-			gpm.istioServiceRegister = makeFuncIstioServiceRegister(
-				gpm.fissionClient.GetCrdClient(), gpm.kubernetesClient, functionNamespace)
-		}
 	}
+
+	gpm.funcStore, gpm.funcController = gpm.makeFuncController(
+		gpm.fissionClient, gpm.kubernetesClient, gpm.namespace, gpm.enableIstio)
+
+	gpm.pkgStore, gpm.pkgController = gpm.makePkgController(gpm.fissionClient, gpm.kubernetesClient, gpm.namespace)
 
 	return gpm
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
-	if gpm.enableIstio && gpm.istioServiceRegister != nil {
-		go gpm.istioServiceRegister.Run(ctx.Done())
-	}
+	go gpm.funcController.Run(ctx.Done())
+	go gpm.pkgController.Run(ctx.Done())
 }
 
 func (gpm *GenericPoolManager) service() {
@@ -113,6 +115,7 @@ func (gpm *GenericPoolManager) service() {
 		req := <-gpm.requestChannel
 		switch req.requestType {
 		case GET_POOL:
+			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
 			pool, ok := gpm.pools[crd.CacheKey(&req.env.Metadata)]
 			if !ok {
@@ -122,9 +125,16 @@ func (gpm *GenericPoolManager) service() {
 					poolsize = 1
 				}
 
+				// To support backward compatibility, if envs are created in default ns, we go ahead
+				// and create pools in fission-function ns as earlier.
+				ns := gpm.namespace
+				if req.env.Metadata.Namespace != metav1.NamespaceDefault {
+					ns = req.env.Metadata.Namespace
+				}
+
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
-					gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio)
+					ns, gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
@@ -133,15 +143,12 @@ func (gpm *GenericPoolManager) service() {
 			}
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
-			latestEnvSet := make(map[string]bool)
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
-				latestEnvSet[crd.CacheKey(&env.Metadata)] = true
 				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = int(gpm.getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
-				_, ok := latestEnvSet[key]
-				poolsize := latestEnvPoolsize[key]
+				poolsize, ok := latestEnvPoolsize[key]
 				if !ok || poolsize == 0 {
 					// Env no longer exists or pool size changed to zero
 
@@ -150,6 +157,7 @@ func (gpm *GenericPoolManager) service() {
 
 					// and delete the pool asynchronously.
 					go pool.destroy()
+					go pool.cleanupRoleBindings()
 				}
 			}
 			// no response, caller doesn't wait

@@ -36,6 +36,7 @@ func wCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a watch, use --function")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	namespace := c.String("ns")
 	if len(namespace) == 0 {
@@ -64,7 +65,7 @@ func wCreate(c *cli.Context) error {
 	w := &crd.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      watchName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.KubernetesWatchTriggerSpec{
 			Namespace: namespace,
@@ -111,10 +112,11 @@ func wDelete(c *cli.Context) error {
 	if len(wName) == 0 {
 		fatal("Need name of watch to delete, use --name")
 	}
+	wNs := c.String("triggerns")
 
 	err := client.WatchDelete(&metav1.ObjectMeta{
 		Name:      wName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: wNs,
 	})
 	checkErr(err, "delete watch")
 
@@ -125,7 +127,9 @@ func wDelete(c *cli.Context) error {
 func wList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
-	ws, err := client.WatchList()
+	wNs := c.String("triggerns")
+
+	ws, err := client.WatchList(wNs)
 	checkErr(err, "list watches")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

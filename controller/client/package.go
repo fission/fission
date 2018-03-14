@@ -120,8 +120,9 @@ func (c *Client) PackageDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) PackageList() ([]crd.Package, error) {
-	resp, err := http.Get(c.url("packages"))
+func (c *Client) PackageList(pkgNamespace string) ([]crd.Package, error) {
+	relativeUrl := fmt.Sprintf("packages?namespace=%v", pkgNamespace)
+	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
 		return nil, err
 	}

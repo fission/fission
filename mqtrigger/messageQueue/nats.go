@@ -100,7 +100,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 				trigger.Spec.FunctionReference.Type, trigger.Metadata.Name)
 		}
 
-		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name), "/")
+		url := nats.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/")
 		log.Printf("Making HTTP request to %v", url)
 
 		headers := map[string]string{

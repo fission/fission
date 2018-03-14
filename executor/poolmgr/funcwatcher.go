@@ -17,6 +17,7 @@ limitations under the License.
 package poolmgr
 
 import (
+	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
@@ -39,15 +39,15 @@ func getIstioServiceLabels(fnName string) map[string]string {
 	}
 }
 
-func makeFuncIstioServiceRegister(crdClient *rest.RESTClient,
-	kubernetesClient *kubernetes.Clientset, fnNamespace string) k8sCache.Controller {
+func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClient,
+	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
-	_, controller := k8sCache.NewInformer(lw, &crd.Function{}, resyncPeriod,
+	lw := k8sCache.NewListWatchFromClient(fissionClient.GetCrdClient(), "functions", metav1.NamespaceAll, fields.Everything())
+
+	funcStore, controller := k8sCache.NewInformer(lw, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-
 				fn := obj.(*crd.Function)
 
 				// Since istio only allows accessing pod through k8s service,
@@ -56,70 +56,192 @@ func makeFuncIstioServiceRegister(crdClient *rest.RESTClient,
 				// Functions with executor type "Newdeploy" is specialized at
 				// pod starts. In this case, just ignore such functions.
 				fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-				if fnExecutorType != fission.ExecutorTypePoolmgr {
+
+				// In some cases, user may not enter the executorType explicitly, for example in his spec.yaml.
+				// we assume it to be of type poolmgr
+				if fnExecutorType != "" && fnExecutorType != fission.ExecutorTypePoolmgr {
 					return
 				}
 
-				// create a same name service for function
-				// since istio only allows the traffic to service
-				sel := map[string]string{
-					"functionName": fn.Metadata.Name,
-					"functionUid":  string(fn.Metadata.UID),
+				// create or update role-binding
+				envNs := fissionfnNamespace
+				if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
+					envNs = fn.Spec.Environment.Namespace
 				}
 
-				svcName := fission.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
+				// TODO : Just bring to your attention during review :
+				// setup rolebinding is tried, if it fails, we dont return. we just log an error and move on, because :
+				// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
+				// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
+				err := fission.SetupRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, envNs)
+				if err != nil {
+					log.Printf("Error : %v creating %s RoleBinding", err, fission.GetSecretConfigMapRoleBinding)
+				} else {
+					log.Printf("Successfully set up rolebinding for fetcher SA: %s.%s, in func's ns for func : %s", fission.FissionFetcherSA, envNs, fn.Metadata.Name, fn.Metadata.Namespace)
+				}
 
-				// service for accepting user traffic
-				svc := apiv1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: fnNamespace,
-						Name:      svcName,
-						Labels:    getIstioServiceLabels(fn.Metadata.Name),
-					},
-					Spec: apiv1.ServiceSpec{
-						Type: apiv1.ServiceTypeClusterIP,
-						Ports: []apiv1.ServicePort{
-							// Service port name should begin with a recognized prefix, or the traffic will be
-							// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/sidecar-injection.html)
-							// Originally the ports' name are similar to "http-fetch" and "http-specialize".
-							// But for istio 0.5.1, istio-proxy return unexpected 431 error with such naming.
-							// https://github.com/istio/istio/issues/928
-							// Workaround: remove prefix
-							// TODO: prepend prefix once the bug fixed
-							{
-								Name:       "fetch",
-								Protocol:   apiv1.ProtocolTCP,
-								Port:       8000,
-								TargetPort: intstr.FromInt(8000),
-							},
-							{
-								Name:       "specialize",
-								Protocol:   apiv1.ProtocolTCP,
-								Port:       8888,
-								TargetPort: intstr.FromInt(8888),
-							},
+				if istioEnabled {
+					// create a same name service for function
+					// since istio only allows the traffic to service
+					sel := map[string]string{
+						"functionName": fn.Metadata.Name,
+						"functionUid":  string(fn.Metadata.UID),
+					}
+
+					svcName := fission.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
+
+					// service for accepting user traffic
+					svc := apiv1.Service{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: envNs,
+							Name:      svcName,
+							Labels:    getIstioServiceLabels(fn.Metadata.Name),
 						},
-						Selector: sel,
-					},
-				}
+						Spec: apiv1.ServiceSpec{
+							Type: apiv1.ServiceTypeClusterIP,
+							Ports: []apiv1.ServicePort{
+								// Service port name should begin with a recognized prefix, or the traffic will be
+								// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/sidecar-injection.html)
+								// Originally the ports' name are similar to "http-fetch" and "http-specialize".
+								// But for istio 0.5.1, istio-proxy return unexpected 431 error with such naming.
+								// https://github.com/istio/istio/issues/928
+								// Workaround: remove prefix
+								// TODO: prepend prefix once the bug fixed
+								{
+									Name:       "fetch",
+									Protocol:   apiv1.ProtocolTCP,
+									Port:       8000,
+									TargetPort: intstr.FromInt(8000),
+								},
+								{
+									Name:       "specialize",
+									Protocol:   apiv1.ProtocolTCP,
+									Port:       8888,
+									TargetPort: intstr.FromInt(8888),
+								},
+							},
+							Selector: sel,
+						},
+					}
 
-				// create function istio service if it does not exist
-				_, err := kubernetesClient.CoreV1().Services(fnNamespace).Create(&svc)
-				if err != nil && !kerrors.IsAlreadyExists(err) {
-					log.Printf("Error creating function istio service: %v", err)
+					// create function istio service if it does not exist
+					_, err = kubernetesClient.CoreV1().Services(envNs).Create(&svc)
+					if err != nil && !kerrors.IsAlreadyExists(err) {
+						log.Printf("Error creating function istio service: %v", err)
+					}
 				}
 			},
+
 			DeleteFunc: func(obj interface{}) {
 				fn := obj.(*crd.Function)
-				svcName := fission.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
-				// delete function istio service
-				err := kubernetesClient.CoreV1().Services(fnNamespace).Delete(svcName, nil)
-				if err != nil && !kerrors.IsNotFound(err) {
-					log.Printf("Error deleting function istio service: %v", err)
+
+				fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+				if fnExecutorType != "" && fnExecutorType != fission.ExecutorTypePoolmgr {
+					return
 				}
+
+				envNs := fissionfnNamespace
+				if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
+					envNs = fn.Spec.Environment.Namespace
+				}
+
+				if istioEnabled {
+					svcName := fission.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
+					// delete function istio service
+					err := kubernetesClient.CoreV1().Services(envNs).Delete(svcName, nil)
+					if err != nil && !kerrors.IsNotFound(err) {
+						log.Printf("Error deleting function istio service: %v", err)
+					}
+				}
+
+				// Remove rolebinding for this function only if there's no other function in same ns
+				gpm.cleanupFuncWatcherRoleBinding(kubernetesClient, fn, fissionfnNamespace)
 			},
-			UpdateFunc: func(oldObj, newObj interface{}) {},
+
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				oldFunc := oldObj.(*crd.Function)
+				newFunc := newObj.(*crd.Function)
+
+				envChanged := (oldFunc.Spec.Environment.Namespace != newFunc.Spec.Environment.Namespace)
+
+				executorTypeChangedToPM := (oldFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
+					newFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr)
+
+				executorTypeChangedFromPM := (oldFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr &&
+					newFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr)
+
+				// if a func's env reference gets updated and the newly referenced env is in a different ns,
+				// we need to create a rolebinding in func's ns so that the fetcher-sa in env ns has access
+				// to fetch secrets and config maps from the func's ns.
+				// similarly if executorType changed to Pool Manager, we now need a rolebinding in the func ns for fetcher sa
+				// present in env ns because for newdeploy, the fetcher sa is in function namespace
+				if envChanged || executorTypeChangedToPM {
+					envNs := fissionfnNamespace
+					if newFunc.Spec.Environment.Namespace != metav1.NamespaceDefault {
+						envNs = newFunc.Spec.Environment.Namespace
+					}
+
+					err := fission.SetupRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding,
+						newFunc.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole,
+						fission.FissionFetcherSA, envNs)
+					if err != nil {
+						log.Printf("Error : %v creating GetSecretConfigMapRoleBinding", err)
+					} else {
+						log.Printf("Set up rolebinding for fetcher SA in func's env ns : %s, in func's ns : %s, for func : %s", newFunc.Spec.Environment.Namespace, newFunc.Metadata.Namespace, newFunc.Metadata.Name)
+					}
+				}
+
+				// if envChanged, we may have to remove the sa from rolebinding if no other function is using the oldEnv.
+				// similarly, if executor type got changed to new deploy, we dont need rolebinding for fetcher sa in envNs.
+				// instead, we'll now need rolebinding for fetcher sa in fNs. ( while this is done by funcWatcher in NDM,
+				// we're only cleaning up privileges here)
+				if envChanged || executorTypeChangedFromPM {
+					gpm.cleanupFuncWatcherRoleBinding(kubernetesClient, oldFunc, fissionfnNamespace)
+				}
+
+			},
 		})
 
-	return controller
+	return funcStore, controller
+}
+
+func (gpm *GenericPoolManager) cleanupFuncWatcherRoleBinding(kubernetesClient *kubernetes.Clientset, fn *crd.Function, fissionfnNamespace string) {
+	funcList := gpm.funcStore.List()
+
+	if len(funcList) == 0 {
+		err := fission.DeleteRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error deleting rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+			return
+		}
+		log.Printf("Deleted rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+		return
+	}
+
+	for _, item := range funcList {
+		fnItem, ok := item.(*crd.Function)
+		if !ok {
+			log.Printf("Error asserting function item, type of item: %v", reflect.TypeOf(item))
+			continue
+		}
+		if fnItem.Spec.Environment.Name == fn.Spec.Environment.Name && fnItem.Spec.Environment.Namespace == fn.Spec.Environment.Namespace &&
+			fnItem.Metadata.Name != fn.Metadata.Name {
+			log.Printf("Another function in the ns: %s is using the same env, so nothing to do", fn.Metadata.Namespace)
+			return
+		}
+	}
+
+	envNs := fissionfnNamespace
+	if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
+		envNs = fn.Spec.Environment.Namespace
+	}
+	// landing here implies that there are no functions in this ns that use the same env, so remove SA from rolebinding
+	err := fission.RemoveSAFromRoleBindingWithRetries(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.FissionFetcherSA, envNs)
+	if err != nil {
+		log.Printf("Error removing sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, envNs, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+		return
+	}
+
+	log.Printf("Removed sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, envNs, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+
 }

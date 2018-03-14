@@ -94,8 +94,9 @@ func (c *Client) WatchDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) WatchList() ([]crd.KubernetesWatchTrigger, error) {
-	resp, err := http.Get(c.url("watches"))
+func (c *Client) WatchList(ns string) ([]crd.KubernetesWatchTrigger, error) {
+	relativeUrl := fmt.Sprintf("watches?namespace=%v", ns)
+	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
 		return nil, err
 	}

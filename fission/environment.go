@@ -28,8 +28,23 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 )
+
+func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {
+	fnList, err := client.FunctionList(metav1.NamespaceAll)
+	if err != nil {
+		return nil, err
+	}
+	fns := []crd.Function{}
+	for _, fn := range fnList {
+		if fn.Spec.Environment.Name == envName && fn.Spec.Environment.Namespace == envNamespace {
+			fns = append(fns, fn)
+		}
+	}
+	return fns, nil
+}
 
 func envCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
@@ -37,6 +52,14 @@ func envCreate(c *cli.Context) error {
 	envName := c.String("name")
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
+	}
+	envNamespace := c.String("envNamespace")
+
+	envList, err := client.EnvironmentList(envNamespace)
+	if err == nil && len(envList) > 0 {
+		warn(fmt.Sprintf("%d environment(s) are present in this ns: %s. All these envs share"+
+			" the same service account token, with previleges to view secrets of all the functions referencing them. "+
+			"Envs can be created in different ns if isolation is needed", len(envList), envNamespace))
 	}
 
 	var poolsize int
@@ -80,7 +103,7 @@ func envCreate(c *cli.Context) error {
 	env := &crd.Environment{
 		Metadata: metav1.ObjectMeta{
 			Name:      envName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: envNamespace,
 		},
 		Spec: fission.EnvironmentSpec{
 			Version: envVersion,
@@ -106,7 +129,7 @@ func envCreate(c *cli.Context) error {
 		return nil
 	}
 
-	_, err := client.EnvironmentCreate(env)
+	_, err = client.EnvironmentCreate(env)
 	checkErr(err, "create environment")
 
 	fmt.Printf("environment '%v' created\n", envName)
@@ -120,10 +143,11 @@ func envGet(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
@@ -143,6 +167,7 @@ func envUpdate(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	envImg := c.String("image")
 	envBuilderImg := c.String("builder")
@@ -155,7 +180,7 @@ func envUpdate(c *cli.Context) error {
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	})
 	checkErr(err, "find environment")
 
@@ -198,10 +223,11 @@ func envDelete(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name , use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")
@@ -212,8 +238,9 @@ func envDelete(c *cli.Context) error {
 
 func envList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	envNamespace := c.String("envNamespace")
 
-	envs, err := client.EnvironmentList()
+	envs, err := client.EnvironmentList(envNamespace)
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

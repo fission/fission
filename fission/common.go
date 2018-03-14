@@ -205,10 +205,10 @@ func createArchive(client *client.Client, fileName string, specFile string) *fis
 	return &archive
 }
 
-func createPackage(client *client.Client, envName, srcArchiveName, deployArchiveName, buildcmd string, specFile string) *metav1.ObjectMeta {
+func createPackage(client *client.Client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd string, specFile string) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
-			Namespace: metav1.NamespaceDefault,
+			Namespace: envNamespace,
 			Name:      envName,
 		},
 	}
@@ -239,7 +239,7 @@ func createPackage(client *client.Client, envName, srcArchiveName, deployArchive
 	pkg := &crd.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: pkgNamespace,
 		},
 		Spec: pkgSpec,
 		Status: fission.PackageStatus{

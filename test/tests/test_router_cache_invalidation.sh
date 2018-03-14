@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -euo pipefail
-
 # 1. This test first creates a python function with a route
 # 2. Makes a curl request to the route and verifies http.StatusOK is received.
 #    This step ensures the pod address is cached in router.

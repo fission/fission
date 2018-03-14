@@ -40,6 +40,8 @@ func ttCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+	fnNamespace := c.String("fnNamespace")
+
 	cron := c.String("cron")
 	if len(cron) == 0 {
 		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', or '@hourly'; use --cron")
@@ -48,7 +50,7 @@ func ttCreate(c *cli.Context) error {
 	tt := &crd.TimeTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.TimeTriggerSpec{
 			Cron: cron,
@@ -84,10 +86,11 @@ func ttUpdate(c *cli.Context) error {
 	if len(ttName) == 0 {
 		fatal("Need name of trigger, use --name")
 	}
+	ttNs := c.String("triggerns")
 
 	tt, err := client.TimeTriggerGet(&metav1.ObjectMeta{
 		Name:      ttName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: ttNs,
 	})
 	checkErr(err, "get time trigger")
 
@@ -97,6 +100,10 @@ func ttUpdate(c *cli.Context) error {
 		tt.Spec.Cron = newCron
 		updated = true
 	}
+
+	// TODO : During update, function has to be in the same ns as the trigger object
+	// but since we are not checking this for other triggers too, not sure if we need a check here.
+
 	fnName := c.String("function")
 	if len(fnName) > 0 {
 		tt.Spec.FunctionReference.Name = fnName
@@ -120,10 +127,11 @@ func ttDelete(c *cli.Context) error {
 	if len(ttName) == 0 {
 		fatal("Need name of trigger to delete, use --name")
 	}
+	ttNs := c.String("triggerns")
 
 	err := client.TimeTriggerDelete(&metav1.ObjectMeta{
 		Name:      ttName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: ttNs,
 	})
 	checkErr(err, "delete trigger")
 
@@ -133,8 +141,9 @@ func ttDelete(c *cli.Context) error {
 
 func ttList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	ttNs := c.String("triggerns")
 
-	tts, err := client.TimeTriggerList()
+	tts, err := client.TimeTriggerList(ttNs)
 	checkErr(err, "list Time triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

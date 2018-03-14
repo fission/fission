@@ -56,6 +56,7 @@ type (
 		replicas               int32                         // num idle pods
 		deployment             *v1beta1.Deployment           // kubernetes deployment
 		namespace              string                        // namespace to keep our resources
+		functionNamespace      string                        // fallback namespace for fission functions
 		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
 		idlePodReapTime        time.Duration                 // pods unused for idlePodReapTime are deleted
 		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
@@ -103,6 +104,7 @@ func MakeGenericPool(
 	env *crd.Environment,
 	initialReplicas int32,
 	namespace string,
+	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	instanceId string,
 	enableIstio bool) (*GenericPool, error) {
@@ -125,29 +127,37 @@ func MakeGenericPool(
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
-		env:              env,
-		replicas:         initialReplicas, // TODO make this an env param instead?
-		requestChannel:   make(chan *choosePodRequest),
-		fissionClient:    fissionClient,
-		kubernetesClient: kubernetesClient,
-		namespace:        namespace,
-		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
-		idlePodReapTime:  3 * time.Minute, // TODO make this configurable
-		fsCache:          fsCache,
-		poolInstanceId:   uniuri.NewLen(8),
-		instanceId:       instanceId,
-		fetcherImage:     fetcherImage,
-		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
-		useIstio:         enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
-		sharedMountPath:  "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
-		sharedSecretPath: "/secrets",
-		sharedCfgMapPath: "/configs",
+		env:               env,
+		replicas:          initialReplicas, // TODO make this an env param instead?
+		requestChannel:    make(chan *choosePodRequest),
+		fissionClient:     fissionClient,
+		kubernetesClient:  kubernetesClient,
+		namespace:         namespace,
+		functionNamespace: functionNamespace,
+		podReadyTimeout:   5 * time.Minute, // TODO make this an env param?
+		idlePodReapTime:   3 * time.Minute, // TODO make this configurable
+		fsCache:           fsCache,
+		poolInstanceId:    uniuri.NewLen(8),
+		instanceId:        instanceId,
+		fetcherImage:      fetcherImage,
+		useSvc:            false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		useIstio:          enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
+		sharedMountPath:   "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
+		sharedSecretPath:  "/secrets",
+		sharedCfgMapPath:  "/configs",
 	}
 
 	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
 
 	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
+
+	// create fetcher SA in this ns, if not already created
+	_, err := fission.SetupSA(gp.kubernetesClient, fission.FissionFetcherSA, gp.namespace)
+	if err != nil {
+		log.Printf("Error : %v creating fetcher SA in ns : %s", err, gp.namespace)
+		return nil, err
+	}
 
 	// Labels for generic deployment/RS/pods.
 	gp.labelsForPool = map[string]string{
@@ -158,7 +168,7 @@ func MakeGenericPool(
 	}
 
 	// create the pool
-	err := gp.createPool()
+	err = gp.createPool()
 	if err != nil {
 		return nil, err
 	}
@@ -469,10 +479,12 @@ func (gp *GenericPool) createPool() error {
 
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
-	gracePeriodSeconds := int64(6 * 60)
-	if gp.env.Spec.TerminationGracePeriod > 0 {
-		gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
-	}
+	//gracePeriodSeconds := int64(6 * 60)
+	//if gp.env.Spec.TerminationGracePeriod > 0 {
+	//	gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
+	//}
+
+	gracePeriodSeconds := int64(0)
 
 	podAnnotation := make(map[string]string)
 
@@ -813,4 +825,44 @@ func (gp *GenericPool) destroy() error {
 		return err
 	}
 	return nil
+}
+
+// TODO : On a 2nd thought, not sure we need to do cleanup rolebindings on env deletes. here's why i think so :
+// 1. first, some context : when a function is updated to refer to a different env, we automatically remove the fetcher.oldEnvNs from the secret-configmap-getter-rolebindings.
+//    similarly, on a pkg update of its environment, we remove the fetcher.oldEnvNs from pkg-getter-rolebinding.
+// 2. so, the sa will eventually be removed from the rolebindings.
+// 3. if someone accidentally deleted the env, the rolebindings will still be in place and we dont have to re-create them and cause surprises to user.
+
+// following comments if we end up retaining this function
+// This seems like an overkill, but it runs it a separate go-routine, so shouldnt affect performance
+// Also we do best effort removing SA from rolebindings without returning err if any of them fail.
+func (gp *GenericPool) cleanupRoleBindings() {
+	log.Printf("cleaning up rolebindings for gp : %s.%s", gp.env.Metadata.Name, gp.env.Metadata.Namespace)
+	// 0. funcList, err := getFunctionsByEnv(UsingPoolMgrExecutor)
+	fnList, err := crd.GetFunctionsByEnv(gp.fissionClient, gp.env.Metadata.Name, gp.env.Metadata.Namespace)
+	if err != nil {
+		log.Printf("Error getting functions by env : %s.%s. err : %v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, err)
+	}
+
+	// 1. for each function, get the Ns, remove fetcherSA.envNs from pkg-getter-rolebinding, remove fetcherSA.envNs from secret-configMap-getter-rolebinding
+	for _, item := range fnList {
+		err = fission.RemoveSAFromRoleBindingWithRetries(gp.kubernetesClient, fission.PackageGetterRB, item.Namespace, fission.FissionFetcherSA, gp.env.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error removing sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, gp.env.Metadata.Namespace, fission.PackageGetterRB, item.Namespace)
+		}
+
+		err = fission.RemoveSAFromRoleBindingWithRetries(gp.kubernetesClient, fission.PackageGetterRB, item.Namespace, fission.FissionBuilderSA, gp.env.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error removing sa: %s.%s from rolebinding : %s.%s", fission.FissionBuilderSA, gp.env.Metadata.Namespace, fission.PackageGetterRB, item.Namespace)
+		}
+
+		err = fission.RemoveSAFromRoleBindingWithRetries(gp.kubernetesClient, fission.GetSecretConfigMapRoleBinding, item.Namespace, fission.FissionFetcherSA, gp.env.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error removing sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, gp.env.Metadata.Namespace, fission.GetSecretConfigMapRoleBinding, item.Namespace)
+		}
+
+		if err == nil {
+			log.Printf("Removed all RoleBindings for pool : %s.%s", gp.env.Metadata.Name, gp.env.Metadata.Namespace)
+		}
+	}
 }

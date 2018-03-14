@@ -242,7 +242,8 @@ func (fr *FissionResources) validate() error {
 	// check references: both dangling refs + garbage
 	//   packages -> archives
 	//   functions -> packages
-	//   functions -> environments [TODO]
+	//   functions -> environments + shared environments between functions [TODO]
+	//   functions -> secrets + configmaps (same ns) [TODO]
 	//   triggers -> functions
 
 	// index archives
@@ -301,12 +302,30 @@ func (fr *FissionResources) validate() error {
 	for _, f := range fr.functions {
 		functions[mapKey(&f.Metadata)] = false
 
-		// check package ref from function
 		pkgMeta := &metav1.ObjectMeta{
 			Name:      f.Spec.Package.PackageRef.Name,
 			Namespace: f.Spec.Package.PackageRef.Namespace,
 		}
-		if _, ok := packages[mapKey(pkgMeta)]; !ok {
+
+		// check package ref from function
+		packageRefExists := func() bool {
+			_, ok := packages[mapKey(pkgMeta)]
+			return ok
+		}
+
+		// check that the package referenced by each function is in the same ns as the function
+		packageRefInFuncNs := func(f *crd.Function) bool {
+			return f.Spec.Package.PackageRef.Namespace == f.Metadata.Namespace
+		}
+
+		if !packageRefInFuncNs(&f) {
+			result = multierror.Append(result, fmt.Errorf(
+				"%v: function '%v' references a package outside of its namespace %v/%v",
+				fr.sourceMap.locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
+				f.Metadata.Name,
+				f.Spec.Package.PackageRef.Namespace,
+				f.Spec.Package.PackageRef.Name))
+		} else if !packageRefExists() {
 			result = multierror.Append(result, fmt.Errorf(
 				"%v: function '%v' references unknown package %v/%v",
 				fr.sourceMap.locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
@@ -781,7 +800,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 
 	// get list of packages, make content-indexed map of available archives
 	availableArchives := make(map[string]string) // (sha256 -> url)
-	pkgs, err := fclient.PackageList()
+	pkgs, err := fclient.PackageList(metav1.NamespaceAll)
 	if err != nil {
 		return err
 	}
@@ -1031,7 +1050,7 @@ func waitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package
 
 func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.PackageList()
+	allObjs, err := fclient.PackageList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1136,7 +1155,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 
 func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.FunctionList()
+	allObjs, err := fclient.FunctionList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1219,7 +1238,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 
 func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.EnvironmentList()
+	allObjs, err := fclient.EnvironmentList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1302,7 +1321,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 
 func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.HTTPTriggerList()
+	allObjs, err := fclient.HTTPTriggerList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1385,7 +1404,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 
 func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.WatchList()
+	allObjs, err := fclient.WatchList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1468,7 +1487,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 
 func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.TimeTriggerList()
+	allObjs, err := fclient.TimeTriggerList(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1551,7 +1570,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 
 func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.MessageQueueTriggerList("")
+	allObjs, err := fclient.MessageQueueTriggerList("", metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}

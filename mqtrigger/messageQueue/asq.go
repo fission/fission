@@ -210,7 +210,7 @@ func (asc AzureStorageConnection) subscribe(trigger *crd.MessageQueueTrigger) (m
 		queue:           asc.service.GetQueue(trigger.Spec.Topic),
 		queueName:       trigger.Spec.Topic,
 		outputQueueName: trigger.Spec.ResponseTopic,
-		functionURL:     asc.routerURL + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name), "/"),
+		functionURL:     asc.routerURL + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/"),
 		contentType:     trigger.Spec.ContentType,
 		unsubscribe:     make(chan bool),
 		done:            make(chan bool),

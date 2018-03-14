@@ -29,7 +29,6 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/api"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	restclient "k8s.io/client-go/rest"
 
@@ -44,7 +43,12 @@ func (a *API) getIstioServiceLabels(fnName string) map[string]string {
 }
 
 func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := a.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	funcs, err := a.fissionClient.Functions(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -73,6 +77,13 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(f.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -92,7 +103,7 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["function"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -151,7 +162,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["function"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -205,7 +216,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		ns = "fission-function"
 	}
 
-	f, err := a.fissionClient.Functions(api.NamespaceDefault).Get(fnName)
+	f, err := a.fissionClient.Functions(ns).Get(fnName)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

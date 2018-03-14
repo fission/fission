@@ -121,8 +121,9 @@ func (c *Client) EnvironmentDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) EnvironmentList() ([]crd.Environment, error) {
-	resp, err := http.Get(c.url("environments"))
+func (c *Client) EnvironmentList(ns string) ([]crd.Environment, error) {
+	relativeUrl := fmt.Sprintf("environments?namespace=%v", ns)
+	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
 		return nil, err
 	}

@@ -120,8 +120,9 @@ func (c *Client) HTTPTriggerDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) HTTPTriggerList() ([]crd.HTTPTrigger, error) {
-	resp, err := http.Get(c.url("triggers/http"))
+func (c *Client) HTTPTriggerList(triggerNamespace string) ([]crd.HTTPTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/http?namespace=%v", triggerNamespace)
+	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
 		return nil, err
 	}

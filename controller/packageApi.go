@@ -29,7 +29,11 @@ import (
 )
 
 func (a *API) PackageApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := a.fissionClient.Packages(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+	funcs, err := a.fissionClient.Packages(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -70,6 +74,13 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(f.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	fnew, err := a.fissionClient.Packages(f.Metadata.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -89,7 +100,7 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["package"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -154,7 +165,7 @@ func (a *API) PackageApiUpdate(w http.ResponseWriter, r *http.Request) {
 func (a *API) PackageApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["package"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}

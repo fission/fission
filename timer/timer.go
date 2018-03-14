@@ -88,16 +88,7 @@ func (timer *Timer) svc() {
 func (timer *Timer) syncCron(triggers []crd.TimeTrigger) error {
 	// add new triggers or update existing ones
 	for _, t := range triggers {
-		if item, ok := timer.triggers[t.Metadata.Name]; ok {
-			// the item exists, update the item if needed
-
-			// if both UID and ResourceVersion match, the
-			// two triggers are identical
-			if item.trigger.Metadata.UID == t.Metadata.UID &&
-				item.trigger.Metadata.ResourceVersion == t.Metadata.ResourceVersion {
-				continue
-			}
-
+		if item, ok := timer.triggers[crd.CacheKey(&t.Metadata)]; ok {
 			// update cron if the cron spec changed
 			if item.trigger.Spec.Cron != t.Spec.Cron {
 				// if there is an cron running, stop it
@@ -109,23 +100,22 @@ func (timer *Timer) syncCron(triggers []crd.TimeTrigger) error {
 
 			item.trigger = t
 		} else {
-			timer.triggers[t.Metadata.Name] = &timerTriggerWithCron{
+			timer.triggers[crd.CacheKey(&t.Metadata)] = &timerTriggerWithCron{
 				trigger: t,
 				cron:    timer.newCron(t),
 			}
 		}
 	}
 
+	// make a local map with current trigger list
+	triggerMap := make(map[string]bool)
+	for _, trigger := range triggers {
+		triggerMap[crd.CacheKey(&trigger.Metadata)] = true
+	}
+
 	// process removed triggers
 	for k, v := range timer.triggers {
-		found := false
-		for _, t := range triggers {
-			if t.Metadata.Name == k {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, found := triggerMap[k]; !found {
 			if v.cron != nil {
 				v.cron.Stop()
 				log.Printf("Cron for time trigger %s stopped", v.trigger.Metadata.Name)
@@ -143,7 +133,7 @@ func (timer *Timer) newCron(t crd.TimeTrigger) *cron.Cron {
 		headers := map[string]string{
 			"X-Fission-Timer-Name": t.Metadata.Name,
 		}
-		(*timer.publisher).Publish("", headers, fission.UrlForFunction(t.Spec.FunctionReference.Name))
+		(*timer.publisher).Publish("", headers, fission.UrlForFunction(t.Spec.FunctionReference.Name, t.Metadata.Namespace))
 	})
 	c.Start()
 	log.Printf("Add new cron for time trigger %v", t.Metadata.Name)

@@ -134,8 +134,9 @@ func (c *Client) FunctionDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) FunctionList() ([]crd.Function, error) {
-	resp, err := http.Get(c.url("functions"))
+func (c *Client) FunctionList(functionNamespace string) ([]crd.Function, error) {
+	relativeUrl := fmt.Sprintf("functions?namespace=%v", functionNamespace)
+	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
 		return nil, err
 	}

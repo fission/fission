@@ -327,7 +327,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			continue
 		}
 
-		url := fission.UrlForFunction(ws.watch.Spec.FunctionReference.Name)
+		url := fission.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.Metadata.Namespace)
 		ws.publisher.Publish(buf.String(), headers, url)
 	}
 }

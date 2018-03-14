@@ -40,6 +40,7 @@ func mqtCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	var mqType fission.MessageQueueType
 	switch c.String("mqtype") {
@@ -76,7 +77,7 @@ func mqtCreate(c *cli.Context) error {
 	mqt := &crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      mqtName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.MessageQueueTriggerSpec{
 			FunctionReference: fission.FunctionReference{
@@ -115,6 +116,8 @@ func mqtUpdate(c *cli.Context) error {
 	if len(mqtName) == 0 {
 		fatal("Need name of trigger, use --name")
 	}
+	mqtNs := c.String("triggerns")
+
 	topic := c.String("topic")
 	respTopic := c.String("resptopic")
 	fnName := c.String("function")
@@ -122,9 +125,11 @@ func mqtUpdate(c *cli.Context) error {
 
 	mqt, err := client.MessageQueueTriggerGet(&metav1.ObjectMeta{
 		Name:      mqtName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: mqtNs,
 	})
 	checkErr(err, "get Time trigger")
+
+	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
 	checkMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
 
@@ -163,10 +168,11 @@ func mqtDelete(c *cli.Context) error {
 	if len(mqtName) == 0 {
 		fatal("Need name of trigger to delete, use --name")
 	}
+	mqtNs := c.String("triggerns")
 
 	err := client.MessageQueueTriggerDelete(&metav1.ObjectMeta{
 		Name:      mqtName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: mqtNs,
 	})
 	checkErr(err, "delete trigger")
 
@@ -176,8 +182,9 @@ func mqtDelete(c *cli.Context) error {
 
 func mqtList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	mqtNs := c.String("triggerns")
 
-	mqts, err := client.MessageQueueTriggerList(c.String("mqtype"))
+	mqts, err := client.MessageQueueTriggerList(c.String("mqtype"), mqtNs)
 	checkErr(err, "list message queue triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

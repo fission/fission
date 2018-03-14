@@ -145,7 +145,7 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
+	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
@@ -287,19 +287,26 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	deployLabels := deploy.getDeployLabels(fn, env)
 
+	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+	// deployment of the function in fission-function ns
+	ns := deploy.namespace
+	if fn.Metadata.Namespace != metav1.NamespaceDefault {
+		ns = fn.Metadata.Namespace
+	}
+
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
 	// Since newdeploy waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	svc, err := deploy.createOrGetSvc(deployLabels, objName)
+	svc, err := deploy.createOrGetSvc(deployLabels, objName, ns)
 	if err != nil {
 		log.Printf("Error creating the service %v: %v", objName, err)
 		return fsvc, err
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 
-	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
+	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, ns)
 	if err != nil {
 		log.Printf("Error creating the deployment %v: %v", objName, err)
 		return fsvc, err
@@ -468,7 +475,15 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
 			return
 		}
-		err = deploy.updateDeployment(newDeployment)
+
+		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+		// deployment of the function in fission-function ns
+		ns := deploy.namespace
+		if newFn.Metadata.Namespace != metav1.NamespaceDefault {
+			ns = newFn.Metadata.Namespace
+		}
+
+		err = deploy.updateDeployment(newDeployment, ns)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to update deployment while updating function")
 			return
@@ -499,19 +514,26 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	}
 	objName := fsvc.Name
 
-	err = deploy.deleteDeployment(deploy.namespace, objName)
+	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+	// deployment of the function in fission-function ns, so cleaning up resources there
+	ns := deploy.namespace
+	if fn.Metadata.Namespace != metav1.NamespaceDefault {
+		ns = fn.Metadata.Namespace
+	}
+
+	err = deploy.deleteDeployment(ns, objName)
 	if err != nil {
 		log.Printf("Error deleting the deployment: %v", objName)
 		delError = err
 	}
 
-	err = deploy.deleteSvc(deploy.namespace, objName)
+	err = deploy.deleteSvc(ns, objName)
 	if err != nil {
 		log.Printf("Error deleting the service: %v", objName)
 		delError = err
 	}
 
-	err = deploy.deleteHpa(deploy.namespace, objName)
+	err = deploy.deleteHpa(ns, objName)
 	if err != nil {
 		log.Printf("Error deleting the HPA: %v", objName)
 		delError = err
@@ -520,6 +542,9 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	if delError != nil {
 		return nil, delError
 	}
+
+	go deploy.cleanupRBACObjs(ns, fn)
+
 	return nil, nil
 }
 

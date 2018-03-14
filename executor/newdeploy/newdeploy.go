@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -50,14 +51,14 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if replicas == 0 {
 		replicas = 1
 	}
 
-	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
+	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
 		if existingDepl.Status.ReadyReplicas < replicas {
 			existingDepl, err = deploy.waitForDeploy(existingDepl, replicas)
@@ -66,13 +67,17 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 	}
 
 	if err != nil && k8s_err.IsNotFound(err) {
+		err := deploy.setupRBACObjs(deployNamespace, fn)
+		if err != nil {
+			return nil, err
+		}
 
 		deployment, err := deploy.getDeploymentSpec(fn, env, deployName, deployLabels)
 		if err != nil {
 			return nil, err
 		}
 
-		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
+		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Create(deployment)
 		if err != nil {
 			log.Printf("Error while creating deployment: %v", err)
 			return nil, err
@@ -85,13 +90,39 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 
 }
 
-func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, error) {
-	deployName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
+func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *crd.Function) error {
+	// create fetcher SA in this ns, if not already created
+	_, err := fission.SetupSA(deploy.kubernetesClient, fission.FissionFetcherSA, deployNamespace)
+	if err != nil {
+		log.Printf("Error : %v creating %s in ns : %s for function: %s.%s", err, fission.FissionFetcherSA, deployNamespace, fn.Metadata.Name, fn.Metadata.Namespace)
+		return err
+	}
+
+	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
+	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
+	if err != nil {
+		log.Printf("Error : %v creating %s RoleBinding for function: %s.%s", err, fission.PackageGetterRB, fn.Metadata.Name, fn.Metadata.Namespace)
+		return err
+	}
+
+	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
+	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
+	if err != nil {
+		log.Printf("Error : %v creating %s RoleBinding for function %s.%s", err, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Name, fn.Metadata.Namespace)
+		return err
+	}
+
+	log.Printf("Set up all RBAC objects for function : %s.%s", fn.Metadata.Name, fn.Metadata.Namespace)
+	return nil
 }
 
-func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) error {
-	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
+func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, error) {
+	deployName := deploy.getObjName(fn)
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(fn.Metadata.Namespace).Get(deployName, metav1.GetOptions{})
+}
+
+func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment, ns string) error {
+	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Update(deployment)
 	return err
 }
 
@@ -108,6 +139,54 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	return nil
 }
 
+func (deploy *NewDeploy) cleanupRBACObjs(deployNamespace string, fn *crd.Function) {
+	fnList := deploy.funcStore.List()
+
+	if len(fnList) == 0 {
+		err := fission.DeleteRoleBinding(deploy.kubernetesClient, fission.PackageGetterRB, fn.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error deleting rolebinding : %s.%s", fission.PackageGetterRB, fn.Metadata.Namespace)
+			return
+		}
+		err = fission.DeleteRoleBinding(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+		if err != nil {
+			log.Printf("Error deleting rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
+			return
+		}
+		log.Printf("Deleted rolebinding : %s.%s and %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.PackageGetterRB, fn.Metadata.Namespace)
+		return
+	}
+
+	for _, item := range fnList {
+		fnItem, ok := item.(*crd.Function)
+		if !ok {
+			log.Printf("Error asserting function item, type of item : %v", reflect.TypeOf(item))
+			return
+		}
+		if fnItem.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy ||
+			fnItem.Spec.Environment.Namespace == fn.Metadata.Namespace {
+			log.Printf("There are other functions needing the rolebindings in this ns, so nothing to do")
+			return
+		}
+	}
+
+	// us landing here implies we can remove sa
+	// not returning if any removals error out. its a best effort cleanup.
+	err := fission.RemoveSAFromRoleBindingWithRetries(deploy.kubernetesClient, fission.PackageGetterRB, fn.Metadata.Namespace, fission.FissionFetcherSA, deployNamespace)
+	if err != nil {
+		log.Printf("error removing sa : %s.%s from rolebinding : %s.%s, err = %v", fission.FissionFetcherSA, deployNamespace, fission.PackageGetterRB, fn.Metadata.Namespace, err)
+	}
+
+	err = fission.RemoveSAFromRoleBindingWithRetries(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.FissionFetcherSA, deployNamespace)
+	if err != nil {
+		log.Printf("error removing sa : %s.%s from rolebinding : %s.%s, err = %v", fission.FissionFetcherSA, deployNamespace, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, err)
+	}
+
+	if err == nil {
+		log.Printf("Removed sa : %s.%s from rolebinding : %s.%s and %s.%s", fission.FissionFetcherSA, deployNamespace, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.PackageGetterRB, fn.Metadata.Namespace)
+	}
+}
+
 func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
@@ -115,7 +194,9 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 	if replicas == 0 {
 		replicas = 1
 	}
+
 	targetFilename := "user"
+
 	gracePeriodSeconds := int64(6 * 60)
 	if env.Spec.TerminationGracePeriod > 0 {
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
@@ -351,7 +432,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	maxRepl := int32(execStrategy.MaxScale)
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 
-	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
+	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
 		return existingHpa, err
 	}
@@ -364,7 +445,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		hpa := asv1.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      hpaName,
-				Namespace: deploy.namespace,
+				Namespace: depl.ObjectMeta.Namespace,
 				Labels:    depl.Labels,
 			},
 			Spec: asv1.HorizontalPodAutoscalerSpec{
@@ -379,7 +460,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 			},
 		}
 
-		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Create(&hpa)
+		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(&hpa)
 		if err != nil {
 			return nil, err
 		}
@@ -392,11 +473,11 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
 	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(fn.Metadata.Namespace).Get(hpaName, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
+	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(hpa)
 	return err
 }
 
@@ -405,9 +486,9 @@ func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
 	return err
 }
 
-func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 
-	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
+	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return existingSvc, err
 	}
@@ -436,7 +517,7 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 			},
 		}
 
-		svc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Create(service)
+		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(service)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +538,7 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
 	for i := 0; i < 120; i++ {
-		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}

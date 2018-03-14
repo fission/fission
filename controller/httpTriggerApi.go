@@ -30,7 +30,12 @@ import (
 )
 
 func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
-	triggers, err := a.fissionClient.HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	triggers, err := a.fissionClient.HTTPTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -81,6 +86,13 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(t.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	tnew, err := a.fissionClient.HTTPTriggers(t.Metadata.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -100,7 +112,7 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 func (a *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["httpTrigger"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -166,7 +178,7 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 func (a *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["httpTrigger"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}

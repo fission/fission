@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Use package command to create two packages one with source 
+# Use package command to create two packages one with source
 # archive and the other with deploy archive. Also, create a 
 # function to test the packages created by package command are 
 # able to work.
