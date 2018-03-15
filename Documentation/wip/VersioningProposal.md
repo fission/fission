@@ -27,16 +27,19 @@ Table of Contents :
 1. A user may want to save a history of all versions of source code deployed for a function, basically leaving an audit trail
 2. A user may want to test different versions of his function ( canary testing )
 3. A user may want to do a rolling upgrade from one version to another version of his function.
-4. A user may want to submit his source code changes to git and then just invoke `fission spec version apply`, that'll take care of creating .
+4. A user may want to submit his source code changes to git and then just invoke `fission spec version apply`, that should then take care of creating all objects including versions if the same object already exists.
 5. A cluster administer may want a record of the exact versions of different functions deployed at any given point in time ( for troubleshooting some issues in the cluster and making them reproducible at a later point perhaps)
 
 # High level proposal
 1. This proposal intends to create a new function version every time the user does a `function version update` - basically creating a new function object.
    Implicitly, this means that fission takes care of assigning versions. 
-2. The version numbers are not sequentially increasing numbers, instead, they are randomly generated uuid short strings. The reason for this is explained under "Implementation changes needed for fission spec".
-3. So, every new function version will be a function object with name function name and a version uuid suffix
+2. The version numbers are not sequentially increasing numbers, instead, they are randomly generated uuid short strings. The reason for this is explained under [Implementation changes needed for fission spec](#implementation-details-for-fission-spec).
+3. So, every new function version will be a function object with name function name and a version uuid suffix.
+
    For example - lets say a user first creates a function "fnA" with `fission function version create --name fnA` and then he updates this function with `fission fn version update --name fnA --code <new_code>`, a new function object is created with `Name: fnA-axv`.
+   
    Next, when he updates the same function again, another new version of a function is created, ex : `Name: fnA-reh`.
+  
 3. This proposal also intends to version packages along with functions. This is because fundamentally, function versioning implies that the source code is versioned and in fission, packages contain source code. 
 4. Naturally, the intention is to version packages similar to functions. So, every pkg update results in a new pkg object being created, which is treated as a version of that package.
 
@@ -49,6 +52,7 @@ Although I've tried to keep the behavior of the code consistent and similar betw
 I've also summarized the differences in the end.
 
 Before diving into scenarios, here's a list of a few data structures needed :
+
 This proposal intends to create 3 new object types for managing the state - `FunctionVersionTracker`, `PackageVersionTracker` and `GroupVersionTracker`.
 
 1. FunctionVersionTracker -  of type `FunctionVersionTracker` is used to track all versions created for each function. 
@@ -77,7 +81,7 @@ This proposal intends to create 3 new object types for managing the state - `Fun
         }
     ```
 
-3. GroupVersionTracker - used to track all versioned objects created in each iteration of `spec version apply`. It also has some metadata about git status, branch etc. This can give the state of k8s cluster at that point in time, necessary for use-case 5 mentioned above. The usage of this object becomes evident when you look at scenario 1 below.
+3. GroupVersionTracker - used to track all versioned objects created in each iteration of `spec version apply`. It also has some metadata about git status, branch etc. This can give the state of k8s cluster at that point in time, necessary for use-case 5 mentioned above. The usage of this object becomes evident when you look at scenario 1 below. 
     ```go
         type GroupVersionTracker struct {
             metav1.TypeMeta `json:",inline"`
@@ -113,9 +117,13 @@ Dividing this section further into
 ### TL;DR of intended behavior of fission code through different scenarios
 The list of scenarios are definitely not all-encompassing. but at a minimum, it's an attempt to show the generic behavior of versioning code.
 Summary of the scenarios (CRUD) :
+
 scenarios 1 - 4 touch upon creation of different versions of functions and packages.
+
 scenario 5 touches upon deletion of versions of function and packages.
+
 There is no concept of updating versions - every new update on a function or a package results in a new version.
+
 Listing all versions of a function and/or package is possible and that's covered under "Implementation details for CLI"
 
 #### Version creation
@@ -1078,13 +1086,21 @@ Dividing this section into
 
 ### TL;DR walking you through various scenarios
 The list of scenarios are again not definitely not all-encompassing.
+
 Summary of the scenarios (CRUD) :
+
 scenario 1 touches upon creation of different versions of packages. 
+
 scenarios 2 - 3 touch upon creation of different versions of functions.
+
 scenario 4 touches upon updation of specific versions of packages.
+
 scenarios 5 - 6 touch upon updation of specific versions of functions.  
+
 scenarios 7 - 8 touch upon deletion of specific versions of packages.
+
 scenarios 9 - 10 touch upon deletion of specific versions of functions.
+
 scenarions 11 - 12 Listing all versions of a package and function respectively.
 
 ( I havent listed the scenarios for CRUD on package versions first and then function verstions. Instead, I've interleaved the scenarios for package and function version CRUD operations. This might seem a little odd at first but it's necessary for ex: in order to understand package version update, it's important to understand how function versions are created first. )
@@ -1156,7 +1172,7 @@ Note: If a function version creation is attempted by the user using `--pkg` flag
 #### Version update for packages
 The general format of the cli to update versions of packages is `fission package version update --name src-pkg --other-options`. Idea here is that every time the user invokes a `package version update`, a new version of package object is created.
 
-4. Lets say the user wants to update the package that was created as part of scenario 1 above with updated source archive `fission package version create --name src-pkg --src src-archive.zip --env python --buildcmd "./build.sh"`
+4. Lets say the user wants to update the package that was created as part of scenario 1 above with updated source archive `fission package version update --name src-pkg --src src-archive.zip --env python --buildcmd "./build.sh"`
 
    1. As expected, a new version uid is generated and a package object is created with the given name suffixed by the version uid. Next, the "versions" list in the `PackageVersionTracker` object created above will have this version uid appended to it.
    What happens next depends on if one(many) function(s) reference this package.
