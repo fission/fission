@@ -246,6 +246,9 @@ func parseYaml(path string, b []byte, fr *FissionResources) error {
 			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
 			return err
 		}
+		if !strings.HasPrefix(v.Spec.RelativeURL, "/") {
+			v.Spec.RelativeURL = fmt.Sprintf("/%s", v.Spec.RelativeURL)
+		}
 		fr.httpTriggers = append(fr.httpTriggers, v)
 	case "KubernetesWatchTrigger":
 		var v crd.KubernetesWatchTrigger
