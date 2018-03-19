@@ -22,7 +22,7 @@ fission route create --function $fn --url /$fn --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-timeout 60 bash -c "test_fn $fn_name 'world'"
+timeout 60 bash -c "test_fn $fn 'world'"
 
 log "Updating function $fn executor type to new deployment"
 fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
@@ -30,4 +30,4 @@ fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --
 log "Waiting for router to catch up"
 sleep 5
 
-timeout 60 bash -c "test_fn $fn_name 'world'"
+timeout 60 bash -c "test_fn $fn 'world'"

@@ -7,55 +7,49 @@ source $(dirname $0)/fnupdate_utils.sh
 ROOT=$(dirname $0)/../../..
 
 env=python-$(date +%N)
-fn_secret=hellosecret-$(date +%N)
-fn_config=helloconfig-$(date +%N)
+fn_name=hellopy-$(date +%N)
+
+old_secret=old_secret
+new_secret=new_secret
 
 cp ../test_secret_cfgmap/secret.py.template secret.py
-sed -i "s/{{ FN_SECRET }}/${fn_secret}/g" secret.py
-
-cp ../test_secret_cfgmap/cfgmap.py.template cfgmap.py
-sed -i "s/{{ FN_CFGMAP }}/${fn_config}/g" cfgmap.py
+sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
 
 log "Creating env $env"
 fission env create --name $env --image fission/python-env
 trap "fission env delete --name $env" EXIT
 
-log "Creating NewDeploy function $fn_secret"
-fission fn create --name ${fn_secret} --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
-trap "fission fn delete --name ${fn_secret}" EXIT
+log "Creating secret"
+kubectl create secret generic ${old_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
+trap "kubectl delete secret ${old_secret} -n default" EXIT
+
+log "Creating NewDeploy function spec: $fn_name"
+fission spec init
+fission fn create --spec --name $fn_name --env $env --code secret.py --secret $old_secret --minscale 1 --maxscale 4 --executortype newdeploy
+fission spec apply ./specs/
+trap "fission fn delete --name ${fn_name}" EXIT
 
 log "Creating route"
-fission route create --function ${fn_secret} --url /${fn_secret} --method GET
+fission route create --function ${fn_name} --url /${fn_name} --method GET
 
 log "Waiting for router to catch up"
 sleep 5
 
 log "Testing function"
-timeout 60 bash -c "test_fn $fn_secret 'world'"
+timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"
 
-log "Creating secret"
-kubectl create secret generic ${fn_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
-trap "kubectl delete secret ${fn_secret} -n default" EXIT
+log "Creating a new secret"
+kubectl create secret generic ${new_secret} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default
+trap "kubectl delete secret ${new_secret} -n default" EXIT
 
 log "Updating secret and code for the function"
-fission fn update --name ${fn_secret} --env $env --code secret.py --secret ${fn_secret} --minscale 1 --maxscale 4 --executortype newdeploy
+cp ../test_secret_cfgmap/secret.py.template secret_new.py
+sed -i "s/{{ FN_SECRET }}/${new_secret}/g" secret.py
+sed -i "s/${old_secret}/${new_secret}/g" specs/function-hellotest.yaml
+fission spec apply ./specs/
 
 log "Waiting for changes to take effect"
 sleep 5
 
 log "Testing function for secret value"
-timeout 60 bash -c "test_fn $fn_secret 'TESTVALUE'"
-
-
-log "Creating configmap"
-kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
-trap "kubectl delete configmap ${fn_cfgmap} -n default" EXIT
-
-log "Updating configmap and code for the function"
-fission fn update --name ${fn_secret} --env $env --code cfgmap.py --configmap ${fn_cfgmap} --minscale 1 --maxscale 4 --executortype newdeploy
-
-log "Waiting for changes to take effect"
-sleep 5
-
-log "Testing function for secret value"
-timeout 60 bash -c "test_fn $fn_secret 'TESTVALUE'"
+timeout 60 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"
