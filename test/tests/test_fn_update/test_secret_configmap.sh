@@ -9,8 +9,8 @@ ROOT=$(dirname $0)/../../..
 env=python-$(date +%N)
 fn_name=hellopy-$(date +%N)
 
-old_secret=old-secret
-new_secret=new-secret
+old_secret=old-secret-$(date +%N)
+new_secret=new-secret-$(date +%N)
 
 cp ../test_secret_cfgmap/secret.py.template secret.py
 sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
@@ -45,7 +45,7 @@ trap "kubectl delete secret ${new_secret} -n default" EXIT
 log "Updating secret and code for the function"
 cp ../test_secret_cfgmap/secret.py.template secret_new.py
 sed -i "s/{{ FN_SECRET }}/${new_secret}/g" secret.py
-sed -i "s/${old_secret}/${new_secret}/g" specs/function-hellotest.yaml
+sed -i "s/${old_secret}/${new_secret}/g" specs/function-$fn_name.yaml
 fission spec apply ./specs/
 
 log "Waiting for changes to take effect"
