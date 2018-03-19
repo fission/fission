@@ -24,7 +24,7 @@ cleanup() {
 trap cleanup EXIT
 
 env=python-$(date +%N)
-fn_name="hellopython"
+fn_name=hellopython-$(date +%N)
 
 log "Creating an archive"
 mkdir test_dir
