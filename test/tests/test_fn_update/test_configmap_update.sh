@@ -12,7 +12,7 @@ fn_name=hellopy-$(date +%N)
 old_cfgmap=old-cfgmap-$(date +%N)
 new_cfgmap=new-cfgmap-$(date +%N)
 
-cp ../test_cfgmap_cfgmap/cfgmap.py.template cfgmap.py
+cp ../test_secret_cfgmap/cfgmap.py.template cfgmap.py
 sed -i "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" cfgmap.py
 
 log "Creating env $env"
