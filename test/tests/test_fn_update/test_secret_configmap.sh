@@ -9,8 +9,8 @@ ROOT=$(dirname $0)/../../..
 env=python-$(date +%N)
 fn_name=hellopy-$(date +%N)
 
-old_secret=old_secret
-new_secret=new_secret
+old_secret=old-secret
+new_secret=new-secret
 
 cp ../test_secret_cfgmap/secret.py.template secret.py
 sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
