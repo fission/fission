@@ -26,6 +26,9 @@ trap "fission env delete --name $env" EXIT
 log "Creating function $fn"
 fission fn create --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu $mincpu1 --maxcpu $maxcpu1 --minmemory $minmem1 --maxmemory $maxmem1
 
+log "Waiting for updates to take effect"
+sleep 5
+
 #If variable not used, shell assumes 'function' to be a real function
 func=function
 
