@@ -17,9 +17,14 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
+	version "github.com/fission/fission"
 	"github.com/urfave/cli"
 )
 
@@ -41,11 +46,25 @@ func getKubeConfigPath() string {
 	return kubeConfig
 }
 
+func getFissionAPIVersion(apiUrl string) (string, error) {
+	resp, err := http.Get(apiUrl)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(body), "\n"), nil
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = "0.6.0"
+	app.Version = version.Version
 
 	// fetch the FISSION_URL env variable. If not set, port-forward to controller.
 	var value string
@@ -58,6 +77,17 @@ func main() {
 		value = "http://127.0.0.1:" + localPort
 	} else {
 		value = fissionUrl
+	}
+
+	cli.VersionPrinter = func(c *cli.Context) {
+		clientVer := version.VersionInfo().String()
+		fmt.Printf("Client Version: %v\n", clientVer)
+		serverVer, err := getFissionAPIVersion(value)
+		if err != nil {
+			fmt.Printf("Error getting Fission API version: %v", err)
+		} else {
+			fmt.Printf("Server Version: %v", serverVer)
+		}
 	}
 
 	app.Flags = []cli.Flag{
