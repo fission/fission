@@ -25,6 +25,7 @@ trap "kubectl delete configmap ${old_cfgmap} -n default" EXIT
 
 log "Creating NewDeploy function spec: $fn_name"
 fission spec init
+trap "rm -rf specs" EXIT
 fission fn create --spec --name $fn_name --env $env --code cfgmap.py --configmap $old_cfgmap --minscale 1 --maxscale 4 --executortype newdeploy
 fission spec apply ./specs/
 trap "fission fn delete --name ${fn_name}" EXIT

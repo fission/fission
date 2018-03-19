@@ -7,7 +7,7 @@ source $(dirname $0)/fnupdate_utils.sh
 ROOT=$(dirname $0)/../../..
 
 env=python-$(date +%N)
-fn_name=hellopy-$(date +%N)
+fn_name=hellopython-$(date +%N)
 
 old_secret=old-secret-$(date +%N)
 new_secret=new-secret-$(date +%N)
@@ -25,6 +25,7 @@ trap "kubectl delete secret ${old_secret} -n default" EXIT
 
 log "Creating NewDeploy function spec: $fn_name"
 fission spec init
+trap "rm -rf specs" EXIT
 fission fn create --spec --name $fn_name --env $env --code secret.py --secret $old_secret --minscale 1 --maxscale 4 --executortype newdeploy
 fission spec apply ./specs/
 trap "fission fn delete --name ${fn_name}" EXIT
