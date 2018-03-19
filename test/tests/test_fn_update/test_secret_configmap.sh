@@ -46,6 +46,7 @@ log "Updating secret and code for the function"
 cp ../test_secret_cfgmap/secret.py.template secret_new.py
 sed -i "s/{{ FN_SECRET }}/${new_secret}/g" secret_new.py
 sed -i "s/${old_secret}/${new_secret}/g" specs/function-$fn_name.yaml
+sed -i "s/secret.py/secret_new.py/g" specs/function-$fn_name.yaml
 fission spec apply ./specs/
 
 log "Waiting for changes to take effect"

@@ -21,16 +21,14 @@ fission fn create --name $fn --env $env --code $ROOT/examples/python/hello.py --
 
 timeout 60 bash -c "test_fn $fn 'world'"
 
-log "Updating function scale and target CPU percent"
+log "Updating function scale and target CPU percent for $fn"
 fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale $targetMinScale --maxscale $targetMaxScale --targetcpu $targetCpuPercent --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
-log "Creating route"
+log "Creating route for function $fn"
 fission route create --function ${fn} --url /${fn} --method GET
 
 log "Waiting for update to catch up"
 sleep 5
-
-timeout 60 bash -c "test_fn $fn 'world'"
 
 #If variable not used, shell assumes 'function' to be a real function
 actualMinScale=$(fission fn list|grep $fn|awk '{ print $5; }')
@@ -54,3 +52,5 @@ then
   log "Failed to update target CPU for the function"
   exit 1
 fi
+
+timeout 60 bash -c "test_fn $fn 'world'"
