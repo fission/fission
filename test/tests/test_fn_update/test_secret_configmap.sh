@@ -43,10 +43,10 @@ kubectl create secret generic ${new_secret} --from-literal=TEST_KEY="TESTVALUE_N
 trap "kubectl delete secret ${new_secret} -n default" EXIT
 
 log "Updating secret and code for the function"
-cp ../test_secret_cfgmap/secret.py.template secret-new.py
-sed -i "s/{{ FN_SECRET }}/${new_secret}/g" secret-new.py
+sed -i "s/${old_secret}/${new_secret}/g" secret.py
 sed -i "s/${old_secret}/${new_secret}/g" specs/function-$fn_name.yaml
-sed -i "s/secret.py/secret-new.py/g" specs/function-$fn_name.yaml
+
+log "Applying function changes"
 fission spec apply ./specs/
 
 log "Waiting for changes to take effect"
