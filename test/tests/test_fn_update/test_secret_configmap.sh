@@ -21,13 +21,13 @@ trap "fission env delete --name $env" EXIT
 
 log "Creating secret $old_secret"
 kubectl create secret generic ${old_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
-trap "kubectl delete secret ${old_secret} -n default"
+trap "kubectl delete secret ${old_secret} -n default" EXIT
 
 log "Creating NewDeploy function spec: $fn_name"
 fission spec init
 fission fn create --spec --name $fn_name --env $env --code secret.py --secret $old_secret --minscale 1 --maxscale 4 --executortype newdeploy
 fission spec apply ./specs/
-trap "fission fn delete --name ${fn_name}"
+trap "fission fn delete --name ${fn_name}" EXIT
 
 log "Creating route"
 fission route create --function ${fn_name} --url /${fn_name} --method GET
@@ -40,7 +40,7 @@ timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"
 
 log "Creating a new secret"
 kubectl create secret generic ${new_secret} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default
-trap "kubectl delete secret ${new_secret} -n default"
+trap "kubectl delete secret ${new_secret} -n default" EXIT
 
 log "Updating secret and code for the function"
 cp ../test_secret_cfgmap/secret.py.template secret_new.py
