@@ -19,13 +19,16 @@ trap "fission env delete --name $env" EXIT
 log "Creating function $fn"
 fission fn create --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
+log "Creating route for function $fn"
+fission route create --function ${fn} --url /${fn} --method GET
+
+log "Waiting for update to catch up"
+sleep 5
+
 timeout 60 bash -c "test_fn $fn 'world'"
 
 log "Updating function scale and target CPU percent for $fn"
 fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale $targetMinScale --maxscale $targetMaxScale --targetcpu $targetCpuPercent --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
-
-log "Creating route for function $fn"
-fission route create --function ${fn} --url /${fn} --method GET
 
 log "Waiting for update to catch up"
 sleep 5
