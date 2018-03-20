@@ -1,5 +1,5 @@
-hash: 3b15246c5a7ca26271ef45e705c92351c786cfbf8ca1c093026b458e527ceefa
-updated: 2018-02-10T19:04:05.240303+01:00
+hash: 68d5d92e8647763e7507c8a93bc89d037eb9df9e8b16b6bb2bdb783ce3040953
+updated: 2018-03-20T14:06:10.96983435-07:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -97,6 +97,8 @@ imports:
   version: abb68c488872b06c5453865fa59f4818b4ea13a4
   subpackages:
   - local
+- name: github.com/hashicorp/errwrap
+  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
 - name: github.com/hashicorp/go-multierror
   version: b7773ae218740a7be65057fc60b366a49b538a44
 - name: github.com/hashicorp/golang-lru

@@ -61,3 +61,4 @@ import:
 - package: github.com/imdario/mergo
   version: ~0.3.2
 - package: github.com/hashicorp/go-multierror
+- package: github.com/hashicorp/errwrap
