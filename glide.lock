@@ -97,6 +97,8 @@ imports:
   version: abb68c488872b06c5453865fa59f4818b4ea13a4
   subpackages:
   - local
+- name: github.com/hashicorp/go-multierror
+  version: b7773ae218740a7be65057fc60b366a49b538a44
 - name: github.com/hashicorp/golang-lru
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
@@ -133,7 +135,11 @@ imports:
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
+<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
   version: 33414c6f2179201f7fda8743ba89d07184e3fa77
+=======
+  version: 7889f37a10062ff8eb9ac11855ed51cddeaf4469
+>>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - spb
   - util
@@ -237,7 +243,11 @@ imports:
 - name: k8s.io/api
   version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
 - name: k8s.io/apiextensions-apiserver
+<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
   version: fcd622fe88a4a6efcb5aea9e94ee87324ac1b036
+=======
+  version: 19d3c0f1ccfb3e4180400ff7c22fe3c879771807
+>>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -245,7 +255,11 @@ imports:
   - pkg/client/clientset/clientset/scheme
   - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
+<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
   version: 8ab5f3d8a330c2e9baaf84e39042db8d49034ae2
+=======
+  version: 208a6980b14bbb263f29482482eabdbcfff9f7bb
+>>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -278,22 +292,22 @@ imports:
   - pkg/util/diff
   - pkg/util/errors
   - pkg/util/framer
+  - pkg/util/httpstream
+  - pkg/util/httpstream/spdy
   - pkg/util/intstr
   - pkg/util/json
   - pkg/util/net
   - pkg/util/rand
+  - pkg/util/remotecommand
   - pkg/util/runtime
   - pkg/util/sets
   - pkg/util/validation
   - pkg/util/validation/field
   - pkg/util/wait
   - pkg/util/yaml
-  - pkg/util/httpstream
-  - pkg/util/httpstream/spdy
-  - pkg/util/remotecommand
-  - third_party/forked/golang/netutil
   - pkg/version
   - pkg/watch
+  - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
   version: d92e8497f71b7b4e0494e5bd204b48d34bd6f254
@@ -374,11 +388,12 @@ imports:
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
   - tools/clientcmd/api/v1
+  - tools/metrics
   - tools/portforward
   - tools/remotecommand
-  - tools/metrics
   - transport
   - util/cert
+  - util/exec
   - util/flowcontrol
   - util/homedir
   - util/integer
