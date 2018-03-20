@@ -29,6 +29,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/ghodss/yaml"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
@@ -227,14 +228,21 @@ func specValidate(c *cli.Context) error {
 	checkErr(err, "read specs")
 
 	// this does the rest of the checks, like dangling refs
-	return fr.validate()
+	err = fr.validate()
+	if err != nil {
+		fmt.Printf("Error validating specs: %v", err)
+	}
+
+	return nil
 }
 
 func (fr *FissionResources) validate() error {
+	var result *multierror.Error
+
 	// check references: both dangling refs + garbage
 	//   packages -> archives
 	//   functions -> packages
-	//   functions -> environments
+	//   functions -> environments [TODO]
 	//   triggers -> functions
 
 	// index archives
@@ -250,36 +258,41 @@ func (fr *FissionResources) validate() error {
 
 		// check archive refs from package
 		aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
-		if _, ok := archives[aname]; !ok {
-			return fmt.Errorf(
-				"%v: package '%v' references unknown source archive %v%v",
-				fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-				p.Metadata.Name,
-				ARCHIVE_URL_PREFIX,
-				aname)
-		} else {
-			archives[aname] = true
+		if len(aname) > 0 {
+			if _, ok := archives[aname]; !ok {
+				result = multierror.Append(result, fmt.Errorf(
+					"%v: package '%v' references unknown source archive %v%v",
+					fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+					p.Metadata.Name,
+					ARCHIVE_URL_PREFIX,
+					aname))
+			} else {
+				archives[aname] = true
+			}
 		}
 
 		aname = strings.TrimPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX)
-		if _, ok := archives[aname]; !ok {
-			return fmt.Errorf(
-				"%v: package '%v' references unknown deployment archive %v%v",
-				fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-				p.Metadata.Name,
-				ARCHIVE_URL_PREFIX,
-				aname)
-		} else {
-			archives[aname] = true
+		if len(aname) > 0 {
+			if _, ok := archives[aname]; !ok {
+				result = multierror.Append(result, fmt.Errorf(
+					"%v: package '%v' references unknown deployment archive %v%v",
+					fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+					p.Metadata.Name,
+					ARCHIVE_URL_PREFIX,
+					aname))
+			} else {
+				archives[aname] = true
+			}
 		}
 	}
 
 	// error on unreferenced archives
 	for name, referenced := range archives {
 		if !referenced {
-			return fmt.Errorf("%v: archive '%v' is not used in any package",
+			result = multierror.Append(result, fmt.Errorf(
+				"%v: archive '%v' is not used in any package",
 				fr.sourceMap.locations["ArchiveUploadSpec"][""][name],
-				name)
+				name))
 		}
 	}
 
@@ -294,14 +307,15 @@ func (fr *FissionResources) validate() error {
 			Namespace: f.Spec.Package.PackageRef.Namespace,
 		}
 		if _, ok := packages[mapKey(pkgMeta)]; !ok {
-			return fmt.Errorf(
+			result = multierror.Append(result, fmt.Errorf(
 				"%v: function '%v' references unknown package %v/%v",
 				fr.sourceMap.locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
 				f.Metadata.Name,
 				pkgMeta.Namespace,
-				pkgMeta.Name)
+				pkgMeta.Name))
+		} else {
+			packages[mapKey(pkgMeta)] = true
 		}
-		packages[mapKey(pkgMeta)] = true
 	}
 
 	// error on unreferenced packages
@@ -309,9 +323,10 @@ func (fr *FissionResources) validate() error {
 		ks := strings.Split(key, ":")
 		namespace, name := ks[0], ks[1]
 		if !referenced {
-			return fmt.Errorf("%v: package '%v' is not used in any function",
+			result = multierror.Append(result, fmt.Errorf(
+				"%v: package '%v' is not used in any function",
 				fr.sourceMap.locations["Package"][namespace][name],
-				name)
+				name))
 		}
 	}
 
@@ -319,31 +334,33 @@ func (fr *FissionResources) validate() error {
 	for _, t := range fr.httpTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
-			return err
+			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.kubernetesWatchTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
-			return err
+			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.timeTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
-			return err
+			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.messageQueueTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
-			return err
+			result = multierror.Append(result, err)
 		}
 	}
 
 	// we do not error on unreferenced functions (you can call a function through workflows,
 	// `fission function test`, etc.)
-	return nil
+
+	// (ErrorOrNil returns nil if there were no errors appended.)
+	return result.ErrorOrNil()
 }
 
 func (loc location) String() string {
@@ -362,7 +379,7 @@ func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMet
 	// check for duplicate resources
 	oldloc, exists := fr.sourceMap.locations[kind][newobj.Namespace][newobj.Name]
 	if exists {
-		return fmt.Errorf("Duplicate %v found in %v; first defined in %v", kind, loc, oldloc)
+		return fmt.Errorf("%v: Duplicate %v '%v', first defined in %v", loc, kind, newobj.Name, oldloc)
 	}
 
 	// track new resource
@@ -498,6 +515,8 @@ func readSpecs(specDir string) (*FissionResources, error) {
 		},
 	}
 
+	var result *multierror.Error
+
 	// Users can organize the specdir into subdirs if they want to.
 	err := filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
 		// For now just read YAML files. We'll add jsonnet at some point. Skip
@@ -508,7 +527,8 @@ func readSpecs(specDir string) (*FissionResources, error) {
 		// read
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			return err
+			result = multierror.Append(result, err)
+			return nil
 		}
 		// handle the case where there are multiple YAML docs per file. go-yaml
 		// doesn't support this directly, yet.
@@ -523,7 +543,8 @@ func readSpecs(specDir string) (*FissionResources, error) {
 					line: lines,
 				})
 				if err != nil {
-					return err
+					// collect all errors so user can fix them all
+					result = multierror.Append(result, err)
 				}
 			}
 			// the separator occupies one line, hence the +1
@@ -531,7 +552,11 @@ func readSpecs(specDir string) (*FissionResources, error) {
 		}
 		return nil
 	})
+
 	if err != nil {
+		return nil, err
+	}
+	if err := result.ErrorOrNil(); err != nil {
 		return nil, err
 	}
 
@@ -610,6 +635,10 @@ func specApply(c *cli.Context) error {
 		// read all specs
 		fr, err := readSpecs(specDir)
 		checkErr(err, "read specs")
+
+		// validate
+		err = fr.validate()
+		checkErr(err, "validate specs")
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(fclient, specDir, fr, deleteResources)
