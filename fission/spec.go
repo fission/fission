@@ -100,7 +100,7 @@ type (
 		messageQueueTriggers    []crd.MessageQueueTrigger
 		archiveUploadSpecs      []ArchiveUploadSpec
 
-		sourceMap SourceMap
+		sourceMap sourceMap
 	}
 
 	resourceApplyStatus struct {
@@ -109,8 +109,13 @@ type (
 		deleted []*metav1.ObjectMeta
 	}
 
-	SourceMap struct {
-		// xxx
+	location struct {
+		path string
+		line int
+	}
+	sourceMap struct {
+		// kind -> namespace -> name -> location
+		locations map[string](map[string](map[string]location))
 	}
 )
 
@@ -190,28 +195,189 @@ func specInit(c *cli.Context) error {
 	return nil
 }
 
+// validateFunctionReference checks a function reference
+func (fr *FissionResources) validateFunctionReference(functions map[string]bool, kind string, meta *metav1.ObjectMeta, funcRef fission.FunctionReference) error {
+	if funcRef.Type == fission.FunctionReferenceTypeFunctionName {
+		// triggers only reference functions in their own namespace
+		namespace := meta.Namespace
+		name := funcRef.Name
+		m := &metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		}
+		if _, ok := functions[mapKey(m)]; !ok {
+			return fmt.Errorf("%v: %v '%v' references unknown function '%v'",
+				fr.sourceMap.locations[kind][meta.Namespace][meta.Name],
+				kind,
+				meta.Name,
+				name)
+		} else {
+			functions[mapKey(m)] = true
+		}
+	}
+	return nil
+}
+
 // specValidate parses a set of specs and checks for references to
 // resources that don't exist.
 func specValidate(c *cli.Context) error {
-	//specDir := getSpecDir(c)
+	// this will error on parse errors and on duplicates
+	specDir := getSpecDir(c)
+	fr, err := readSpecs(specDir)
+	checkErr(err, "read specs")
 
-	// parse all specs
-	// verify references:
-	//   functions from triggers
-	//   packages from functions
+	// this does the rest of the checks, like dangling refs
+	return fr.validate()
+}
 
-	// find unreferenced uploads
+func (fr *FissionResources) validate() error {
+	// check references: both dangling refs + garbage
+	//   packages -> archives
+	//   functions -> packages
+	//   functions -> environments
+	//   triggers -> functions
+
+	// index archives
+	archives := make(map[string]bool)
+	for _, a := range fr.archiveUploadSpecs {
+		archives[a.Name] = false
+	}
+
+	// index packages, check outgoing refs, mark archives that are referenced
+	packages := make(map[string]bool)
+	for _, p := range fr.packages {
+		packages[mapKey(&p.Metadata)] = false
+
+		// check archive refs from package
+		aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
+		if _, ok := archives[aname]; !ok {
+			return fmt.Errorf(
+				"%v: package '%v' references unknown source archive %v%v",
+				fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+				p.Metadata.Name,
+				ARCHIVE_URL_PREFIX,
+				aname)
+		} else {
+			archives[aname] = true
+		}
+
+		aname = strings.TrimPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX)
+		if _, ok := archives[aname]; !ok {
+			return fmt.Errorf(
+				"%v: package '%v' references unknown deployment archive %v%v",
+				fr.sourceMap.locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+				p.Metadata.Name,
+				ARCHIVE_URL_PREFIX,
+				aname)
+		} else {
+			archives[aname] = true
+		}
+	}
+
+	// error on unreferenced archives
+	for name, referenced := range archives {
+		if !referenced {
+			return fmt.Errorf("%v: archive '%v' is not used in any package",
+				fr.sourceMap.locations["ArchiveUploadSpec"][""][name],
+				name)
+		}
+	}
+
+	// index functions, check function package refs, mark referenced packages
+	functions := make(map[string]bool)
+	for _, f := range fr.functions {
+		functions[mapKey(&f.Metadata)] = false
+
+		// check package ref from function
+		pkgMeta := &metav1.ObjectMeta{
+			Name:      f.Spec.Package.PackageRef.Name,
+			Namespace: f.Spec.Package.PackageRef.Namespace,
+		}
+		if _, ok := packages[mapKey(pkgMeta)]; !ok {
+			return fmt.Errorf(
+				"%v: function '%v' references unknown package %v/%v",
+				fr.sourceMap.locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
+				f.Metadata.Name,
+				pkgMeta.Namespace,
+				pkgMeta.Name)
+		}
+		packages[mapKey(pkgMeta)] = true
+	}
+
+	// error on unreferenced packages
+	for key, referenced := range packages {
+		ks := strings.Split(key, ":")
+		namespace, name := ks[0], ks[1]
+		if !referenced {
+			return fmt.Errorf("%v: package '%v' is not used in any function",
+				fr.sourceMap.locations["Package"][namespace][name],
+				name)
+		}
+	}
+
+	// check function refs from triggers
+	for _, t := range fr.httpTriggers {
+		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		if err != nil {
+			return err
+		}
+	}
+	for _, t := range fr.kubernetesWatchTriggers {
+		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		if err != nil {
+			return err
+		}
+	}
+	for _, t := range fr.timeTriggers {
+		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		if err != nil {
+			return err
+		}
+	}
+	for _, t := range fr.messageQueueTriggers {
+		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		if err != nil {
+			return err
+		}
+	}
+
+	// we do not error on unreferenced functions (you can call a function through workflows,
+	// `fission function test`, etc.)
+	return nil
+}
+
+func (loc location) String() string {
+	return fmt.Sprintf("%v:%v", loc.path, loc.line)
+}
+
+// Keep track of source location of resources, and track duplicates
+func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMeta, loc *location) error {
+	if _, exists := fr.sourceMap.locations[kind]; !exists {
+		fr.sourceMap.locations[kind] = make(map[string](map[string]location))
+	}
+	if _, exists := fr.sourceMap.locations[kind][newobj.Namespace]; !exists {
+		fr.sourceMap.locations[kind][newobj.Namespace] = make(map[string]location)
+	}
+
+	// check for duplicate resources
+	oldloc, exists := fr.sourceMap.locations[kind][newobj.Namespace][newobj.Name]
+	if exists {
+		return fmt.Errorf("Duplicate %v found in %v; first defined in %v", kind, loc, oldloc)
+	}
+
+	// track new resource
+	fr.sourceMap.locations[kind][newobj.Namespace][newobj.Name] = *loc
 
 	return nil
 }
 
 // parseYaml takes one yaml document, figures out its type, parses it, and puts it in
 // the right list in the given fission resources set.
-func parseYaml(path string, b []byte, fr *FissionResources) error {
+func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
+	var m *metav1.ObjectMeta
 
 	// Figure out the object type by unmarshaling into the TypeMeta struct; then
-	// unmarshal again into the "real" struct once we know the type.  There's almost
-	// certainly a better way to do this...
+	// unmarshal again into the "real" struct once we know the type.
 	var tm TypeMeta
 	err := yaml.Unmarshal(b, &tm)
 	switch tm.Kind {
@@ -219,60 +385,63 @@ func parseYaml(path string, b []byte, fr *FissionResources) error {
 		var v crd.Package
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.packages = append(fr.packages, v)
 	case "Function":
 		var v crd.Function
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.functions = append(fr.functions, v)
 	case "Environment":
 		var v crd.Environment
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.environments = append(fr.environments, v)
 	case "HTTPTrigger":
 		var v crd.HTTPTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+
+		// TODO move to validator
 		if !strings.HasPrefix(v.Spec.RelativeURL, "/") {
 			v.Spec.RelativeURL = fmt.Sprintf("/%s", v.Spec.RelativeURL)
 		}
+
+		m = &v.Metadata
 		fr.httpTriggers = append(fr.httpTriggers, v)
 	case "KubernetesWatchTrigger":
 		var v crd.KubernetesWatchTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.kubernetesWatchTriggers = append(fr.kubernetesWatchTriggers, v)
 	case "TimeTrigger":
 		var v crd.TimeTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.timeTriggers = append(fr.timeTriggers, v)
 	case "MessageQueueTrigger":
 		var v crd.MessageQueueTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
+		m = &v.Metadata
 		fr.messageQueueTriggers = append(fr.messageQueueTriggers, v)
 
 	// The following are not CRDs
@@ -281,22 +450,32 @@ func parseYaml(path string, b []byte, fr *FissionResources) error {
 		var v DeploymentConfig
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
 		}
 		fr.deploymentConfig = v
 	case "ArchiveUploadSpec":
 		var v ArchiveUploadSpec
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			warn(fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, path, err))
-			return err
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+		}
+		m = &metav1.ObjectMeta{
+			Name:      v.Name,
+			Namespace: "",
 		}
 		fr.archiveUploadSpecs = append(fr.archiveUploadSpecs, v)
 	default:
 		// no need to error out just because there's some extra files around;
 		// also good for compatibility.
-		warn(fmt.Sprintf("Ignoring unknown type %v in %v", tm.Kind, path))
+		warn(fmt.Sprintf("Ignoring unknown type %v in %v", tm.Kind, loc))
+	}
+
+	// add to source map, check for duplicates
+	if m != nil {
+		err = fr.trackSourceMap(tm.Kind, m, loc)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -313,6 +492,10 @@ func readSpecs(specDir string) (*FissionResources, error) {
 		kubernetesWatchTriggers: make([]crd.KubernetesWatchTrigger, 0),
 		timeTriggers:            make([]crd.TimeTrigger, 0),
 		messageQueueTriggers:    make([]crd.MessageQueueTrigger, 0),
+
+		sourceMap: sourceMap{
+			locations: make(map[string](map[string](map[string]location))),
+		},
 	}
 
 	// Users can organize the specdir into subdirs if they want to.
@@ -330,15 +513,21 @@ func readSpecs(specDir string) (*FissionResources, error) {
 		// handle the case where there are multiple YAML docs per file. go-yaml
 		// doesn't support this directly, yet.
 		docs := bytes.Split(b, []byte("\n---"))
+		lines := 1
 		for _, doc := range docs {
 			d := []byte(strings.TrimSpace(string(doc)))
 			if len(d) != 0 {
 				// parse this document and add whatever is in it to fr
-				err = parseYaml(path, d, &fr)
+				err = fr.parseYaml(d, &location{
+					path: path,
+					line: lines,
+				})
 				if err != nil {
 					return err
 				}
 			}
+			// the separator occupies one line, hence the +1
+			lines += strings.Count(string(doc), "\n") + 1
 		}
 		return nil
 	})
