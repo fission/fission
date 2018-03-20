@@ -510,7 +510,7 @@ func fnUpdate(c *cli.Context) error {
 		default:
 			fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 		}
-		if c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory") &&
+		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
 			fnExecutor == fission.ExecutorTypePoolmgr {
 			warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
 		}
