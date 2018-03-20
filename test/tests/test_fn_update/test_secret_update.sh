@@ -28,7 +28,7 @@ fission spec init
 trap "rm -rf specs" EXIT
 fission fn create --spec --name $fn_name --env $env --code secret.py --secret $old_secret --minscale 1 --maxscale 4 --executortype newdeploy
 fission spec apply ./specs/
-trap "fission fn delete --name ${fn_name}" EXIT
+trap "fission spec destroy" EXIT
 
 log "Creating route"
 fission route create --function ${fn_name} --url /${fn_name} --method GET
@@ -49,6 +49,7 @@ sed -i "s/${old_secret}/${new_secret}/g" specs/function-$fn_name.yaml
 
 log "Applying function changes"
 fission spec apply ./specs/
+trap "fission spec destroy" EXIT
 
 log "Waiting for changes to take effect"
 sleep 5
