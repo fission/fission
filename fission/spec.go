@@ -402,7 +402,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.Package
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.packages = append(fr.packages, v)
@@ -410,7 +410,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.Function
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.functions = append(fr.functions, v)
@@ -418,7 +418,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.Environment
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.environments = append(fr.environments, v)
@@ -426,7 +426,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.HTTPTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 
 		// TODO move to validator
@@ -440,7 +440,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.KubernetesWatchTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.kubernetesWatchTriggers = append(fr.kubernetesWatchTriggers, v)
@@ -448,7 +448,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.TimeTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.timeTriggers = append(fr.timeTriggers, v)
@@ -456,7 +456,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v crd.MessageQueueTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.Metadata
 		fr.messageQueueTriggers = append(fr.messageQueueTriggers, v)
@@ -467,14 +467,14 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		var v DeploymentConfig
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		fr.deploymentConfig = v
 	case "ArchiveUploadSpec":
 		var v ArchiveUploadSpec
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v: %v", tm.Kind, loc))
+			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &metav1.ObjectMeta{
 			Name:      v.Name,
@@ -1008,6 +1008,19 @@ func hasDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) bool {
 	return false
 }
 
+func waitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package, error) {
+	for {
+		if pkg.Status.BuildStatus != fission.BuildStatusRunning {
+			return pkg, nil
+		}
+		time.Sleep(time.Second)
+		pkg, err := fclient.PackageGet(&pkg.Metadata)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
 func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.PackageList()
@@ -1064,9 +1077,20 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.PackageUpdate(&o)
+
+				// We may be racing against the package builder to update the
+				// package (a previous version mighta be getting built).  So, wait
+				// for the package to have a non-running build status.
+				pkg, err = waitForPackageBuild(fclient, &o)
+				if err != nil {
+					// log and ignore
+					fmt.Printf("Error waiting for package '%v' build, ignoring\n", o.Metadata.Name)
+				}
+
+				newmeta, err := fclient.PackageUpdate(pkg)
 				if err != nil {
 					return nil, nil, err
+					// xxx how to check for the specific conflict error?
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
