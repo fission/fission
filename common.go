@@ -27,6 +27,8 @@ import (
 	"syscall"
 
 	"github.com/gorilla/handlers"
+	"github.com/imdario/mergo"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func UrlForFunction(name string) string {
@@ -65,4 +67,23 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			handlers.LoggingHandler(os.Stdout, next).ServeHTTP(w, r)
 		}
 	})
+}
+
+// MergeContainerSpecs merges container specs using a predefined order.
+//
+// The order of the arguments indicates which spec has precedence (lower index takes precedence over higher indexes).
+// Slices and maps are merged; other fields are set only if they are a zero value.
+func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
+	result := &apiv1.Container{}
+	for _, spec := range specs {
+		if spec == nil {
+			continue
+		}
+
+		err := mergo.Merge(result, spec)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return *result
 }

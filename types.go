@@ -18,7 +18,7 @@ package fission
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/api/v1"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 type (
@@ -133,7 +133,7 @@ type (
 		ConfigMaps []ConfigMapReference `json:"configmaps"`
 
 		// cpu and memory resources as per K8S standards
-		Resources v1.ResourceRequirements `json:"resources"`
+		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// InvokeStrategy is a set of controls which affect how function executes
 		InvokeStrategy InvokeStrategy
@@ -208,6 +208,16 @@ type (
 		// server listens for function requests. Optional;
 		// default 8888.
 		FunctionEndpointPort int32 `json:"functionendpointport"`
+
+		// Container allows the modification of the deployed runtime
+		// container using the Kubernetes Container spec. Fission overrides
+		// the following fields:
+		// - Name
+		// - Image; set to the Runtime.Image
+		// - TerminationMessagePath
+		// - ImagePullPolicy
+		// (optional)
+		Container *apiv1.Container `json:"container,omitempty"`
 	}
 	Builder struct {
 		// Image for containing the language runtime.
@@ -215,6 +225,18 @@ type (
 
 		// (Optional) Default build command to run for this build environment.
 		Command string `json:"command,omitempty"`
+
+		// Container allows the modification of the deployed builder
+		// container using the Kubernetes Container spec. Fission overrides
+		// the following fields:
+		// - Name
+		// - Image; set to the Builder.Image
+		// - Command; set to the Builder.Command
+		// - TerminationMessagePath
+		// - ImagePullPolicy
+		// - ReadinessProbe
+		// (optional)
+		Container *apiv1.Container `json:"container,omitempty"`
 	}
 	EnvironmentSpec struct {
 		// Environment API version
@@ -237,7 +259,7 @@ type (
 		AllowAccessToExternalNetwork bool `json:"allowAccessToExternalNetwork,omitempty"`
 
 		// Request and limit resources for the environment
-		Resources v1.ResourceRequirements `json:"resources"`
+		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// The initial pool size for environment
 		Poolsize int `json:"poolsize,omitempty"`
