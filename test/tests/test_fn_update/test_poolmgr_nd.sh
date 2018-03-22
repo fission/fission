@@ -31,3 +31,11 @@ log "Waiting for router to catch up"
 sleep 5
 
 timeout 60 bash -c "test_fn $fn 'world'"
+
+log "Updating function $fn executor type back to pool manager"
+fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --executortype poolmgr
+
+log "Waiting for router to catch up"
+sleep 5
+
+timeout 60 bash -c "test_fn $fn 'world'"
