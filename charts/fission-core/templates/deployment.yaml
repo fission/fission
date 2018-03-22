@@ -144,14 +144,14 @@ spec:
         readinessProbe:
           httpGet:
             path: "/healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 1
           periodSeconds: 1
           failureThreshold: 30
         livenessProbe:
           httpGet:
             path: "/healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
       serviceAccount: fission-svc
@@ -180,14 +180,14 @@ spec:
         readinessProbe:
           httpGet:
             path: "/router-healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 1
           periodSeconds: 1
           failureThreshold: 30
         livenessProbe:
           httpGet:
             path: "/router-healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
       serviceAccount: fission-svc
@@ -238,14 +238,14 @@ spec:
         readinessProbe:
           httpGet:
             path: "/healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 1
           periodSeconds: 1
           failureThreshold: 30
         livenessProbe:
           httpGet:
             path: "/healthz"
-            port: "8888"
+            port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
       serviceAccount: fission-svc
