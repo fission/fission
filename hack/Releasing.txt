@@ -20,6 +20,12 @@ Prerequisites
 4. Install changelog generator tool "github_changelog_generator": https://github.com/skywinder/github-changelog-generator
 
 
+Check that the build is green!
+------------------------------
+
+Fix if not, etc.
+
+
 Update versions
 ---------------
 
@@ -31,6 +37,18 @@ templates/NOTES.yaml.
 Commit your changes, push them, open a PR, merge it.
 
 Update doc versions: Docs live at github.com/fission/docs.fission.io
+
+
+Update the docs versions
+------------------------
+
+Archive existing version into dist/
+
+Change config.toml baseURL.
+
+Change versions in links.
+
+git add, git commit.
 
 
 Make the release
@@ -54,12 +72,15 @@ Make the release
 
 3. Push docs update to github
 
-4. Copy over charts into charts repo, update helm chart index, push to github
+4. Copy over charts from build dir into charts repo [see below], update helm chart index, push to github
 
 5. Manually test an installation, just for a sanity check
 
 6. Switch the github release from pre-release to release.
 
+7. Add links from release notes:
+   * Install guide in docs
+   * Changelog.md
 
 Update chart repo
 -----------------
@@ -75,20 +96,15 @@ The chart repo is a github page, so once you push the master branch,
 you're all set.
 
 
-Update the docs website
------------------------
-
-Rebuild the docs website using hugo.
-
-Create a new folder named by version under fission.io/docs.  Copy the
-generated docs public folder into this folder.
-
-Update the 'latest' symlink to point to the new version of the docs.
-
-git add, git commit, git push.
 
 
 Announce the release
 --------------------
 
 Announce the release on #contributors.
+
+
+Update Fission.io
+-----------------
+
+Tell #marketing channel to update link
