@@ -83,7 +83,7 @@ fission route create --function ${fn_secret}-1 --url /${fn_secret}-1 --method GE
 log "Waiting for router catch up"
 sleep 5
 
-checkFunctionResponse ${fn_secret}-1 'TESTVALUE' 'secret'
+checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'
 
 log "Creating configmap"
 kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
