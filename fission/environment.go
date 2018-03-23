@@ -65,6 +65,12 @@ func envCreate(c *cli.Context) error {
 		}
 	}
 
+	// Environment API interface version is not specified and
+	// builder image is empty, set default interface version
+	if envVersion == 0 {
+		envVersion = 1
+	}
+
 	resourceReq := getResourceReq(c)
 
 	env := &crd.Environment{
