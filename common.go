@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -29,6 +30,10 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/imdario/mergo"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
+)
+
+var (
+	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
 )
 
 func UrlForFunction(name string) string {
