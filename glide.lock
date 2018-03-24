@@ -1,5 +1,5 @@
-hash: 68d5d92e8647763e7507c8a93bc89d037eb9df9e8b16b6bb2bdb783ce3040953
-updated: 2018-03-20T14:06:10.96983435-07:00
+hash: d77d204547318863d07beea96b4e29a90f0d6c106a957dd0ba40eb0345a77e42
+updated: 2018-03-23T17:49:04.748453691-07:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -18,7 +18,7 @@ imports:
   - autorest/azure
   - autorest/date
 - name: github.com/coreos/etcd
-  version: 9c6d93056575da4da94382f473b0ecfcd9c1443b
+  version: 6a265731e10a5137b991c1aa3a83ecefdd149d50
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
@@ -55,7 +55,7 @@ imports:
 - name: github.com/emicklei/go-restful-swagger12
   version: dcef7f55730566d41eae5db10e7d6981829720f6
 - name: github.com/fsnotify/fsnotify
-  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
+  version: 4da3e2cfbabc9f751898f250b49f2439785783a1
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/go-openapi/analysis
@@ -137,11 +137,7 @@ imports:
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
-<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
-  version: 33414c6f2179201f7fda8743ba89d07184e3fa77
-=======
   version: 7889f37a10062ff8eb9ac11855ed51cddeaf4469
->>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - spb
   - util
@@ -156,7 +152,7 @@ imports:
   subpackages:
   - xxHash32
 - name: github.com/pkg/errors
-  version: 30136e27e2ac8d167177e8a583aa4c3fea5be833
+  version: f15c970de5b76fac0b59abb32d62c17cc7bed265
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -245,11 +241,7 @@ imports:
 - name: k8s.io/api
   version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
 - name: k8s.io/apiextensions-apiserver
-<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
-  version: fcd622fe88a4a6efcb5aea9e94ee87324ac1b036
-=======
   version: 19d3c0f1ccfb3e4180400ff7c22fe3c879771807
->>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -257,11 +249,7 @@ imports:
   - pkg/client/clientset/clientset/scheme
   - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-<<<<<<< 26d8d8d054d45113381745d00c67fad503ce1c26
-  version: 8ab5f3d8a330c2e9baaf84e39042db8d49034ae2
-=======
   version: 208a6980b14bbb263f29482482eabdbcfff9f7bb
->>>>>>> Add go-multierror to use in spec validator
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
