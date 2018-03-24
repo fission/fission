@@ -1079,8 +1079,8 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
 
 				// We may be racing against the package builder to update the
-				// package (a previous version mighta be getting built).  So, wait
-				// for the package to have a non-running build status.
+				// package (a previous version might have been getting built).  So,
+				// wait for the package to have a non-running build status.
 				pkg, err = waitForPackageBuild(fclient, &o)
 				if err != nil {
 					// log and ignore
@@ -1090,7 +1090,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				newmeta, err := fclient.PackageUpdate(pkg)
 				if err != nil {
 					return nil, nil, err
-					// xxx how to check for the specific conflict error?
+					// TODO check for resourceVersion conflict errors and retry
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
