@@ -134,6 +134,19 @@ $ fission function test --name hello
 Hello, world!
 ```
 
+For a compiled language like Go:
+
+```sh
+$ fission env create --name go --image fission/go-env:0.6.0 --builder fission/go-builder:0.6.0
+
+$ curl -LO https://raw.githubusercontent.com/fission/fission/master/examples/go/hello.go
+
+$ fission function create --name gohello --env go --src hello.go --entrypoint Handler
+
+$ fission function test --name gohello
+Hello, world!
+```
+
 ### What's next?
 
 If something went wrong, we'd love to help -- please [drop by the
