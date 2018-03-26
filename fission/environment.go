@@ -57,19 +57,21 @@ func envCreate(c *cli.Context) error {
 	envExternalNetwork := c.Bool("externalnetwork")
 
 	if len(envBuilderImg) > 0 {
-		envVersion = 2
+		if !c.IsSet("version") {
+			envVersion = 2
+		}
 		if len(envBuildCmd) == 0 {
 			envBuildCmd = "build"
 		}
 	}
-
-	resourceReq := getResourceReq(c)
 
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
 	if envVersion == 0 {
 		envVersion = 1
 	}
+
+	resourceReq := getResourceReq(c)
 
 	env := &crd.Environment{
 		Metadata: metav1.ObjectMeta{
