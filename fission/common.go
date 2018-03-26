@@ -40,6 +40,11 @@ import (
 	storageSvcClient "github.com/fission/fission/storagesvc/client"
 )
 
+var (
+	// global verbosity of our CLI
+	verbosity int
+)
+
 func fatal(msg string) {
 	os.Stderr.WriteString(msg + "\n")
 	os.Exit(1)
@@ -49,10 +54,16 @@ func warn(msg string) {
 	os.Stderr.WriteString(msg + "\n")
 }
 
-func getClient(serverUrl string) *client.Client {
+func verbose(msglevel int, format string, args ...interface{}) {
+	if verbosity >= msglevel {
+		fmt.Printf(format+"\n", args...)
+	}
+}
 
+func getClient(serverUrl string) *client.Client {
 	if len(serverUrl) == 0 {
-		fatal("Need --server or FISSION_URL set to your fission server.")
+		// starts local portforwarder etc.
+		serverUrl = getServerUrl()
 	}
 
 	isHTTPS := strings.Index(serverUrl, "https://") == 0

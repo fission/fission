@@ -52,6 +52,8 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 		fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
 	}
 
+	verbose(2, "Connected to Kubernetes API")
+
 	// if fission namespace is unset, try to find a fission pod in any namespace
 	if len(fissionNamespace) == 0 {
 		fissionNamespace = meta_v1.NamespaceAll
@@ -93,6 +95,7 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 	for _, servicePort := range service.Spec.Ports {
 		targetPort = servicePort.TargetPort.String()
 	}
+	verbose(2, "Connecting to port %v on pod %v/%v", targetPort, podNameSpace, podNameSpace)
 
 	stopChannel := make(chan struct{}, 1)
 	readyChannel := make(chan struct{})
@@ -113,12 +116,17 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 		fatal(msg)
 	}
 
-	fw, err := portforward.New(dialer, ports, stopChannel, readyChannel, nil, os.Stderr)
+	outStream := os.Stdout
+	if verbosity < 2 {
+		outStream = nil
+	}
+	fw, err := portforward.New(dialer, ports, stopChannel, readyChannel, outStream, os.Stderr)
 	if err != nil {
 		msg := fmt.Sprintf("portforward.new errored out :%v", err.Error())
 		fatal(msg)
 	}
 
+	verbose(2, "Starting port forwarder")
 	return fw.ForwardPorts()
 }
 
@@ -128,11 +136,15 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
 func setupPortForward(kubeConfig, namespace, labelSelector string) string {
+	verbose(2, "Setting up port forward to %s in namespace %s using the kubeconfig at %s",
+		labelSelector, namespace, kubeConfig)
+
 	localPort, err := findFreePort()
 	if err != nil {
 		fatal(fmt.Sprintf("Error finding unused port :%v", err.Error()))
 	}
 
+	verbose(2, "Waiting for local port %v", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
 			net.JoinHostPort("", localPort), time.Millisecond)
@@ -144,6 +156,7 @@ func setupPortForward(kubeConfig, namespace, labelSelector string) string {
 		time.Sleep(time.Millisecond * 50)
 	}
 
+	verbose(2, "Starting port forward from local port %v", localPort)
 	go func() {
 		err := runPortForward(kubeConfig, labelSelector, localPort, namespace)
 		if err != nil {
@@ -151,6 +164,7 @@ func setupPortForward(kubeConfig, namespace, labelSelector string) string {
 		}
 	}()
 
+	verbose(2, "Waiting for port forward %v to start...", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
 			net.JoinHostPort("", localPort), time.Millisecond)
@@ -160,6 +174,8 @@ func setupPortForward(kubeConfig, namespace, labelSelector string) string {
 		}
 		time.Sleep(time.Millisecond * 50)
 	}
+
+	verbose(2, "Port forward from local port %v started", localPort)
 
 	return localPort
 }

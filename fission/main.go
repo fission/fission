@@ -60,29 +60,38 @@ func getFissionAPIVersion(apiUrl string) (string, error) {
 	return strings.TrimRight(string(body), "\n"), nil
 }
 
-func main() {
-	app := cli.NewApp()
-	app.Name = "fission"
-	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = version.Version
-
-	// fetch the FISSION_URL env variable. If not set, port-forward to controller.
-	var value string
+func getServerUrl() string {
+	var serverUrl string
+	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := getFissionNamespace()
 		kubeConfig := getKubeConfigPath()
 		localPort := setupPortForward(
 			kubeConfig, fissionNamespace, "application=fission-api")
-		value = "http://127.0.0.1:" + localPort
+		serverUrl = "http://127.0.0.1:" + localPort
 	} else {
-		value = fissionUrl
+		serverUrl = fissionUrl
 	}
+	return serverUrl
+}
+
+func cliHook(c *cli.Context) error {
+	verbosity = c.Int("verbosity")
+	verbose(2, "Verbosity = 2")
+	return nil
+}
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "fission"
+	app.Usage = "Serverless functions for Kubernetes"
+	app.Version = version.Version
 
 	cli.VersionPrinter = func(c *cli.Context) {
 		clientVer := version.VersionInfo().String()
 		fmt.Printf("Client Version: %v\n", clientVer)
-		serverVer, err := getFissionAPIVersion(value)
+		serverVer, err := getFissionAPIVersion(getServerUrl())
 		if err != nil {
 			fmt.Printf("Error getting Fission API version: %v", err)
 		} else {
@@ -91,7 +100,8 @@ func main() {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Value: value, Usage: "Fission server URL"},
+		cli.StringFlag{Name: "server", Value: "", Usage: "Fission server URL"},
+		cli.IntFlag{Name: "verbosity", Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
 	}
 
 	// trigger method and url flags (used in function and route CLIs)
@@ -273,5 +283,6 @@ func main() {
 		{Name: "tpr2crd", Aliases: []string{}, Usage: "Migrate tool for TPR to CRD", Subcommands: migrateSubCommands},
 	}
 
+	app.Before = cliHook
 	app.Run(os.Args)
 }
