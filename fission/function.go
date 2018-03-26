@@ -274,6 +274,10 @@ func fnCreate(c *cli.Context) error {
 	if len(triggerUrl) == 0 {
 		return nil
 	}
+	if !strings.HasPrefix(triggerUrl, "/") {
+		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
+	}
+
 	method := c.String("method")
 	if len(method) == 0 {
 		method = "GET"

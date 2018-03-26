@@ -80,6 +80,10 @@ func htCreate(c *cli.Context) error {
 	if len(triggerUrl) == 0 {
 		fatal("Need a trigger URL, use --url")
 	}
+	if !strings.HasPrefix(triggerUrl, "/") {
+		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
+	}
+
 	method := c.String("method")
 	if len(method) == 0 {
 		method = "GET"
