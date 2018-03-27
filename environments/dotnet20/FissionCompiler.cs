@@ -27,7 +27,10 @@ namespace Fission.DotNetCore.Compiler
                 MetadataReference.CreateFromFile(coreDir.FullName + Path.DirectorySeparatorChar + "mscorlib.dll"),
                 MetadataReference.CreateFromFile(typeof(object).GetTypeInfo().Assembly.Location),
                 MetadataReference.CreateFromFile(Assembly.GetEntryAssembly().Location),
-                MetadataReference.CreateFromFile(typeof(System.Runtime.Serialization.Json.DataContractJsonSerializer).GetTypeInfo().Assembly.Location)
+                MetadataReference.CreateFromFile(typeof(System.Runtime.Serialization.Json.DataContractJsonSerializer).GetTypeInfo().Assembly.Location),
+                MetadataReference.CreateFromFile(coreDir.FullName + Path.DirectorySeparatorChar + "System.Xml.ReaderWriter.dll"),
+                MetadataReference.CreateFromFile(coreDir.FullName + Path.DirectorySeparatorChar + "System.Private.Xml.dll"),
+                MetadataReference.CreateFromFile(coreDir.FullName + Path.DirectorySeparatorChar + "System.Dynamic.Runtime.dll")
             };
 
             foreach (var referencedAssembly in Assembly.GetEntryAssembly().GetReferencedAssemblies())
