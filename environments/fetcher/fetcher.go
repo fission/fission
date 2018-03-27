@@ -217,6 +217,12 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 // Fetch takes FetchRequest and makes the fetch call
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
+	// verify first if the file already exists.
+	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, req.Filename)); err == nil {
+		log.Printf("Requested file: %s already exists at %s. Skipping fetch.", req.Filename, fetcher.sharedVolumePath)
+		return 200, nil
+	}
+
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
