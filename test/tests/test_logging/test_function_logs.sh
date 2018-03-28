@@ -47,7 +47,7 @@ sleep 60
 fission function logs --name $fn --detail > /tmp/logfile
 
 size=$(wc -c </tmp/logfile)
-if [ $size = 0 ]
+if [ $size == 0 ]
 then
     fission function logs --name $fn --detail > /tmp/logfile
 fi
