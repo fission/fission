@@ -17,11 +17,15 @@ limitations under the License.
 package poolmgr
 
 import (
+	"context"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -45,6 +49,9 @@ type (
 		fsCache        *fscache.FunctionServiceCache
 		instanceId     string
 		requestChannel chan *request
+
+		enableIstio          bool
+		istioServiceRegister k8sCache.Controller
 	}
 	request struct {
 		requestType
@@ -61,7 +68,6 @@ type (
 func MakeGenericPoolManager(
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
-	fissionNamespace string,
 	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	instanceId string) *GenericPoolManager {
@@ -78,7 +84,24 @@ func MakeGenericPoolManager(
 	go gpm.service()
 	go gpm.eagerPoolCreator()
 
+	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
+		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
+		if err != nil {
+			log.Println("Failed to parse ENABLE_ISTIO")
+		}
+		gpm.enableIstio = istio
+
+		if gpm.enableIstio {
+			gpm.istioServiceRegister = makeFuncIstioServiceRegister(
+				gpm.fissionClient.GetCrdClient(), gpm.kubernetesClient, functionNamespace)
+		}
+	}
+
 	return gpm
+}
+
+func (gpm *GenericPoolManager) Run(ctx context.Context) {
+	go gpm.istioServiceRegister.Run(ctx.Done())
 }
 
 func (gpm *GenericPoolManager) service() {
@@ -97,7 +120,7 @@ func (gpm *GenericPoolManager) service() {
 
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
-					gpm.namespace, gpm.fsCache, gpm.instanceId)
+					gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue

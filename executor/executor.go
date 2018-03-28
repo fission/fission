@@ -204,8 +204,9 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	poolID := strings.ToLower(uniuri.NewLen(8))
 	cleanupObjects(kubernetesClient, functionNamespace, poolID)
 	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
+
 	gpm := poolmgr.MakeGenericPoolManager(
-		fissionClient, kubernetesClient, fissionNamespace,
+		fissionClient, kubernetesClient,
 		functionNamespace, fsCache, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(

@@ -28,7 +28,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -105,7 +104,8 @@ func MakeGenericPool(
 	initialReplicas int32,
 	namespace string,
 	fsCache *fscache.FunctionServiceCache,
-	instanceId string) (*GenericPool, error) {
+	instanceId string,
+	enableIstio bool) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
 
@@ -120,16 +120,6 @@ func MakeGenericPool(
 	runtimeImagePullPolicy := os.Getenv("RUNTIME_IMAGE_PULL_POLICY")
 	if len(runtimeImagePullPolicy) == 0 {
 		runtimeImagePullPolicy = "IfNotPresent"
-	}
-
-	enableIstio := false
-
-	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
-		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
-		if err != nil {
-			log.Println("Failed to parse ENABLE_ISTIO")
-		}
-		enableIstio = istio
 	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
@@ -753,7 +743,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 	log.Printf("Specialized pod: %v", pod.ObjectMeta.Name)
 
 	var svcHost string
-	if gp.useSvc {
+	if gp.useSvc && !gp.useIstio {
 		svcName := fmt.Sprintf("svc-%v", m.Name)
 		if len(m.UID) > 0 {
 			svcName = fmt.Sprintf("%s-%v", svcName, m.UID)
