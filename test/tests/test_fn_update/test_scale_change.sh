@@ -34,9 +34,10 @@ log "Waiting for update to catch up"
 sleep 5
 
 #If variable not used, shell assumes 'function' to be a real function
-actualMinScale=$(fission fn list|grep $fn|awk '{ print $5; }')
-actualMaxScale=$(fission fn list|grep $fn|awk '{ print $6; }')
-actualTargetCPU=$(fission fn list|grep $fn|awk '{ print $7; }')
+func=function
+actualMinScale=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.MinScale}')
+actualMaxScale=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.MaxScale}')
+actualTargetCPU=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent}')
 
 if [ "$actualMinScale" -ne "$targetMinScale" ]
 then

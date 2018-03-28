@@ -35,10 +35,10 @@ sleep 5
 #If variable not used, shell assumes 'function' to be a real function
 func=function
 
-maxcpu_actual=$(kubectl describe $func $fn -n default|grep Cpu|head -1|cut -f 2|tr -dc '0-9')
-mincpu_actual=$(kubectl describe $func $fn -n default|grep Cpu|tail -1|cut -f 2|tr -dc '0-9')
-maxmem_actual=$(kubectl describe $func $fn -n default|grep Memory|head -1|cut -f 2|tr -dc '0-9')
-minmem_actual=$(kubectl describe $func $fn -n default|grep Memory|tail -1|cut -f 2|tr -dc '0-9')
+maxcpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.limits.cpu}')
+mincpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.requests.cpu}')
+maxmem_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.limits.memory}')
+minmem_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.requests.memory}')
 
 if [ "$maxcpu_actual" -ne "$maxcpu1" ] || [ "$mincpu_actual" -ne "$mincpu1" ]
 then
@@ -57,10 +57,10 @@ timeout 60 bash -c "test_fn $fn 'world'"
 log "Updating function $fn with new resource values"
 fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu $mincpu2 --maxcpu $maxcpu2 --minmemory $minmem2 --maxmemory $maxmem2
 
-maxcpu_actual=$(kubectl describe $func $fn -n default|grep Cpu|head -1|cut -f 2|tr -dc '0-9')
-mincpu_actual=$(kubectl describe $func $fn -n default|grep Cpu|tail -1|cut -f 2|tr -dc '0-9')
-maxmem_actual=$(kubectl describe $func $fn -n default|grep Memory|head -1|cut -f 2|tr -dc '0-9')
-minmem_actual=$(kubectl describe $func $fn -n default|grep Memory|tail -1|cut -f 2|tr -dc '0-9')
+maxcpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.limits.cpu}')
+mincpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.requests.cpu}')
+maxmem_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.limits.memory}')
+minmem_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.requests.memory}')
 
 if [ "$maxcpu_actual" -ne "$maxcpu2" ] || [ "$mincpu_actual" -ne "$mincpu2" ]
 then
