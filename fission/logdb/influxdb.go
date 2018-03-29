@@ -98,7 +98,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	logEntries := []LogEntry{}
 	response, err := influx.query(query)
 	if err != nil {
-		return logEntries, nil
+		return logEntries, err
 	}
 	for _, r := range response.Results {
 		for _, series := range r.Series {
