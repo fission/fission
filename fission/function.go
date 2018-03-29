@@ -599,7 +599,7 @@ func fnLogs(c *cli.Context) error {
 	checkErr(err, "get function")
 
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, c.GlobalString("server"))
+	logDB, err := logdb.GetLogDB(dbType, getServerUrl())
 	if err != nil {
 		fatal("failed to connect log database")
 	}
@@ -671,7 +671,7 @@ func fnPods(c *cli.Context) error {
 
 	// client first sends db query to the controller, then the controller
 	// will establish a proxy server that bridges the client and the database.
-	logDB, err := logdb.GetLogDB(dbType, c.GlobalString("server"))
+	logDB, err := logdb.GetLogDB(dbType, getServerUrl())
 	if err != nil {
 		fatal("failed to connect log database")
 	}
