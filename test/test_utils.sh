@@ -152,10 +152,6 @@ generate_test_id() {
     echo $(date|md5sum|cut -c1-6)
 }
 
-helm_purge_old() {
-    helm ls | grep fission | awk '{print $1}' | xargs helm delete --purge
-}
-
 helm_install_fission() {
     id=$1
     image=$2
@@ -438,9 +434,6 @@ install_and_test() {
     natsPort=31235
 
     clean_tpr_crd_resources
-
-    #helm_setup
-    #helm_purge_old
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
