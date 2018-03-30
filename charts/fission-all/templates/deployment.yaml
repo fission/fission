@@ -547,7 +547,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mqt", , "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: {{ .Values.messageQueue.type }}
