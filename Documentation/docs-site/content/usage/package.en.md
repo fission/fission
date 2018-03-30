@@ -123,7 +123,7 @@ Build Logs:
 Finally you can create a function with the package and test the function:
 
 ```
-$fission fn create --name deploypy --pkg demo-deploy-pkg-zip-whzl --entrypoint "hello.main"
+$ fission fn create --name deploypy --pkg demo-deploy-pkg-zip-whzl --entrypoint "hello.main"
 
 $curl http://$FISSION_ROUTER/deploypy
 Hello, world!

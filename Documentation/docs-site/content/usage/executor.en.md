@@ -62,7 +62,7 @@ Status code distribution:
 While the load is being generated, we will watch the HorizontalPodAutoscaler and how it scales over period of time. As you can notice, the number of pods is scaled from 1 to 3 after the load rises from 8 - 103%. After the load generator stops, it takes a few iterations to scale down from 3 to 1 pod. 
 
 ```
-$ k -n fission-function get hpa -w
+$ kubectl -n fission-function get hpa -w
 NAME             REFERENCE                   TARGETS    MINPODS   MAXPODS   REPLICAS   AGE
 hello-qoxmothj   Deployment/hello-qoxmothj   5% / 50%   1         6         1          3m
 hello-qoxmothj   Deployment/hello-qoxmothj   8% / 50%   1         6         1         3m
