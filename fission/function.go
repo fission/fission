@@ -118,7 +118,7 @@ func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	if len(c.String("package")) > 0 {
-		fatal("--package is deprecated, please use --deploy instead.")
+		fatal("--package is deprecated and will be remove in the next release, please use --deploy instead.")
 	}
 
 	fnName := c.String("name")
@@ -653,6 +653,8 @@ func fnLogs(c *cli.Context) error {
 
 func fnPods(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+
+	fmt.Println("This subcommand is deprecated and will be remove in the next release. Please use `kubectl -n <namespace> logs -f -c <container> <pod>` instead.")
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
