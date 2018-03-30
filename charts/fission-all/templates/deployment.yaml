@@ -300,7 +300,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--kubewatcher"]
+        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
       serviceAccount: fission-svc
 
 ---
@@ -469,7 +469,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--timer"]
+        args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
       serviceAccount: fission-svc
 
 #
@@ -547,7 +547,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mqt"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: {{ .Values.messageQueue.type }}
