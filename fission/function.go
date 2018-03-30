@@ -647,50 +647,6 @@ func fnLogs(c *cli.Context) error {
 	}
 }
 
-func fnPods(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
-
-	fmt.Println("This subcommand is deprecated and will be removed in the next release. Please use `kubectl get pods -l functionName=<name> --all-namespaces` instead.")
-
-	fnName := c.String("name")
-	if len(fnName) == 0 {
-		fatal("Need name of function, use --name")
-	}
-
-	dbType := c.String("dbtype")
-	if len(dbType) == 0 {
-		dbType = logdb.INFLUXDB
-	}
-
-	m := &metav1.ObjectMeta{Name: fnName}
-
-	f, err := client.FunctionGet(m)
-	checkErr(err, "get function")
-
-	// client first sends db query to the controller, then the controller
-	// will establish a proxy server that bridges the client and the database.
-	logDB, err := logdb.GetLogDB(dbType, getServerUrl())
-	if err != nil {
-		fatal("failed to connect log database")
-	}
-
-	logFilter := logdb.LogFilter{
-		Function: f.Metadata.Name,
-		FuncUid:  string(f.Metadata.UID),
-	}
-	pods, err := logDB.GetPods(logFilter)
-	if err != nil {
-		fatal("failed to get pods of function")
-		return err
-	}
-	fmt.Printf("NAME\t\n")
-	for _, pod := range pods {
-		fmt.Println(pod)
-	}
-
-	return err
-}
-
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
