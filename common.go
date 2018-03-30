@@ -103,3 +103,19 @@ func IsNetworkDialError(err error) bool {
 	}
 	return false
 }
+
+// IsReadyPod checks that all containers in a pod are ready and returns true if so
+func IsReadyPod(pod *apiv1.Pod) bool {
+	// since its a utility function, just ensuring there is no nil pointer exception
+	if pod == nil {
+		return false
+	}
+
+	for _, cStatus := range pod.Status.ContainerStatuses {
+		if !cStatus.Ready {
+			return false
+		}
+	}
+
+	return true
+}

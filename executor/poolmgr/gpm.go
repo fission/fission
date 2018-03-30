@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/pkg/api"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -225,18 +224,8 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *crd.Environment) int32 {
 func (gpm *GenericPoolManager) IsValidPod(kubeObjects []api.ObjectReference, podAddress string) bool {
 	for _, obj := range kubeObjects {
 		if obj.Kind == "pod" {
-			// local function to check if all containers in a pod are ready
-			isReadyPod := func(pod *apiv1.Pod) bool {
-				for _, cStatus := range pod.Status.ContainerStatuses {
-					if !cStatus.Ready {
-						return false
-					}
-				}
-				return true
-			}
-
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && strings.Contains(podAddress, pod.Status.PodIP) && isReadyPod(pod) {
+			if err == nil && strings.Contains(podAddress, pod.Status.PodIP) && fission.IsReadyPod(pod) {
 				log.Printf("Valid pod address : %s", podAddress)
 				return true
 			}
