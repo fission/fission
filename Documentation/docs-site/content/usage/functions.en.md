@@ -10,7 +10,7 @@ Before creating a function the environment should be created, we will assume tha
 
 Let's create a simple code snippet in nodejs which will output Hello world:
 
-```
+``` js
 module.exports = async function(context) {
     return {
         status: 200,
@@ -19,36 +19,65 @@ module.exports = async function(context) {
 }
 ```
 
+Let's create a function based on pool based executor.
+
+``` bash
+$ fission fn create --name hello --code hello.js --env node --executortype poolmgr
+```
+
+### Access function
+
+Before accessing function, we need to set the `FISSION_ROUTER` environment variable first. It is needed for the examples below to work
+
+#### Minikube
+
+If you're using minikube, use these commands:
+
+``` bash
+$ export FISSION_ROUTER=$(minikube ip):31314
+```
+
+#### Cloud setups
+
+Save the external IP addresses of router services in FISSION_ROUTER.
+
+Wait for services to get IP addresses (check this with `kubectl --namespace fission get svc`).  Then:
+
+``` bash
+# AWS
+$ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..hostname}')
+
+# GCP
+$ export FISSION_ROUTER=$(kubectl --namespace fission get svc router -o=jsonpath='{..ip}')
+```
+
+#### Create a HTTP trigger
+
 Let's create a route for the function which can be used for making HTTP requests:
 
-```
+``` bash
 $ fission route create --function hello --url /hello
 trigger '5327e9a7-6d87-4533-a4fb-c67f55b1e492' created
 ```
 
-Let's create a function based on pool based executor.
-
-```
-fission fn create --name hello --code hello.js --env node --executortype poolmgr
-```
-
 When you hit this function's URL , you get a response:
 
-```
+``` bash
 $ curl http://$FISSION_ROUTER/hello
 Hello, world!
 ```
+
 Similarly you can create a new deployment executor type function and provide minmum and maximum scale for the function. 
 
-```
-fission fn create --name hello --code hello.js --env node --minscale 1 --maxscale 5  --executortype newdeploy
+``` bash
+$ fission fn create --name hello --code hello.js --env node --minscale 1 --maxscale 5  --executortype newdeploy
 ```
 
 ### View & update function source code
 
 You can look at the source code associated with given function:
 
-```
+``` bash
 $ fission fn get --name hello
 module.exports = async function(context) {
     return {
@@ -60,7 +89,7 @@ module.exports = async function(context) {
 
 Let's say you want to update the function to output "Hello Fission" instead of "Hello world", you can update the source file and update the source code for function:
 
-```
+``` bash
 $ fission fn update --name hello --code ../hello.js 
 package 'hello-js-ku9s' updated
 function 'hello' updated
@@ -68,7 +97,7 @@ function 'hello' updated
 
 Let's verify that the function now respond with a different output than earlier:
 
-```
+``` bash
 $ curl http://$FISSION_ROUTER/hello
 Hello, Fission!
 ```
@@ -76,13 +105,13 @@ Hello, Fission!
 ### Test and debug function
 
 You can directly test a function using test command. If the function call succeeds, it will output the function's response. 
-```
+``` bash
 $ fission fn test --name hello
 Hello, Fission!
 ```
 
 But if there is an error in function execution then the logs of function execution are displayed:
-```
+``` bash
 $ fission fn test --name hello
 Error calling function hello: 500 Internal server error (fission)
 
@@ -97,7 +126,7 @@ user code load error: SyntaxError: Unexpected token function
 ```
 
 You can also look at function execution logs explicitly:
-```
+``` bash
 $ fission fn logs --name hello
 [2018-02-16 08:41:43 +0000 UTC] 2018/02/16 08:41:43 fetcher received fetch request and started downloading: {1 {hello-js-rqew  default    0 0001-01-01 00:00:00 +0000 UTC <nil> <nil> map[] map[] [] nil [] }   user [] []}
 [2018-02-16 08:41:43 +0000 UTC] 2018/02/16 08:41:43 Successfully placed at /userfunc/user
@@ -119,15 +148,17 @@ You can attach the source/deployment packages to a function or explicitly create
 
 Let's take a simple python function which has dependency on a python pyyaml module. We can specify the dependencies in requirements.txt and a simple command to build from source. The tree structure of directory looks like:
 
-```
+``` bash
 sourcepkg/
 ├── __init__.py
 ├── build.sh
 ├── requirements.txt
 └── user.py
 ```
+
 And the file contents:
-```
+
+``` bash
 $ cat user.py 
 import sys
 import yaml
@@ -152,13 +183,14 @@ pip3 install -r ${SRC_PKG}/requirements.txt -t ${SRC_PKG} && cp -r ${SRC_PKG} ${
 
 You first need to create an environment with environment image and python-builder image specified:
 
+``` bash
+$ fission env create --name python --image fission/python-env:latest --builder fission/python-builder:latest --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 2
 ```
-$fission env create --name python --image fission/python-env:latest --builder fission/python-builder:latest --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 2
-```
+
 Now let's zip the directory containing the source files and create a function with source package:
 
-```
-$zip -jr demo-src-pkg.zip sourcepkg/
+``` bash
+$ zip -jr demo-src-pkg.zip sourcepkg/
   adding: __init__.py (stored 0%)
   adding: build.sh (deflated 24%)
   adding: requirements.txt (stored 0%)
@@ -169,10 +201,11 @@ function 'hellopy' created
 
 $ fission route create --function hellopy --url /hellopy
 ```
+
 Once we create the function, the build process is started. You can check logs of the builder in fission-builder namespace:
 
-```
-$ k -n fission-builder logs -f py3-4214348-59555d9bd8-ks7m4 builder
+``` bash
+$ kubectl -n fission-builder logs -f py3-4214348-59555d9bd8-ks7m4 builder
 2018/02/16 11:44:21 Builder received request: {demo-src-pkg-zip-ninf-djtswo ./build.sh}
 2018/02/16 11:44:21 Starting build...
 
@@ -189,8 +222,8 @@ Successfully installed pyyaml-3.12
 ```
 
 Once the build has succeeded, you can hit the function URL to test the function:
-```
-$curl http://$FISSION_ROUTER/hellopy
+``` bash
+$ curl http://$FISSION_ROUTER/hellopy
 a: 1
 b: {c: 3, d: 4}
 ```
@@ -201,7 +234,7 @@ In some cases you have a pre-built deployment package which you need to deploy t
 
 We will use a simple python file in a directory and turn it into a deployment package:
 
-```
+``` bash
 $ cat testDir/hello.py
 def main():
     return "Hello, world!"
@@ -209,9 +242,10 @@ def main():
 $zip -jr demo-deploy-pkg.zip testDir/
 
 ```
+
 Let's use the deployment package to create a function and route and then test it.
 
-```
+``` bash
 $ fission fn create --name hellopy --env python --deploy demo-deploy-pkg.zip --entrypoint "hello.main"
 function 'hellopy' created
 
@@ -225,7 +259,7 @@ Hello, world!
 
 You can retrieve metadata information of a single function or list all functions to look at basic information of functions:
 
-```
+``` bash
 $ fission fn getmeta --name hello
 NAME  UID                                  ENV
 hello 34234b50-12f5-11e8-85c9-42010aa00010 node
@@ -234,5 +268,4 @@ $ fission fn list
 NAME   UID                                  ENV  EXECUTORTYPE MINSCALE MAXSCALE TARGETCPU
 hello  34234b50-12f5-11e8-85c9-42010aa00010 node poolmgr      0        1        80
 hello2 e37a46e3-12f4-11e8-85c9-42010aa00010 node newdeploy    1        5        80
-
 ```
