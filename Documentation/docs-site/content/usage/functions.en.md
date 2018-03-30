@@ -34,7 +34,7 @@ Before accessing function, we need to set the `FISSION_ROUTER` environment varia
 If you're using minikube, use these commands:
 
 ``` bash
-$ export FISSION_ROUTER=$(minikube ip):31314
+$ export FISSION_ROUTER=$(minikube ip):$(kubectl -n fission get svc router -o jsonpath='{...nodePort}')
 ```
 
 #### Cloud setups
