@@ -115,7 +115,7 @@ type (
 )
 
 func getSpecDir(c *cli.Context) string {
-	specDir := c.String("specs")
+	specDir := c.String("specdir")
 	if len(specDir) == 0 {
 		specDir = "specs"
 	}
