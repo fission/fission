@@ -1,5 +1,5 @@
-hash: 3b15246c5a7ca26271ef45e705c92351c786cfbf8ca1c093026b458e527ceefa
-updated: 2018-02-10T19:04:05.240303+01:00
+hash: d77d204547318863d07beea96b4e29a90f0d6c106a957dd0ba40eb0345a77e42
+updated: 2018-03-23T17:49:04.748453691-07:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -18,7 +18,7 @@ imports:
   - autorest/azure
   - autorest/date
 - name: github.com/coreos/etcd
-  version: 9c6d93056575da4da94382f473b0ecfcd9c1443b
+  version: 6a265731e10a5137b991c1aa3a83ecefdd149d50
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
@@ -55,7 +55,7 @@ imports:
 - name: github.com/emicklei/go-restful-swagger12
   version: dcef7f55730566d41eae5db10e7d6981829720f6
 - name: github.com/fsnotify/fsnotify
-  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
+  version: 4da3e2cfbabc9f751898f250b49f2439785783a1
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/go-openapi/analysis
@@ -97,6 +97,10 @@ imports:
   version: abb68c488872b06c5453865fa59f4818b4ea13a4
   subpackages:
   - local
+- name: github.com/hashicorp/errwrap
+  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
+- name: github.com/hashicorp/go-multierror
+  version: b7773ae218740a7be65057fc60b366a49b538a44
 - name: github.com/hashicorp/golang-lru
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
@@ -133,7 +137,7 @@ imports:
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
-  version: 33414c6f2179201f7fda8743ba89d07184e3fa77
+  version: 7889f37a10062ff8eb9ac11855ed51cddeaf4469
   subpackages:
   - spb
   - util
@@ -148,7 +152,7 @@ imports:
   subpackages:
   - xxHash32
 - name: github.com/pkg/errors
-  version: 30136e27e2ac8d167177e8a583aa4c3fea5be833
+  version: f15c970de5b76fac0b59abb32d62c17cc7bed265
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -237,7 +241,7 @@ imports:
 - name: k8s.io/api
   version: 4b8fc5be9b77d91bbb6525d18591c43699a2b4e5
 - name: k8s.io/apiextensions-apiserver
-  version: fcd622fe88a4a6efcb5aea9e94ee87324ac1b036
+  version: 19d3c0f1ccfb3e4180400ff7c22fe3c879771807
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -245,7 +249,7 @@ imports:
   - pkg/client/clientset/clientset/scheme
   - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-  version: 8ab5f3d8a330c2e9baaf84e39042db8d49034ae2
+  version: 208a6980b14bbb263f29482482eabdbcfff9f7bb
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -278,22 +282,22 @@ imports:
   - pkg/util/diff
   - pkg/util/errors
   - pkg/util/framer
+  - pkg/util/httpstream
+  - pkg/util/httpstream/spdy
   - pkg/util/intstr
   - pkg/util/json
   - pkg/util/net
   - pkg/util/rand
+  - pkg/util/remotecommand
   - pkg/util/runtime
   - pkg/util/sets
   - pkg/util/validation
   - pkg/util/validation/field
   - pkg/util/wait
   - pkg/util/yaml
-  - pkg/util/httpstream
-  - pkg/util/httpstream/spdy
-  - pkg/util/remotecommand
-  - third_party/forked/golang/netutil
   - pkg/version
   - pkg/watch
+  - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
   version: d92e8497f71b7b4e0494e5bd204b48d34bd6f254
@@ -374,11 +378,12 @@ imports:
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
   - tools/clientcmd/api/v1
+  - tools/metrics
   - tools/portforward
   - tools/remotecommand
-  - tools/metrics
   - transport
   - util/cert
+  - util/exec
   - util/flowcontrol
   - util/homedir
   - util/integer
