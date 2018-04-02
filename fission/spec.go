@@ -1009,12 +1009,20 @@ func hasDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) bool {
 }
 
 func waitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package, error) {
+	start := time.Now()
 	for {
 		if pkg.Status.BuildStatus != fission.BuildStatusRunning {
 			return pkg, nil
 		}
+		if time.Since(start) > 5*time.Minute {
+			return nil, fmt.Errorf("Package %v has been building for a while.  Giving up on waiting for it.", pkg.Metadata.Name)
+		}
+
+		// TODO watch instead
 		time.Sleep(time.Second)
-		pkg, err := fclient.PackageGet(&pkg.Metadata)
+
+		var err error
+		pkg, err = fclient.PackageGet(&pkg.Metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -1081,7 +1089,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
 				// wait for the package to have a non-running build status.
-				pkg, err = waitForPackageBuild(fclient, &o)
+				pkg, err := waitForPackageBuild(fclient, &o)
 				if err != nil {
 					// log and ignore
 					fmt.Printf("Error waiting for package '%v' build, ignoring\n", o.Metadata.Name)
