@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,9 +70,8 @@ func assertNotFoundFailure(err error, name string) {
 
 func assertCronSpecFails(err error) {
 	assert(err != nil, "using an invalid cron spec must fail")
-	fe, ok := err.(fission.Error)
-	assert(ok, "error must be a fission Error")
-	assert(fe.Code == fission.ErrorInvalidArgument, "error must be a invalid argument error")
+	ok := strings.Contains(err.Error(), "not a valid cron spec")
+	assert(ok, "invalid cron spec must fail")
 }
 
 func TestFunctionApi(t *testing.T) {
