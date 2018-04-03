@@ -27,6 +27,7 @@ sleep 5
 
 log "Doing an HTTP GET on the function's route"
 response0=$(curl http://$FISSION_ROUTER/$fn0)
+echo "Response: $response0"
 
 log "Checking for valid response"
 echo $response0 | grep -i hello
