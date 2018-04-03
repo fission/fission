@@ -169,7 +169,7 @@ func waitForCRDs(crdClient *rest.RESTClient) error {
 			return nil
 		}
 
-		if time.Since(start) > 30*time.Second {
+		if time.Since(start) > 60*time.Second {
 			return errors.New("timeout waiting for CRDs")
 		}
 	}
@@ -212,8 +212,8 @@ func (fc *FissionClient) Packages(ns string) PackageInterface {
 	return MakePackageInterface(fc.crdClient, ns)
 }
 
-func (fc *FissionClient) WaitForCRDs() {
-	waitForCRDs(fc.crdClient)
+func (fc *FissionClient) WaitForCRDs() error {
+	return waitForCRDs(fc.crdClient)
 }
 func (fc *FissionClient) GetCrdClient() *rest.RESTClient {
 	return fc.crdClient

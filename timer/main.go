@@ -17,6 +17,8 @@ limitations under the License.
 package timer
 
 import (
+	"log"
+
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/publisher"
 )
@@ -25,6 +27,11 @@ func Start(routerUrl string) error {
 	fissionClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
+	}
+
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
 	}
 
 	poster := publisher.MakeWebhookPublisher(routerUrl)

@@ -193,6 +193,12 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	fission.SetupStackTraceHandler()
 
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
+
 	restClient := fissionClient.GetCrdClient()
 	if err != nil {
 		log.Printf("Failed to get kubernetes client: %v", err)
