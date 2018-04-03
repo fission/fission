@@ -111,6 +111,7 @@ func (executor *Executor) Serve(port int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executor.ndm.Run(ctx)
+	executor.gpm.Run(ctx)
 	r.Use(fission.LoggingMiddleware)
 	log.Fatal(http.ListenAndServe(address, r))
 }

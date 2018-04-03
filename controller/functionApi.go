@@ -29,8 +29,6 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/pkg/api"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	restclient "k8s.io/client-go/rest"
@@ -91,62 +89,6 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.respondWithError(w, err)
 		return
-	}
-
-	// Since istio only allows accessing pod through k8s service,
-	// for the functions with executor type "poolmgr" we need to
-	// create a service for sending requests to pod in pool.
-	// Functions with executor type "Newdeploy" is specialized at
-	// pod starts. In this case, just ignore such functions.
-	fnExecutorType := f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-
-	if a.useIstio && fnExecutorType == fission.ExecutorTypePoolmgr {
-		// create a same name service for function
-		// since istio only allows the traffic to service
-
-		sel := map[string]string{
-			"functionName": fnew.Metadata.Name,
-			"functionUid":  string(fnew.Metadata.UID),
-		}
-
-		// service for accepting user traffic
-		svc := apiv1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: a.functionNamespace,
-				Name:      fission.GetFunctionIstioServiceName(f.Metadata.Name, f.Metadata.Namespace),
-				Labels:    a.getIstioServiceLabels(f.Metadata.Name),
-			},
-			Spec: apiv1.ServiceSpec{
-				Type: apiv1.ServiceTypeClusterIP,
-				Ports: []apiv1.ServicePort{
-					// Service port name should begin with a recognized prefix, or the traffic will be
-					// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/sidecar-injection.html)
-					// Originally the ports' name are similar to "http-fetch" and "http-specialize".
-					// But for istio 0.5.1, istio-proxy return unexpected 431 error with such naming.
-					// https://github.com/istio/istio/issues/928
-					// Workaround: remove prefix
-					// TODO: prepend prefix once the bug fixed
-					{
-						Name:       "fetch",
-						Protocol:   apiv1.ProtocolTCP,
-						Port:       8000,
-						TargetPort: intstr.FromInt(8000),
-					},
-					{
-						Name:       "specialize",
-						Protocol:   apiv1.ProtocolTCP,
-						Port:       8888,
-						TargetPort: intstr.FromInt(8888),
-					},
-				},
-				Selector: sel,
-			},
-		}
-		_, err = a.kubernetesClient.CoreV1().Services(a.functionNamespace).Create(&svc)
-		if err != nil {
-			a.respondWithError(w, err)
-			return
-		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -224,20 +166,6 @@ func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.respondWithError(w, err)
 		return
-	}
-
-	if a.useIstio {
-		// delete all istio services belong to the function
-		sel := a.getIstioServiceLabels(name)
-		svcList, err := a.kubernetesClient.CoreV1().Services(a.functionNamespace).List(metav1.ListOptions{
-			LabelSelector: labels.Set(sel).AsSelector().String(),
-		})
-		for _, svc := range svcList.Items {
-			err = a.kubernetesClient.CoreV1().Services(a.functionNamespace).Delete(svc.ObjectMeta.Name, &metav1.DeleteOptions{})
-			// log error and continue
-			log.Printf("Failed to delete service %v: %v", svc.ObjectMeta.Name, err)
-			continue
-		}
 	}
 
 	a.respondWithSuccess(w, []byte(""))

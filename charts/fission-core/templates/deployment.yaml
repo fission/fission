@@ -139,8 +139,6 @@ spec:
         env:
           - name: FISSION_FUNCTION_NAMESPACE
             value: "{{ .Values.functionNamespace }}"
-          - name: ENABLE_ISTIO
-            value: "{{ .Values.enableIstio }}"
         readinessProbe:
           httpGet:
             path: "/healthz"

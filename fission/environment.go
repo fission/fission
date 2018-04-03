@@ -55,6 +55,10 @@ func envCreate(c *cli.Context) error {
 	envBuilderImg := c.String("builder")
 	envBuildCmd := c.String("buildcmd")
 	envExternalNetwork := c.Bool("externalnetwork")
+	envGracePeriod := c.Int64("period")
+	if envGracePeriod <= 0 {
+		envGracePeriod = 360
+	}
 
 	if len(envBuilderImg) > 0 {
 		if !c.IsSet("version") {
@@ -90,6 +94,7 @@ func envCreate(c *cli.Context) error {
 			Poolsize:                     poolsize,
 			Resources:                    resourceReq,
 			AllowAccessToExternalNetwork: envExternalNetwork,
+			TerminationGracePeriod:       envGracePeriod,
 		},
 	}
 
@@ -165,6 +170,10 @@ func envUpdate(c *cli.Context) error {
 		env.Spec.Poolsize = c.Int("poolsize")
 	}
 
+	if c.IsSet("period") {
+		env.Spec.TerminationGracePeriod = c.Int64("period")
+	}
+
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
@@ -200,12 +209,13 @@ func envList(c *cli.Context) error {
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Poolsize,
 			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
-			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory())
+			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
+			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
 	}
 	w.Flush()
 

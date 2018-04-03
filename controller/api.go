@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
-	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -81,14 +80,6 @@ func MakeAPI() (*API, error) {
 		api.functionNamespace = fnNs
 	} else {
 		api.functionNamespace = "fission-function"
-	}
-
-	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
-		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
-		if err != nil {
-			log.Println("Failed to parse ENABLE_ISTIO")
-		}
-		api.useIstio = istio
 	}
 
 	return api, err
