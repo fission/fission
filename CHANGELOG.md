@@ -1,17 +1,43 @@
-# 0.6.1
-[Documentation](http://fission.io/docs/0.6.1/)
-## Downloads for 0.6.1
+# 0.7.0
+[Documentation](http://fission.io/docs/0.7.0/)
+## Downloads for 0.7.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-0.6.1.tgz](https://github.com/fission/fission/releases/download/0.6.1/fission-all-0.6.1.tgz) | `5a17ab8bee880029fe42b9919c6d5319e0abe0751e05d2b410b23bd9f16bc611`
-[fission-core-0.6.1.tgz](https://github.com/fission/fission/releases/download/0.6.1/fission-core-0.6.1.tgz) | `81d2f1fcff61ae1227bc1728eaaa4ec54b2f096929bde440358b41c7ffb2ece3`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.6.1/fission-cli-linux) | `4d89e89a0d8704e98e8358e1b3db32702bb9514666f3a208bb5e0194f4da561e`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.6.1/fission-cli-osx) | `485d56c978b423ab51e6b3cd1f6ffa75cb7fa969c6c6897d462b44ae8681ae9d`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.6.1/fission-cli-windows.exe) | `df4625398f93f285b89cea02505a2d0968953e74cd384474bad09bb6dc796416`
+[fission-core-0.7.0.tgz](https://github.com/fission/fission/releases/download/0.7.0/fission-core-0.7.0.tgz) | `82aa772f89a3b1c1e2527b4d1b8061be66595565fb9878bc31a7c66665b4623b`
+[fission-all-0.7.0.tgz](https://github.com/fission/fission/releases/download/0.7.0/fission-all-0.7.0.tgz) | `747535045cf78dccc7b4d0ab911f4f0581ea517fd9d901b2c930ddcbf2792b19`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-osx) | `e8783502fe74dea516e3c208fb7da1df78ee7c55df380a28eb6c46c0ae075e9f`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-linux) | `b3aa0fcb89fb56a7b0f58e02a00378f0d374bcc4c5acc1b1d914a60f802e8019`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-windows.exe) | `400326c9dc4712e12d8b33fee708b285356b8d9aac21c811144d271eeb791640`
 
 # Change Log
+
+## [0.7.0](https://github.com/fission/fission/tree/0.7.0) (2018-04-02)
+[Full Changelog](https://github.com/fission/fission/compare/0.7.0...0.7.0)
+
+**Merged pull requests:**
+
+- changes needed for release 0.7.0 [\#597](https://github.com/fission/fission/pull/597) ([smruthi2187](https://github.com/smruthi2187))
+
+## [0.7.0](https://github.com/fission/fission/tree/0.7.0) (2018-04-02)
+[Full Changelog](https://github.com/fission/fission/compare/0.6.1...0.7.0)
+
+**Merged pull requests:**
+
+- bug fix: spec dir flag [\#595](https://github.com/fission/fission/pull/595) ([xiekeyang](https://github.com/xiekeyang))
+- Add steps to set FISSION\_ROUTER env variable & update docs [\#593](https://github.com/fission/fission/pull/593) ([life1347](https://github.com/life1347))
+- Adding routerUrl parameter for kubewatch, timer, message queue trigge… [\#591](https://github.com/fission/fission/pull/591) ([smruthi2187](https://github.com/smruthi2187))
+- Uses proper way to get server URL [\#587](https://github.com/fission/fission/pull/587) ([vishal-biyani](https://github.com/vishal-biyani))
+- Check if the requested file already exists in fetcher and skip fetch [\#584](https://github.com/fission/fission/pull/584) ([smruthi2187](https://github.com/smruthi2187))
+- Add golang example to installation guide [\#578](https://github.com/fission/fission/pull/578) ([clee](https://github.com/clee))
+- Fixes the issue \#559 with env versions [\#569](https://github.com/fission/fission/pull/569) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add post-upgrade-job to track fission upgrade [\#564](https://github.com/fission/fission/pull/564) ([life1347](https://github.com/life1347))
+- Prepending a slash to user input url if missing. [\#547](https://github.com/fission/fission/pull/547) ([smruthi2187](https://github.com/smruthi2187))
+- Add verbosity flag and verbose logs for portforwarder [\#575](https://github.com/fission/fission/pull/575) ([soamvasani](https://github.com/soamvasani))
+- Spec validator, better errors, apply waits for previous build  [\#560](https://github.com/fission/fission/pull/560) ([soamvasani](https://github.com/soamvasani))
+- Tests for function update [\#550](https://github.com/fission/fission/pull/550) ([vishal-biyani](https://github.com/vishal-biyani))
+- Show fission deployment version with cli [\#538](https://github.com/fission/fission/pull/538) ([life1347](https://github.com/life1347))
 
 ## [0.6.1](https://github.com/fission/fission/tree/0.6.1) (2018-03-22)
 [Full Changelog](https://github.com/fission/fission/compare/0.6.0...0.6.1)
@@ -24,7 +50,6 @@ filename | sha256 hash
 - Docs update [\#542](https://github.com/fission/fission/pull/542) ([soamvasani](https://github.com/soamvasani))
 - Release script updates [\#541](https://github.com/fission/fission/pull/541) ([soamvasani](https://github.com/soamvasani))
 - Show warning when trying to create a route with non-existent function \(\#238\) [\#539](https://github.com/fission/fission/pull/539) ([life1347](https://github.com/life1347))
-- Show fission deployment version with cli [\#538](https://github.com/fission/fission/pull/538) ([life1347](https://github.com/life1347))
 - Fix executor failed to clean cache & kubeobjs after function deleted \(\#533\) [\#534](https://github.com/fission/fission/pull/534) ([life1347](https://github.com/life1347))
 - Delete healthz log [\#525](https://github.com/fission/fission/pull/525) ([smruthi2187](https://github.com/smruthi2187))
 - Always retry when istio is enabled. [\#536](https://github.com/fission/fission/pull/536) ([life1347](https://github.com/life1347))
