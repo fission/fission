@@ -101,7 +101,9 @@ func MakeGenericPoolManager(
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
-	go gpm.istioServiceRegister.Run(ctx.Done())
+	if gpm.enableIstio && gpm.istioServiceRegister != nil {
+		go gpm.istioServiceRegister.Run(ctx.Done())
+	}
 }
 
 func (gpm *GenericPoolManager) service() {
