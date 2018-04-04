@@ -160,16 +160,15 @@ helm_install_fission() {
     fetcherImageTag=$5
     controllerNodeport=$6
     routerNodeport=$7
-    natsNodeport=$8
-    fluentdImage=$9
-    fluentdImageTag=${10}
-    pruneInterval="${11}"
-    routerServiceType=${12}
+    fluentdImage=$8
+    fluentdImageTag=${9}
+    pruneInterval="${10}"
+    routerServiceType=${11}
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,natsStreamingPort=$natsNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
 
     timeout 30 bash -c "helm_setup"
 
@@ -431,13 +430,12 @@ install_and_test() {
 
     controllerPort=31234
     routerPort=31235
-    natsPort=31236
 
     clean_tpr_crd_resources
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $natsPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
@@ -448,11 +446,11 @@ install_and_test() {
 
     export PATH=$ROOT/fission:$PATH
 
-    port_forward_services $id "router" $routerPort
-    port_forward_services $id "nats-streaming" $natsPort
+    port_forward_services $id "router" 8888
+    port_forward_services $id "nats-streaming" 4222
 
-    export FISSION_ROUTER="127.0.0.1:$routerPort"
-    export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@127.0.0.1:$natsPort"
+    export FISSION_ROUTER="127.0.0.1:8888"
+    export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@127.0.0.1:4222"
 
     run_all_tests $id
 
