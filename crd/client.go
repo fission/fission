@@ -169,7 +169,7 @@ func waitForCRDs(crdClient *rest.RESTClient) error {
 			return nil
 		}
 
-		if time.Since(start) > 60*time.Second {
+		if time.Since(start) > 30*time.Second {
 			return errors.New("timeout waiting for CRDs")
 		}
 	}
