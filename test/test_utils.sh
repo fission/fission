@@ -431,7 +431,7 @@ install_and_test() {
 
     controllerPort=31234
     routerPort=31235
-    natsPort=31235
+    natsPort=31236
 
     clean_tpr_crd_resources
     
