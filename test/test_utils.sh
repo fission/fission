@@ -162,7 +162,7 @@ helm_install_fission() {
     routerNodeport=$7
     natsNodeport=$8
     fluentdImage=$9
-    fluentdImageTag=$10
+    fluentdImageTag=${10}
     pruneInterval="${11}"
     routerServiceType=${12}
 
