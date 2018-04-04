@@ -30,6 +30,11 @@ func Start(routerUrl string) error {
 		log.Fatalf("Failed to get fission client: %v", err)
 	}
 
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
+
 	// Message queue type: nats is the only supported one for now
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")

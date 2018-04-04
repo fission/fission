@@ -37,7 +37,10 @@ func Start(port int) {
 		log.Fatalf("Failed to create fission CRDs: %v", err)
 	}
 
-	fc.WaitForCRDs()
+	err = fc.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
 
 	api, err := MakeAPI()
 	if err != nil {

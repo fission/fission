@@ -31,6 +31,11 @@ func Start(storageSvcUrl string, envBuilderNamespace string) error {
 		return err
 	}
 
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
+
 	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 

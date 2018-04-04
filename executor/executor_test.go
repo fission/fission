@@ -138,7 +138,11 @@ func TestExecutor(t *testing.T) {
 	if err != nil {
 		log.Panicf("failed to ensure crds: %v", err)
 	}
-	fissionClient.WaitForCRDs()
+
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Panicf("failed to wait crds: %v", err)
+	}
 
 	// create an env on the cluster
 	env, err := fissionClient.Environments(fissionNs).Create(&crd.Environment{

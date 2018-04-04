@@ -212,8 +212,8 @@ func (fc *FissionClient) Packages(ns string) PackageInterface {
 	return MakePackageInterface(fc.crdClient, ns)
 }
 
-func (fc *FissionClient) WaitForCRDs() {
-	waitForCRDs(fc.crdClient)
+func (fc *FissionClient) WaitForCRDs() error {
+	return waitForCRDs(fc.crdClient)
 }
 func (fc *FissionClient) GetCrdClient() *rest.RESTClient {
 	return fc.crdClient

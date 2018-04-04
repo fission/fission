@@ -17,6 +17,8 @@ limitations under the License.
 package kubewatcher
 
 import (
+	"log"
+
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/publisher"
 )
@@ -26,6 +28,12 @@ func Start(routerUrl string) error {
 	if err != nil {
 		return err
 	}
+
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
+
 	poster := publisher.MakeWebhookPublisher(routerUrl)
 	kubeWatch := MakeKubeWatcher(kubeClient, poster)
 	MakeWatchSync(fissionClient, kubeWatch)

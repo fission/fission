@@ -82,6 +82,11 @@ func Start(port int, executorUrl string) {
 		log.Fatalf("Error connecting to kubernetes API: %v", err)
 	}
 
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		log.Fatalf("Error waiting for CRDs: %v", err)
+	}
+
 	restClient := fissionClient.GetCrdClient()
 
 	executor := executorClient.MakeClient(executorUrl)
