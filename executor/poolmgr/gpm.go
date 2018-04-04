@@ -21,12 +21,13 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/pkg/api"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
