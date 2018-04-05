@@ -19,6 +19,12 @@ Prerequisites
    
 4. Install changelog generator tool "github_changelog_generator": https://github.com/skywinder/github-changelog-generator
 
+5. Install realpath if you don't already have it : https://github.com/harto/realpath-osx
+
+6. Install gothub if you don't already have it : https://github.com/itchio/gothub 
+   You just have to go get github.com/itchio/gothub, that'll install gothub in $GOPATH/bin. Ensure this is already
+   in $PATH env variable.
+
 
 Check that the build is green!
 ------------------------------
@@ -65,7 +71,7 @@ Make the release
 
    ./hack/release.sh <VERSION>
 
-   This script checks to make sure you're releasing from the master
+   This script checks to make sure you're releasing from the vX.Y.Z
    branch, and that your repo is clean (no modified/staged files).
 
    This will take a while.
@@ -76,26 +82,28 @@ Make the release
 
 5. Manually test an installation, just for a sanity check
 
-6. Switch the github release from pre-release to release.
+6. Git commit and push Changelog.md into master branch.
 
-7. Add links from release notes:
+7. Switch the github release from pre-release to release.
+
+8. Add links from release notes:
    * Install guide in docs
    * Changelog.md
 
 Update chart repo
 -----------------
 
-Copy the helm charts over to the fission-charts repo.
+Copy the helm charts over to the fission-charts repo
 
 Run `index.sh` in that repo.  (Don't edit the index.yaml in this repo
 manually.  index.sh generates it, using the helm repo CLI.)
 
 git add, git commit, and git push your changes.
 
-The chart repo is a github page, so once you push the master branch,
+The chart repo is a github page : https://github.com/fission/fission-charts, so once you push the master branch,
 you're all set.
 
-
+Ask to be added to this repo if permissions are missing.
 
 
 Announce the release
