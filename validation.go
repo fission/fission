@@ -25,16 +25,38 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-type ErrorType int
+const (
+	ErrorUnsupportedType = iota
+	ErrorInvalidValue
+	ErrorInvalidObject
+)
 
+type ValidationErrorType int
+
+// ValidationError is a custom error type for resource validation.
+// It indicate which field is invalid or illegal in the fission resource.
+// Also, it shows what kind of error type, bad value and detail error messages.
 type ValidationError struct {
-	Type     ErrorType
-	Field    string
+	// Type of validation error.
+	// It indicates what kind of error of field in error output.
+	Type ValidationErrorType
+
+	// Name of error field.
+	// Example: FunctionReference.Name
+	Field string
+
+	// Error field value.
 	BadValue interface{}
-	Detail   string
+
+	// Detail error message
+	Detail string
 }
 
 func (e ValidationError) Error() string {
+	// Example error message
+	// Failed to create HTTP trigger: Invalid fission HTTPTrigger object:
+	// * FunctionReference.Name: Invalid value: findped.ts: [...]
+
 	errMsg := fmt.Sprintf("%v: ", e.Field)
 
 	switch e.Type {
@@ -71,7 +93,7 @@ func AggregateValidationErrors(objName string, err error) error {
 	return result.ErrorOrNil()
 }
 
-func MakeValidationErr(errType ErrorType, field string, val interface{}, detail ...string) ValidationError {
+func MakeValidationErr(errType ValidationErrorType, field string, val interface{}, detail ...string) ValidationError {
 	return ValidationError{
 		Type:     errType,
 		Field:    field,
@@ -80,19 +102,16 @@ func MakeValidationErr(errType ErrorType, field string, val interface{}, detail 
 	}
 }
 
-const (
-	ErrorUnsupportedType = iota
-	ErrorInvalidValue
-	ErrorInvalidObject
-)
-
 func ValidateKubeLabel(field string, labels map[string]string) error {
 	var result *multierror.Error
 
 	for k, v := range labels {
+		// Example: XXX -> YYY
+		// KubernetesWatchTriggerSpec.LabelSelector.Key: Invalid value: XXX
+		// KubernetesWatchTriggerSpec.LabelSelector.Value: Invalid value: YYY
 		result = multierror.Append(result,
-			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.key.%v", field, k), k, validation.IsQualifiedName(k)...),
-			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.value.%v", field, v), v, validation.IsValidLabelValue(v)...))
+			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.Key", field), k, validation.IsQualifiedName(k)...),
+			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.Value", field), v, validation.IsValidLabelValue(v)...))
 	}
 
 	return result.ErrorOrNil()
