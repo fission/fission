@@ -161,7 +161,7 @@ helm_install_fission() {
     controllerNodeport=$6
     routerNodeport=$7
     fluentdImage=$8
-    fluentdImageTag=$9
+    fluentdImageTag=${9}
     pruneInterval="${10}"
     routerServiceType=${11}
 
@@ -234,15 +234,12 @@ export -f helm_uninstall_fission
 port_forward_services() {
     id=$1
     ns=f-$id
-    port=8888
+    svc=$2
+    port=$3
 
-    kubectl get pods -l svc="router" -o name --namespace $ns | \
+    kubectl get pods -l svc="$svc" -o name --namespace $ns | \
         sed 's/^.*\///' | \
         xargs -I{} kubectl port-forward {} $port:$port -n $ns &
-
-    export FISSION_ROUTER="127.0.0.1:"
-    FISSION_ROUTER+="$port"
-    export PATH=$ROOT/fission:$PATH
 }
 
 dump_builder_pod_logs() {
@@ -367,6 +364,8 @@ dump_logs() {
     dump_fission_logs $ns $fns buildermgr
     dump_fission_logs $ns $fns executor
     dump_fission_logs $ns $fns storagesvc
+    dump_fission_logs $ns $fns mqtrigger
+    dump_fission_logs $ns $fns nats-streaming
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
@@ -433,7 +432,7 @@ install_and_test() {
     routerPort=31235
 
     clean_tpr_crd_resources
-
+    
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
     helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
@@ -445,7 +444,14 @@ install_and_test() {
 	    exit 1
     fi
 
-    port_forward_services $id $routerPort
+    export PATH=$ROOT/fission:$PATH
+
+    port_forward_services $id "router" 8888
+    port_forward_services $id "nats-streaming" 4222
+
+    export FISSION_ROUTER="127.0.0.1:8888"
+    export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@127.0.0.1:4222"
+
     run_all_tests $id
 
     dump_logs $id
