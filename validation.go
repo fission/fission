@@ -19,9 +19,12 @@ package fission
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
+	nsUtil "github.com/nats-io/nats-streaming-server/util"
+	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -29,6 +32,10 @@ const (
 	ErrorUnsupportedType = iota
 	ErrorInvalidValue
 	ErrorInvalidObject
+)
+
+var (
+	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
 )
 
 type ValidationErrorType int
@@ -148,6 +155,23 @@ func ValidateKubeReference(refName string, name string, namespace string) error 
 
 	return result.ErrorOrNil()
 }
+
+func IsTopicValid(mqType MessageQueueType, topic string) bool {
+	switch mqType {
+	case MessageQueueTypeNats:
+		return nsUtil.IsChannelNameValid(topic, false)
+	case MessageQueueTypeASQ:
+		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
+	}
+	return false
+}
+
+func IsValidCronSpec(spec string) error {
+	_, err := cron.Parse(spec)
+	return err
+}
+
+/* Resource validation function */
 
 func (checksum Checksum) Validate() error {
 	var result *multierror.Error
