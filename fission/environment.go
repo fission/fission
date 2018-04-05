@@ -98,6 +98,14 @@ func envCreate(c *cli.Context) error {
 		},
 	}
 
+	// if we're writing a spec, don't call the API
+	if c.Bool("spec") {
+		specFile := fmt.Sprintf("env-%v.yaml", envName)
+		err := specSave(*env, specFile)
+		checkErr(err, "create environment spec")
+		return nil
+	}
+
 	_, err := client.EnvironmentCreate(env)
 	checkErr(err, "create environment")
 

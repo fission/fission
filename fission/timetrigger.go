@@ -59,6 +59,14 @@ func ttCreate(c *cli.Context) error {
 		},
 	}
 
+	// if we're writing a spec, don't call the API
+	if c.Bool("spec") {
+		specFile := fmt.Sprintf("timetrigger-%v.yaml", name)
+		err := specSave(*tt, specFile)
+		checkErr(err, "create time trigger spec")
+		return nil
+	}
+
 	_, err := client.TimeTriggerCreate(tt)
 	checkErr(err, "create Time trigger")
 

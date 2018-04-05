@@ -1632,7 +1632,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 	return metadataMap, &ras, nil
 }
 
-// called from `fission function create --spec`
+// called from `fission * create --spec`
 func specSave(resource interface{}, specFile string) error {
 	specDir := "specs"
 
@@ -1655,6 +1655,26 @@ func specSave(resource interface{}, specFile string) error {
 	case crd.Function:
 		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
 		typedres.TypeMeta.Kind = "Function"
+		data, err = yaml.Marshal(typedres)
+	case crd.Environment:
+		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
+		typedres.TypeMeta.Kind = "Environment"
+		data, err = yaml.Marshal(typedres)
+	case crd.HTTPTrigger:
+		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
+		typedres.TypeMeta.Kind = "HTTPTrigger"
+		data, err = yaml.Marshal(typedres)
+	case crd.KubernetesWatchTrigger:
+		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
+		typedres.TypeMeta.Kind = "KubernetesWatchTrigger"
+		data, err = yaml.Marshal(typedres)
+	case crd.MessageQueueTrigger:
+		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
+		typedres.TypeMeta.Kind = "MessageQueueTrigger"
+		data, err = yaml.Marshal(typedres)
+	case crd.TimeTrigger:
+		typedres.TypeMeta.APIVersion = SPEC_API_VERSION
+		typedres.TypeMeta.Kind = "TimeTrigger"
 		data, err = yaml.Marshal(typedres)
 	default:
 		return fmt.Errorf("can't save resource %#v", resource)

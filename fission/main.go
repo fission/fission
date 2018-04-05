@@ -104,6 +104,9 @@ func main() {
 		cli.IntFlag{Name: "verbosity", Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
 	}
 
+	// all resource create commands accept --spec
+	specSaveFlag := cli.BoolFlag{Name: "spec", Usage: "Save to the spec directory instead of creating on cluster"}
+
 	// trigger method and url flags (used in function and route CLIs)
 	htMethodFlag := cli.StringFlag{Name: "method", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD; defaults to GET"}
 	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
@@ -139,10 +142,9 @@ func main() {
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
-	fnSpecSaveFlag := cli.BoolFlag{Name: "spec", Usage: "Save function to the spec directory instead of creating it"}
 
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnSpecSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, fnSecretnsFlag, fnCfgMapnsFlag}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, fnSecretnsFlag, fnCfgMapnsFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag}, Action: fnGet},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag}, Action: fnGetMeta},
 		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu}, Action: fnUpdate},
@@ -157,7 +159,7 @@ func main() {
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
 	htFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	htSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag}, Action: htCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, specSaveFlag}, Action: htCreate},
 		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag}, Action: htGet},
 		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, htFnNameFlag}, Action: htUpdate},
 		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: htDelete},
@@ -169,7 +171,7 @@ func main() {
 	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec ('0 30 * * *', '@every 5m', '@hourly')"}
 	ttFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	ttSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create Time trigger", Flags: []cli.Flag{ttNameFlag, ttFnNameFlag, ttCronFlag}, Action: ttCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create Time trigger", Flags: []cli.Flag{ttNameFlag, ttFnNameFlag, ttCronFlag, specSaveFlag}, Action: ttCreate},
 		{Name: "get", Usage: "Get Time trigger", Flags: []cli.Flag{}, Action: ttGet},
 		{Name: "update", Usage: "Update Time trigger", Flags: []cli.Flag{ttNameFlag, ttCronFlag, ttFnNameFlag}, Action: ttUpdate},
 		{Name: "delete", Usage: "Delete Time trigger", Flags: []cli.Flag{ttNameFlag}, Action: ttDelete},
@@ -184,7 +186,7 @@ func main() {
 	mqtRespTopicFlag := cli.StringFlag{Name: "resptopic", Usage: "Topic that the function response is sent on (optional; response discarded if unspecified)"}
 	mqtMsgContentType := cli.StringFlag{Name: "contenttype, c", Usage: "Content type of messages that publish to the topic (optional; uses \"application/json\" if unspecified)"}
 	mqtSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create Message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag, mqtMsgContentType}, Action: mqtCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create Message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag, mqtMsgContentType, specSaveFlag}, Action: mqtCreate},
 		{Name: "get", Usage: "Get message queue trigger", Flags: []cli.Flag{}, Action: mqtGet},
 		{Name: "update", Usage: "Update message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtTopicFlag, mqtRespTopicFlag, mqtFnNameFlag, mqtMsgContentType}, Action: mqtUpdate},
 		{Name: "delete", Usage: "Delete message queue trigger", Flags: []cli.Flag{mqtNameFlag}, Action: mqtDelete},
@@ -202,7 +204,7 @@ func main() {
 
 	envVersionFlag := cli.IntFlag{Name: "version", Usage: "Environment API version: defaults to 1 (means v1 interface)"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag}, Action: envCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, specSaveFlag}, Action: envCreate},
 		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag}, Action: envGet},
 		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag, envTerminationGracePeriodFlag}, Action: envUpdate},
 		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag}, Action: envDelete},
@@ -216,7 +218,7 @@ func main() {
 	wObjTypeFlag := cli.StringFlag{Name: "type", Usage: "Type of resource to watch (Pod, Service, etc.)"}
 	wLabelsFlag := cli.StringFlag{Name: "labels", Usage: "Label selector of the form a=b,c=d"}
 	wSubCommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create a watch", Flags: []cli.Flag{wFnNameFlag, wNamespaceFlag, wObjTypeFlag, wLabelsFlag}, Action: wCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create a watch", Flags: []cli.Flag{wFnNameFlag, wNamespaceFlag, wObjTypeFlag, wLabelsFlag, specSaveFlag}, Action: wCreate},
 		{Name: "get", Usage: "Get details about a watch", Flags: []cli.Flag{wNameFlag}, Action: wGet},
 		// TODO add update flag when supported
 		{Name: "delete", Usage: "Delete watch", Flags: []cli.Flag{wNameFlag}, Action: wDelete},
