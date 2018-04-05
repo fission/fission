@@ -119,6 +119,15 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
+func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fission.ExecutorType, error) {
+	fn, err := executor.fissionClient.Functions(meta.Namespace).Get(meta.Name)
+	if err != nil {
+		return "", err
+	}
+	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, nil
+
+}
+
 func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
@@ -129,14 +138,12 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		return nil, err
 	}
 
-	fn, err := executor.fissionClient.
-		Functions(meta.Namespace).
-		Get(meta.Name)
+	executorType, err := executor.getFunctionExecutorType(meta)
 	if err != nil {
 		return nil, err
 	}
 
-	switch fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
+	switch executorType {
 	case fission.ExecutorTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta)
 		return fs, err
@@ -180,6 +187,15 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 	executor.functionEnv.Set(crd.CacheKey(m), env)
 
 	return env, nil
+}
+
+// isValidAddress invokes isValidService or isValidPod depending on the type of executor
+func (executor *Executor) isValidAddress(fsvc *fscache.FuncSvc) bool {
+	if fsvc.Executor == fscache.NEWDEPLOY {
+		return executor.ndm.IsValidService(fsvc.Address)
+	} else {
+		return executor.gpm.IsValidPod(fsvc.KubernetesObjects, fsvc.Address)
+	}
 }
 
 func dumpStackTrace() {

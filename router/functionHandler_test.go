@@ -54,7 +54,9 @@ func TestFunctionProxying(t *testing.T) {
 	fmap := makeFunctionServiceMap(0)
 	fmap.assign(fn, backendURL)
 
-	fh := &functionHandler{fmap: fmap, function: fn}
+	fh := &functionHandler{fmap: fmap,
+		function: fn,
+	}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
 

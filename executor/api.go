@@ -57,13 +57,27 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 	w.Write([]byte(serviceName))
 }
 
+// getServiceForFunction first checks if this function's service is cached, if yes, it validates the address.
+// if it's a valid address, just returns it.
+// else, invalidates its cache entry and makes a new request to create a service for this function and finally responds
+// with new address or error.
+//
+// checking for the validity of the address causes a little more over-head than desired. but, it ensures that
+// stale addresses are not returned to the router.
+// To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
+// invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, error) {
 	// Check function -> svc cache
 	log.Printf("[%v] Checking for cached function service", m.Name)
 	fsvc, err := executor.fsCache.GetByFunction(m)
 	if err == nil {
-		// Cached, return svc address
-		return fsvc.Address, nil
+		if executor.isValidAddress(fsvc) {
+			// Cached, return svc address
+			return fsvc.Address, nil
+		} else {
+			log.Printf("[%v] Deleting cache entry for invalid address : %s", m.Name, fsvc.Address)
+			executor.fsCache.DeleteEntry(fsvc)
+		}
 	}
 
 	respChan := make(chan *createFuncServiceResponse)

@@ -87,3 +87,35 @@ func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
 	}
 	return *result
 }
+
+// IsNetworkDialError returns true if its a network dial error
+func IsNetworkDialError(err error) bool {
+	netErr, ok := err.(net.Error)
+	if !ok {
+		return false
+	}
+	netOpErr, ok := netErr.(*net.OpError)
+	if !ok {
+		return false
+	}
+	if netOpErr.Op == "dial" {
+		return true
+	}
+	return false
+}
+
+// IsReadyPod checks that all containers in a pod are ready and returns true if so
+func IsReadyPod(pod *apiv1.Pod) bool {
+	// since its a utility function, just ensuring there is no nil pointer exception
+	if pod == nil {
+		return false
+	}
+
+	for _, cStatus := range pod.Status.ContainerStatuses {
+		if !cStatus.Ready {
+			return false
+		}
+	}
+
+	return true
+}
