@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) TimeTriggerCreate(t *crd.TimeTrigger) (*metav1.ObjectMeta, error) {
-	errs := t.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("TimeTrigger", errs)
+	err := t.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("TimeTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)
@@ -84,9 +84,9 @@ func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*crd.TimeTrigger, error) 
 }
 
 func (c *Client) TimeTriggerUpdate(t *crd.TimeTrigger) (*metav1.ObjectMeta, error) {
-	errs := t.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("TimeTrigger", errs)
+	err := t.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("TimeTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)

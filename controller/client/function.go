@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) FunctionCreate(f *crd.Function) (*metav1.ObjectMeta, error) {
-	errs := f.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Function", errs)
+	err := f.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Function", err)
 	}
 
 	reqbody, err := json.Marshal(f)
@@ -98,9 +98,9 @@ func (c *Client) FunctionGetRawDeployment(m *metav1.ObjectMeta) ([]byte, error) 
 }
 
 func (c *Client) FunctionUpdate(f *crd.Function) (*metav1.ObjectMeta, error) {
-	errs := f.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Function", errs)
+	err := f.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Function", err)
 	}
 
 	reqbody, err := json.Marshal(f)

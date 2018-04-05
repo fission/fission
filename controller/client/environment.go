@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) EnvironmentCreate(env *crd.Environment) (*metav1.ObjectMeta, error) {
-	errs := env.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Environment", errs)
+	err := env.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Environment", err)
 	}
 
 	reqbody, err := json.Marshal(env)
@@ -84,9 +84,9 @@ func (c *Client) EnvironmentGet(m *metav1.ObjectMeta) (*crd.Environment, error) 
 }
 
 func (c *Client) EnvironmentUpdate(env *crd.Environment) (*metav1.ObjectMeta, error) {
-	errs := env.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Environment", errs)
+	err := env.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Environment", err)
 	}
 
 	reqbody, err := json.Marshal(env)

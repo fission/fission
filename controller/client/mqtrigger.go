@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) MessageQueueTriggerCreate(t *crd.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
-	errs := t.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("MessageQueueTrigger", errs)
+	err := t.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)
@@ -84,9 +84,9 @@ func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*crd.MessageQueue
 }
 
 func (c *Client) MessageQueueTriggerUpdate(mqTrigger *crd.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
-	errs := mqTrigger.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("MessageQueueTrigger", errs)
+	err := mqTrigger.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(mqTrigger)

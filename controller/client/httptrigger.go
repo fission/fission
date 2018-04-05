@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) HTTPTriggerCreate(t *crd.HTTPTrigger) (*metav1.ObjectMeta, error) {
-	errs := t.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("HTTPTrigger", errs)
+	err := t.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("HTTPTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)
@@ -84,9 +84,9 @@ func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*crd.HTTPTrigger, error) 
 }
 
 func (c *Client) HTTPTriggerUpdate(t *crd.HTTPTrigger) (*metav1.ObjectMeta, error) {
-	errs := t.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("HTTPTrigger", errs)
+	err := t.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("HTTPTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)

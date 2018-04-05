@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) PackageCreate(f *crd.Package) (*metav1.ObjectMeta, error) {
-	errs := f.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Package", errs)
+	err := f.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Package", err)
 	}
 
 	reqbody, err := json.Marshal(f)
@@ -84,9 +84,9 @@ func (c *Client) PackageGet(m *metav1.ObjectMeta) (*crd.Package, error) {
 }
 
 func (c *Client) PackageUpdate(f *crd.Package) (*metav1.ObjectMeta, error) {
-	errs := f.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("Package", errs)
+	err := f.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("Package", err)
 	}
 
 	reqbody, err := json.Marshal(f)

@@ -17,11 +17,11 @@ limitations under the License.
 package fission
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/hashicorp/go-multierror"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -55,12 +55,20 @@ func (e ValidationError) Error() string {
 	return errMsg
 }
 
-func AggregateValidationErrors(objName string, errs []error) error {
-	errMsg := fmt.Sprintf("Invalid fission %v object:\n", objName)
-	for _, err := range errs {
-		errMsg += fmt.Sprintf("* %v\n", err.Error())
+func AggregateValidationErrors(objName string, err error) error {
+	var result *multierror.Error
+
+	result = multierror.Append(result, err)
+
+	result.ErrorFormat = func(errs []error) string {
+		errMsg := fmt.Sprintf("Invalid fission %v object:\n", objName)
+		for _, err := range errs {
+			errMsg += fmt.Sprintf("* %v\n", err.Error())
+		}
+		return errMsg
 	}
-	return errors.New(errMsg)
+
+	return result.ErrorOrNil()
 }
 
 func MakeValidationErr(errType ErrorType, field string, val interface{}, detail ...string) ValidationError {
@@ -78,280 +86,330 @@ const (
 	ErrorInvalidObject
 )
 
-func ValidateKubeLabel(field string, labels map[string]string) (errs []error) {
+func ValidateKubeLabel(field string, labels map[string]string) error {
+	var result *multierror.Error
+
 	for k, v := range labels {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.key.%v", field, k), k, validation.IsQualifiedName(k)...))
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.value.%v", field, v), v, validation.IsValidLabelValue(v)...))
+		result = multierror.Append(result,
+			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.key.%v", field, k), k, validation.IsQualifiedName(k)...),
+			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.value.%v", field, v), v, validation.IsValidLabelValue(v)...))
 	}
-	return errs
+
+	return result.ErrorOrNil()
 }
 
-func ValidateKubePort(field string, port int) (errs []error) {
+func ValidateKubePort(field string, port int) error {
+	var result *multierror.Error
+
 	e := validation.IsValidPortNum(port)
 	if len(e) > 0 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, field, port, e...))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, field, port, e...))
 	}
-	return errs
+
+	return result.ErrorOrNil()
 }
 
-func ValidateKubeName(field string, val string) (errs []error) {
+func ValidateKubeName(field string, val string) error {
+	var result *multierror.Error
+
 	e := validation.IsDNS1123Label(val)
 	if len(e) > 0 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, field, val, e...))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, field, val, e...))
 	}
-	return errs
+
+	return result.ErrorOrNil()
 }
 
-func ValidateKubeReference(refName string, name string, namespace string) (errs []error) {
-	errs = append(errs, ValidateKubeName(fmt.Sprintf("%v.Name", refName), name)...)
-	errs = append(errs, ValidateKubeName(fmt.Sprintf("%v.Namespace", refName), namespace)...)
-	return errs
+func ValidateKubeReference(refName string, name string, namespace string) error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		ValidateKubeName(fmt.Sprintf("%v.Name", refName), name),
+		ValidateKubeName(fmt.Sprintf("%v.Namespace", refName), namespace))
+
+	return result.ErrorOrNil()
 }
 
-func (checksum Checksum) Validate() (errs []error) {
+func (checksum Checksum) Validate() error {
+	var result *multierror.Error
+
 	switch checksum.Type {
 	case ChecksumTypeSHA256: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "Checksum.Type", checksum.Type, "not a valid checksum type"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "Checksum.Type", checksum.Type, "not a valid checksum type"))
 	}
-	return errs
+
+	return result.ErrorOrNil()
 }
 
-func (archive Archive) Validate() (errs []error) {
+func (archive Archive) Validate() error {
+	var result *multierror.Error
+
 	if len(archive.Type) > 0 {
 		switch archive.Type {
 		case ArchiveTypeLiteral, ArchiveTypeUrl: // no op
 		default:
-			errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
+			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
 		}
 	}
 
 	if archive.Checksum != (Checksum{}) {
-		errs = append(errs, archive.Checksum.Validate()...)
+		result = multierror.Append(result, archive.Checksum.Validate())
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (ref EnvironmentReference) Validate() (errs []error) {
-	errs = append(errs, ValidateKubeReference("EnvironmentReference", ref.Name, ref.Namespace)...)
-	return errs
+func (ref EnvironmentReference) Validate() error {
+	var result *multierror.Error
+	result = multierror.Append(result, ValidateKubeReference("EnvironmentReference", ref.Name, ref.Namespace))
+	return result.ErrorOrNil()
 }
 
-func (ref SecretReference) Validate() (errs []error) {
-	errs = append(errs, ValidateKubeReference("SecretReference", ref.Name, ref.Namespace)...)
-	return errs
+func (ref SecretReference) Validate() error {
+	var result *multierror.Error
+	result = multierror.Append(result, ValidateKubeReference("SecretReference", ref.Name, ref.Namespace))
+	return result.ErrorOrNil()
 }
 
-func (ref ConfigMapReference) Validate() (errs []error) {
-	errs = append(errs, ValidateKubeReference("ConfigMapReference", ref.Name, ref.Namespace)...)
-	return errs
+func (ref ConfigMapReference) Validate() error {
+	var result *multierror.Error
+	result = multierror.Append(result, ValidateKubeReference("ConfigMapReference", ref.Name, ref.Namespace))
+	return result.ErrorOrNil()
 }
 
-func (spec PackageSpec) Validate() (errs []error) {
-	errs = append(errs, spec.Environment.Validate()...)
+func (spec PackageSpec) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result, spec.Environment.Validate())
 
 	for _, r := range []Archive{spec.Source, spec.Deployment} {
 		if len(r.URL) > 0 || len(r.Literal) > 0 {
-			errs = append(errs, r.Validate()...)
+			result = multierror.Append(result, r.Validate())
 		}
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (sts PackageStatus) Validate() (errs []error) {
+func (sts PackageStatus) Validate() error {
+	var result *multierror.Error
+
 	switch sts.BuildStatus {
 	case BuildStatusPending, BuildStatusRunning, BuildStatusSucceeded, BuildStatusFailed, BuildStatusNone: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "PackageStatus.BuildStatus", sts.BuildStatus, "not a valid build status"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "PackageStatus.BuildStatus", sts.BuildStatus, "not a valid build status"))
 	}
-	return errs
+
+	return result.ErrorOrNil()
 }
 
-func (ref PackageRef) Validate() (errs []error) {
-	errs = append(errs, ValidateKubeReference("PackageRef", ref.Name, ref.Namespace)...)
-	return errs
+func (ref PackageRef) Validate() error {
+	var result *multierror.Error
+	result = multierror.Append(result, ValidateKubeReference("PackageRef", ref.Name, ref.Namespace))
+	return result.ErrorOrNil()
 }
 
-func (ref FunctionPackageRef) Validate() (errs []error) {
-	errs = append(errs, ref.PackageRef.Validate()...)
-	return errs
+func (ref FunctionPackageRef) Validate() error {
+	var result *multierror.Error
+	result = multierror.Append(result, ref.PackageRef.Validate())
+	return result.ErrorOrNil()
 }
 
-func (spec FunctionSpec) Validate() (errs []error) {
+func (spec FunctionSpec) Validate() error {
+	var result *multierror.Error
+
 	if spec.Environment != (EnvironmentReference{}) {
-		errs = append(errs, spec.Environment.Validate()...)
+		result = multierror.Append(result, spec.Environment.Validate())
 	}
 
 	if spec.Package != (FunctionPackageRef{}) {
-		errs = append(errs, spec.Package.Validate()...)
+		result = multierror.Append(result, spec.Package.Validate())
 	}
 
 	for _, s := range spec.Secrets {
-		errs = append(errs, s.Validate()...)
+		result = multierror.Append(result, s.Validate())
 	}
 	for _, c := range spec.ConfigMaps {
-		errs = append(errs, c.Validate()...)
+		result = multierror.Append(result, c.Validate())
 	}
 
 	if spec.InvokeStrategy != (InvokeStrategy{}) {
-		errs = append(errs, spec.InvokeStrategy.Validate()...)
+		result = multierror.Append(result, spec.InvokeStrategy.Validate())
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (is InvokeStrategy) Validate() (errs []error) {
+func (is InvokeStrategy) Validate() error {
+	var result *multierror.Error
+
 	switch is.StrategyType {
 	case StrategyTypeExecution: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid valid strategy"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid valid strategy"))
 	}
 
-	errs = append(errs, is.ExecutionStrategy.Validate()...)
+	result = multierror.Append(result, is.ExecutionStrategy.Validate())
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (es ExecutionStrategy) Validate() (errs []error) {
+func (es ExecutionStrategy) Validate() error {
+	var result *multierror.Error
+
 	switch es.ExecutorType {
 	case ExecutorTypeNewdeploy, ExecutorTypePoolmgr: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
 	}
 
 	if es.MinScale < 0 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater or equal to 0"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater or equal to 0"))
 	}
 
 	if es.MaxScale < es.MinScale {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater or equal to minimum scale"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater or equal to minimum scale"))
 	}
 
 	if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (ref FunctionReference) Validate() (errs []error) {
+func (ref FunctionReference) Validate() error {
+	var result *multierror.Error
+
 	switch ref.Type {
 	case FunctionReferenceTypeFunctionName: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "FunctionReference.Type", ref.Type, "not a valid function reference type"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "FunctionReference.Type", ref.Type, "not a valid function reference type"))
 	}
 
-	errs = append(errs, ValidateKubeName("FunctionReference.Name", ref.Name)...)
+	result = multierror.Append(result, ValidateKubeName("FunctionReference.Name", ref.Name))
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (runtime Runtime) Validate() (errs []error) {
+func (runtime Runtime) Validate() error {
+	var result *multierror.Error
+
 	if runtime.LoadEndpointPort > 0 {
-		errs = append(errs, ValidateKubePort("Runtime.LoadEndpointPort", int(runtime.LoadEndpointPort))...)
+		result = multierror.Append(result, ValidateKubePort("Runtime.LoadEndpointPort", int(runtime.LoadEndpointPort)))
 	}
 
 	if runtime.FunctionEndpointPort > 0 {
-		errs = append(errs, ValidateKubePort("Runtime.FunctionEndpointPort", int(runtime.FunctionEndpointPort))...)
+		result = multierror.Append(result, ValidateKubePort("Runtime.FunctionEndpointPort", int(runtime.FunctionEndpointPort)))
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (builder Builder) Validate() (errs []error) {
+func (builder Builder) Validate() error {
 	// do nothing for now
 	return nil
 }
 
-func (spec EnvironmentSpec) Validate() (errs []error) {
+func (spec EnvironmentSpec) Validate() error {
+	var result *multierror.Error
+
 	if spec.Version < 1 && spec.Version > 3 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Version", spec.Version, "not a valid environment version"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Version", spec.Version, "not a valid environment version"))
 	}
 
-	errs = append(errs, spec.Runtime.Validate()...)
+	result = multierror.Append(result, spec.Runtime.Validate())
 
 	if spec.Builder != (Builder{}) {
-		errs = append(errs, spec.Builder.Validate()...)
+		result = multierror.Append(result, spec.Builder.Validate())
 	}
 
 	if len(spec.AllowedFunctionsPerContainer) > 0 {
 		switch spec.AllowedFunctionsPerContainer {
 		case AllowedFunctionsPerContainerSingle, AllowedFunctionsPerContainerInfinite: // no op
 		default:
-			errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "EnvironmentSpec.AllowedFunctionsPerContainer", spec.AllowedFunctionsPerContainer, "not a valid value"))
+			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "EnvironmentSpec.AllowedFunctionsPerContainer", spec.AllowedFunctionsPerContainer, "not a valid value"))
 		}
 	}
 
 	if spec.Poolsize < 0 {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "Poolsize must be greater or equal to 0"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "Poolsize must be greater or equal to 0"))
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (spec HTTPTriggerSpec) Validate() (errs []error) {
+func (spec HTTPTriggerSpec) Validate() error {
+	var result *multierror.Error
+
 	switch spec.Method {
 	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
 		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
 	}
 
-	errs = append(errs, spec.FunctionReference.Validate()...)
+	result = multierror.Append(result, spec.FunctionReference.Validate())
 
 	if len(spec.Host) > 0 {
 		e := validation.IsDNS1123Subdomain(spec.Host)
 		if len(e) > 0 {
-			errs = append(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
 		}
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (spec KubernetesWatchTriggerSpec) Validate() (errs []error) {
+func (spec KubernetesWatchTriggerSpec) Validate() error {
+	var result *multierror.Error
+
 	switch strings.ToUpper(spec.Type) {
 	case "POD", "SERVICE", "REPLICATIONCONTROLLER", "JOB":
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "KubernetesWatchTriggerSpec.Type", spec.Type, "not a valid supported type"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "KubernetesWatchTriggerSpec.Type", spec.Type, "not a valid supported type"))
 	}
 
-	errs = append(errs, ValidateKubeName("KubernetesWatchTriggerSpec.Namespace", spec.Namespace)...)
-	errs = append(errs, ValidateKubeLabel("KubernetesWatchTriggerSpec.LabelSelector", spec.LabelSelector)...)
-	errs = append(errs, spec.FunctionReference.Validate()...)
+	result = multierror.Append(result,
+		ValidateKubeName("KubernetesWatchTriggerSpec.Namespace", spec.Namespace),
+		ValidateKubeLabel("KubernetesWatchTriggerSpec.LabelSelector", spec.LabelSelector),
+		spec.FunctionReference.Validate())
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (spec MessageQueueTriggerSpec) Validate() (errs []error) {
-	errs = append(errs, spec.FunctionReference.Validate()...)
+func (spec MessageQueueTriggerSpec) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result, spec.FunctionReference.Validate())
 
 	switch spec.MessageQueueType {
 	case MessageQueueTypeNats, MessageQueueTypeASQ: // no op
 	default:
-		errs = append(errs, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
+		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	}
 
 	if !IsTopicValid(spec.MessageQueueType, spec.Topic) {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
 	}
 
 	if len(spec.ResponseTopic) > 0 && !IsTopicValid(spec.MessageQueueType, spec.ResponseTopic) {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 	}
 
-	return errs
+	return result.ErrorOrNil()
 }
 
-func (spec TimeTriggerSpec) Validate() (errs []error) {
+func (spec TimeTriggerSpec) Validate() error {
+	var result *multierror.Error
+
 	err := IsValidCronSpec(spec.Cron)
 	if err != nil {
-		errs = append(errs, MakeValidationErr(ErrorInvalidValue, "TimeTriggerSpec.Cron", spec.Cron, "not a valid cron spec"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "TimeTriggerSpec.Cron", spec.Cron, "not a valid cron spec"))
 	}
 
-	errs = append(errs, spec.FunctionReference.Validate()...)
+	result = multierror.Append(result, spec.FunctionReference.Validate())
 
-	return errs
+	return result.ErrorOrNil()
 }

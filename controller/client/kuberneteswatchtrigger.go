@@ -29,9 +29,9 @@ import (
 )
 
 func (c *Client) WatchCreate(w *crd.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
-	errs := w.Validate()
-	if len(errs) > 0 {
-		return nil, fission.AggregateValidationErrors("KubernetesWatchTrigger", errs)
+	err := w.Validate()
+	if err != nil {
+		return nil, fission.AggregateValidationErrors("KubernetesWatchTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(w)
