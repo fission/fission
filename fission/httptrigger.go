@@ -109,6 +109,14 @@ func htCreate(c *cli.Context) error {
 		},
 	}
 
+	// if we're writing a spec, don't call the API
+	if c.Bool("spec") {
+		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
+		err := specSave(*ht, specFile)
+		checkErr(err, "create HTTP trigger spec")
+		return nil
+	}
+
 	_, err := client.HTTPTriggerCreate(ht)
 	checkErr(err, "create HTTP trigger")
 

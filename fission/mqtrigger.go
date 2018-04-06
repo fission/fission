@@ -74,7 +74,7 @@ func mqtCreate(c *cli.Context) error {
 
 	checkMQTopicAvailability(mqType, topic, respTopic)
 
-	mqt := crd.MessageQueueTrigger{
+	mqt := &crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      mqtName,
 			Namespace: metav1.NamespaceDefault,
@@ -91,7 +91,15 @@ func mqtCreate(c *cli.Context) error {
 		},
 	}
 
-	_, err := client.MessageQueueTriggerCreate(&mqt)
+	// if we're writing a spec, don't call the API
+	if c.Bool("spec") {
+		specFile := fmt.Sprintf("mqtrigger-%v.yaml", mqtName)
+		err := specSave(*mqt, specFile)
+		checkErr(err, "create message queue trigger spec")
+		return nil
+	}
+
+	_, err := client.MessageQueueTriggerCreate(mqt)
 	checkErr(err, "create message queue trigger")
 
 	fmt.Printf("trigger '%s' created\n", mqtName)
