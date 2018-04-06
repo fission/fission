@@ -14,7 +14,6 @@ cleanup() {
     if [ -e "/tmp/file" ]; then
         rm -rf /tmp/file
     fi
-    ps aux | grep -i "kubectl port-forward controller" | awk {'print $2'} | xargs kill -9 || true
 }
 
 create_archive() {
@@ -40,18 +39,10 @@ get_archive_url_from_package() {
     url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
-port_forward_controller_pod() {
-    log "Trying to port forward controller pod"
-    controller_pod=`kubectl get pods -n $FISSION_NAMESPACE| grep controller| tr -s " "| cut -d" " -f1`
-    controller_port=`kubectl get svc controller -n $FISSION_NAMESPACE -ojsonpath='{.spec.ports[0].targetPort}'`
-    log "controller pod: $controller_pod, controller port : $controller_port"
-    kubectl port-forward $controller_pod 9999:8888 -n $FISSION_NAMESPACE &
-    sleep 4
-}
-
 get_archive_from_storage() {
     storage_service_url=$1
-    controller_proxy_url=`echo $storage_service_url | sed -e "s/storagesvc.$FISSION_NAMESPACE/127.0.0.1:9999\/proxy\/storage/"`
+    controller_ip=$(kubectl -n $FISSION_NAMESPACE get svc controller -o jsonpath='{...ip}')
+    controller_proxy_url=`echo $storage_service_url | sed -e "s/storagesvc.$FISSION_NAMESPACE/$controller_ip\/proxy\/storage/"`
     log "controller_proxy_url=$controller_proxy_url"
     http_status=`curl -sw "%{http_code}" $controller_proxy_url -o /tmp/file`
     echo "http_status: $http_status"
@@ -89,9 +80,6 @@ main() {
     delete_package $pkg_1
     delete_package $pkg_2
     log "deleted packages : $pkg_1 $pkg_2"
-
-    # port forward controller pod
-    port_forward_controller_pod
 
     # curl on the archive url
     get_archive_from_storage $url_1

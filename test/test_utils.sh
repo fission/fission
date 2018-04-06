@@ -148,6 +148,18 @@ clean_tpr_crd_resources() {
     kubectl --namespace default get crd| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete crd @"  || true
 }
 
+set_environment() {
+    id=$1
+    ns=f-$id
+
+    export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
+    export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
+    export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}')"
+
+    # set path to include cli
+    export PATH=$ROOT/fission:$PATH
+}
+
 generate_test_id() {
     echo $(date|md5sum|cut -c1-6)
 }
@@ -164,11 +176,12 @@ helm_install_fission() {
     fluentdImageTag=${9}
     pruneInterval="${10}"
     routerServiceType=${11}
+    serviceType=${12}
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType
 
     timeout 30 bash -c "helm_setup"
 
@@ -427,6 +440,7 @@ install_and_test() {
     fluentdImageTag=$6
     pruneInterval=$7
     routerServiceType=$8
+    serviceType=$9
 
     controllerPort=31234
     routerPort=31235
@@ -435,7 +449,7 @@ install_and_test() {
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType
+    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType $serviceType
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
@@ -444,14 +458,7 @@ install_and_test() {
 	    exit 1
     fi
 
-    export PATH=$ROOT/fission:$PATH
-
-    port_forward_services $id "router" 8888
-    port_forward_services $id "nats-streaming" 4222
-
-    export FISSION_ROUTER="127.0.0.1:8888"
-    export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@127.0.0.1:4222"
-
+    set_environment $id
     run_all_tests $id
 
     dump_logs $id
