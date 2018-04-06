@@ -155,7 +155,6 @@ set_environment() {
     export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
     export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
     export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
-    echo "$FISSION_NATS_STREAMING_URL"
 
     # set path to include cli
     export PATH=$ROOT/fission:$PATH
