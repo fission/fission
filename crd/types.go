@@ -17,6 +17,7 @@ limitations under the License.
 package crd
 
 import (
+	"github.com/hashicorp/go-multierror"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -151,14 +152,14 @@ func (ht *HTTPTrigger) GetObjectKind() schema.ObjectKind {
 func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
 	return &w.TypeMeta
 }
-func (w *TimeTrigger) GetObjectKind() schema.ObjectKind {
-	return &w.TypeMeta
+func (t *TimeTrigger) GetObjectKind() schema.ObjectKind {
+	return &t.TypeMeta
 }
-func (w *MessageQueueTrigger) GetObjectKind() schema.ObjectKind {
-	return &w.TypeMeta
+func (m *MessageQueueTrigger) GetObjectKind() schema.ObjectKind {
+	return &m.TypeMeta
 }
-func (w *Package) GetObjectKind() schema.ObjectKind {
-	return &w.TypeMeta
+func (p *Package) GetObjectKind() schema.ObjectKind {
+	return &p.TypeMeta
 }
 
 func (f *Function) GetObjectMeta() metav1.Object {
@@ -173,14 +174,14 @@ func (ht *HTTPTrigger) GetObjectMeta() metav1.Object {
 func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
 	return &w.Metadata
 }
-func (w *TimeTrigger) GetObjectMeta() metav1.Object {
-	return &w.Metadata
+func (t *TimeTrigger) GetObjectMeta() metav1.Object {
+	return &t.Metadata
 }
-func (w *MessageQueueTrigger) GetObjectMeta() metav1.Object {
-	return &w.Metadata
+func (m *MessageQueueTrigger) GetObjectMeta() metav1.Object {
+	return &m.Metadata
 }
-func (w *Package) GetObjectMeta() metav1.Object {
-	return &w.Metadata
+func (p *Package) GetObjectMeta() metav1.Object {
+	return &p.Metadata
 }
 
 func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
@@ -198,11 +199,11 @@ func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
 func (wl *TimeTriggerList) GetObjectKind() schema.ObjectKind {
 	return &wl.TypeMeta
 }
-func (wl *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
-	return &wl.TypeMeta
+func (ml *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
+	return &ml.TypeMeta
 }
-func (wl *PackageList) GetObjectKind() schema.ObjectKind {
-	return &wl.TypeMeta
+func (pl *PackageList) GetObjectKind() schema.ObjectKind {
+	return &pl.TypeMeta
 }
 
 func (fl *FunctionList) GetListMeta() metav1.List {
@@ -220,9 +221,141 @@ func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.List {
 func (wl *TimeTriggerList) GetListMeta() metav1.List {
 	return &wl.Metadata
 }
-func (wl *MessageQueueTriggerList) GetListMeta() metav1.List {
-	return &wl.Metadata
+func (ml *MessageQueueTriggerList) GetListMeta() metav1.List {
+	return &ml.Metadata
 }
-func (wl *PackageList) GetListMeta() metav1.List {
-	return &wl.Metadata
+func (pl *PackageList) GetListMeta() metav1.List {
+	return &pl.Metadata
+}
+
+func validateMetadata(field string, m metav1.ObjectMeta) error {
+	return fission.ValidateKubeReference(field, m.Name, m.Namespace)
+}
+
+func (p *Package) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("Package", p.Metadata),
+		p.Spec.Validate(),
+		p.Status.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (pl *PackageList) Validate() error {
+	var result *multierror.Error
+	// not validate ListMeta
+	for _, p := range pl.Items {
+		result = multierror.Append(result, p.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (f *Function) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("Function", f.Metadata),
+		f.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (fl *FunctionList) Validate() error {
+	var result *multierror.Error
+	for _, f := range fl.Items {
+		result = multierror.Append(result, f.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (e *Environment) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("Environment", e.Metadata),
+		e.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (el *EnvironmentList) Validate() error {
+	var result *multierror.Error
+	for _, e := range el.Items {
+		result = multierror.Append(result, e.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (h *HTTPTrigger) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("HTTPTrigger", h.Metadata),
+		h.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (hl *HTTPTriggerList) Validate() error {
+	var result *multierror.Error
+	for _, h := range hl.Items {
+		result = multierror.Append(result, h.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (k *KubernetesWatchTrigger) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("KubernetesWatchTrigger", k.Metadata),
+		k.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (kl *KubernetesWatchTriggerList) Validate() error {
+	var result *multierror.Error
+	for _, k := range kl.Items {
+		result = multierror.Append(result, k.Validate())
+	}
+	return result
+}
+
+func (t *TimeTrigger) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("TimeTrigger", t.Metadata),
+		t.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (tl *TimeTriggerList) Validate() error {
+	var result *multierror.Error
+	for _, t := range tl.Items {
+		result = multierror.Append(result, t.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (m *MessageQueueTrigger) Validate() error {
+	var result *multierror.Error
+
+	result = multierror.Append(result,
+		validateMetadata("MessageQueueTrigger", m.Metadata),
+		m.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (ml *MessageQueueTriggerList) Validate() error {
+	var result *multierror.Error
+	for _, m := range ml.Items {
+		result = multierror.Append(result, m.Validate())
+	}
+	return result.ErrorOrNil()
 }
