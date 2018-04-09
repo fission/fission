@@ -67,6 +67,13 @@ Over a period of time as tests grow, there will be unit, smkoe, integration, per
 ### Measuring test times
 
 [Good to have, not a must] Measuring time for tests and reporting somewhere helps over time to monitor trends. Although this job is better done by performance/benchmark tests so it is not a strict requirement
+
+### Cleaner Logging
+It would be good to have cleaner/relevant logging as part of build & test. For example something that Ginkgo framework does is it shows error logs only for failed tests.
+### Tests in Parallel 
+
+It would be good to be able to run tests in parallel.
+
 ## Evalutaing the tools/alternatives
 ### BATS
 
@@ -93,6 +100,9 @@ $ bats addition.bats
 ### Go Test
 
 The testing package of Go is fairly understood so won't go into much details here. Go 1.7 onwards there is support for setup & teardown parts and parallelism etc. 
+#### Go's Exec Library
+To Be Explored and updated
+
 ### Using CLI package
 
 Currently we build a CLI and then execute the tests. The tests basically call one of functions from CLI package. If we decide to use a go lang based framework, then we can import the CLI package and then call those functions  by providing them context. This is as good as calling the Fission from CLI, with added benefit of programmibility of Go langugage.
@@ -169,7 +179,6 @@ Eventually(session.Out).Should(gbytes.Say("hello [A-Za-z], world"))
 Ginkgo: http://onsi.github.io/ginkgo/
 Gomega: http://onsi.github.io/gomega/
 ## Thoughts & Next actions
-
 
 
 ## References
