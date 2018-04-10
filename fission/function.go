@@ -114,6 +114,21 @@ func getTargetCPU(c *cli.Context) int {
 	return targetCPU
 }
 
+// getEnvName returns the former environment name before the latter.
+// And fatal if both are empty. https://github.com/fission/fission/issues/617
+func getEnvName(env1 string, env2 string) string {
+	if len(env1) == 0 && len(env2) == 0 {
+		fatal("Need --env argument.")
+	}
+
+	// return first environment name if its not empty
+	if len(env1) > 0 {
+		return env1
+	}
+
+	return env2
+}
+
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
@@ -150,6 +165,8 @@ func fnCreate(c *cli.Context) error {
 	secretNameSpace := c.String("secretNamespace")
 	cfgMapNameSpace := c.String("configmapNamespace")
 
+	envName = c.String("env")
+
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -158,13 +175,10 @@ func fnCreate(c *cli.Context) error {
 		})
 		checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
 		pkgMetadata = &pkg.Metadata
-		envName = pkg.Spec.Environment.Name
+		envName = getEnvName(envName, pkg.Spec.Environment.Name)
 	} else {
 		// need to specify environment for creating new package
-		envName = c.String("env")
-		if len(envName) == 0 {
-			fatal("Need --env argument.")
-		}
+		envName = getEnvName(envName, "")
 
 		// examine existence of given environment
 		_, err := client.EnvironmentGet(&metav1.ObjectMeta{

@@ -227,7 +227,7 @@ func main() {
 	// packages
 	pkgNameFlag := cli.StringFlag{Name: "name", Usage: "Package name"}
 	pkgForceFlag := cli.BoolFlag{Name: "force, f", Usage: "Force update a package even if it is used by one or more functions"}
-	pkgEnvironmentFlag := cli.StringFlag{Name: "env", Usage: "Environment name"}
+	pkgEnvironmentFlag := cli.StringFlag{Name: "env", Usage: "Environment name (required if source archive is not empty)"}
 	pkgSrcArchiveFlag := cli.StringFlag{Name: "sourcearchive, src", Usage: "Local path or URL for source archive"}
 	pkgDeployArchiveFlag := cli.StringFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
 	pkgBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for builder to run with"}

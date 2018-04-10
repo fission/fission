@@ -65,12 +65,13 @@ func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 func pkgCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	srcArchiveName := c.String("src")
+
 	envName := c.String("env")
-	if len(envName) == 0 {
+	if len(srcArchiveName) > 0 && len(envName) == 0 {
 		fatal("Need --env argument.")
 	}
 
-	srcArchiveName := c.String("src")
 	deployArchiveName := c.String("deploy")
 	buildcmd := c.String("buildcmd")
 
@@ -98,9 +99,8 @@ func pkgUpdate(c *cli.Context) error {
 	deployArchiveName := c.String("deploy")
 	buildcmd := c.String("buildcmd")
 
-	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
-		len(envName) == 0 && len(buildcmd) == 0 {
-		fatal("Need --env or --src or --deploy or --buildcmd argument.")
+	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 && len(buildcmd) == 0 {
+		fatal("Need --src or --deploy or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -115,6 +115,8 @@ func pkgUpdate(c *cli.Context) error {
 	if !force && len(fnList) > 1 {
 		fatal("Package is used by multiple functions, use --force to force update")
 	}
+
+	envName = getEnvName(envName, pkg.Spec.Environment.Name)
 
 	newPkgMeta := updatePackage(client, pkg,
 		envName, srcArchiveName, deployArchiveName, buildcmd)
@@ -263,7 +265,7 @@ func pkgInfo(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Metadata.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
+	fmt.Fprintf(w, "%v\t%v\n", "Build Environment:", pkg.Spec.Environment.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
 	fmt.Fprintf(w, "%v\n%v", "Build Logs:", pkg.Status.BuildLog)
 	w.Flush()
@@ -282,7 +284,7 @@ func pkgList(c *cli.Context) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
+	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "BUILD ENV")
 	if listOrphans {
 		for _, pkg := range pkgList {
 			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
