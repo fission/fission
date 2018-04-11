@@ -1,24 +1,34 @@
-# 0.7.0
-[Documentation](http://fission.io/docs/0.7.0/)
-## Downloads for 0.7.0
+# 0.7.1
+[Documentation](http://fission.io/docs/0.7.1/)
+## Downloads for 0.7.1
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-core-0.7.0.tgz](https://github.com/fission/fission/releases/download/0.7.0/fission-core-0.7.0.tgz) | `82aa772f89a3b1c1e2527b4d1b8061be66595565fb9878bc31a7c66665b4623b`
-[fission-all-0.7.0.tgz](https://github.com/fission/fission/releases/download/0.7.0/fission-all-0.7.0.tgz) | `747535045cf78dccc7b4d0ab911f4f0581ea517fd9d901b2c930ddcbf2792b19`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-osx) | `e8783502fe74dea516e3c208fb7da1df78ee7c55df380a28eb6c46c0ae075e9f`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-linux) | `b3aa0fcb89fb56a7b0f58e02a00378f0d374bcc4c5acc1b1d914a60f802e8019`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.7.0/fission-cli-windows.exe) | `400326c9dc4712e12d8b33fee708b285356b8d9aac21c811144d271eeb791640`
+[fission-core-0.7.1.tgz](https://github.com/fission/fission/releases/download/0.7.1/fission-core-0.7.1.tgz) | `5d5606c79b5d83c2e88c371b6bea4a49a599f1a1e26674db3388a63278a47c2c`
+[fission-all-0.7.1.tgz](https://github.com/fission/fission/releases/download/0.7.1/fission-all-0.7.1.tgz) | `0ea6887f39c0f59463b49e632294152c926b62b5afc65202c80045ff71735b05`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-osx) | `765b35bd1e4565b9819bed157ca0206a0e5217394d0b253a0cdd9a318ef4d9a5`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-linux) | `5eacdff0a0f3d6d3a1c2aa8d6164bc6524b1f001298cb2e82b60cf1c762a5a9e`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-windows.exe) | `c237b1ee1a8f2b26038555388a438e4fff5725c90d4128baaa32a77ccf990d2e`
 
 # Change Log
 
-## [0.7.0](https://github.com/fission/fission/tree/0.7.0) (2018-04-02)
-[Full Changelog](https://github.com/fission/fission/compare/0.7.0...0.7.0)
+## [0.7.1](https://github.com/fission/fission/tree/0.7.1) (2018-04-10)
+[Full Changelog](https://github.com/fission/fission/compare/0.7.0...0.7.1)
 
 **Merged pull requests:**
 
+- Prevent releasing idle connections because transport is shared. [\#609](https://github.com/fission/fission/pull/609) ([smruthi2187](https://github.com/smruthi2187))
+- Fix components crash before crds creation [\#602](https://github.com/fission/fission/pull/602) ([life1347](https://github.com/life1347))
+- updates to changelog. [\#598](https://github.com/fission/fission/pull/598) ([smruthi2187](https://github.com/smruthi2187))
 - changes needed for release 0.7.0 [\#597](https://github.com/fission/fission/pull/597) ([smruthi2187](https://github.com/smruthi2187))
+- `fission X create --spec` flags for env and trigger create commands [\#607](https://github.com/fission/fission/pull/607) ([soamvasani](https://github.com/soamvasani))
+- Updating releasing guideliness with a few more details. [\#599](https://github.com/fission/fission/pull/599) ([smruthi2187](https://github.com/smruthi2187))
+- Add deprecated message to subcommand pods [\#592](https://github.com/fission/fission/pull/592) ([life1347](https://github.com/life1347))
+- Add validate function to crd resource and do validate before creation/update [\#580](https://github.com/fission/fission/pull/580) ([life1347](https://github.com/life1347))
+- Invalidate stale router cache entry with podIP's for deleted pods. [\#546](https://github.com/fission/fission/pull/546) ([smruthi2187](https://github.com/smruthi2187))
+- Use a separate controller loop to watch functions change and create a service [\#544](https://github.com/fission/fission/pull/544) ([life1347](https://github.com/life1347))
+- E2E test for NATS-streaming trigger [\#338](https://github.com/fission/fission/pull/338) ([soamvasani](https://github.com/soamvasani))
 
 ## [0.7.0](https://github.com/fission/fission/tree/0.7.0) (2018-04-02)
 [Full Changelog](https://github.com/fission/fission/compare/0.6.1...0.7.0)
