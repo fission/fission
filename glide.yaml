@@ -42,14 +42,12 @@ import:
   subpackages:
   - client/v2
 - package: github.com/robfig/cron
-
 - package: github.com/nats-io/go-nats-streaming
   version: ^v0.3.4
 - package: github.com/nats-io/nats-streaming-server
   version: ^v0.4.0
 - package: github.com/graymeta/stow
 - package: github.com/mholt/archiver
-<<<<<<< 449f49515a80375513f963cd90ec38474d7d947f
 - package: github.com/pkg/errors
 - package: github.com/fsnotify/fsnotify
 - package: github.com/Azure/azure-sdk-for-go
