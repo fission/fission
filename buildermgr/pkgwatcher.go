@@ -67,24 +67,24 @@ func makePackageWatcher(fissionClient *crd.FissionClient, getter k8sCache.Getter
 // 5. Update package resource in package ref of functions that share the same package
 // 6. Update package status to succeed state
 // *. Update package status to failed state,if any one of steps above failed/time out
-func (pkgw *packageWatcher) build(buildCache *cache.Cache, pkg *crd.Package) {
+func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) {
 
 	// Ignore non-pending state packages.
-	if pkg.Status.BuildStatus != fission.BuildStatusPending {
+	if srcpkg.Status.BuildStatus != fission.BuildStatusPending {
 		return
 	}
 
 	// Ignore duplicate build requests
-	key := fmt.Sprintf("%v-%v", pkg.Metadata.Name, pkg.Metadata.ResourceVersion)
-	err, _ := buildCache.Set(key, pkg)
+	key := fmt.Sprintf("%v-%v", srcpkg.Metadata.Name, srcpkg.Metadata.ResourceVersion)
+	err, _ := buildCache.Set(key, srcpkg)
 	if err != nil {
 		return
 	}
 	defer buildCache.Delete(key)
 
-	log.Printf("Start build for package %v with resource version %v", pkg.Metadata.Name, pkg.Metadata.ResourceVersion)
+	log.Printf("Start build for package %v with resource version %v", srcpkg.Metadata.Name, srcpkg.Metadata.ResourceVersion)
 
-	pkg, err = updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusRunning, "", nil)
+	pkg, err := updatePackage(pkgw.fissionClient, srcpkg, fission.BuildStatusRunning, "", nil)
 	if err != nil {
 		e := fmt.Sprintf("Error setting package pending state: %v", err)
 		log.Println(e)
