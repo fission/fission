@@ -45,6 +45,11 @@ const (
 	LABEL_ENV_RESOURCEVERSION = "envResourceVersion"
 )
 
+var (
+	deletePropagation = metav1.DeletePropagationBackground
+	delOpt            = metav1.DeleteOptions{PropagationPolicy: &deletePropagation}
+)
+
 type (
 	builderInfo struct {
 		envMetadata *metav1.ObjectMeta
@@ -341,17 +346,9 @@ func (envw *environmentWatcher) deleteBuilderService(sel map[string]string) erro
 	}
 	for _, svc := range svcList {
 		log.Printf("Removing builder service: %v", svc.ObjectMeta.Name)
-
-		// cascading deletion
-		// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/
-		falseVal := false
-		delOpt := &metav1.DeleteOptions{
-			OrphanDependents: &falseVal,
-		}
-
 		err = envw.kubernetesClient.
 			Services(envw.builderNamespace).
-			Delete(svc.ObjectMeta.Name, delOpt)
+			Delete(svc.ObjectMeta.Name, nil)
 		if err != nil {
 			return fmt.Errorf("Error deleting builder service: %v", err)
 		}
@@ -366,15 +363,9 @@ func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string) e
 	}
 	for _, deploy := range deployList {
 		log.Printf("Removing builder deployment: %v", deploy.ObjectMeta.Name)
-
-		falseVal := false
-		delOpt := &metav1.DeleteOptions{
-			OrphanDependents: &falseVal,
-		}
-
 		err = envw.kubernetesClient.ExtensionsV1beta1().
 			Deployments(envw.builderNamespace).
-			Delete(deploy.ObjectMeta.Name, delOpt)
+			Delete(deploy.ObjectMeta.Name, &delOpt)
 		if err != nil {
 			return fmt.Errorf("Error deleteing builder deployment: %v", err)
 		}

@@ -802,40 +802,15 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 
 // destroys the pool -- the deployment, replicaset and pods
 func (gp *GenericPool) destroy() error {
-	// Destroy deployment
-	err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, nil)
+	deletePropagation := metav1.DeletePropagationBackground
+	delOpt := metav1.DeleteOptions{
+		PropagationPolicy: &deletePropagation,
+	}
+	err := gp.kubernetesClient.ExtensionsV1beta1().
+		Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, &delOpt)
 	if err != nil {
 		log.Printf("Error destroying deployment: %v", err)
 		return err
 	}
-
-	// Destroy ReplicaSet.  Pre-1.6 K8s versions don't do this
-	// automatically but post-1.6 K8s will, and may beat us to it,
-	// so don't error out if we fail.
-	rsList, err := gp.kubernetesClient.ExtensionsV1beta1().ReplicaSets(gp.namespace).List(metav1.ListOptions{
-		LabelSelector: labels.Set(gp.labelsForPool).AsSelector().String(),
-	})
-	if len(rsList.Items) >= 0 {
-		for _, rs := range rsList.Items {
-			err = gp.kubernetesClient.ExtensionsV1beta1().ReplicaSets(gp.namespace).Delete(rs.ObjectMeta.Name, nil)
-			if err != nil {
-				log.Printf("Error deleting replicaset, ignoring: %v", err)
-			}
-		}
-	}
-
-	// Destroy Pods.  See note above.
-	podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(metav1.ListOptions{
-		LabelSelector: labels.Set(gp.labelsForPool).AsSelector().String(),
-	})
-	if len(podList.Items) >= 0 {
-		for _, pod := range podList.Items {
-			err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil)
-			if err != nil {
-				log.Printf("Error deleting pod, ignoring: %v", err)
-			}
-		}
-	}
-
 	return nil
 }
