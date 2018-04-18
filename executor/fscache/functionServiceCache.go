@@ -68,7 +68,6 @@ type (
 		address           string
 		kubernetesObjects []api.ObjectReference
 		age               time.Duration
-		env               *metav1.ObjectMeta // used for ListOld
 		responseChannel   chan *fscResponse
 	}
 	fscResponse struct {
@@ -117,8 +116,7 @@ func (fsc *FunctionServiceCache) service() {
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
 				fsvc := funcSvc.(*FuncSvc)
-				if fsvc.Environment.Metadata.UID == req.env.UID &&
-					time.Since(fsvc.Atime) > req.age {
+				if time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
 			}
@@ -263,12 +261,11 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 	return true, nil
 }
 
-func (fsc *FunctionServiceCache) ListOld(env *metav1.ObjectMeta, age time.Duration) ([]*FuncSvc, error) {
+func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
 		age:             age,
-		env:             env,
 		responseChannel: responseChannel,
 	}
 	resp := <-responseChannel

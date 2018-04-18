@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
 
@@ -104,52 +104,46 @@ func idleObjectReaper(kubeClient *kubernetes.Clientset,
 			log.Fatalf("Failed to get environment list: %v", err)
 		}
 
+		envList := make(map[types.UID]struct{})
 		for i := range envs.Items {
 			env := envs.Items[i]
-			if env.Spec.AllowedFunctionsPerContainer == fission.AllowedFunctionsPerContainerInfinite {
-				continue
+			envList[env.Metadata.UID] = struct{}{}
+		}
+
+		funcSvcs, err := fsCache.ListOld(idlePodReapTime)
+		if err != nil {
+			log.Printf("Error reaping idle pods: %v", err)
+			continue
+		}
+
+		for _, fsvc := range funcSvcs {
+			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
+				log.Printf("Environment %v for function %v no longer exists",
+					fsvc.Environment.Metadata.Name, fsvc.Name)
 			}
-			funcSvcs, err := fsCache.ListOld(&env.Metadata, idlePodReapTime)
-			if err != nil {
-				log.Printf("Error reaping idle pods: %v", err)
+
+			if fsvc.Environment.Spec.AllowedFunctionsPerContainer == fission.AllowedFunctionsPerContainerInfinite {
 				continue
 			}
 
-			for _, fsvc := range funcSvcs {
-
-				fn, err := fissionClient.Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name)
-				if err == nil {
-					// Ignore functions of NewDeploy ExecutorType with MinScale > 0
-					if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale > 0 &&
-						fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
-						continue
+			// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
+			// so we ignore the function service cache with newdepoy executor type here.
+			if fsvc.Executor != fscache.NEWDEPLOY {
+				deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
+				if err != nil {
+					log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
+					log.Printf("Object Name| Object Kind | Object Namespace")
+					for _, kubeobj := range fsvc.KubernetesObjects {
+						log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
 					}
 				}
 
-				// Return errors not equal to "is not found" error
-				if err != nil && !errors.IsNotFound(err) {
-					log.Printf("Error getting function: %v", fsvc.Function.Name)
+				if !deleted {
 					continue
 				}
 
-				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
-				// so we ignore the function service cache with newdepoy executor type here.
-				if fsvc.Executor != fscache.NEWDEPLOY {
-					deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
-					if err != nil {
-						log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
-						log.Printf("Object Name| Object Kind | Object Namespace")
-						for _, kubeobj := range fsvc.KubernetesObjects {
-							log.Printf("%v | %v | %v", kubeobj.Name, kubeobj.Kind, kubeobj.Namespace)
-						}
-					}
-
-					if !deleted {
-						continue
-					}
-					for _, kubeobj := range fsvc.KubernetesObjects {
-						deleteKubeobject(kubeClient, &kubeobj)
-					}
+				for _, kubeobj := range fsvc.KubernetesObjects {
+					deleteKubeobject(kubeClient, &kubeobj)
 				}
 			}
 		}
