@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-if [[ "$TRAVIS_EVENT_TYPE" -e "cron" ]]
+if [[ ${TRAVIS_EVENT_TYPE+NOVALUE} != "NOVALUE" ]]
 then
     exit 0
 fi
