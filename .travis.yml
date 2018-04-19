@@ -38,9 +38,8 @@ script:
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
   - hack/runtests.sh
+  - test/build_and_test.sh
   - test/upgrade/fission_upgrade_test.sh
-
-  #- test/build_and_test.sh // Remove before merging the PR
 
 notifications:
   slack:

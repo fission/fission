@@ -4,10 +4,10 @@ set -euo pipefail
 
 # To be uncommented before merge, right now for testing can't be cron
 
-#if [[ "$TRAVIS_EVENT_TYPE" -ne "cron" ]]
-#then
-#    exit 0
-#fi
+if [[ "$TRAVIS_EVENT_TYPE" -ne "cron" ]]
+then
+    exit 0
+fi
 
 if [ ! -f ${HOME}/.kube/config ]
 then
