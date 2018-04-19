@@ -131,12 +131,12 @@ func updatePackage(fissionClient *crd.FissionClient,
 	}
 
 	// update package spec
-	pkg, err := fissionClient.Packages(metav1.NamespaceDefault).Update(pkg)
+	newPkg, err := fissionClient.Packages(metav1.NamespaceDefault).Update(pkg)
 	if err != nil {
 		log.Printf("Error updating package: %v", err)
 		return nil, err
 	}
 
 	// return resource version for function to update function package ref
-	return pkg, nil
+	return newPkg, nil
 }

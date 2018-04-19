@@ -88,7 +88,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 	if err != nil {
 		e := fmt.Sprintf("Error setting package pending state: %v", err)
 		log.Println(e)
-		updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, e, nil)
+		updatePackage(pkgw.fissionClient, srcpkg, fission.BuildStatusFailed, e, nil)
 		return
 	}
 
