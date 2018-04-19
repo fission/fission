@@ -45,28 +45,6 @@ type InfluxDB struct {
 	endpoint string
 }
 
-func (influx InfluxDB) GetPods(filter LogFilter) ([]string, error) {
-	parameters := make(map[string]interface{})
-	parameters["funcuid"] = filter.FuncUid
-
-	queryCmd := "select * from \"log\" where \"funcuid\" = $funcuid group by \"pod\""
-	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
-
-	response, err := influx.query(query)
-	if err != nil /*|| response.Err != ""*/ {
-		return []string{}, err
-	}
-	pods := []string{}
-	for _, r := range response.Results {
-		for _, series := range r.Series {
-			for _, pod := range series.Tags {
-				pods = append(pods, pod)
-			}
-		}
-	}
-	return pods, nil
-}
-
 func makeIndexMap(cols []string) map[string]int {
 	indexMap := make(map[string]int, len(cols))
 	for i := range cols {

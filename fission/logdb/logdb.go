@@ -27,7 +27,6 @@ const (
 )
 
 type LogDatabase interface {
-	GetPods(LogFilter) ([]string, error)
 	GetLogs(LogFilter) ([]LogEntry, error)
 }
 
