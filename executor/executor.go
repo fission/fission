@@ -19,7 +19,6 @@ package executor
 import (
 	"log"
 	"net/http"
-	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
