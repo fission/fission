@@ -230,8 +230,6 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	increaseHttpCalls(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method)
-	observeHttpCallDelay(metricCached, fh.function.Name, string(fh.function.UID),
-		metricPath, metricStatus, request.Method, float64(delay.Nanoseconds())/10e9)
 	observeHttpCallLatency(metricCached, fh.function.Name, string(fh.function.UID),
 		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
 	observeHttpCallResponseSize(metricCached, fh.function.Name, string(fh.function.UID),
