@@ -98,6 +98,10 @@ func pkgUpdate(c *cli.Context) error {
 	deployArchiveName := c.String("deploy")
 	buildcmd := c.String("buildcmd")
 
+	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
+		fatal("Need either of --src or --deploy and not both arguments.")
+	}
+
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
 		len(envName) == 0 && len(buildcmd) == 0 {
 		fatal("Need --env or --src or --deploy or --buildcmd argument.")
@@ -158,9 +162,8 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName,
 		pkg.Spec.Deployment = *deployArchiveMetadata
 	}
 
-	// Set package as pending status only when there is no
-	// deploy archive.
-	if needToBuild && len(pkg.Spec.Deployment.Type) == 0 {
+	// Set package as pending status when needToBuild is true
+	if needToBuild {
 		// change into pending state to trigger package build
 		pkg.Status = fission.PackageStatus{
 			BuildStatus: fission.BuildStatusPending,
