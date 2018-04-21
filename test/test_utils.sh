@@ -228,6 +228,32 @@ dump_tiller_logs() {
 }
 export -f dump_tiller_logs
 
+wait_for_service() {
+    id=$1
+    svc=$2
+
+    ns=f-$id
+    while true
+    do
+	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+	if [ ! -z $ip ]
+	then
+	    break
+	fi
+	echo Waiting for service $svc...
+	sleep 1
+    done
+}
+
+wait_for_services() {
+    id=$1
+
+    wait_for_service $id controller
+    wait_for_service $id router
+
+    echo Waiting for service is routable...
+    sleep 10
+}
 
 helm_uninstall_fission() {(set +e
     id=$1
@@ -458,6 +484,7 @@ install_and_test() {
 	    exit 1
     fi
 
+    wait_for_services $id
     set_environment $id
     run_all_tests $id
 
