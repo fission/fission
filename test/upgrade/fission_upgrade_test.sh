@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-# To be uncommented before merge, right now for testing can't be cron
-
+# Unbound variables cause failure, so this readable if block instead of Parameter Expansion
 if [[ ${TRAVIS_EVENT_TYPE+NOVALUE} != "cronNOVALUE" ]]
 then
+    echo "Skipping Fission upgrade tests, not a cron job"
     exit 0
 fi
 
