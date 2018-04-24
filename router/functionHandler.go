@@ -29,13 +29,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 )
 
 type functionHandler struct {
-	fmap     *functionServiceMap
-	executor *executorClient.Client
-	function *metav1.ObjectMeta
+	fmap        *functionServiceMap
+	executor    *executorClient.Client
+	function    *metav1.ObjectMeta
+	httpTrigger *crd.HTTPTrigger
 }
 
 // A layer on top of http.DefaultTransport, with retries.
@@ -84,8 +86,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	}
 	httpMetricLabels := &httpLabels{
 		method: req.Method,
-		// TODO host and path from httptrigger
-		code: resp.StatusCode,
+		host:   roundTripper.funcHandler.httpTrigger.Spec.Host,
+		path:   roundTripper.funcHandler.httpTrigger.Spec.RelativeURL,
 	}
 
 	// set the timeout for transport context
@@ -154,6 +156,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		resp, err = transport.RoundTrip(req)
 		if err == nil {
 			// Track metrics
+			httpMetricLabels.code = resp.StatusCode
 			functionCallCompleted(funcMetricLabels, httpMetricLabels,
 				overhead, time.Since(startTime), resp.ContentLength)
 
