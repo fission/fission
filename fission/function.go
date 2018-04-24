@@ -393,6 +393,10 @@ func fnUpdate(c *cli.Context) error {
 		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd or --secret or --secretNamespace or --configmap or --configmapNamespace argument.")
 	}
 
+	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
+		fatal("Need either of --src or --deploy and not both arguments.")
+	}
+
 	if len(secretName) > 0 {
 		if len(function.Spec.Secrets) > 1 {
 			fatal("Please use 'fission spec apply' to update list of secrets")
