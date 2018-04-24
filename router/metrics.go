@@ -1,96 +1,138 @@
 package router
 
 import (
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
+)
+
+type (
+	// functionLabels is the set of metrics labels that relate to
+	// functions.
+	//
+	// cached indicates whether or not the function call hit the
+	// cache in this service.
+	//
+	// namespace and name are the metadata of the function.
+	functionLabels struct {
+		cached    bool
+		namespace string
+		name      string
+	}
+
+	// httpLabels is the set of metrics labels that relate to HTTP
+	// requests.
+	//
+	// host is the host that the HTTP request was made to
+	// path is the relative URL of the request
+	// method is the HTTP method ("GET", "POST", ...)
+	// code is the HTTP status code
+	httpLabels struct {
+		host   string
+		path   string
+		method string
+		code   int
+	}
 )
 
 var (
 	metricAddr = ":8080"
 
-	// function http calls
+	// function + http labels as strings
+	labelsStrings = []string{"cached", "namespace", "name", "host", "path", "method", "code"}
+
+	// Function http calls count
 	// cached: true | false, is this function service address cached locally
-	// funcname: the function's name
-	// funcuid: the function's version id
+	// namespace: function namespace
+	// name: function name
+	// code: http status code
 	// path: the client call the function on which http path
-	// code: the http status code
 	// method: the function's http method
-	httpCalls = prometheus.NewCounterVec(
+	functionCalls = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fission_http_calls_total",
-			Help: "How many fission HTTP calls by cached or not, funcname, funcuid, url, HTTP code and method.",
+			Name: "fission_function_calls_total",
+			Help: "Count of Fission function calls",
 		},
-		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
+		labelsStrings,
 	)
-	httpCallErrors = prometheus.NewCounterVec(
+	functionCallErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fission_http_call_errors_total",
-			Help: "How many fission error during HTTP call labelled by reason.",
+			Name: "fission_function_errors_total",
+			Help: "Count of Fission function errors",
 		},
-		[]string{"reason"},
+		labelsStrings,
 	)
-	httpCallLatencySummary = prometheus.NewSummaryVec(
+	functionCallDuration = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_http_call_latency_seconds_summary",
-			Help:       "The latency of the http call to target function.",
+			Name:       "fission_function_duration_seconds",
+			Help:       "Runtime duration of the Fission function.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
+		labelsStrings,
 	)
-	httpCallDelaySummary = prometheus.NewSummaryVec(
+	functionCallOverhead = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_http_call_delay_seconds_summary",
+			Name:       "fission_function_overhead_seconds",
 			Help:       "The function call delay caused by fission.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
+		labelsStrings,
 	)
-	httpCallResponseSizeSummary = prometheus.NewSummaryVec(
+	functionCallResponseSize = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_http_call_response_size_bytes_summary",
+			Name:       "fission_function_response_size_bytes",
 			Help:       "The response size of the http call to target function.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
-	)
-	functionErrors = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_function_errors",
-			Help: "The number of total function errors",
-		},
-		[]string{"cached", "funcname", "funcuid", "path", "code", "method"},
+		labelsStrings,
 	)
 )
 
 func init() {
-	// Register the function calls counter with Prometheus's default registry.
-	prometheus.MustRegister(httpCalls)
-	prometheus.MustRegister(httpCallErrors)
-	prometheus.MustRegister(httpCallLatencySummary)
-	prometheus.MustRegister(httpCallDelaySummary)
-	prometheus.MustRegister(httpCallResponseSizeSummary)
-	prometheus.MustRegister(functionErrors)
+	prometheus.MustRegister(functionCalls)
+	prometheus.MustRegister(functionCallErrors)
+	prometheus.MustRegister(functionCallDuration)
+	prometheus.MustRegister(functionCallOverhead)
+	prometheus.MustRegister(functionCallResponseSize)
 }
 
-func increaseHttpCalls(cached, funcname, funcuid, path, code, method string) {
-	httpCalls.WithLabelValues(cached, funcname, funcuid, path, code, method).Inc()
+func labelsToStrings(f *functionLabels, h *httpLabels) []string {
+	var cached string
+	if f.cached {
+		cached = "true"
+	} else {
+		cached = "false"
+	}
+	return []string{
+		cached,
+		f.namespace,
+		f.name,
+		h.host,
+		h.path,
+		h.method,
+		string(h.code),
+	}
 }
 
-func increaseHttpCallErrors(reason string) {
-	httpCallErrors.WithLabelValues(reason).Inc()
-}
+func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration time.Duration, respSize int64) {
+	l := labelsToStrings(f, h)
 
-func observeHttpCallLatency(cached, funcname, funcuid, path, code, method string, latency float64) {
-	httpCallLatencySummary.WithLabelValues(cached, funcname, funcuid, path, code, method).Observe(latency)
-}
+	// overhead: time from request ingress into router upto proxing into function pod
+	functionCallOverhead.WithLabelValues(l...).Observe(float64(overhead.Nanoseconds()) / 1e9)
 
-func observeHttpCallDelay(cached, funcname, funcuid, path, code, method string, delay float64) {
-	httpCallDelaySummary.WithLabelValues(cached, funcname, funcuid, path, code, method).Observe(delay)
-}
+	// total function call counter
+	functionCalls.WithLabelValues(l...).Inc()
 
-func observeHttpCallResponseSize(cached, funcname, funcuid, path, code, method string, size float64) {
-	httpCallResponseSizeSummary.WithLabelValues(cached, funcname, funcuid, path, code, method).Observe(size)
-}
+	// error counter
+	if h.code >= 400 {
+		functionCallErrors.WithLabelValues(l...).Inc()
+	}
 
-func increaseFunctionErrors(cached, funcname, funcuid, path, code, method string) {
-	functionErrors.WithLabelValues(cached, funcname, funcuid, path, code, method).Inc()
+	// duration summary
+	functionCallDuration.WithLabelValues(l...).Observe(float64(duration.Nanoseconds()) / 1e9)
+
+	// Response size.  -1 means the size unknown, in which case we don't report it.
+	if respSize != -1 {
+		functionCallResponseSize.WithLabelValues(l...).Observe(float64(respSize))
+	}
 }

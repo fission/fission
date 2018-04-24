@@ -168,6 +168,10 @@ spec:
       labels:
         application: fission-router
         svc: router
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: router
@@ -188,6 +192,11 @@ spec:
             port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8888
+          name: http
       serviceAccount: fission-svc
 
 ---
@@ -219,6 +228,10 @@ spec:
     metadata:
       labels:
         svc: executor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: executor
@@ -248,6 +261,11 @@ spec:
             port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8888
+          name: http
       serviceAccount: fission-svc
 
 ---

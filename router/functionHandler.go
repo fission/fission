@@ -75,6 +75,19 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	var needExecutor, serviceUrlFromExecutor bool
 	var serviceUrl *url.URL
 
+	// Metrics stuff
+	startTime := time.Now()
+	funcMetricLabels := &functionLabels{
+		cached:    !serviceUrlFromExecutor,
+		namespace: roundTripper.funcHandler.function.Namespace,
+		name:      roundTripper.funcHandler.function.Name,
+	}
+	httpMetricLabels := &httpLabels{
+		method: req.Method,
+		// TODO host and path from httptrigger
+		code: resp.StatusCode,
+	}
+
 	// set the timeout for transport context
 	timeout := roundTripper.initialTimeout
 	transport := http.DefaultTransport.(*http.Transport)
@@ -135,13 +148,20 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			KeepAlive: 30 * time.Second,
 		}).DialContext
 
+		overhead := time.Since(startTime)
+
 		// forward the request to the function service
 		resp, err = transport.RoundTrip(req)
 		if err == nil {
+			// Track metrics
+			functionCallCompleted(funcMetricLabels, httpMetricLabels,
+				overhead, time.Since(startTime), resp.ContentLength)
+
 			// if transport.RoundTrip succeeds and it was a cached entry, then tapService
 			if !serviceUrlFromExecutor {
 				go roundTripper.funcHandler.tapService(serviceUrl)
 			}
+
 			// return response back to user
 			return resp, nil
 		}
@@ -190,14 +210,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
-	// System Params
+	// system params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
-	metricCached := "true"
-	metricPath := request.URL.Path
-
-	// TODO: As an optimization we may want to cache proxies too -- this might get us
-	// connection reuse and possibly better performance
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
 			// explicitly disable User-Agent so it's not set to default value
@@ -214,24 +229,5 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		},
 	}
 
-	callStartTime := time.Now()
-	wrapper := NewResponseWriterWrapper(responseWriter)
-
-	// the actual proxy
-	proxy.ServeHTTP(wrapper, request)
-
-	latency := time.Now().Sub(callStartTime)
-	metricStatus := fmt.Sprint(wrapper.Status())
-
-	if wrapper.status != 200 {
-		increaseFunctionErrors(metricCached, fh.function.Name, string(fh.function.UID),
-			metricPath, metricStatus, request.Method)
-	}
-
-	increaseHttpCalls(metricCached, fh.function.Name, string(fh.function.UID),
-		metricPath, metricStatus, request.Method)
-	observeHttpCallLatency(metricCached, fh.function.Name, string(fh.function.UID),
-		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
-	observeHttpCallResponseSize(metricCached, fh.function.Name, string(fh.function.UID),
-		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
+	proxy.ServeHTTP(responseWriter, request)
 }
