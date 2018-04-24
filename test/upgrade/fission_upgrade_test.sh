@@ -21,7 +21,7 @@ ROOT=$(pwd)
 popd
 
 # This will change for every new release
-CURRENT_VERSION=0.6.0
+CURRENT_VERSION=0.7.0
 
 source $ROOT/test/test_utils.sh
 source $(dirname $0)/fixture_tests.sh
