@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# Unbound variables cause failure, so this readable if block instead of Parameter Expansion
+if [[ ${TRAVIS_EVENT_TYPE+NOVALUE} == "cronNOVALUE" ]]
+then
+    echo "Skipping build & test, this is cron job for fission upgrade tests"
+    exit 0
+fi
+
 if [ ! -f ${HOME}/.kube/config ]
 then
     echo "Skipping end to end tests, no cluster credentials"

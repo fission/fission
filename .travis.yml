@@ -39,6 +39,7 @@ script:
   - hack/verify-govet.sh
   - hack/runtests.sh
   - test/build_and_test.sh
+  - test/upgrade/fission_upgrade_test.sh
 
 notifications:
   slack:
