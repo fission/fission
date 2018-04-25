@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
+	"github.com/robfig/cron"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +30,21 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 )
+
+func getCronNextNActivationTime(cronSpec string, round int) error {
+	sched, err := cron.Parse(cronSpec)
+	if err != nil {
+		return err
+	}
+
+	t := time.Now()
+	for i := 0; i < round; i++ {
+		t = sched.Next(t)
+		fmt.Printf("Next %v invocation: %v\n", i+1, t.Format(time.RFC3339))
+	}
+
+	return nil
+}
 
 func ttCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
@@ -40,11 +57,12 @@ func ttCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+
 	fnNamespace := c.String("fnNamespace")
 
-	cron := c.String("cron")
-	if len(cron) == 0 {
-		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', or '@hourly'; use --cron")
+	cronSpec := c.String("cron")
+	if len(cronSpec) == 0 {
+		fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	tt := &crd.TimeTrigger{
@@ -53,7 +71,7 @@ func ttCreate(c *cli.Context) error {
 			Namespace: fnNamespace,
 		},
 		Spec: fission.TimeTriggerSpec{
-			Cron: cron,
+			Cron: cronSpec,
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
@@ -73,6 +91,10 @@ func ttCreate(c *cli.Context) error {
 	checkErr(err, "create Time trigger")
 
 	fmt.Printf("trigger '%v' created\n", name)
+
+	err = getCronNextNActivationTime(cronSpec, 1)
+	checkErr(err, "pass cron spec examination")
+
 	return err
 }
 
@@ -118,6 +140,10 @@ func ttUpdate(c *cli.Context) error {
 	checkErr(err, "update Time trigger")
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
+
+	err = getCronNextNActivationTime(newCron, 1)
+	checkErr(err, "pass cron spec examination")
+
 	return nil
 }
 
@@ -154,6 +180,19 @@ func ttList(c *cli.Context) error {
 			tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}
 	w.Flush()
+
+	return nil
+}
+
+func ttTest(c *cli.Context) error {
+	round := c.Int("round")
+	cronSpec := c.String("cron")
+	if len(cronSpec) == 0 {
+		fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+	}
+
+	err := getCronNextNActivationTime(cronSpec, round)
+	checkErr(err, "pass cron spec examination")
 
 	return nil
 }
