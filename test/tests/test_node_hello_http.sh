@@ -30,7 +30,7 @@ response=$(curl http://$FISSION_ROUTER/$fn)
 log "Checking for valid response"
 echo $response | grep -i hello
 
-# crappy cleanup, improve this later
-kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
+routeid=$(fission route list|grep "$fn"|awk '{print $1}')
+fission route delete --name $routeid || true
 
 log "All done."
