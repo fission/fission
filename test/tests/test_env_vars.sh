@@ -43,9 +43,13 @@ fi
 getPodName() {
     NS=$1
     POD=$2
-    kubectl -n ${NS} get po -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+    # find pod is ready to serve
+    JSONPATH="{range .items[*]}{'\n'}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}"
+    kubectl -n ${NS} get po -o jsonpath="$JSONPATH" \
+        | grep "Ready=True" \
         | grep ${POD} \
-        | head -n 1
+        | head -n 1 \
+        | cut -f1 -d":"
 }
 
 # retry function adapted from:
@@ -53,7 +57,7 @@ getPodName() {
 function retry {
   local n=1
   local max=5
-  local delay=5
+  local delay=10 # pods take time to get ready
   while true; do
     "$@" && break || {
       if [[ ${n} -lt ${max} ]]; then
