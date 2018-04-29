@@ -40,11 +40,16 @@ fission fn create --name $invalid_fn_name --env $env --code errhello.js
 log "Testing invalid function $valid_fn_name"
 fission fn test --name $invalid_fn_name > /tmp/invalid.log
 
-size=$(wc -c </tmp/invalid.log)
-if [ $size == 0 ]
-then
-    fission fn test --name $invalid_fn_name > /tmp/invalid.log
-fi
+for i in {1..10}
+do
+    size=$(wc -c </tmp/invalid.log)
+    if [ $size == 0 ]
+    then
+        fission fn test --name $invalid_fn_name > /tmp/invalid.log
+    else
+        break
+    fi
+done
 
 log "---Invalid Function logs---"
 cat /tmp/invalid.log
