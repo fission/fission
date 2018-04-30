@@ -285,6 +285,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	subscription, err := connection.subscribe(&crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name: TriggerName,
+			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fission.MessageQueueTriggerSpec{
 			FunctionReference: fission.FunctionReference{
