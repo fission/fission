@@ -387,12 +387,6 @@ func fnUpdate(c *cli.Context) error {
 	secretNameSpace := c.String("secretNamespace")
 	cfgMapNameSpace := c.String("configmapNamespace")
 
-	if len(envName) == 0 && len(deployArchiveName) == 0 && len(srcArchiveName) == 0 && len(pkgName) == 0 &&
-		len(entrypoint) == 0 && len(buildcmd) == 0 && len(secretName) == 0 && len(secretNameSpace) == 0 &&
-		len(cfgMapName) == 0 && len(cfgMapNameSpace) == 0 {
-		fatal("Need --env or --deploy or --src or --pkg or --entrypoint or --buildcmd or --secret or --secretNamespace or --configmap or --configmapNamespace argument.")
-	}
-
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
 		fatal("Need either of --src or --deploy and not both arguments.")
 	}
