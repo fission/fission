@@ -43,7 +43,7 @@ func printPodLogs(c *cli.Context) error {
 		fatal("Need --name argument.")
 	}
 
-	queryURL, err := url.Parse(c.GlobalString("server"))
+	queryURL, err := url.Parse(getServerUrl())
 	checkErr(err, "parse the base URL")
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
