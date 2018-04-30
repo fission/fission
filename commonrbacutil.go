@@ -128,6 +128,15 @@ func AddSaToRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBinding,
 			return err
 		}
 
+		if k8serrors.IsConflict(err) {
+			// TODO : Need to test this out, not able to simulate conflicts yet.
+			// Initially, my understanding was that patch can never error on conflict because Api server will handle the conflicts for us.
+			// but one CI run did show patch errored out on conflict : https://api.travis-ci.org/v3/job/373161490/log.txt, look for :
+			// Error returned by rolebinding patch : <some more text> there is a meaningful conflict (firstResourceVersion: "35482724", currentResourceVersion: "35482849")
+			// so, m guessing retrying patch should help. will watch out for any such conflicts and fix the issue if any
+			continue
+		}
+
 		log.Printf("Error returned by rolebinding patch : %v", err)
 		return err
 	}
