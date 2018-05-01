@@ -76,7 +76,11 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	// still route to an old instance, i.e. router cache expiry
 	// time.
 	time.Sleep(6 * time.Minute)
+
 	err = cleanupPods(client, namespace, instanceId)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
