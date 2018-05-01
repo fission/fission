@@ -97,7 +97,7 @@ new_deploy_mgr_and_internal_route_test_1() {
 builder_mgr_test_2() {
     log "Starting builder_mgr_test_2 with env in default ns"
     fission env create --name python-builder-env --builder fission/python-builder --image fission/python-env
-    sleep 10
+    sleep 180
 
     # verify the env builder pod came up in fission-builder and env runtime pod came up in fission-function ns
     verify_pod_ns python-builder-env fission-builder || (log "python-builder-env builder env not found in fission-builder ns" &&
@@ -107,7 +107,6 @@ builder_mgr_test_2() {
 
     zip -jr src-pkg.zip $ROOT/examples/python/sourcepkg/
     pkg=$(fission package create --src src-pkg.zip --env python-builder-env --buildcmd "./build.sh" --pkgns "ns2-$id"| cut -f2 -d' '| tr -d \')
-#    timeout 60s bash -c "waitBuild $pkg"
     sleep 60
     fission fn create --name func4 --fns "ns2-$id" --pkg $pkg --entrypoint "user.main"
     ht=$(fission route create --function func4 --fns "ns2-$id" --url /func4 --method GET | cut -f2 -d' '| tr -d \')
@@ -130,17 +129,19 @@ builder_mgr_test_2() {
 builder_mgr_test_1() {
     log "Starting builder_mgr_test_1 with env and fn in different ns"
     fission env create --name python-builder-env --envns "ns1-$id" --builder fission/python-builder --image fission/python-env
+    # we need to wait sufficiently for env pods to be up
+    sleep 180
+
     zip -jr src-pkg.zip $ROOT/examples/python/sourcepkg/
     pkg=$(fission package create --src src-pkg.zip --env python-builder-env --envns "ns1-$id" --buildcmd "./build.sh" --pkgns "ns2-$id"| cut -f2 -d' '| tr -d \')
-    #timeout 60s bash -c "waitBuild $pkg"
     sleep 60
     fission fn create --name func3 --fns "ns2-$id" --pkg $pkg --entrypoint "user.main"
     ht=$(fission route create --function func3 --fns "ns2-$id" --url /func3 --method GET | cut -f2 -d' '| tr -d \')
 
     # get the function loaded into a pod
-    sleep 5
+    sleep 10
     response=$(curl http://$FISSION_ROUTER/func3)
-    echo $response
+    echo "response : $response"
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}" || (log "response a: 1 b: {c: 3, d: 4} not received" &&
     cleanup python-builder-env "ns1-$id" func3 "ns2-$id" "$pkg" "ns2-$id" $ht "ns2-$id"  && exit 1)
 

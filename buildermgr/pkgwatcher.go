@@ -150,9 +150,14 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 			}
 
 			// Add the package getter rolebinding to builder sa
+			// we continue here if role binding was not setup succeesffully. this is because without this, the fetcher wont be able to fetch the source pkg into the container and
+			// the build will fail eventually
 			err := fission.SetupRoleBinding(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionBuilderSA, ns)
 			if err != nil {
 				log.Printf("Error : %v in setting up the role binding %s for pkg : %s.%s", err, fission.PackageGetterRB, pkg.Metadata.Name, pkg.Metadata.Namespace)
+				continue
+			} else {
+				log.Printf("Setup rolebinding for sa : %s.%s for pkg : %s.%s", fission.FissionBuilderSA, ns, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			}
 
 			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient, ns, pkgw.storageSvcUrl, pkg)
@@ -207,6 +212,10 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 	// build timeout
 	updatePackage(pkgw.fissionClient, pkg,
 		fission.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
+
+	log.Printf("Max retries exceeded in building the source pkg : %s.%s, timeout due to environment builder not ready",
+		pkg.Metadata.Name, pkg.Metadata.Namespace)
+
 	return
 }
 
