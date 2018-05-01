@@ -50,7 +50,7 @@ sed -i 's/world/fission/' test_dir/hello.py
 zip -jr test-deploy-pkg.zip test_dir/
 
 log "Updating function with updated package"
-fission fn update --name $fn_name --env $env --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
+fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
 
 log "Waiting for deployment to update"
 sleep 5
