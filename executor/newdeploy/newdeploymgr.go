@@ -480,7 +480,6 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	var delError error
 
-
 	// GetByFunction uses resource version as part of cache key, however,
 	// the resource version in function metadata will be changed when a function
 	// is deleted and cause newdeploy backend fails to delete the entry.
