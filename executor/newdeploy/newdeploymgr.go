@@ -488,7 +488,7 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	// fsvc entry.
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	if err != nil {
-		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
+		log.Printf("fsvc not found in cache: %v", fn.Metadata)
 		delError = err
 		return nil, err
 	}
