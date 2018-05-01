@@ -142,7 +142,26 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 func (deploy *NewDeploy) cleanupRBACObjs(deployNamespace string, fn *crd.Function) {
 	fnList := deploy.funcStore.List()
 
-	if len(fnList) == 0 {
+	fnListInSameNs := make([]*crd.Function, 0)
+	for _, item := range fnList {
+		fnItem, ok := item.(*crd.Function)
+		if !ok {
+			log.Printf("Error asserting function item, type of item : %v", reflect.TypeOf(item))
+			return
+		}
+
+		if fnItem.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy ||
+			fnItem.Spec.Environment.Namespace == fn.Metadata.Namespace {
+			log.Printf("There are other functions needing the rolebindings in this ns, so nothing to do")
+			return
+		}
+
+		if fnItem.Metadata.Namespace == fn.Metadata.Namespace {
+			fnListInSameNs = append(fnListInSameNs, fnItem)
+		}
+	}
+
+	if len(fnListInSameNs) == 0 {
 		err := fission.DeleteRoleBinding(deploy.kubernetesClient, fission.PackageGetterRB, fn.Metadata.Namespace)
 		if err != nil {
 			log.Printf("Error deleting rolebinding : %s.%s", fission.PackageGetterRB, fn.Metadata.Namespace)
@@ -155,19 +174,6 @@ func (deploy *NewDeploy) cleanupRBACObjs(deployNamespace string, fn *crd.Functio
 		}
 		log.Printf("Deleted rolebinding : %s.%s and %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.PackageGetterRB, fn.Metadata.Namespace)
 		return
-	}
-
-	for _, item := range fnList {
-		fnItem, ok := item.(*crd.Function)
-		if !ok {
-			log.Printf("Error asserting function item, type of item : %v", reflect.TypeOf(item))
-			return
-		}
-		if fnItem.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy ||
-			fnItem.Spec.Environment.Namespace == fn.Metadata.Namespace {
-			log.Printf("There are other functions needing the rolebindings in this ns, so nothing to do")
-			return
-		}
 	}
 
 	// us landing here implies we can remove sa

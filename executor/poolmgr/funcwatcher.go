@@ -208,7 +208,26 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 func (gpm *GenericPoolManager) cleanupFuncWatcherRoleBinding(kubernetesClient *kubernetes.Clientset, fn *crd.Function, fissionfnNamespace string) {
 	funcList := gpm.funcStore.List()
 
-	if len(funcList) == 0 {
+	fnListInSameNs := make([]*crd.Function, 0)
+	for _, item := range funcList {
+		fnItem, ok := item.(*crd.Function)
+		if !ok {
+			log.Printf("Error asserting function item, type of item: %v", reflect.TypeOf(item))
+			continue
+		}
+
+		if fnItem.Spec.Environment.Name == fn.Spec.Environment.Name && fnItem.Spec.Environment.Namespace == fn.Spec.Environment.Namespace &&
+			fnItem.Metadata.Name != fn.Metadata.Name && fnItem.Metadata.Namespace == fn.Metadata.Namespace {
+			log.Printf("Another function in the ns: %s is using the same env, so nothing to do", fn.Metadata.Namespace)
+			return
+		}
+
+		if fnItem.Metadata.Namespace == fn.Metadata.Namespace {
+			fnListInSameNs = append(fnListInSameNs, fnItem)
+		}
+	}
+
+	if len(fnListInSameNs) == 0 {
 		err := fission.DeleteRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
 		if err != nil {
 			log.Printf("Error deleting rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
@@ -216,19 +235,6 @@ func (gpm *GenericPoolManager) cleanupFuncWatcherRoleBinding(kubernetesClient *k
 		}
 		log.Printf("Deleted rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
 		return
-	}
-
-	for _, item := range funcList {
-		fnItem, ok := item.(*crd.Function)
-		if !ok {
-			log.Printf("Error asserting function item, type of item: %v", reflect.TypeOf(item))
-			continue
-		}
-		if fnItem.Spec.Environment.Name == fn.Spec.Environment.Name && fnItem.Spec.Environment.Namespace == fn.Spec.Environment.Namespace &&
-			fnItem.Metadata.Name != fn.Metadata.Name {
-			log.Printf("Another function in the ns: %s is using the same env, so nothing to do", fn.Metadata.Namespace)
-			return
-		}
 	}
 
 	envNs := fissionfnNamespace

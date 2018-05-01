@@ -224,7 +224,7 @@ func (envw *environmentWatcher) service() {
 		req := <-envw.requestChan
 		switch req.requestType {
 		case GET_BUILDER:
-			// In order to support backward compatibility, for all builder images created in default env,
+			// In order to support backward compatibility, for all environments with builder image created in default env,
 			// the pods will be created in fission-builder namespace
 			ns := envw.builderNamespace
 			if req.env.Metadata.Namespace != metav1.NamespaceDefault {

@@ -123,14 +123,14 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 
 			// In order to support backward compatibility, for all builder images created in default env,
 			// the pods will be created in fission-builder namespace
-			ns := pkgw.builderNamespace
+			builderNs := pkgw.builderNamespace
 			if env.Metadata.Namespace != metav1.NamespaceDefault {
-				ns = env.Metadata.Namespace
+				builderNs = env.Metadata.Namespace
 			}
 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.Metadata.Name ||
-				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != ns ||
+				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
 				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.Metadata.ResourceVersion {
 				continue
 			}
@@ -152,15 +152,15 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 			// Add the package getter rolebinding to builder sa
 			// we continue here if role binding was not setup succeesffully. this is because without this, the fetcher wont be able to fetch the source pkg into the container and
 			// the build will fail eventually
-			err := fission.SetupRoleBinding(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionBuilderSA, ns)
+			err := fission.SetupRoleBinding(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionBuilderSA, builderNs)
 			if err != nil {
 				log.Printf("Error : %v in setting up the role binding %s for pkg : %s.%s", err, fission.PackageGetterRB, pkg.Metadata.Name, pkg.Metadata.Namespace)
 				continue
 			} else {
-				log.Printf("Setup rolebinding for sa : %s.%s for pkg : %s.%s", fission.FissionBuilderSA, ns, pkg.Metadata.Name, pkg.Metadata.Namespace)
+				log.Printf("Setup rolebinding for sa : %s.%s for pkg : %s.%s", fission.FissionBuilderSA, builderNs, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			}
 
-			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient, ns, pkgw.storageSvcUrl, pkg)
+			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
@@ -219,17 +219,11 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 	return
 }
 
-// RemoveRoleBinding takes care of deleting rolebinding for pkg or removing builder sa from rolebinding,
-// just like pkg watcher in executor. while executor cleans up rolebindings for fetcher sa, this cleans up privileges
-// for builder sa.
+// cleanupRoleBinding takes care of deleting rolebinding for pkg or removing fission-builder sa from rolebinding,
+// just like pkg watcher in executor. while executor cleans up rolebindings for fission-fetcher sa, this cleans up privileges
+// for fission-builder sa.
 func (pkgw *packageWatcher) cleanupRoleBinding(pkg *crd.Package) {
 	pkgList := pkgw.pkgStore.List()
-
-	// if there are no pkgs in this ns, we shd ideally delete the RoleBinding, but, pkgWatcher in executor
-	// deletes the rolebinding. so we can just silently return.
-	if len(pkgList) == 0 {
-		return
-	}
 
 	// loop through each of those and even if even one of them shares the same env as this pkg; return
 	for _, item := range pkgList {
@@ -239,8 +233,9 @@ func (pkgw *packageWatcher) cleanupRoleBinding(pkg *crd.Package) {
 			return
 		}
 		if pkgItem.Spec.Source.Type != "" && pkgItem.Spec.Environment.Name == pkg.Spec.Environment.Name &&
-			pkgItem.Spec.Environment.Namespace == pkg.Spec.Environment.Namespace {
-			log.Printf("Another pkg: %s with source is using the same env, nothing to do", pkg.Metadata.Name)
+			pkgItem.Spec.Environment.Namespace == pkg.Spec.Environment.Namespace &&
+			pkgItem.Metadata.Namespace == pkg.Metadata.Namespace {
+			// found another source pkg using the same env, nothing to do
 			return
 		}
 	}
