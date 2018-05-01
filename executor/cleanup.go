@@ -23,7 +23,6 @@ import (
 	"time"
 
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
@@ -31,6 +30,11 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
+)
+
+var (
+	deletePropagation = meta_v1.DeletePropagationBackground
+	delOpt            = meta_v1.DeleteOptions{PropagationPolicy: &deletePropagation}
 )
 
 // cleanupObjects cleans up resources created by old executortype instances
@@ -62,14 +66,6 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	// immediately.  (We should "adopt" these instead of creating
 	// a new pool.)
 	err = cleanupDeployments(client, namespace, instanceId)
-	if err != nil {
-		return err
-	}
-	// See K8s #33845 and related bugs: deleting a deployment
-	// through the API doesn't cause the associated ReplicaSet to
-	// be deleted.  (Fixed recently, but we may be running a
-	// version before the fix.)
-	err = cleanupReplicaSets(client, namespace, instanceId)
 	if err != nil {
 		return err
 	}
@@ -161,10 +157,8 @@ func deleteKubeobject(kubeClient *kubernetes.Clientset, kubeobj *api.ObjectRefer
 		logErr(fmt.Sprintf("cleaning up service %v ", kubeobj.Name), err)
 
 	case "deployment":
-		depl, err := kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Get(kubeobj.Name, meta_v1.GetOptions{})
-		err = kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Delete(kubeobj.Name, nil)
+		err := kubeClient.ExtensionsV1beta1().Deployments(kubeobj.Namespace).Delete(kubeobj.Name, &delOpt)
 		logErr(fmt.Sprintf("cleaning up deployment %v ", kubeobj.Name), err)
-		cleanupDeploymentObjects(kubeClient, kubeobj.Namespace, depl.Labels)
 
 	case "horizontalpodautoscaler":
 		err := kubeClient.AutoscalingV1().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(kubeobj.Name, nil)
@@ -173,22 +167,6 @@ func deleteKubeobject(kubeClient *kubernetes.Clientset, kubeobj *api.ObjectRefer
 	default:
 		log.Printf("There was an error identifying the object type: %v for obj: %v", kubeobj.Kind, kubeobj)
 
-	}
-}
-
-func cleanupDeploymentObjects(kubeClient *kubernetes.Clientset, namespace string, sel map[string]string) {
-	rsList, err := kubeClient.ExtensionsV1beta1().ReplicaSets(namespace).List(meta_v1.ListOptions{LabelSelector: labels.Set(sel).AsSelector().String()})
-	logErr("Getting replicaset for deployment ", err)
-	for _, rs := range rsList.Items {
-		err = kubeClient.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.Name, nil)
-		logErr(fmt.Sprintf("Cleaning replicaset %v for deployment", rs.Name), err)
-	}
-
-	podList, err := kubeClient.CoreV1().Pods(namespace).List(meta_v1.ListOptions{LabelSelector: labels.Set(sel).AsSelector().String()})
-	logErr("Getting pods for deployment ", err)
-	for _, pod := range podList.Items {
-		err = kubeClient.CoreV1().Pods(namespace).Delete(pod.Name, nil)
-		logErr(fmt.Sprintf("Cleaning pod %v for deployment", pod.Name), err)
 	}
 }
 
@@ -201,7 +179,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		id, ok := dep.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
+			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, &delOpt)
 			logErr("cleaning up deployment", err)
 			// ignore err
 		}
@@ -209,32 +187,9 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		pid, pok := dep.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
 		if pok && pid != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, nil)
+			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, &delOpt)
 			logErr("cleaning up deployment", err)
 			// ignore err
-		}
-	}
-	return nil
-}
-
-func cleanupReplicaSets(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	rsList, err := client.ExtensionsV1beta1().ReplicaSets(namespace).List(meta_v1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, rs := range rsList.Items {
-		id, ok := rs.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
-		if ok && id != instanceId {
-			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
-			logErr("cleaning up replicaset", err)
-		}
-		// Backward compatibility with older label name
-		pid, pok := rs.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
-		if pok && pid != instanceId {
-			log.Printf("Cleaning up replicaset %v", rs.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().ReplicaSets(namespace).Delete(rs.ObjectMeta.Name, nil)
-			logErr("cleaning up replicaset", err)
 		}
 	}
 	return nil
@@ -246,6 +201,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 		return err
 	}
 	for _, pod := range podList.Items {
+		log.Printf("Clean pod: %v", pod.ObjectMeta.Name)
 		id, ok := pod.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
