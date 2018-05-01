@@ -480,9 +480,14 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
 	var delError error
 
-	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
+	// GetByFunction uses resource version as part of cache key, however,
+	// the resource version in function metadata will be changed when a function
+	// is deleted and cause newdeploy backend fails to delete the entry.
+	// Use GetByFunctionUID instead of GetByFunction here to find correct
+	// fsvc entry.
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	if err != nil {
-		log.Printf("fsvc not fonud in cache: %v", fn.Metadata)
+		log.Printf("fsvc not found in cache: %v", fn.Metadata)
 		delError = err
 		return nil, err
 	}
