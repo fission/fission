@@ -31,6 +31,7 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -196,7 +197,7 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
-	resourceReq := getResourceReq(c)
+	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
 	if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
 		invokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr {
 		warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
@@ -469,9 +470,11 @@ func fnUpdate(c *cli.Context) error {
 		ResourceVersion: pkgMetadata.ResourceVersion,
 	}
 
-	function.Spec.Resources = getResourceReq(c)
+	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
 
-	function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = getTargetCPU(c)
+	if c.IsSet("targetcpu") {
+		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = getTargetCPU(c)
+	}
 
 	if c.IsSet("minscale") {
 		minscale := c.Int("minscale")
@@ -496,7 +499,7 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
 	}
 
-	if c.String("executortype") != "" {
+	if c.IsSet("executortype") {
 		var fnExecutor fission.ExecutorType
 		switch c.String("executortype") {
 		case "":
@@ -550,13 +553,19 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "TARGETCPU")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
 	for _, f := range fns {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		mincpu := f.Spec.Resources.Requests.Cpu
+		mincpu().Value()
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
+			f.Spec.Resources.Requests.Cpu().String(),
+			f.Spec.Resources.Limits.Cpu().String(),
+			f.Spec.Resources.Requests.Memory().String(),
+			f.Spec.Resources.Limits.Memory().String(),
 			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
 	}
 	w.Flush()
