@@ -66,7 +66,6 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		}
 
 		// poll list of packages (TODO: convert to watch)
-		// TODO : STV
 		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
 		checkErr(err, "Getting list of packages")
 

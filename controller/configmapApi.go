@@ -25,29 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (a *API) SecretGet(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	name := vars["secret"]
-	ns := a.extractQueryParamFromRequest(r, "namespace")
-	if len(ns) == 0 {
-		ns = metav1.NamespaceDefault
-	}
-
-	secret, err := a.kubernetesClient.Secrets(ns).Get(name, metav1.GetOptions{})
-	if err != nil {
-		log.Printf("Error getting secret: %s from ns: %s", name, ns)
-		a.respondWithError(w, err)
-		return
-	}
-
-	resp, err := json.Marshal(secret)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-	a.respondWithSuccess(w, resp)
-}
-
 func (a *API) ConfigMapGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["configmap"]

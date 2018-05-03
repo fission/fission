@@ -9,8 +9,8 @@ Users that prefer complete isolation can create their env, functions in the same
 ## Roles and privileges
 
 1. Cluster-Admin Role : Fission's services need cluster-admin privileges to monitor, create, update and delete resources across namespaces.
-2. Package-getter Role : This role has previliges to do a get, watch and list on fission package objects.
-3. Secret-Configmap-getter Role : This role has previleges to do a get, watch and list on secrets and configmaps.
+2. Package-getter Role : This role has privileges to do a get, watch and list on fission package objects.
+3. Secret-Configmap-getter Role : This role has privileges to do a get, watch and list on secrets and configmaps.
 
 ## Service Accounts 
 

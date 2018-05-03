@@ -56,16 +56,14 @@ func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 	return p
 }
 
-// TODO : Find out if this is ok
 func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
-	request := &publishRequest{
+	p.requestChannel <- &publishRequest{
 		body:       body,
 		headers:    headers,
 		target:     target,
 		retries:    p.maxRetries,
 		retryDelay: p.retryDelay,
 	}
-	go p.makeHttpRequest(request)
 }
 
 func (p *WebhookPublisher) svc() {

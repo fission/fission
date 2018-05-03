@@ -31,7 +31,7 @@ import (
 func (a *API) PackageApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
-		ns = metav1.NamespaceAll
+		ns = metav1.NamespaceDefault
 	}
 	funcs, err := a.fissionClient.Packages(ns).List(metav1.ListOptions{})
 	if err != nil {

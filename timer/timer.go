@@ -87,7 +87,9 @@ func (timer *Timer) svc() {
 
 func (timer *Timer) syncCron(triggers []crd.TimeTrigger) error {
 	// add new triggers or update existing ones
+	triggerMap := make(map[string]bool)
 	for _, t := range triggers {
+		triggerMap[crd.CacheKey(&t.Metadata)] = true
 		if item, ok := timer.triggers[crd.CacheKey(&t.Metadata)]; ok {
 			// update cron if the cron spec changed
 			if item.trigger.Spec.Cron != t.Spec.Cron {
@@ -105,12 +107,6 @@ func (timer *Timer) syncCron(triggers []crd.TimeTrigger) error {
 				cron:    timer.newCron(t),
 			}
 		}
-	}
-
-	// make a local map with current trigger list
-	triggerMap := make(map[string]bool)
-	for _, trigger := range triggers {
-		triggerMap[crd.CacheKey(&trigger.Metadata)] = true
 	}
 
 	// process removed triggers

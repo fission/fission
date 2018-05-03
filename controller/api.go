@@ -113,11 +113,7 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 
 func (api *API) extractQueryParamFromRequest(r *http.Request, queryParam string) string {
 	values := r.URL.Query()
-	paramValue, ok := values[queryParam]
-	if !ok || len(paramValue) == 0 {
-		return ""
-	}
-	return paramValue[0]
+	return values.Get(queryParam)
 }
 
 // check if namespace exists, if not create it.

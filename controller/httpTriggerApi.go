@@ -32,7 +32,7 @@ import (
 func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
-		ns = metav1.NamespaceAll
+		ns = metav1.NamespaceDefault
 	}
 
 	triggers, err := a.fissionClient.HTTPTriggers(ns).List(metav1.ListOptions{})

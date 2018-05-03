@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -229,8 +230,13 @@ func (pkgw *packageWatcher) cleanupRoleBinding(pkg *crd.Package) {
 	for _, item := range pkgList {
 		pkgItem, ok := item.(*crd.Package)
 		if !ok {
-			log.Printf("Error asserting pkg item")
-			return
+			itemJson, err := json.Marshal(item)
+			if err != nil {
+				log.Printf("Error marshaling item into json, err : %v ", err)
+				continue
+			}
+			log.Printf("Error asserting pkg item : %v", itemJson)
+			continue
 		}
 		if pkgItem.Spec.Source.Type != "" && pkgItem.Spec.Environment.Name == pkg.Spec.Environment.Name &&
 			pkgItem.Spec.Environment.Namespace == pkg.Spec.Environment.Namespace &&
@@ -241,17 +247,17 @@ func (pkgw *packageWatcher) cleanupRoleBinding(pkg *crd.Package) {
 	}
 
 	// us landing here implies no pkg in this ns uses this env, so remove fission-builder.envNs from rolebinding
-	envNs := pkgw.builderNamespace
+	envBuilderNS := pkgw.builderNamespace
 	if pkg.Spec.Environment.Namespace != metav1.NamespaceDefault {
-		envNs = pkg.Spec.Environment.Namespace
+		envBuilderNS = pkg.Spec.Environment.Namespace
 	}
-	err := fission.RemoveSAFromRoleBindingWithRetries(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.FissionBuilderSA, envNs)
+	err := fission.RemoveSAFromRoleBindingWithRetries(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.FissionBuilderSA, envBuilderNS)
 	if err != nil {
-		log.Printf("Error removing sa: %s.%s from role binding: %s.%s", fission.FissionBuilderSA, envNs, fission.PackageGetterRB, pkg.Metadata.Namespace)
+		log.Printf("Error removing sa: %s.%s from role binding: %s.%s", fission.FissionBuilderSA, envBuilderNS, fission.PackageGetterRB, pkg.Metadata.Namespace)
 		return
 	}
 
-	log.Printf("Removed sa : %s.%s from role binding: %s.%s", fission.FissionBuilderSA, envNs, fission.PackageGetterRB, pkg.Metadata.Namespace)
+	log.Printf("Removed sa : %s.%s from role binding: %s.%s", fission.FissionBuilderSA, envBuilderNS, fission.PackageGetterRB, pkg.Metadata.Namespace)
 }
 
 func (pkgw *packageWatcher) watchPackages(fissionClient *crd.FissionClient,

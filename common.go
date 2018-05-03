@@ -35,7 +35,7 @@ import (
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {
-		prefix += "/" + namespace
+		prefix = fmt.Sprintf("/fission-function/%s", namespace)
 	}
 	return fmt.Sprintf("%v/%v", prefix, name)
 }

@@ -839,7 +839,7 @@ func (gp *GenericPool) destroy() error {
 func (gp *GenericPool) cleanupRoleBindings() {
 	log.Printf("cleaning up rolebindings for gp : %s.%s", gp.env.Metadata.Name, gp.env.Metadata.Namespace)
 	// 0. funcList, err := getFunctionsByEnv(UsingPoolMgrExecutor)
-	fnList, err := crd.GetFunctionsByEnv(gp.fissionClient, gp.env.Metadata.Name, gp.env.Metadata.Namespace)
+	fnList, err := gp.getFunctionsBypool()
 	if err != nil {
 		log.Printf("Error getting functions by env : %s.%s. err : %v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, err)
 	}
@@ -865,4 +865,24 @@ func (gp *GenericPool) cleanupRoleBindings() {
 			log.Printf("Removed all RoleBindings for pool : %s.%s", gp.env.Metadata.Name, gp.env.Metadata.Namespace)
 		}
 	}
+}
+
+// getFunctionsBypool is a generic util function that fetches all functions using this pool.
+func (gp *GenericPool) getFunctionsBypool() ([]metav1.ObjectMeta, error) {
+	poolMgrfnList := make([]metav1.ObjectMeta, 0)
+	fnList, err := gp.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("Error fetching function list across all namespaces")
+		return poolMgrfnList, err
+	}
+
+	for _, item := range fnList.Items {
+		if item.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr &&
+			item.Spec.Environment.Name == gp.env.Metadata.Name &&
+			item.Spec.Environment.Namespace == gp.env.Metadata.Namespace {
+			poolMgrfnList = append(poolMgrfnList, item.Metadata)
+		}
+	}
+
+	return poolMgrfnList, nil
 }

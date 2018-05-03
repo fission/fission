@@ -32,7 +32,7 @@ func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request)
 	//mqType := r.FormValue("mqtype") // ignored for now
 	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
-		ns = metav1.NamespaceAll
+		ns = metav1.NamespaceDefault
 	}
 
 	triggers, err := a.fissionClient.MessageQueueTriggers(ns).List(metav1.ListOptions{})
