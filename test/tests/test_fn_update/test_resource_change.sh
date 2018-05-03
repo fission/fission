@@ -55,7 +55,7 @@ fi
 timeout 60 bash -c "test_fn $fn 'world'"
 
 log "Updating function $fn with new resource values"
-fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu $mincpu2 --maxcpu $maxcpu2 --minmemory $minmem2 --maxmemory $maxmem2
+fission fn update --name $fn --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu $mincpu2 --maxcpu $maxcpu2 --minmemory $minmem2 --maxmemory $maxmem2
 
 maxcpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.limits.cpu}'|tr -dc '0-9')
 mincpu_actual=$(kubectl get $func $fn -n default -ojsonpath='{.spec.resources.requests.cpu}'|tr -dc '0-9')

@@ -28,7 +28,7 @@ sleep 5
 timeout 60 bash -c "test_fn $fn 'world'"
 
 log "Updating function scale and target CPU percent for $fn"
-fission fn update --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale $targetMinScale --maxscale $targetMaxScale --targetcpu $targetCpuPercent --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+fission fn update --name $fn --code $ROOT/examples/python/hello.py --minscale $targetMinScale --maxscale $targetMaxScale --targetcpu $targetCpuPercent --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
 log "Waiting for update to catch up"
 sleep 5
