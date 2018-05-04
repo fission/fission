@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/mholt/archiver"
@@ -304,16 +303,11 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 		manifestPath := tmpUnarchivePath + "/META-INF/MANIFEST.MF"
 		_, err = os.Stat(manifestPath)
-		fmt.Println("tmpPath=", tmpPath)
-		fmt.Println("tmpUnarchivePath=", tmpUnarchivePath)
 		//TODO - Find a better way to detect a Java Jar
 		//If /META-INF/MANIFEST.MF exists - it is a Java environment
 		if err != nil {
 			tmpPath = tmpUnarchivePath
-		} else {
-			tmpPath = strings.Replace(tmpPath, ".tmp", ".jar", -1)
 		}
-		fmt.Println("Final tmpPath=", tmpPath)
 
 	}
 
