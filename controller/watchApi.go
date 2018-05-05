@@ -31,7 +31,7 @@ import (
 func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
-		ns = metav1.NamespaceDefault
+		ns = metav1.NamespaceAll
 	}
 
 	watches, err := a.fissionClient.KubernetesWatchTriggers(ns).List(metav1.ListOptions{})

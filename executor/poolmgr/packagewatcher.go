@@ -68,6 +68,10 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 				oldPkg := oldObj.(*crd.Package)
 				newPkg := newObj.(*crd.Package)
 
+				if oldPkg.Metadata.ResourceVersion == newPkg.Metadata.ResourceVersion {
+					return
+				}
+
 				// if a pkg's env reference gets updated and the newly referenced env is in a different ns,
 				// we need to update the role-binding in pkg ns to grant permissions to the fetcher-sa in env ns
 				// to do a get on pkg
@@ -98,6 +102,24 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 func (gpm *GenericPoolManager) cleanupPkgWatcherRolebinding(fissionClient *crd.FissionClient, pkg *crd.Package, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) {
 	objList := gpm.pkgStore.List()
 
+	// check all the packages sharing the env referenced in this pkg.
+	// if there's none, then remove the fetcher sa for this env from the rolebinding
+	for _, item := range objList {
+		pkgItem, ok := item.(*crd.Package)
+		if !ok {
+			log.Printf("Asserting failed for packageItem, type of item : %v", reflect.TypeOf(item))
+			continue
+		}
+
+		if pkg.Spec.Environment.Namespace != pkgItem.Spec.Environment.Namespace {
+			continue
+		}
+
+		if pkg.Spec.Environment.Name == pkgItem.Spec.Environment.Name || {
+			return
+		}
+	}
+
 	// there's no pkg in this ns, safe to delete the RoleBinding obj.
 	if len(objList) == 0 {
 		err := fission.DeleteRoleBinding(kubernetesClient, fission.PackageGetterRB, pkg.Metadata.Namespace)
@@ -109,19 +131,7 @@ func (gpm *GenericPoolManager) cleanupPkgWatcherRolebinding(fissionClient *crd.F
 		return
 	}
 
-	// check all the packages sharing the env referenced in this pkg.
-	// if there's none, then remove the fetcher sa for this env from the rolebinding
-	for _, item := range objList {
-		pkgItem, ok := item.(*crd.Package)
-		if !ok {
-			log.Printf("Asserting failed for packageItem, type of item : %v", reflect.TypeOf(item))
-			return
-		}
-		if pkg.Spec.Environment.Name == pkgItem.Spec.Environment.Name && pkg.Spec.Environment.Namespace == pkgItem.Spec.Environment.Namespace &&
-			pkgItem.Metadata.Name != pkg.Metadata.Name {
-			return
-		}
-	}
+
 	// us landing here implies no other pkg in this ns references this env, so safely remove sa from role-binding
 	envNs := fissionfnNamespace
 	if pkg.Spec.Environment.Namespace != metav1.NamespaceDefault {
