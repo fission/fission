@@ -16,13 +16,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 0.7.1
+imageTag: 0.7.2
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 0.7.1
+fetcherImageTag: 0.7.2
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -48,7 +48,7 @@ enableIstio: false
 logger:
   influxdbAdmin: "admin"
   fluentdImage: fission/fluentd
-  fluentdImageTag: 0.7.1
+  fluentdImageTag: 0.7.2
 
 ## Type of Queue you would like to use
 ## currently supports nats-streaming, azure-storage-queue
