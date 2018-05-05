@@ -386,7 +386,7 @@ generate_changelog() {
 
     echo "# ${version}" > new_CHANGELOG.md
     echo
-    echo "[Documentation](http://fission.io/docs/${version}/)" >> new_CHANGELOG.md
+    echo "[Documentation](https://docs.fission.io/${version}/)" >> new_CHANGELOG.md
     echo
 
     create_downloads_table ${version} >> new_CHANGELOG.md

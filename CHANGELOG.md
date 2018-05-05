@@ -1,17 +1,43 @@
-# 0.7.1
-[Documentation](http://fission.io/docs/0.7.1/)
-## Downloads for 0.7.1
+# 0.7.2
+[Documentation](https://docs.fission.io/0.7.2/)
+## Downloads for 0.7.2
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-core-0.7.1.tgz](https://github.com/fission/fission/releases/download/0.7.1/fission-core-0.7.1.tgz) | `5d5606c79b5d83c2e88c371b6bea4a49a599f1a1e26674db3388a63278a47c2c`
-[fission-all-0.7.1.tgz](https://github.com/fission/fission/releases/download/0.7.1/fission-all-0.7.1.tgz) | `0ea6887f39c0f59463b49e632294152c926b62b5afc65202c80045ff71735b05`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-osx) | `765b35bd1e4565b9819bed157ca0206a0e5217394d0b253a0cdd9a318ef4d9a5`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-linux) | `5eacdff0a0f3d6d3a1c2aa8d6164bc6524b1f001298cb2e82b60cf1c762a5a9e`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.7.1/fission-cli-windows.exe) | `c237b1ee1a8f2b26038555388a438e4fff5725c90d4128baaa32a77ccf990d2e`
+[fission-core-0.7.2.tgz](https://github.com/fission/fission/releases/download/0.7.2/fission-core-0.7.2.tgz) | `e890adfe45816fe82b6f48722b88a5f8ffe17d670cf751ec95036a8e4bcb05dd`
+[fission-all-0.7.2.tgz](https://github.com/fission/fission/releases/download/0.7.2/fission-all-0.7.2.tgz) | `7e22eab5663b02570a4e3a94af70970c0d10cbfd95a65383f5db512616a03b90`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.7.2/fission-cli-osx) | `8e00248acd9cea9f5df45c06aced4367c6a5ace0b83df7584cc27e2d8511ad87`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.7.2/fission-cli-linux) | `58558fd4642d5ae4a6e4a2fa1c191e0ea5a3c26482c547d6820aea1649c4170b`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.7.2/fission-cli-windows.exe) | `1a86c0a66580111cd69b9d1adc3668ed2120d20e72d790e3a15b3cca31227d45`
 
 # Change Log
+
+## [0.7.2](https://github.com/fission/fission/tree/0.7.2) (2018-05-05)
+[Full Changelog](https://github.com/fission/fission/compare/0.7.1...0.7.2)
+
+**Merged pull requests:**
+
+- Add benchmark script [\#666](https://github.com/fission/fission/pull/666) ([life1347](https://github.com/life1347))
+- Fixed the issue with update wiping values [\#663](https://github.com/fission/fission/pull/663) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix newdeploy backend failed to delete deployment due to incorrect resource version [\#657](https://github.com/fission/fission/pull/657) ([life1347](https://github.com/life1347))
+- Function update should be possible without change to code [\#652](https://github.com/fission/fission/pull/652) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fixes the issue with fn test and adds relevant test cases, fixes \#650 [\#651](https://github.com/fission/fission/pull/651) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix test cases occasional failure [\#647](https://github.com/fission/fission/pull/647) ([life1347](https://github.com/life1347))
+- Change time precision for fluentd influxdb plugin to nano second [\#646](https://github.com/fission/fission/pull/646) ([life1347](https://github.com/life1347))
+- Setting buildStatus to pending when function's source archive is updated. [\#637](https://github.com/fission/fission/pull/637) ([smruthi2187](https://github.com/smruthi2187))
+- Fix SEGFAULT issue when buildmgr failed to update package [\#635](https://github.com/fission/fission/pull/635) ([life1347](https://github.com/life1347))
+- Fix executor does not reap specialized function pod when env no longer exists [\#633](https://github.com/fission/fission/pull/633) ([life1347](https://github.com/life1347))
+- Update readme to point to the proper link [\#628](https://github.com/fission/fission/pull/628) ([jgall](https://github.com/jgall))
+- Changes needed for release 0.7.1 [\#622](https://github.com/fission/fission/pull/622) ([smruthi2187](https://github.com/smruthi2187))
+- Add default value to cli flag [\#619](https://github.com/fission/fission/pull/619) ([life1347](https://github.com/life1347))
+- Remove port forward in tests for router, controller and nats pods  [\#611](https://github.com/fission/fission/pull/611) ([smruthi2187](https://github.com/smruthi2187))
+- meaningful error message when fetch request is received for a package when build is not successful. [\#661](https://github.com/fission/fission/pull/661) ([smruthi2187](https://github.com/smruthi2187))
+- Delete deployment with proper delete propagation policy [\#630](https://github.com/fission/fission/pull/630) ([life1347](https://github.com/life1347))
+- Fix buildmgr SEGFAULT when it failed to update package [\#626](https://github.com/fission/fission/pull/626) ([life1347](https://github.com/life1347))
+- Fission upgrade tests [\#605](https://github.com/fission/fission/pull/605) ([vishal-biyani](https://github.com/vishal-biyani))
+- Removed the fn pods functionality [\#594](https://github.com/fission/fission/pull/594) ([vishal-biyani](https://github.com/vishal-biyani))
+- Testing proposal: Requirements and frameworks exploration [\#581](https://github.com/fission/fission/pull/581) ([vishal-biyani](https://github.com/vishal-biyani))
 
 ## [0.7.1](https://github.com/fission/fission/tree/0.7.1) (2018-04-10)
 [Full Changelog](https://github.com/fission/fission/compare/0.7.0...0.7.1)
@@ -54,7 +80,7 @@ filename | sha256 hash
 
 **Merged pull requests:**
 
-- This change fixes an error in a yaml file in the fission-core chart. [\#563](https://github.com/fission/fission/pull/563) ([yiqunding](https://github.com/yiqunding))
+- This change fixes an error in a yaml file in the fission-core chart. [\#563](https://github.com/fission/fission/pull/563) ([associationrule](https://github.com/associationrule))
 - \[ci skip\] update release number [\#561](https://github.com/fission/fission/pull/561) ([appleboy](https://github.com/appleboy))
 - Fixes \#537 - warning should not be given when updating to newdeploy [\#545](https://github.com/fission/fission/pull/545) ([vishal-biyani](https://github.com/vishal-biyani))
 - Docs update [\#542](https://github.com/fission/fission/pull/542) ([soamvasani](https://github.com/soamvasani))
