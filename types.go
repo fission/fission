@@ -437,12 +437,8 @@ const (
 )
 
 const (
-	FissionBuilderSA                 = "fission-builder"
-	FissionBuilderClusterRoleBinding = "fission-builder-crd"
-	ClusterAdminRole                 = "cluster-admin"
-
-	FissionFetcherSA                 = "fission-fetcher"
-	FissionFetcherClusterRoleBinding = "fission-fetcher-crd"
+	FissionBuilderSA = "fission-builder"
+	FissionFetcherSA = "fission-fetcher"
 
 	SecretConfigMapGetterCR       = "secret-configmap-getter"
 	GetSecretConfigMapRoleBinding = "secret-configmap-getter-binding"

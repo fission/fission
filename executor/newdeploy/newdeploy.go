@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -137,73 +136,6 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 		return err
 	}
 	return nil
-}
-
-func (deploy *NewDeploy) cleanupRBACObjs(deployNamespace string, fn *crd.Function) {
-	// list of functions in all namespaces
-	fnList := deploy.funcStore.List()
-
-	// fnNsHasFuncs denotes if there are other functions in the same namespace as fn
-	fnNsHasFuncs := false
-
-	// iterate through the function list to decide if any rolebindings can be deleted or SAs can be removed from them
-	for _, item := range fnList {
-		fnItem, ok := item.(*crd.Function)
-		if !ok {
-			log.Printf("Error asserting function item, type of item : %v", reflect.TypeOf(item))
-			continue
-		}
-
-		if fnItem.Metadata.Namespace != fn.Metadata.Namespace {
-			// if the fnItem doesnt belong to the fn's ns, don't care
-			continue
-		} else {
-			// if there is even one function in this ns, set this flag to true, we'll use it outside the loop
-			fnNsHasFuncs = true
-		}
-
-		// if there is even one function with executor type NDM present in the same ns, or,
-		// even one function with executor type PM whose env pods are in the same ns, return.
-		// because the role-bindings are still in use
-		if fnItem.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy ||
-			fnItem.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr &&
-			fnItem.Spec.Environment.Namespace == fn.Metadata.Namespace {
-			return
-		}
-
-	}
-
-	// if there are no functions in this ns, then delete the role-bindings
-	if !fnNsHasFuncs {
-		err := fission.DeleteRoleBinding(deploy.kubernetesClient, fission.PackageGetterRB, fn.Metadata.Namespace)
-		if err != nil {
-			log.Printf("Error deleting rolebinding : %s.%s, err : %v", fission.PackageGetterRB, fn.Metadata.Namespace, err)
-			return
-		}
-		err = fission.DeleteRoleBinding(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-		if err != nil {
-			log.Printf("Error deleting rolebinding : %s.%s, err : %v", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, err)
-			return
-		}
-		log.Printf("Deleted rolebinding : %s.%s and %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.PackageGetterRB, fn.Metadata.Namespace)
-		return
-	}
-
-	// us landing here implies there are other functions in this ns, we can remove fission-fetcher SA used by this function only from rolebindings
-	// NOTE : not returning if any of these functions error out. its a best effort cleanup. they'll eventually get cleaned up.
-	err := fission.RemoveSAFromRoleBindingWithRetries(deploy.kubernetesClient, fission.PackageGetterRB, fn.Metadata.Namespace, fission.FissionFetcherSA, deployNamespace)
-	if err != nil {
-		log.Printf("error removing sa : %s.%s from rolebinding : %s.%s, err = %v", fission.FissionFetcherSA, deployNamespace, fission.PackageGetterRB, fn.Metadata.Namespace, err)
-	}
-
-	err = fission.RemoveSAFromRoleBindingWithRetries(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.FissionFetcherSA, deployNamespace)
-	if err != nil {
-		log.Printf("error removing sa : %s.%s from rolebinding : %s.%s, err = %v", fission.FissionFetcherSA, deployNamespace, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, err)
-	}
-
-	if err == nil {
-		log.Printf("Removed sa : %s.%s from rolebinding : %s.%s and %s.%s", fission.FissionFetcherSA, deployNamespace, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.PackageGetterRB, fn.Metadata.Namespace)
-	}
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environment,

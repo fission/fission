@@ -19,6 +19,7 @@ package fission
 import (
 	"log"
 
+	"fmt"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -156,13 +157,13 @@ func AddSaToRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBinding,
 		return err
 	}
 
-	log.Printf("Exceeded maxretries : %d adding SA: %s.%s to rolebinding : %s.%s, giving up, err: %v", MaxRetries, sa, saNamespace, roleBinding, roleBindingNs)
+	log.Printf("Exceeded maxretries : %d adding SA: %s.%s to rolebinding : %s.%s, giving up, err: %v", MaxRetries, sa, saNamespace, roleBinding, roleBindingNs, err)
 	return err
 }
 
 // RemoveSAFromRoleBindingWithRetries removes an SA from the rolebinding passed as parameter. If this is the only SA in
 // the rolebinding, then it deletes the rolebinding object.
-func RemoveSAFromRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs, sa, ns string) (err error) {
+func RemoveSAFromRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs string, saToRemove map[string]bool) (err error) {
 	for i := 0; i < MaxRetries; i++ {
 		rbObj, err := k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Get(
 			roleBinding, metav1.GetOptions{})
@@ -177,11 +178,7 @@ func RemoveSAFromRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBin
 
 		// TODO : optimize it.
 		for _, item := range subjects {
-			if item.Name == sa && item.Namespace == ns && len(subjects) == 1 {
-				return DeleteRoleBinding(k8sClient, roleBinding, roleBindingNs)
-			}
-
-			if item.Name == sa && item.Namespace == ns {
+			if _, ok := saToRemove[MakeSAMapKey(item.Name, item.Namespace)]; ok {
 				continue
 			}
 
@@ -191,16 +188,20 @@ func RemoveSAFromRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBin
 				Namespace: item.Namespace,
 			})
 		}
+		if len(newSubjects) == 0 {
+			return DeleteRoleBinding(k8sClient, roleBinding, roleBindingNs)
+		}
+
 		rbObj.Subjects = newSubjects
 
 		// cant use patch for deletes, the results become in-deterministic, so using update.
 		_, err = k8sClient.RbacV1beta1().RoleBindings(rbObj.Namespace).Update(rbObj)
 		switch {
 		case err == nil:
-			log.Printf("Removed sa : %s.%s from rolebinding : %s.%s", sa, ns, roleBinding, roleBindingNs)
+			log.Printf("Removed sa's : %v from rolebinding : %s.%s", saToRemove, roleBinding, roleBindingNs)
 			return nil
 		case k8serrors.IsConflict(err):
-			log.Printf("Conflict in update, retrying")
+			log.Printf("Conflict in update of rolebinding: %s.%s, retrying", roleBinding, roleBindingNs)
 			continue
 		default:
 			log.Printf("Rolebinding Update Errored out : %v", err)
@@ -208,7 +209,7 @@ func RemoveSAFromRoleBindingWithRetries(k8sClient *kubernetes.Clientset, roleBin
 		}
 	}
 
-	log.Printf("Maxretries : %d exceeded for removing SA : %s.%s from rolebinding %s.%s, giving up, err: %v", MaxRetries, sa, ns, roleBinding, roleBindingNs, err)
+	log.Printf("Maxretries : %d exceeded for removing SA's : %v from rolebinding %s.%s, giving up, err: %v", MaxRetries, saToRemove, roleBinding, roleBindingNs, err)
 	return err
 }
 
@@ -250,4 +251,8 @@ func DeleteRoleBinding(k8sClient *kubernetes.Clientset, roleBinding, roleBinding
 		return nil
 	}
 	return err
+}
+
+func MakeSAMapKey(saName, saNamespace string) string {
+	return fmt.Sprintf("%s-%s", saName, saNamespace)
 }

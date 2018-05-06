@@ -543,8 +543,6 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 		return nil, delError
 	}
 
-	go deploy.cleanupRBACObjs(ns, fn)
-
 	return nil, nil
 }
 

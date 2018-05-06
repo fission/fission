@@ -17,7 +17,6 @@ limitations under the License.
 package poolmgr
 
 import (
-	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -153,9 +152,6 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						log.Printf("Error deleting function istio service: %v", err)
 					}
 				}
-
-				// Remove rolebinding for this function only if there's no other function in same ns
-				gpm.cleanupFuncWatcherRoleBinding(kubernetesClient, fn, fissionfnNamespace)
 			},
 
 			UpdateFunc: func(oldObj, newObj interface{}) {
@@ -166,9 +162,6 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 
 				executorTypeChangedToPM := (oldFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
 					newFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr)
-
-				executorTypeChangedFromPM := (oldFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr &&
-					newFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr)
 
 				// if a func's env reference gets updated and the newly referenced env is in a different ns,
 				// we need to create a rolebinding in func's ns so that the fetcher-sa in env ns has access
@@ -190,64 +183,8 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						log.Printf("Set up rolebinding for fetcher SA in func's env ns : %s, in func's ns : %s, for func : %s", newFunc.Spec.Environment.Namespace, newFunc.Metadata.Namespace, newFunc.Metadata.Name)
 					}
 				}
-
-				// if envChanged, we may have to remove the sa from rolebinding if no other function is using the oldEnv.
-				// similarly, if executor type got changed to new deploy, we dont need rolebinding for fetcher sa in envNs.
-				// instead, we'll now need rolebinding for fetcher sa in fNs. ( while this is done by funcWatcher in NDM,
-				// we're only cleaning up privileges here)
-				if envChanged || executorTypeChangedFromPM {
-					gpm.cleanupFuncWatcherRoleBinding(kubernetesClient, oldFunc, fissionfnNamespace)
-				}
-
 			},
 		})
 
 	return funcStore, controller
-}
-
-func (gpm *GenericPoolManager) cleanupFuncWatcherRoleBinding(kubernetesClient *kubernetes.Clientset, fn *crd.Function, fissionfnNamespace string) {
-	funcList := gpm.funcStore.List()
-
-	fnListInSameNs := make([]*crd.Function, 0)
-	for _, item := range funcList {
-		fnItem, ok := item.(*crd.Function)
-		if !ok {
-			log.Printf("Error asserting function item, type of item: %v", reflect.TypeOf(item))
-			continue
-		}
-
-		if fnItem.Spec.Environment.Name == fn.Spec.Environment.Name && fnItem.Spec.Environment.Namespace == fn.Spec.Environment.Namespace &&
-			fnItem.Metadata.Name != fn.Metadata.Name && fnItem.Metadata.Namespace == fn.Metadata.Namespace {
-			log.Printf("Another function in the ns: %s is using the same env, so nothing to do", fn.Metadata.Namespace)
-			return
-		}
-
-		if fnItem.Metadata.Namespace == fn.Metadata.Namespace {
-			fnListInSameNs = append(fnListInSameNs, fnItem)
-		}
-	}
-
-	if len(fnListInSameNs) == 0 {
-		err := fission.DeleteRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-		if err != nil {
-			log.Printf("Error deleting rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-			return
-		}
-		log.Printf("Deleted rolebinding : %s.%s", fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-		return
-	}
-
-	envNs := fissionfnNamespace
-	if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
-		envNs = fn.Spec.Environment.Namespace
-	}
-	// landing here implies that there are no functions in this ns that use the same env, so remove SA from rolebinding
-	err := fission.RemoveSAFromRoleBindingWithRetries(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.FissionFetcherSA, envNs)
-	if err != nil {
-		log.Printf("Error removing sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, envNs, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-		return
-	}
-
-	log.Printf("Removed sa: %s.%s from rolebinding : %s.%s", fission.FissionFetcherSA, envNs, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace)
-
 }

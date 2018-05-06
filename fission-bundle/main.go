@@ -29,8 +29,8 @@ func runRouter(port int, executorUrl string) {
 	log.Fatalf("Error: Router exited.")
 }
 
-func runExecutor(port int, fissionNamespace, functionNamespace string) {
-	err := executor.StartExecutor(fissionNamespace, functionNamespace, port)
+func runExecutor(port int, fissionNamespace, functionNamespace, envBuilderNamespace string) {
+	err := executor.StartExecutor(fissionNamespace, functionNamespace, envBuilderNamespace, port)
 	if err != nil {
 		log.Fatalf("Error starting executor: %v", err)
 	}
@@ -166,7 +166,7 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(arguments["--executorPort"])
-		runExecutor(port, fissionNs, functionNs)
+		runExecutor(port, fissionNs, functionNs, envBuilderNs)
 	}
 
 	if arguments["--kubewatcher"] == true {

@@ -157,7 +157,6 @@ func (gpm *GenericPoolManager) service() {
 
 					// and delete the pool asynchronously.
 					go pool.destroy()
-					go pool.cleanupRoleBindings()
 				}
 			}
 			// no response, caller doesn't wait

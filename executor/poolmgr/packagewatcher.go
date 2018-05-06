@@ -17,7 +17,6 @@ limitations under the License.
 package poolmgr
 
 import (
-	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -59,11 +58,6 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 				log.Printf("Successfully set up rolebinding for fetcher SA: %s.%s, in packages's ns : %s, for pkg : %s", fission.FissionFetcherSA, envNs, pkg.Metadata.Namespace, pkg.Metadata.Name)
 			},
 
-			DeleteFunc: func(obj interface{}) {
-				pkg := obj.(*crd.Package)
-				gpm.cleanupPkgWatcherRolebinding(fissionClient, pkg, kubernetesClient, fissionfnNamespace)
-			},
-
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldPkg := oldObj.(*crd.Package)
 				newPkg := newObj.(*crd.Package)
@@ -89,58 +83,9 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 						return
 					}
 					log.Printf("Updated rolebinding for fetcher SA: %s.%s, in packages's ns : %s, for pkg : %s", fission.FissionFetcherSA, envNs, newPkg.Metadata.Namespace, newPkg.Metadata.Name)
-
-					// also remove old sa : fission-fetcher.oldEnvNs from rolebinding, if there are no pkgs in this ns referencing the same env.
-					gpm.cleanupPkgWatcherRolebinding(fissionClient, oldPkg, kubernetesClient, fissionfnNamespace)
 				}
 			},
 		})
 
 	return pkgStore, controller
-}
-
-func (gpm *GenericPoolManager) cleanupPkgWatcherRolebinding(fissionClient *crd.FissionClient, pkg *crd.Package, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) {
-	objList := gpm.pkgStore.List()
-
-	// check all the packages sharing the env referenced in this pkg.
-	// if there's none, then remove the fetcher sa for this env from the rolebinding
-	for _, item := range objList {
-		pkgItem, ok := item.(*crd.Package)
-		if !ok {
-			log.Printf("Asserting failed for packageItem, type of item : %v", reflect.TypeOf(item))
-			continue
-		}
-
-		if pkg.Spec.Environment.Namespace != pkgItem.Spec.Environment.Namespace {
-			continue
-		}
-
-		if pkg.Spec.Environment.Name == pkgItem.Spec.Environment.Name || {
-			return
-		}
-	}
-
-	// there's no pkg in this ns, safe to delete the RoleBinding obj.
-	if len(objList) == 0 {
-		err := fission.DeleteRoleBinding(kubernetesClient, fission.PackageGetterRB, pkg.Metadata.Namespace)
-		if err != nil {
-			log.Printf("Error deleting role binding: %s.%s", fission.PackageGetterRB, pkg.Metadata.Namespace)
-			return
-		}
-		log.Printf("Deleted role binding: %s.%s", fission.PackageGetterRB, pkg.Metadata.Namespace)
-		return
-	}
-
-
-	// us landing here implies no other pkg in this ns references this env, so safely remove sa from role-binding
-	envNs := fissionfnNamespace
-	if pkg.Spec.Environment.Namespace != metav1.NamespaceDefault {
-		envNs = pkg.Spec.Environment.Namespace
-	}
-	err := fission.RemoveSAFromRoleBindingWithRetries(kubernetesClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.FissionFetcherSA, envNs)
-	if err != nil {
-		log.Printf("Error removing sa: %s.%s from role binding: %s.%s", fission.FissionFetcherSA, envNs, fission.PackageGetterRB, pkg.Metadata.Namespace)
-		return
-	}
-	log.Printf("Removed sa : %s.%s from role binding: %s.%s", fission.FissionFetcherSA, envNs, fission.PackageGetterRB, pkg.Metadata.Namespace)
 }

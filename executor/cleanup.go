@@ -263,3 +263,135 @@ func logErr(msg string, err error) {
 		log.Printf("Error %v: %v", msg, err)
 	}
 }
+
+// cleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
+// deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
+func cleanupRoleBindings(client *kubernetes.Clientset, fissionClient *crd.FissionClient, functionNs, envBuilderNs string, cleanupRoleBindingInterval time.Duration) {
+	for {
+		log.Printf("Starting cleanupRoleBindings cycle")
+		// get all rolebindings ( just to be efficient, one call to kubernetes )
+		rbList, err := client.RbacV1beta1().RoleBindings(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+		if err != nil {
+			// something wrong, but next iteration hopefully succeeds
+			log.Println("Error listing rolebindings in all ns, err: %v", err)
+			continue
+		}
+
+		// we need these flags to decide if any of the service accounts can be removed from rolebindings depending on the functions that need them.
+		// ndmFunc denotes if there's at least one function has executor type New deploy Manager
+		// funcEnvReference denotes if there's atleast one function that has reference to an environment in the SA Namespace for the SA in question
+		var ndmFunc, funcEnvReference bool
+
+		// go through each rolebinding object and do the cleanup necessary
+		for _, roleBinding := range rbList.Items {
+			// ignore rolebindings in kube-system namespace
+			if roleBinding.Namespace == "kube-system" {
+				continue
+			}
+
+			// ignore rolebindings not created by fission
+			if roleBinding.Name != fission.PackageGetterRB && roleBinding.Name != fission.GetSecretConfigMapRoleBinding {
+				continue
+			}
+
+			// in order to find out if there are any functions that need this rolebinding in rolebinding namespace,
+			// we can list the functions once per rolebinding.
+			funcList, err := fissionClient.Functions(roleBinding.Namespace).List(meta_v1.ListOptions{})
+			if err != nil {
+				log.Printf("Error fetching environment list in : %s", roleBinding.Namespace)
+				continue
+			}
+
+			// final map of service accounts that can be removed from this roleBinding object
+			// using a map here instead of a list so the code in RemoveSAFromRoleBindingWithRetries is efficient.
+			saToRemove := make(map[string]bool)
+
+			// iterate through each subject in the rolebinding and check if there are any references to them
+			for _, subj := range roleBinding.Subjects {
+				ndmFunc = false
+				funcEnvReference = false
+
+				// this is the reverse of what we're doing in setting up of rolebindings. if objects are created in default ns,
+				// the SA namespace will have the value of "fission-function"/"fission-builder" depending on the SA.
+				// so now we need to look for the objects in default namespace.
+				saNs := subj.Namespace
+				if subj.Namespace == functionNs ||
+					subj.Namespace == envBuilderNs {
+					saNs = meta_v1.NamespaceDefault
+				}
+
+				// go through each function and find out if there's either at least one function with env reference in the same namespace as the Service Account in this iteration
+				// or at least one function using ndm executor in the rolebinding namespace and set the corresponding flags
+				for _, fn := range funcList.Items {
+					if fn.Spec.Environment.Namespace == saNs {
+						funcEnvReference = true
+						break
+					}
+
+					if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+						ndmFunc = true
+						break
+					}
+				}
+
+				// if its a package-getterr-rb, we have 2 kinds of SAs and each of them is handled differently
+				// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
+				if roleBinding.Name == fission.PackageGetterRB {
+					// check if there is an env obj in saNs
+					envList, err := fissionClient.Environments(saNs).List(meta_v1.ListOptions{})
+					if err != nil {
+						log.Printf("Error fetching environment list in : %s", saNs)
+						continue
+					}
+
+					// if the SA in this iteration is fission-builder, then we need to only check
+					// if either there's at least one env object in the SA's namespace, or,
+					// if there's at least one function in the rolebinding namespace with env reference
+					// to the SA's namespace.
+					// if neither, then we can remove this SA from this rolebinding
+					if subj.Name == fission.FissionBuilderSA {
+						if len(envList.Items) == 0 && !funcEnvReference {
+							saToRemove[fission.MakeSAMapKey(subj.Name, subj.Namespace)] = true
+						}
+					}
+
+					// if the SA in this iteration is fission-fetcher, then in addition to above checks,
+					// we also need to check if there's at least one function with executor type New deploy
+					// in the rolebinding's namespace.
+					// if none of them are true, then remove this SA from this rolebinding
+					if subj.Name == fission.FissionFetcherSA {
+						if len(envList.Items) == 0 && !ndmFunc && !funcEnvReference {
+							// remove SA from rolebinding
+							saToRemove[fission.MakeSAMapKey(subj.Name, subj.Namespace)] = true
+						}
+					}
+				} else if roleBinding.Name == fission.GetSecretConfigMapRoleBinding {
+					// if there's not even one function in the rolebinding's namespace and there's not even
+					// one function with env reference to the SA's namespace, then remove that SA
+					// from this rolebinding
+					if !ndmFunc && !funcEnvReference {
+						saToRemove[fission.MakeSAMapKey(subj.Name, subj.Namespace)] = true
+					}
+				}
+			}
+
+			// finally, make a call to RemoveSAFromRoleBindingWithRetries for all the service accounts that need to be removed
+			// for the roleBinding in this iteration
+			if len(saToRemove) != 0 {
+				log.Printf("saToRemove : %v for rolebinding : %s.%s", saToRemove, roleBinding.Name, roleBinding.Namespace)
+
+				// call this once in the end for each rolebinding
+				err = fission.RemoveSAFromRoleBindingWithRetries(client, roleBinding.Name, roleBinding.Namespace, saToRemove)
+				if err != nil {
+					// if there's an error, we just log it and proceed with the next rolebinding, hoping that this rolebinding
+					// will be processed in next iteration.
+					log.Printf("Error removing SA : %v from rolebinding : %s.%s, err: %v", saToRemove, roleBinding.Name,
+						roleBinding.Namespace, err)
+				}
+			}
+		}
+
+		// some sleep before the next cleanup iteration
+		time.Sleep(cleanupRoleBindingInterval)
+	}
+}
