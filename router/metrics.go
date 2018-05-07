@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -110,7 +111,7 @@ func labelsToStrings(f *functionLabels, h *httpLabels) []string {
 		h.host,
 		h.path,
 		h.method,
-		string(h.code),
+		fmt.Sprint(h.code),
 	}
 }
 

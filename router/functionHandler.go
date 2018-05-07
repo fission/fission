@@ -80,14 +80,15 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	// Metrics stuff
 	startTime := time.Now()
 	funcMetricLabels := &functionLabels{
-		cached:    !serviceUrlFromExecutor,
 		namespace: roundTripper.funcHandler.function.Namespace,
 		name:      roundTripper.funcHandler.function.Name,
 	}
 	httpMetricLabels := &httpLabels{
 		method: req.Method,
-		host:   roundTripper.funcHandler.httpTrigger.Spec.Host,
-		path:   roundTripper.funcHandler.httpTrigger.Spec.RelativeURL,
+	}
+	if roundTripper.funcHandler.httpTrigger != nil {
+		httpMetricLabels.host = roundTripper.funcHandler.httpTrigger.Spec.Host
+		httpMetricLabels.path = roundTripper.funcHandler.httpTrigger.Spec.RelativeURL
 	}
 
 	// set the timeout for transport context
@@ -157,6 +158,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
+			funcMetricLabels.cached = !serviceUrlFromExecutor
+
 			functionCallCompleted(funcMetricLabels, httpMetricLabels,
 				overhead, time.Since(startTime), resp.ContentLength)
 
