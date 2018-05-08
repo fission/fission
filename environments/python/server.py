@@ -4,6 +4,7 @@ import logging
 import sys
 import imp
 import os
+import bjoern
 
 from flask import Flask, request, abort, g
 
@@ -99,4 +100,4 @@ def setup_logger(loglevel):
 #
 setup_logger(logging.DEBUG)
 app.logger.info("Starting server")
-app.run(host='0.0.0.0', port=8888)
+bjoern.run(app, '0.0.0.0', 8888, reuse_port=True)
