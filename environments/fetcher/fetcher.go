@@ -301,7 +301,14 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			log.Println(err.Error())
 			return 500, err
 		}
-		tmpPath = tmpUnarchivePath
+		manifestPath := tmpUnarchivePath + "/META-INF/MANIFEST.MF"
+		_, err = os.Stat(manifestPath)
+		//TODO - Find a better way to detect a Java Jar
+		//If /META-INF/MANIFEST.MF exists - it is a Java environment
+		if err != nil {
+			tmpPath = tmpUnarchivePath
+		}
+
 	}
 
 	// move tmp file to requested filename
