@@ -47,6 +47,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -71,6 +72,12 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 	http.ListenAndServe(url, mr)
 }
 
+func serveMetric() {
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(metricAddr, nil))
+}
+
 func Start(port int, executorUrl string) {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
@@ -92,6 +99,8 @@ func Start(port int, executorUrl string) {
 	executor := executorClient.MakeClient(executorUrl)
 	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, executor, restClient)
 	resolver := makeFunctionReferenceResolver(fnStore)
+
+	go serveMetric()
 
 	log.Printf("Starting router at port %v\n", port)
 	ctx, cancel := context.WithCancel(context.Background())
