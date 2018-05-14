@@ -269,8 +269,8 @@ type (
 		// Optional, defaults to 360 seconds
 		TerminationGracePeriod int64
 
-		// ExtractArchive is used by fetcher to determine if the extrcted archive
-		// or unarchived file should be placed, which is then used by specialize handler
+		// ExtractArchive flag controls whether the runtime environment gets an archive file or a
+		// directory of files
 		ExtractArchive bool `json:"extractarchive"`
 	}
 
