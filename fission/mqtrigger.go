@@ -71,8 +71,8 @@ func mqtCreate(c *cli.Context) error {
 
 	maxRetries := c.Int("maxretries")
 
-	if maxRetries < 0 || maxRetries > 10 {
-		fatal("Maximum number of retries must be between 0 and 10")
+	if maxRetries < 1 || maxRetries > 10 {
+		fatal("Maximum number of retries must be between 1 and 10")
 	}
 
 	contentType := c.String("contenttype")
