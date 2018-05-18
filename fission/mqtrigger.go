@@ -68,6 +68,14 @@ func mqtCreate(c *cli.Context) error {
 		fatal("Listen topic should not equal to response topic")
 	}
 
+	errorTopic := c.String("errortopic")
+
+	maxRetries := c.Int("maxretries")
+
+	if maxRetries < 1 || maxRetries > 10 {
+		fatal("Maximum number of retries must be between 1 and 10")
+	}
+
 	contentType := c.String("contenttype")
 	if len(contentType) == 0 {
 		contentType = "application/json"
