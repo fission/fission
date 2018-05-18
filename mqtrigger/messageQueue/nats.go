@@ -115,34 +115,46 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			req.Header.Add(k, v)
 		}
 
-		// Make the request
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Warningf("Request failed: %v", url)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Warningf("Request body error: %v", string(body))
-			return
-		}
-		if resp.StatusCode != 200 {
-			log.Printf("Request returned failure: %v", resp.StatusCode)
-			return
-		}
-		// trigger acks message only if a request done successfully
-		err = msg.Ack()
-		if err != nil {
-			log.Warningf("Failed to ack message: %v", err)
-		}
-
-		if len(trigger.Spec.ResponseTopic) > 0 {
-			err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
+		for attempt := 0; attempt < trigger.Spec.MaxRetries; attempt++ {
+			// Make the request
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
-				log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
+				log.Warningf("Request failed, will retry: %v", url)
+				// return
 			}
+			// defer resp.Body.Close()
+
+			body, bodyErr := ioutil.ReadAll(resp.Body)
+			if bodyErr != nil {
+				log.Warningf("Request body error: %v", string(body))
+				// return
+			}
+			if resp.StatusCode != 200 {
+				log.Printf("Request returned failure: %v", resp.StatusCode)
+
+				if len(trigger.Spec.ErrorTopic) > 0 {
+					err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
+				}
+				//return
+				// Request successful; no need to retry
+				resp.Body.Close()
+				break
+			}
+			// trigger acks message only if a request done successfully
+			err = msg.Ack()
+			if err != nil {
+				log.Warningf("Failed to ack message: %v", err)
+			}
+
+			if len(trigger.Spec.ResponseTopic) > 0 {
+				err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
+				if err != nil {
+					log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
+				}
+			}
+
+			resp.Body.Close()
 		}
+
 	}
 }
