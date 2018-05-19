@@ -72,9 +72,9 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				// setup rolebinding is tried, if it fails, we dont return. we just log an error and move on, because :
 				// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
 				// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-				err := fission.SetupRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, envNs)
+				err := fission.SetupRoleBinding(kubernetesClient, fission.SecretConfigMapGetterRB, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, envNs)
 				if err != nil {
-					log.Printf("Error : %v creating %s RoleBinding", err, fission.GetSecretConfigMapRoleBinding)
+					log.Printf("Error : %v creating %s RoleBinding", err, fission.SecretConfigMapGetterRB)
 				} else {
 					log.Printf("Successfully set up rolebinding for fetcher SA: %s.%s, in func's ns for func : %s", fission.FissionFetcherSA, envNs, fn.Metadata.Name, fn.Metadata.Namespace)
 				}
@@ -178,7 +178,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						envNs = newFunc.Spec.Environment.Namespace
 					}
 
-					err := fission.SetupRoleBinding(kubernetesClient, fission.GetSecretConfigMapRoleBinding,
+					err := fission.SetupRoleBinding(kubernetesClient, fission.SecretConfigMapGetterRB,
 						newFunc.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole,
 						fission.FissionFetcherSA, envNs)
 					if err != nil {

@@ -123,10 +123,6 @@ func fnCreate(c *cli.Context) error {
 	fnNamespace := c.String("fnNamespace")
 	envNamespace := c.String("envNamespace")
 
-	if len(c.String("package")) > 0 {
-		fatal("--package is deprecated, please use --deploy instead.")
-	}
-
 	fnName := c.String("name")
 	if len(fnName) == 0 {
 		fatal("Need --name argument.")
@@ -221,7 +217,7 @@ func fnCreate(c *cli.Context) error {
 			Name:      secretName,
 		})
 		if k8serrors.IsNotFound(err) {
-			warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+			warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 		}
 
 		newSecret := fission.SecretReference{

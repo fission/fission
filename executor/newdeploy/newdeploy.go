@@ -105,9 +105,9 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *crd.Function)
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
+	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.SecretConfigMapGetterRB, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
 	if err != nil {
-		log.Printf("Error : %v creating %s RoleBinding for function %s.%s", err, fission.GetSecretConfigMapRoleBinding, fn.Metadata.Name, fn.Metadata.Namespace)
+		log.Printf("Error : %v creating %s RoleBinding for function %s.%s", err, fission.SecretConfigMapGetterRB, fn.Metadata.Name, fn.Metadata.Namespace)
 		return err
 	}
 

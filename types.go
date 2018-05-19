@@ -440,8 +440,8 @@ const (
 	FissionBuilderSA = "fission-builder"
 	FissionFetcherSA = "fission-fetcher"
 
-	SecretConfigMapGetterCR       = "secret-configmap-getter"
-	GetSecretConfigMapRoleBinding = "secret-configmap-getter-binding"
+	SecretConfigMapGetterCR = "secret-configmap-getter"
+	SecretConfigMapGetterRB = "secret-configmap-getter-binding"
 
 	PackageGetterCR = "package-getter"
 	PackageGetterRB = "package-getter-binding"
