@@ -409,7 +409,7 @@ func (envw *environmentWatcher) deleteBuilderService(sel map[string]string, ns s
 		log.Printf("Removing builder service: %v", svc.ObjectMeta.Name)
 		err = envw.kubernetesClient.
 			Services(ns).
-			Delete(svc.ObjectMeta.Name, delOpt)
+			Delete(svc.ObjectMeta.Name, &delOpt)
 		if err != nil {
 			return fmt.Errorf("Error deleting builder service: %v", err)
 		}
