@@ -29,13 +29,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 )
 
 type functionHandler struct {
-	fmap     *functionServiceMap
-	executor *executorClient.Client
-	function *metav1.ObjectMeta
+	fmap        *functionServiceMap
+	executor    *executorClient.Client
+	function    *metav1.ObjectMeta
+	httpTrigger *crd.HTTPTrigger
 }
 
 // A layer on top of http.DefaultTransport, with retries.
@@ -74,6 +76,20 @@ type RetryingRoundTripper struct {
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var needExecutor, serviceUrlFromExecutor bool
 	var serviceUrl *url.URL
+
+	// Metrics stuff
+	startTime := time.Now()
+	funcMetricLabels := &functionLabels{
+		namespace: roundTripper.funcHandler.function.Namespace,
+		name:      roundTripper.funcHandler.function.Name,
+	}
+	httpMetricLabels := &httpLabels{
+		method: req.Method,
+	}
+	if roundTripper.funcHandler.httpTrigger != nil {
+		httpMetricLabels.host = roundTripper.funcHandler.httpTrigger.Spec.Host
+		httpMetricLabels.path = roundTripper.funcHandler.httpTrigger.Spec.RelativeURL
+	}
 
 	// set the timeout for transport context
 	timeout := roundTripper.initialTimeout
@@ -135,13 +151,23 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			KeepAlive: 30 * time.Second,
 		}).DialContext
 
+		overhead := time.Since(startTime)
+
 		// forward the request to the function service
 		resp, err = transport.RoundTrip(req)
 		if err == nil {
+			// Track metrics
+			httpMetricLabels.code = resp.StatusCode
+			funcMetricLabels.cached = !serviceUrlFromExecutor
+
+			functionCallCompleted(funcMetricLabels, httpMetricLabels,
+				overhead, time.Since(startTime), resp.ContentLength)
+
 			// if transport.RoundTrip succeeds and it was a cached entry, then tapService
 			if !serviceUrlFromExecutor {
 				go roundTripper.funcHandler.tapService(serviceUrl)
 			}
+
 			// return response back to user
 			return resp, nil
 		}
@@ -190,11 +216,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
-	// System Params
+	// system params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
-	// TODO: As an optimization we may want to cache proxies too -- this might get us
-	// connection reuse and possibly better performance
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
 			// explicitly disable User-Agent so it's not set to default value

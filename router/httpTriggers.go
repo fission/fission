@@ -117,9 +117,10 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		}
 
 		fh := &functionHandler{
-			fmap:     ts.functionServiceMap,
-			function: rr.functionMetadata,
-			executor: ts.executor,
+			fmap:        ts.functionServiceMap,
+			function:    rr.functionMetadata,
+			executor:    ts.executor,
+			httpTrigger: &trigger,
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
