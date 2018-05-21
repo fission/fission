@@ -136,10 +136,12 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 					err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
 				}
 				//return
-				// Request successful; no need to retry
-				resp.Body.Close()
-				break
 			}
+
+			// Request successful; no need to retry
+			resp.Body.Close()
+			break
+
 			// trigger acks message only if a request done successfully
 			err = msg.Ack()
 			if err != nil {
