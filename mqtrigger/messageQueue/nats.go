@@ -111,52 +111,61 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 
 		// Create request
 		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
+
+		if err != nil {
+			log.Errorf("Could not issue POST request with message to url %v", url)
+			return
+		}
+
 		for k, v := range headers {
 			req.Header.Add(k, v)
 		}
 
+		var resp *http.Response
+
+		// Number of retries is required to be between 1 and 5, inclusive
 		for attempt := 0; attempt < trigger.Spec.MaxRetries; attempt++ {
 			// Make the request
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				log.Warningf("Request failed, will retry: %v", url)
-				// return
 			}
-			// defer resp.Body.Close()
-
-			body, bodyErr := ioutil.ReadAll(resp.Body)
-			if bodyErr != nil {
-				log.Warningf("Request body error: %v", string(body))
-				// return
+			if resp.StatusCode == 200 {
+				break
 			}
-			if resp.StatusCode != 200 {
-				log.Printf("Request returned failure: %v", resp.StatusCode)
-
-				if len(trigger.Spec.ErrorTopic) > 0 {
-					err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
-				}
-				//return
-			}
-
-			// Request successful; no need to retry
-			resp.Body.Close()
-			break
-
-			// trigger acks message only if a request done successfully
-			err = msg.Ack()
-			if err != nil {
-				log.Warningf("Failed to ack message: %v", err)
-			}
-
-			if len(trigger.Spec.ResponseTopic) > 0 {
-				err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
-				if err != nil {
-					log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
-				}
-			}
-
-			resp.Body.Close()
 		}
 
+		defer resp.Body.Close()
+
+		// Only the latest error response will be published to error topic
+		if resp.StatusCode != 200 {
+			log.Printf("Request returned failure: %v", resp.StatusCode)
+
+			if len(trigger.Spec.ErrorTopic) > 0 {
+				err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
+			}
+			return
+		}
+
+		body, bodyErr := ioutil.ReadAll(resp.Body)
+
+		if bodyErr != nil {
+			log.Warningf("Response body error: %v", string(body))
+			return
+		}
+
+		// trigger acks message only if a request done successfully
+		err = msg.Ack()
+		if err != nil {
+			log.Warningf("Failed to ack message: %v", err)
+		}
+
+		if len(trigger.Spec.ResponseTopic) > 0 {
+			err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
+			if err != nil {
+				log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
+			}
+		}
 	}
+
 }
