@@ -151,6 +151,20 @@ func mqtUpdate(c *cli.Context) error {
 		mqt.Spec.ResponseTopic = respTopic
 		updated = true
 	}
+
+	if len(errorTopic) > 0 {
+		mqt.Spec.ErrorTopic = errorTopic
+		updated = true
+	}
+
+	// Default number of tries is 1
+	mqt.Spec.MaxRetries = 1
+
+	if maxRetries > 0 && maxRetries < 6  {
+		mqt.Spec.MaxRetries = maxRetries
+		updated = true
+	}
+
 	if len(fnName) > 0 {
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
