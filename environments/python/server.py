@@ -4,9 +4,9 @@ import logging
 import sys
 import imp
 import os
-import bjoern
 
 from flask import Flask, request, abort, g
+from gevent.pywsgi import WSGIServer
 
 app = Flask(__name__)
 
@@ -100,4 +100,5 @@ def setup_logger(loglevel):
 #
 setup_logger(logging.DEBUG)
 app.logger.info("Starting server")
-bjoern.run(app, '0.0.0.0', 8888, reuse_port=True)
+server = WSGIServer(('', 8888), app)
+server.serve_forever()
