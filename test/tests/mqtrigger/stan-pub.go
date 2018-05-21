@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
