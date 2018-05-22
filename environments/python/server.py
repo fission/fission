@@ -78,7 +78,7 @@ def f():
     #   g.myKey = myValue
     # And the user func can then access that (after doing a "from flask import g").
     #
-    return userfunc()
+    return "%s" %(userfunc())
 
 #
 # Logging setup.  TODO: Loglevel hard-coded for now. We could allow
