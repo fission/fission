@@ -1,0 +1,4 @@
+router:
+  dialtimeout: 50ms
+  alivetimeout: 30s
+  maxretries: 10

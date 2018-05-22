@@ -10,6 +10,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/buildermgr"
+	"github.com/fission/fission/config"
 	"github.com/fission/fission/controller"
 	"github.com/fission/fission/executor"
 	"github.com/fission/fission/kubewatcher"
@@ -19,13 +20,15 @@ import (
 	"github.com/fission/fission/timer"
 )
 
+const configPath = "/etc/fission/config.yaml"
+
 func runController(port int) {
 	controller.Start(port)
 	log.Fatalf("Error: Controller exited.")
 }
 
-func runRouter(port int, executorUrl string) {
-	router.Start(port, executorUrl)
+func runRouter(port int, executorUrl string, cfg *config.Config) {
+	router.Start(port, executorUrl, cfg)
 	log.Fatalf("Error: Router exited.")
 }
 
@@ -154,6 +157,11 @@ Options:
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
 
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+
 	if arguments["--controllerPort"] != nil {
 		port := getPort(arguments["--controllerPort"])
 		runController(port)
@@ -161,7 +169,7 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(arguments["--routerPort"])
-		runRouter(port, executorUrl)
+		runRouter(port, executorUrl, cfg)
 	}
 
 	if arguments["--executorPort"] != nil {

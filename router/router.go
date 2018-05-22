@@ -50,6 +50,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/config"
+	fissionctx "github.com/fission/fission/context"
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 )
@@ -78,7 +80,7 @@ func serveMetric() {
 	log.Fatal(http.ListenAndServe(metricAddr, nil))
 }
 
-func Start(port int, executorUrl string) {
+func Start(port int, executorUrl string, cfg *config.Config) {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
 
@@ -94,16 +96,22 @@ func Start(port int, executorUrl string) {
 		log.Fatalf("Error waiting for CRDs: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx = context.WithValue(ctx, fissionctx.KeyDialTimeout, cfg.Router.DialTimeout)
+	ctx = context.WithValue(ctx, fissionctx.KeyAliveTimeout, cfg.Router.AliveTimeout)
+	ctx = context.WithValue(ctx, fissionctx.KeyMaxRetries, cfg.Router.MaxRetries)
+
 	restClient := fissionClient.GetCrdClient()
 
 	executor := executorClient.MakeClient(executorUrl)
-	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, executor, restClient)
+	triggers, _, fnStore := makeHTTPTriggerSet(ctx, fmap, fissionClient, executor, restClient)
 	resolver := makeFunctionReferenceResolver(fnStore)
 
 	go serveMetric()
 
 	log.Printf("Starting router at port %v\n", port)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
 	serve(ctx, port, triggers, resolver)
 }
