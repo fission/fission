@@ -48,6 +48,10 @@ func getKubeConfigPath() string {
 }
 
 func getServerUrl() string {
+	return getApplicationUrl("application=fission-api")
+}
+
+func getApplicationUrl(selector string) string {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
