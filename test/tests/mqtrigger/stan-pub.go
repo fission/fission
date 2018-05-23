@@ -13,7 +13,7 @@ import (
 	"log"
 	"sync"
 	"time"
-
+	"os"
 	"github.com/nats-io/go-nats-streaming"
 )
 
