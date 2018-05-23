@@ -14,9 +14,9 @@ clusterID="fissionMQTrigger"
 topic="foo.bar"
 resptopic="foo.foo"
 errortopic="foo.error"
-maxretries=2
-FISSION_NATS_STREAMING_URL="0.0.0.0:4222"
-expectedRespOutput="[foo.foo]: 'Hello, World!'"
+maxretries=1
+FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@192.168.64.3:4222"
+expectedRespOutput="[foo.error]: 'Hello, World!'"
 
 echo "Pre-test cleanup"
 fission env delete --name nodejs || true
@@ -33,6 +33,8 @@ trap "fission fn delete --name $fn" EXIT
 echo "Creating message queue trigger"
 mqt=mqt-$(date +%s)
 fission mqtrigger create --name $mqt --function $fn --mqtype "nats-streaming" --topic $topic --resptopic $resptopic --errortopic $errortopic --maxretries $maxretries
+echo "Updated mqtrigger list"
+fission mqtrigger list
 trap "fission mqtrigger delete --name $mqt" EXIT
 
 # wait until nats trigger is created
@@ -45,7 +47,7 @@ echo "Sending message"
 go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic ""
 
 #
-# Wait for message on response topic
+# Wait for message on error topic
 #
 echo "Waiting for response"
 TIMEOUT=timeout
@@ -54,11 +56,11 @@ then
     # If this fails on mac os, do "brew install coreutils".
     TIMEOUT=gtimeout
 fi
-response=$($TIMEOUT 120s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
+response=$($TIMEOUT 240s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $errortopic 2>&1)
+
+echo "Subscriber received expected response: $response"
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
     exit 1
 fi
-
-echo "Subscriber received expected response: $response"

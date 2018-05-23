@@ -109,9 +109,10 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 		headers := map[string]string{
 			"X-Fission-MQTrigger-Topic":     trigger.Spec.Topic,
 			"X-Fission-MQTrigger-RespTopic": trigger.Spec.ResponseTopic,
+			"X-Fission-MQTrigger-ErrorTopic":trigger.Spec.ErrorTopic,
 			"Content-Type":                  trigger.Spec.ContentType,
 		}
-
+		
 		// Create request
 		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
 
