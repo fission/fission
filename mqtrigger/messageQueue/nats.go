@@ -109,7 +109,10 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			"X-Fission-MQTrigger-ErrorTopic":trigger.Spec.ErrorTopic,
 			"Content-Type":                  trigger.Spec.ContentType,
 		}
-		
+
+		log.Info("Making sure the NATS message handler recognizes a valid error topic: ", trigger.Spec.ErrorTopic)
+		log.Info("And max retries value: ", trigger.Spec.MaxRetries)
+
 		// Create request
 		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
 
@@ -128,19 +131,29 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 		for attempt := 0; attempt < trigger.Spec.MaxRetries; attempt++ {
 			// Make the request
 			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				log.Warningf("Request failed, will retry: %v", url)
-			}
-			if resp.StatusCode == 200 {
+			if err == nil && resp.StatusCode == 200 {
 				break
 			}
+			//if err != nil {
+			//	log.Error("Request failed, will retry: %v", url)
+			//}
+			//if resp != nil || resp.StatusCode == 200 {
+			//	break
+			//}
 		}
 
-		defer resp.Body.Close()
+		log.Info("We've reached the max retries limit. Proceeding to publish error to error queue.")
+
+		//defer resp.Body.Close()
+
+		if resp == nil {
+			log.Info("The response is empty!")
+		}
 
 		// Only the latest error response will be published to error topic
-		if resp.StatusCode != 200 {
-			log.Printf("Request returned failure: %v", resp.StatusCode)
+		if err != nil || resp.StatusCode != 200 {
+			log.Errorf("Request to %v failed after %v retries, err : %v", url, trigger.Spec.MaxRetries, err)
+			//log.Errorf("Request returned failure: %v", resp.StatusCode)
 
 			if len(trigger.Spec.ErrorTopic) > 0 {
 				err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
