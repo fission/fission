@@ -23,6 +23,37 @@ metadata:
     {{- end }}
 
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: secret-configmap-getter
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - secrets
+  - configmaps
+  verbs:
+  - get
+  - watch
+  - list
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: package-getter
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - packages
+  verbs:
+  - get
+  - watch
+  - list
+
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -35,21 +66,6 @@ apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: fission-admin
   namespace: {{ .Release.Namespace }}
-subjects:
-  - kind: ServiceAccount
-    name: fission-svc
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: admin
-  apiGroup: rbac.authorization.k8s.io
-
----
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: fission-function-admin
-  namespace: {{ .Values.functionNamespace }}
 subjects:
   - kind: ServiceAccount
     name: fission-svc
@@ -81,39 +97,11 @@ metadata:
   namespace: {{ .Values.functionNamespace }}
 
 ---
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: fission-fetcher-crd
-subjects:
-- kind: ServiceAccount
-  name: fission-fetcher
-  namespace: {{ .Values.functionNamespace }}
-roleRef:
-  kind: ClusterRole
-  name: cluster-admin
-  apiGroup: rbac.authorization.k8s.io
-
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: fission-builder
   namespace: {{ .Values.builderNamespace }}
-
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: fission-builder-crd
-subjects:
-- kind: ServiceAccount
-  name: fission-builder
-  namespace: {{ .Values.builderNamespace }}
-roleRef:
-  kind: ClusterRole
-  name: cluster-admin
-  apiGroup: rbac.authorization.k8s.io
 
 ---
 apiVersion: extensions/v1beta1

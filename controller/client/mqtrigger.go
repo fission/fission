@@ -120,11 +120,11 @@ func (c *Client) MessageQueueTriggerDelete(m *metav1.ObjectMeta) error {
 	return c.delete(relativeUrl)
 }
 
-func (c *Client) MessageQueueTriggerList(mqType string) ([]crd.MessageQueueTrigger, error) {
+func (c *Client) MessageQueueTriggerList(mqType string, ns string) ([]crd.MessageQueueTrigger, error) {
 	relativeUrl := "triggers/messagequeue"
 	if len(mqType) > 0 {
 		// TODO remove this, replace with field selector
-		relativeUrl += fmt.Sprintf("?mqtype=%v", mqType)
+		relativeUrl += fmt.Sprintf("?mqtype=%v&namespace=%v", mqType, ns)
 	}
 
 	resp, err := http.Get(c.url(relativeUrl))

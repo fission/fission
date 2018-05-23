@@ -57,6 +57,7 @@ func MakeWebhookPublisher(baseUrl string) *WebhookPublisher {
 }
 
 func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
+	// serializing the request gives user a guarantee that the request is sent in sequence order
 	p.requestChannel <- &publishRequest{
 		body:       body,
 		headers:    headers,

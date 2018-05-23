@@ -30,7 +30,12 @@ import (
 )
 
 func (a *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
-	envs, err := a.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	envs, err := a.fissionClient.Environments(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -60,6 +65,13 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(env.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	enew, err := a.fissionClient.Environments(env.Metadata.Namespace).Create(&env)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -79,7 +91,8 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 func (a *API) EnvironmentApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["environment"]
-	ns := vars["namespace"]
+
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -140,7 +153,8 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["environment"]
-	ns := vars["namespace"]
+
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}

@@ -40,8 +40,8 @@ func Start(storageSvcUrl string, envBuilderNamespace string) error {
 	go envWatcher.watchEnvironments()
 
 	pkgWatcher := makePackageWatcher(fissionClient,
-		kubernetesClient.CoreV1().RESTClient(), envBuilderNamespace, storageSvcUrl)
-	go pkgWatcher.watchPackages()
+		kubernetesClient, envBuilderNamespace, storageSvcUrl)
+	go pkgWatcher.watchPackages(fissionClient, kubernetesClient, envBuilderNamespace)
 
 	select {}
 }

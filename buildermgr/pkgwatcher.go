@@ -30,26 +30,29 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
+	"k8s.io/client-go/kubernetes"
 )
 
 type (
 	packageWatcher struct {
 		fissionClient    *crd.FissionClient
+		k8sClient        *kubernetes.Clientset
 		podStore         k8sCache.Store
+		pkgStore         k8sCache.Store
 		builderNamespace string
 		storageSvcUrl    string
 	}
 )
 
-func makePackageWatcher(fissionClient *crd.FissionClient, getter k8sCache.Getter,
+func makePackageWatcher(fissionClient *crd.FissionClient, k8sClientSet *kubernetes.Clientset,
 	builderNamespace string, storageSvcUrl string) *packageWatcher {
-
-	lw := k8sCache.NewListWatchFromClient(getter, "pods", builderNamespace, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(k8sClientSet.CoreV1().RESTClient(), "pods", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(lw, &apiv1.Pod{}, 30*time.Second, k8sCache.ResourceEventHandlerFuncs{})
 	go controller.Run(make(chan struct{}))
 
 	pkgw := &packageWatcher{
 		fissionClient:    fissionClient,
+		k8sClient:        k8sClientSet,
 		podStore:         store,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
@@ -118,8 +121,16 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 		for _, item := range items {
 			pod := item.(*apiv1.Pod)
 
+			// In order to support backward compatibility, for all builder images created in default env,
+			// the pods will be created in fission-builder namespace
+			builderNs := pkgw.builderNamespace
+			if env.Metadata.Namespace != metav1.NamespaceDefault {
+				builderNs = env.Metadata.Namespace
+			}
+
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.Metadata.Name ||
+				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
 				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.Metadata.ResourceVersion {
 				continue
 			}
@@ -138,8 +149,18 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 				break
 			}
 
-			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient,
-				pkgw.builderNamespace, pkgw.storageSvcUrl, pkg)
+			// Add the package getter rolebinding to builder sa
+			// we continue here if role binding was not setup succeesffully. this is because without this, the fetcher wont be able to fetch the source pkg into the container and
+			// the build will fail eventually
+			err := fission.SetupRoleBinding(pkgw.k8sClient, fission.PackageGetterRB, pkg.Metadata.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionBuilderSA, builderNs)
+			if err != nil {
+				log.Printf("Error : %v in setting up the role binding %s for pkg : %s.%s", err, fission.PackageGetterRB, pkg.Metadata.Name, pkg.Metadata.Namespace)
+				continue
+			} else {
+				log.Printf("Setup rolebinding for sa : %s.%s for pkg : %s.%s", fission.FissionBuilderSA, builderNs, pkg.Metadata.Name, pkg.Metadata.Namespace)
+			}
+
+			uploadResp, buildLogs, err := buildPackage(pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				log.Printf("Error building package %v: %v", pkg.Metadata.Name, err)
 				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
@@ -149,7 +170,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 			log.Printf("Start updating info of package: %v", pkg.Metadata.Name)
 
 			fnList, err := pkgw.fissionClient.
-				Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
+				Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 			if err != nil {
 				e := fmt.Sprintf("Error getting function list: %v", err)
 				log.Println(e)
@@ -191,13 +212,18 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 	// build timeout
 	updatePackage(pkgw.fissionClient, pkg,
 		fission.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
+
+	log.Printf("Max retries exceeded in building the source pkg : %s.%s, timeout due to environment builder not ready",
+		pkg.Metadata.Name, pkg.Metadata.Namespace)
+
 	return
 }
 
-func (pkgw *packageWatcher) watchPackages() {
+func (pkgw *packageWatcher) watchPackages(fissionClient *crd.FissionClient,
+	kubernetesClient *kubernetes.Clientset, builderNamespace string) {
 	buildCache := cache.MakeCache(0, 0)
-	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.GetCrdClient(), "packages", apiv1.NamespaceDefault, fields.Everything())
-	_, controller := k8sCache.NewInformer(lw, &crd.Package{}, 60*time.Second, k8sCache.ResourceEventHandlerFuncs{
+	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.GetCrdClient(), "packages", apiv1.NamespaceAll, fields.Everything())
+	pkgStore, controller := k8sCache.NewInformer(lw, &crd.Package{}, 60*time.Second, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*crd.Package)
 			go pkgw.build(buildCache, pkg)
@@ -207,5 +233,6 @@ func (pkgw *packageWatcher) watchPackages() {
 			go pkgw.build(buildCache, pkg)
 		},
 	})
+	pkgw.pkgStore = pkgStore
 	controller.Run(make(chan struct{}))
 }

@@ -327,7 +327,10 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			continue
 		}
 
-		url := fission.UrlForFunction(ws.watch.Spec.FunctionReference.Name)
+		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
+		// the triggers can only be created in the same namespace as the function.
+		// so essentially, function namespace = trigger namespace.
+		url := fission.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.Metadata.Namespace)
 		ws.publisher.Publish(buf.String(), headers, url)
 	}
 }

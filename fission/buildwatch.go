@@ -66,7 +66,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		}
 
 		// poll list of packages (TODO: convert to watch)
-		pkgs, err := w.fclient.PackageList()
+		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
 		checkErr(err, "Getting list of packages")
 
 		// find packages that (a) are in the app spec and (b) have an interesting

@@ -70,6 +70,7 @@ func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fis
 		fsCreateWg:  make(map[string]*sync.WaitGroup),
 	}
 	go executor.serveCreateFuncServices()
+
 	return executor
 }
 
@@ -127,7 +128,6 @@ func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fiss
 		return "", err
 	}
 	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, nil
-
 }
 
 func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
@@ -211,9 +211,9 @@ func serveMetric() {
 	log.Fatal(http.ListenAndServe(metricAddr, nil))
 }
 
-// StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
-// deploymgr and potential future backends
-func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
+// StartExecutor Starts executor and the executor components such as Poolmgr,
+// deploymgr and potential future executor types
+func StartExecutor(fissionNamespace string, functionNamespace string, envBuilderNamespace string, port int) error {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
 
@@ -235,6 +235,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	poolID := strings.ToLower(uniuri.NewLen(8))
 	cleanupObjects(kubernetesClient, functionNamespace, poolID)
 	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
+	go cleanupRoleBindings(kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient,

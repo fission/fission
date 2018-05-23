@@ -435,3 +435,16 @@ var errorDescriptions = []string{
 const (
 	ArchiveLiteralSizeLimit int64 = 256 * 1024
 )
+
+const (
+	FissionBuilderSA = "fission-builder"
+	FissionFetcherSA = "fission-fetcher"
+
+	SecretConfigMapGetterCR = "secret-configmap-getter"
+	SecretConfigMapGetterRB = "secret-configmap-getter-binding"
+
+	PackageGetterCR = "package-getter"
+	PackageGetterRB = "package-getter-binding"
+
+	ClusterRole = "ClusterRole"
+)

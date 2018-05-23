@@ -56,6 +56,7 @@ type (
 		replicas               int32                         // num idle pods
 		deployment             *v1beta1.Deployment           // kubernetes deployment
 		namespace              string                        // namespace to keep our resources
+		functionNamespace      string                        // fallback namespace for fission functions
 		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
 		idlePodReapTime        time.Duration                 // pods unused for idlePodReapTime are deleted
 		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
@@ -103,6 +104,7 @@ func MakeGenericPool(
 	env *crd.Environment,
 	initialReplicas int32,
 	namespace string,
+	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	instanceId string,
 	enableIstio bool) (*GenericPool, error) {
@@ -125,29 +127,37 @@ func MakeGenericPool(
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
-		env:              env,
-		replicas:         initialReplicas, // TODO make this an env param instead?
-		requestChannel:   make(chan *choosePodRequest),
-		fissionClient:    fissionClient,
-		kubernetesClient: kubernetesClient,
-		namespace:        namespace,
-		podReadyTimeout:  5 * time.Minute, // TODO make this an env param?
-		idlePodReapTime:  3 * time.Minute, // TODO make this configurable
-		fsCache:          fsCache,
-		poolInstanceId:   uniuri.NewLen(8),
-		instanceId:       instanceId,
-		fetcherImage:     fetcherImage,
-		useSvc:           false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
-		useIstio:         enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
-		sharedMountPath:  "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
-		sharedSecretPath: "/secrets",
-		sharedCfgMapPath: "/configs",
+		env:               env,
+		replicas:          initialReplicas, // TODO make this an env param instead?
+		requestChannel:    make(chan *choosePodRequest),
+		fissionClient:     fissionClient,
+		kubernetesClient:  kubernetesClient,
+		namespace:         namespace,
+		functionNamespace: functionNamespace,
+		podReadyTimeout:   5 * time.Minute, // TODO make this an env param?
+		idlePodReapTime:   3 * time.Minute, // TODO make this configurable
+		fsCache:           fsCache,
+		poolInstanceId:    uniuri.NewLen(8),
+		instanceId:        instanceId,
+		fetcherImage:      fetcherImage,
+		useSvc:            false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		useIstio:          enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
+		sharedMountPath:   "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
+		sharedSecretPath:  "/secrets",
+		sharedCfgMapPath:  "/configs",
 	}
 
 	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
 
 	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
+
+	// create fetcher SA in this ns, if not already created
+	_, err := fission.SetupSA(gp.kubernetesClient, fission.FissionFetcherSA, gp.namespace)
+	if err != nil {
+		log.Printf("Error : %v creating fetcher SA in ns : %s", err, gp.namespace)
+		return nil, err
+	}
 
 	// Labels for generic deployment/RS/pods.
 	gp.labelsForPool = map[string]string{
@@ -158,7 +168,7 @@ func MakeGenericPool(
 	}
 
 	// create the pool
-	err := gp.createPool()
+	err = gp.createPool()
 	if err != nil {
 		return nil, err
 	}

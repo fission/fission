@@ -58,10 +58,10 @@ func getMethod(method string) string {
 	return ""
 }
 
-func checkFunctionExistence(fissionClient *client.Client, fnName string) {
+func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNamespace string) {
 	meta := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	}
 
 	_, err := fissionClient.FunctionGet(meta)
@@ -77,6 +77,8 @@ func htCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+	fnNamespace := c.String("fnNamespace")
+
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
 		fatal("Need a trigger URL, use --url")
@@ -90,7 +92,7 @@ func htCreate(c *cli.Context) error {
 		method = "GET"
 	}
 
-	checkFunctionExistence(client, fnName)
+	checkFunctionExistence(client, fnName, fnNamespace)
 
 	// just name triggers by uuid.
 	triggerName := uuid.NewV4().String()
@@ -98,7 +100,7 @@ func htCreate(c *cli.Context) error {
 	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
@@ -135,6 +137,7 @@ func htUpdate(c *cli.Context) error {
 	if len(htName) == 0 {
 		fatal("Need name of trigger, use --name")
 	}
+	triggerNamespace := c.String("triggerNamespace")
 
 	// update function ref
 	newFn := c.String("function")
@@ -142,11 +145,11 @@ func htUpdate(c *cli.Context) error {
 		fatal("Nothing to update. Use --function to specify a new function.")
 	}
 
-	checkFunctionExistence(client, newFn)
+	checkFunctionExistence(client, newFn, triggerNamespace)
 
 	ht, err := client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      htName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: triggerNamespace,
 	})
 	checkErr(err, "get HTTP trigger")
 
@@ -167,10 +170,11 @@ func htDelete(c *cli.Context) error {
 	if len(htName) == 0 {
 		fatal("Need name of trigger to delete, use --name")
 	}
+	triggerNamespace := c.String("triggerNamespace")
 
 	err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
 		Name:      htName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: triggerNamespace,
 	})
 	checkErr(err, "delete trigger")
 
@@ -180,8 +184,9 @@ func htDelete(c *cli.Context) error {
 
 func htList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	triggerNamespace := c.String("triggerNamespace")
 
-	hts, err := client.HTTPTriggerList()
+	hts, err := client.HTTPTriggerList(triggerNamespace)
 	checkErr(err, "list HTTP triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

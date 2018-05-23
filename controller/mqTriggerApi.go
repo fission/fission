@@ -30,7 +30,12 @@ import (
 
 func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	//mqType := r.FormValue("mqtype") // ignored for now
-	triggers, err := a.fissionClient.MessageQueueTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	triggers, err := a.fissionClient.MessageQueueTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -57,6 +62,13 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(mqTrigger.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
 	tnew, err := a.fissionClient.MessageQueueTriggers(mqTrigger.Metadata.Namespace).Create(&mqTrigger)
 	if err != nil {
 		a.respondWithError(w, err)
@@ -75,7 +87,7 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 func (a *API) MessageQueueTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["mqTrigger"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -133,7 +145,7 @@ func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Reques
 func (a *API) MessageQueueTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["mqTrigger"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}

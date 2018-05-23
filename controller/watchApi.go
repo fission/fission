@@ -29,7 +29,12 @@ import (
 )
 
 func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
-	watches, err := a.fissionClient.KubernetesWatchTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	ns := a.extractQueryParamFromRequest(r, "namespace")
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	watches, err := a.fissionClient.KubernetesWatchTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -59,6 +64,13 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO check for duplicate watches
+	// TODO check for duplicate watches -> we probably wont need it?
+	// check if namespace exists, if not create it.
+	err = a.createNsIfNotExists(watch.Metadata.Namespace)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
 
 	wnew, err := a.fissionClient.KubernetesWatchTriggers(watch.Metadata.Namespace).Create(&watch)
 	if err != nil {
@@ -79,7 +91,7 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["watch"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
@@ -107,7 +119,7 @@ func (a *API) WatchApiUpdate(w http.ResponseWriter, r *http.Request) {
 func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["watch"]
-	ns := vars["namespace"]
+	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	}
