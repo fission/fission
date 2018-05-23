@@ -44,7 +44,7 @@ sleep 5
 # Send a message
 #
 echo "Sending message"
-go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic ""
+go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic "Giraffes"
 
 #
 # Wait for message on error topic
