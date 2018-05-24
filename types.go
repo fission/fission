@@ -51,7 +51,9 @@ type (
 	MessageQueueType             = fv1.MessageQueueType
 	MessageQueueTriggerSpec      = fv1.MessageQueueTriggerSpec
 	TimeTriggerSpec              = fv1.TimeTriggerSpec
+)
 
+type (
 	// Errors returned by the Fission API.
 	Error struct {
 		Code    errorCode `json:"code"`

@@ -113,7 +113,7 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, f
 	// actually start the port-forwarding process here
 	transport, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
-		msg := fmt.Sprintf("spdy round tripper errored out :%v", err.Error())
+		msg := fmt.Sprintf("Failed to connect to Fission service on Kubernetes: %v", err.Error())
 		fatal(msg)
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
