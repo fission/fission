@@ -15,7 +15,7 @@ topic="foo.bar"
 resptopic="foo.foo"
 errortopic="foo.error"
 maxretries=1
-FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@192.168.64.3:4222"
+FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@192.168.64.4:4222"
 expectedRespOutput="[foo.error]: 'Hello, World!'"
 
 echo "Pre-test cleanup"
@@ -23,19 +23,19 @@ fission env delete --name nodejs || true
 
 echo "Creating nodejs env"
 fission env create --name nodejs --image fission/node-env
-trap "fission env delete --name nodejs" EXIT
+#trap "fission env delete --name nodejs" EXIT
 
 echo "Creating function"
 fn=hello-$(date +%s)
 fission fn create --name $fn --env nodejs --code $DIR/main.js --method GET
-trap "fission fn delete --name $fn" EXIT
+##trap "fission fn delete --name $fn" EXIT
 
 echo "Creating message queue trigger"
 mqt=mqt-$(date +%s)
 fission mqtrigger create --name $mqt --function $fn --mqtype "nats-streaming" --topic $topic --resptopic $resptopic --errortopic $errortopic --maxretries $maxretries
 echo "Updated mqtrigger list"
 fission mqtrigger list
-trap "fission mqtrigger delete --name $mqt" EXIT
+#trap "fission mqtrigger delete --name $mqt" EXIT
 
 # wait until nats trigger is created
 sleep 5
@@ -64,3 +64,6 @@ if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
     exit 1
 fi
+
+fission mqtrigger delete --name $mqt
+kubectl delete functions --all
