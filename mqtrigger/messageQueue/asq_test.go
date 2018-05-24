@@ -171,7 +171,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		mock.MatchedBy(httpRequestMatcher(t, QueueName, "", "", ContentType, FunctionName, MessageBody)),
 	).Return(
 		&http.Response{
-			StatusCode: 500,
+			StatusCode: http.StatusInternalServerError,
 			Body:       ioutil.NopCloser(strings.NewReader("server error")),
 		},
 		nil,
@@ -181,7 +181,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		mock.MatchedBy(httpRequestMatcher(t, QueueName, "", "1", ContentType, FunctionName, MessageBody)),
 	).Return(
 		&http.Response{
-			StatusCode: 404,
+			StatusCode: http.StatusNotFound,
 			Body:       ioutil.NopCloser(strings.NewReader("not found")),
 		},
 		nil,
@@ -191,7 +191,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		mock.MatchedBy(httpRequestMatcher(t, QueueName, "", "2", ContentType, FunctionName, MessageBody)),
 	).Return(
 		&http.Response{
-			StatusCode: 400,
+			StatusCode: http.StatusBadRequest,
 			Body:       ioutil.NopCloser(strings.NewReader("bad request")),
 		},
 		nil,
@@ -201,7 +201,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		mock.MatchedBy(httpRequestMatcher(t, QueueName, "", "3", ContentType, FunctionName, MessageBody)),
 	).Return(
 		&http.Response{
-			StatusCode: 403,
+			StatusCode: http.StatusForbidden,
 			Body:       ioutil.NopCloser(strings.NewReader("not authorized")),
 		},
 		nil,
@@ -338,7 +338,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 		responseTopic = OutputQueueName
 	}
 
-	// Mock a HTTP client that returns 200 with "output" for the body
+	// Mock a HTTP client that returns http.StatusOK with "output" for the body
 	httpClient := new(azureHTTPClientMock)
 	httpClient.bodyHandler = func(res *http.Response) {
 		res.Body = ioutil.NopCloser(strings.NewReader(FunctionResponse))
@@ -346,7 +346,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 	httpClient.On(
 		"Do",
 		mock.MatchedBy(httpRequestMatcher(t, QueueName, responseTopic, "", ContentType, FunctionName, MessageBody)),
-	).Return(&http.Response{StatusCode: 200}, nil).Times(count)
+	).Return(&http.Response{StatusCode: http.StatusOK}, nil).Times(count)
 
 	// Mock a queue message with "input" as the message body
 	message := new(azureMessageMock)

@@ -34,7 +34,7 @@ import (
 func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request", 500)
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
 
@@ -42,7 +42,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 	m := metav1.ObjectMeta{}
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		http.Error(w, "Failed to parse request", 400)
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request", 500)
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
 	svcName := string(body)
@@ -106,7 +106,7 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 	err = executor.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		log.Printf("funcSvc tap error: %v", err)
-		http.Error(w, "Not found", 404)
+		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusOK)

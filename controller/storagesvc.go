@@ -30,7 +30,7 @@ func (api *API) StorageServiceProxy(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := fmt.Sprintf("Error parsing url %v: %v", u, err)
 		log.Println(msg)
-		http.Error(w, msg, 500)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 	director := func(req *http.Request) {

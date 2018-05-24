@@ -46,7 +46,7 @@ type (
 
 func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
 	if specialized {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Not a generic container"))
 		return
 	}

@@ -48,7 +48,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	r.ParseMultipartForm(0)
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
-		http.Error(w, "missing upload file", 400)
+		http.Error(w, "missing upload file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -61,14 +61,14 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
 		log.Error("Missing X-File-Size")
-		http.Error(w, "missing X-File-Size header", 400)
+		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
 		return
 	}
 
 	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
 		log.WithError(err).Errorf("Error parsing x-file-size: '%v'", fileSizeS)
-		http.Error(w, "missing or bad X-File-Size header", 400)
+		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
 		return
 	}
 
@@ -81,7 +81,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
 		log.WithError(err).Error("Error saving uploaded file")
-		http.Error(w, "Error saving uploaded file", 500)
+		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
-		http.Error(w, "Error marshaling response", 500)
+		http.Error(w, "Error marshaling response", http.StatusInternalServerError)
 		return
 	}
 	w.Write(resp)
@@ -110,14 +110,14 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 	// get id from request
 	fileId, err := ss.getIdFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = ss.storageClient.removeFileByID(fileId)
 	if err != nil {
 		msg := fmt.Sprintf("Error deleting item: %v", err)
-		http.Error(w, msg, 500)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -127,7 +127,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	// get id from request
 	fileId, err := ss.getIdFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -137,13 +137,13 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		log.WithError(err).Errorf("Error getting item id '%v'", fileId)
 		if err == ErrNotFound {
-			http.Error(w, "Error retrieving item: not found", 404)
+			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
 		} else if err == ErrRetrievingItem {
-			http.Error(w, "Error retrieving item", 400)
+			http.Error(w, "Error retrieving item", http.StatusBadRequest)
 		} else if err == ErrOpeningItem {
-			http.Error(w, "Error opening item", 400)
+			http.Error(w, "Error opening item", http.StatusBadRequest)
 		} else if err == ErrWritingFileIntoResponse {
-			http.Error(w, "Error writing response", 500)
+			http.Error(w, "Error writing response", http.StatusInternalServerError)
 		}
 		return
 	}

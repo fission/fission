@@ -13,7 +13,7 @@ func (api *API) WorkflowApiserverProxy(w http.ResponseWriter, r *http.Request) {
 	ssUrl, err := url.Parse(u)
 	if err != nil {
 		msg := fmt.Sprintf("Error parsing url %v: %v", u, err)
-		http.Error(w, msg, 500)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 

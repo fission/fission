@@ -221,13 +221,13 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 	if len(req.Filename) == 0 {
 		e := fmt.Sprintf("Fetch request received for an empty file name, request: %v", req)
 		log.Printf(e)
-		return 400, errors.New(e)
+		return http.StatusBadRequest, errors.New(e)
 	}
 
 	// verify first if the file already exists.
 	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, req.Filename)); err == nil {
 		log.Printf("Requested file: %s already exists at %s. Skipping fetch", req.Filename, fetcher.sharedVolumePath)
-		return 200, nil
+		return http.StatusOK, nil
 	}
 
 	tmpFile := req.Filename + ".tmp"
@@ -239,7 +239,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 			log.Printf(e)
-			return 400, errors.New(e)
+			return http.StatusBadRequest, errors.New(e)
 		}
 	} else {
 		// get pkg
@@ -247,7 +247,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		if err != nil {
 			e := fmt.Sprintf("Failed to get package: %v", err)
 			log.Printf(e)
-			return 500, errors.New(e)
+			return http.StatusInternalServerError, errors.New(e)
 		}
 
 		var archive *fission.Archive
@@ -261,7 +261,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			if pkg.Status.BuildStatus != fission.BuildStatusSucceeded && pkg.Status.BuildStatus != fission.BuildStatusNone {
 				e := fmt.Sprintf("Build status for the function's pkg : %s.%s is : %s, can't fetch deployment", pkg.Metadata.Name, pkg.Metadata.Namespace, pkg.Status.BuildStatus)
 				log.Printf(e)
-				return 500, errors.New(e)
+				return http.StatusInternalServerError, errors.New(e)
 			}
 			archive = &pkg.Spec.Deployment
 		}
@@ -272,7 +272,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to write file %v: %v", tmpPath, err)
 				log.Printf(e)
-				return 500, errors.New(e)
+				return http.StatusInternalServerError, errors.New(e)
 			}
 		} else {
 			// download and verify
@@ -280,14 +280,14 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			if err != nil {
 				e := fmt.Sprintf("Failed to download url %v: %v", req.Url, err)
 				log.Printf(e)
-				return 400, errors.New(e)
+				return http.StatusBadRequest, errors.New(e)
 			}
 
 			err = verifyChecksum(tmpPath, &archive.Checksum)
 			if err != nil {
 				e := fmt.Sprintf("Failed to verify checksum: %v", err)
 				log.Printf(e)
-				return 400, errors.New(e)
+				return http.StatusBadRequest, errors.New(e)
 			}
 		}
 	}
@@ -299,7 +299,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			log.Println(err.Error())
-			return 500, err
+			return http.StatusInternalServerError, err
 		}
 		tmpPath = tmpUnarchivePath
 	}
@@ -308,11 +308,11 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 	err := fetcher.rename(tmpPath, filepath.Join(fetcher.sharedVolumePath, req.Filename))
 	if err != nil {
 		log.Println(err.Error())
-		return 500, err
+		return http.StatusInternalServerError, err
 	}
 
 	log.Printf("Successfully placed at %v", filepath.Join(fetcher.sharedVolumePath, req.Filename))
-	return 200, nil
+	return http.StatusOK, nil
 }
 
 // FetchSecretsAndCfgMaps fetches secrets and configmaps specified by user

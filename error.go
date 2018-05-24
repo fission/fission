@@ -32,19 +32,19 @@ func MakeError(code int, msg string) Error {
 }
 
 func MakeErrorFromHTTP(resp *http.Response) error {
-	if resp.StatusCode == 200 {
+	if resp.StatusCode == http.StatusOK {
 		return nil
 	}
 
 	var errCode int
 	switch resp.StatusCode {
-	case 400:
+	case http.StatusBadRequest:
 		errCode = ErrorInvalidArgument
-	case 403:
+	case http.StatusForbidden:
 		errCode = ErrorNotAuthorized
-	case 404:
+	case http.StatusNotFound:
 		errCode = ErrorNotFound
-	case 409:
+	case http.StatusConflict:
 		errCode = ErrorNameExists
 	default:
 		errCode = ErrorInternal
@@ -64,15 +64,15 @@ func (err Error) HTTPStatus() int {
 	var code int
 	switch err.Code {
 	case ErrorInvalidArgument:
-		code = 400
+		code = http.StatusBadRequest
 	case ErrorNotAuthorized:
-		code = 403
+		code = http.StatusForbidden
 	case ErrorNotFound:
-		code = 404
+		code = http.StatusNotFound
 	case ErrorNameExists:
-		code = 409
+		code = http.StatusConflict
 	default:
-		code = 500
+		code = http.StatusInternalServerError
 	}
 	return code
 }
@@ -85,7 +85,7 @@ func GetHTTPError(err error) (int, string) {
 		code = fe.HTTPStatus()
 		msg = fe.Message
 	} else {
-		code = 500
+		code = http.StatusInternalServerError
 		msg = err.Error()
 	}
 	return code, msg
