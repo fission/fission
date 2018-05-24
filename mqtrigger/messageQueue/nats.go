@@ -128,46 +128,43 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			req.Header.Add(k, v)
 		}
 
-		var resp *http.Response
 
+		var resp *http.Response
 		// Number of retries is required to be between 1 and 5, inclusive
 		for attempt := 0; attempt < trigger.Spec.MaxRetries; attempt++ {
 			// Make the request
-			resp, err := http.DefaultClient.Do(req)
+			log.Warningf("Request : %v", req)
+			resp, err = http.DefaultClient.Do(req)
 			if err == nil && resp.StatusCode == 200 {
+				// Success, quit retries
 				break
 			}
-			//if err != nil {
-			//	log.Error("Request failed, will retry: %v", url)
-			//}
-			//if resp != nil || resp.StatusCode == 200 {
-			//	break
-			//}
 		}
 
-		log.Info("We've reached the max retries limit. Proceeding to publish error to error queue.")
-
-		//defer resp.Body.Close()
+		// Where should the following line go?
+		defer resp.Body.Close()
 
 		if resp == nil {
 			log.Info("The response is empty!")
 		}
 
+		body, bodyErr := ioutil.ReadAll(resp.Body)
+		if bodyErr != nil {
+			log.Warningf("Response body error: %v", string(body))
+			return
+		}
+		
 		// Only the latest error response will be published to error topic
 		if err != nil || resp.StatusCode != 200 {
 			log.Errorf("Request to %v failed after %v retries, err : %v", url, trigger.Spec.MaxRetries, err)
-			//log.Errorf("Request returned failure: %v", resp.StatusCode)
+			log.Info("Attempting to publish error to error queue, if defined.")
 
 			if len(trigger.Spec.ErrorTopic) > 0 {
-				err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, []byte(err.Error()))
+				err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
+				if err != nil {
+					log.Error("Failed to publish error to error topic: %v", err)
+				}
 			}
-			return
-		}
-
-		body, bodyErr := ioutil.ReadAll(resp.Body)
-
-		if bodyErr != nil {
-			log.Warningf("Response body error: %v", string(body))
 			return
 		}
 
