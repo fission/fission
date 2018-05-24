@@ -373,13 +373,9 @@ func (envw *environmentWatcher) createBuilder(env *crd.Environment, ns string) (
 }
 
 func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace string) error {
-	falseVal := false
-	delOpt := &metav1.DeleteOptions{
-		OrphanDependents: &falseVal,
-	}
-	err := envw.kubernetesClient.
+	err := envw.kubernetesClient.CoreV1().
 		Services(namespace).
-		Delete(name, delOpt)
+		Delete(name, &delOpt)
 	if err != nil {
 		return fmt.Errorf("Error deleting builder service %s.%s: %v", name, namespace, err)
 	}
@@ -387,13 +383,9 @@ func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace strin
 }
 
 func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace string) error {
-	falseVal := false
-	delOpt := &metav1.DeleteOptions{
-		OrphanDependents: &falseVal,
-	}
 	err := envw.kubernetesClient.ExtensionsV1beta1().
 		Deployments(namespace).
-		Delete(name, delOpt)
+		Delete(name, &delOpt)
 	if err != nil {
 		return fmt.Errorf("Error deleting builder deployment %s.%s: %v", name, namespace, err)
 	}

@@ -1,5 +1,5 @@
 hash: 1f595f5cdf8dc629d9046f82869cb77811dac21ce5f58e4f81e89d21181f6c34
-updated: 2018-05-22T12:47:28.089615+08:00
+updated: 2018-05-24T22:39:34.860206+08:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -249,7 +249,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 28aef64757f4d432485ab970b094e1af8b301e84
+  version: 1937f90a1bb43667aff4059b1bab13eb15121e8e
   subpackages:
   - imports
 - name: google.golang.org/appengine
@@ -357,7 +357,6 @@ imports:
   version: 23781f4d6632d88e869066eaebb743857aa1ef9b
   subpackages:
   - discovery
-  - discovery/fake
   - kubernetes
   - kubernetes/scheme
   - kubernetes/typed/admissionregistration/v1alpha1
@@ -399,7 +398,6 @@ imports:
   - plugin/pkg/client/auth/openstack
   - rest
   - rest/watch
-  - testing
   - third_party/forked/golang/template
   - tools/auth
   - tools/cache
@@ -422,7 +420,7 @@ imports:
   - util/jsonpath
   - util/retry
 - name: k8s.io/code-generator
-  version: 69d88fb997c52c32288a40f5efb62add0a7c8e04
+  version: d9b16e114e8c31761e26efcdee0a42cf066fbf58
 - name: k8s.io/gengo
   version: 01a732e01d00cb9a81bb0ca050d3e6d2b947927b
 testImports:

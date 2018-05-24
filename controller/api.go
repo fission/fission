@@ -123,14 +123,14 @@ func (api *API) createNsIfNotExists(ns string) error {
 		return nil
 	}
 
-	_, err := api.kubernetesClient.CoreV1Client.Namespaces().Get(ns, metav1.GetOptions{})
+	_, err := api.kubernetesClient.CoreV1().Namespaces().Get(ns, metav1.GetOptions{})
 	if err != nil && kerrors.IsNotFound(err) {
 		ns := &apiv1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ns,
 			},
 		}
-		_, err = api.kubernetesClient.CoreV1Client.Namespaces().Create(ns)
+		_, err = api.kubernetesClient.CoreV1().Namespaces().Create(ns)
 	}
 
 	return err
