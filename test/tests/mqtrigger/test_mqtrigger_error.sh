@@ -2,7 +2,7 @@
 
 #
 # Create a function and trigger it using NATS
-# This is intended to be run on Minikube
+# To run this on Minikube, uncomment line 18
 
 set -euo pipefail
 set +x
@@ -15,7 +15,7 @@ topic="foo.bar"
 resptopic="foo.foo"
 errortopic="foo.error"
 maxretries=1
-FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
+# FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
 expectedRespOutput="[foo.error]: '404 page not found
 '"
 
@@ -67,4 +67,6 @@ kubectl delete functions --all
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
     exit 1
+else
+    echo "Responses match."
 fi
