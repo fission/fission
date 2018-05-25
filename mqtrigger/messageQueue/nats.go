@@ -131,7 +131,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 				HTTP response body could not be read 			-> Return
 				HTTP request returned error or non-200 status	-> Publish error to error queue if specified and return
 				HTTP request did not return error and 200 status-> Ack the message and publish response to resp topic
-		 */
+		*/
 
 		var resp *http.Response
 		// Number of retries is required to be between 1 and 5, inclusive
