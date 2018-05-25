@@ -62,7 +62,7 @@ response=$(go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clu
 echo "Subscriber received response: $response"
 
 fission mqtrigger delete --name $mqt
-kubectl delete functions --all
+# kubectl delete functions --all
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"

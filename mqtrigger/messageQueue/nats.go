@@ -169,12 +169,8 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			log.Info("Attempting to publish error to error queue, if defined.")
 
 			if len(trigger.Spec.ErrorTopic) > 0 {
-				if err != nil {
-					err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
-				} else {
-					err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
-				}
-				if err != nil {
+				publishErr := nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
+				if publishErr != nil {
 					log.Error("Failed to publish error to error topic: %v", err)
 				}
 			}
