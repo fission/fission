@@ -2,7 +2,7 @@
 
 #
 # Create a function and trigger it using NATS
-#
+# This is intended to be run on Minikube
 
 set -euo pipefail
 set +x
@@ -15,8 +15,9 @@ topic="foo.bar"
 resptopic="foo.foo"
 errortopic="foo.error"
 maxretries=1
-FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@192.168.64.4:4222"
-expectedRespOutput="[foo.error]: 'Hello, World!'"
+FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
+expectedRespOutput="[foo.error]: '404 page not found
+'"
 
 echo "Pre-test cleanup"
 fission env delete --name nodejs || true
@@ -56,14 +57,14 @@ then
     # If this fails on mac os, do "brew install coreutils".
     TIMEOUT=gtimeout
 fi
-response=$($TIMEOUT 240s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $errortopic 2>&1)
+response=$(go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $errortopic 2>&1)
 
-echo "Subscriber received expected response: $response"
+echo "Subscriber received response: $response"
+
+fission mqtrigger delete --name $mqt
+kubectl delete functions --all
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
     echo "$response is not equal to $expectedRespOutput"
     exit 1
 fi
-
-fission mqtrigger delete --name $mqt
-kubectl delete functions --all
