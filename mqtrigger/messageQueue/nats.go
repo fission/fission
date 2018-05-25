@@ -167,6 +167,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 		if err != nil || resp.StatusCode != 200 {
 			log.Errorf("Request to %v failed after %v retries, err : %v", url, trigger.Spec.MaxRetries, err)
 			log.Info("Attempting to publish error to error queue, if defined.")
+			log.Info("The response body is: %v", body)
 
 			if len(trigger.Spec.ErrorTopic) > 0 {
 				publishErr := nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)

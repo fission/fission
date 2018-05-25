@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 #
 # Create two functions, make sure their internal http triggers invoke
