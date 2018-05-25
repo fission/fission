@@ -43,6 +43,7 @@ func createIngress(trigger *crd.HTTPTrigger, kubeClient *kubernetes.Clientset) {
 
 	if !trigger.Spec.CreateIngress {
 		log.Printf("Skipping creation of ingress for trigger: %v", trigger.Metadata.Name)
+		return
 	}
 
 	ing := &v1beta1.Ingress{
@@ -87,8 +88,9 @@ func createIngress(trigger *crd.HTTPTrigger, kubeClient *kubernetes.Clientset) {
 
 func getDeployLabels(trigger *crd.HTTPTrigger) map[string]string {
 	return map[string]string{
-		"triggerName":  trigger.Metadata.Name,
-		"functionName": trigger.Spec.FunctionReference.Name,
+		"triggerName":      trigger.Metadata.Name,
+		"functionName":     trigger.Spec.FunctionReference.Name,
+		"triggerNamespace": trigger.Metadata.Namespace,
 	}
 }
 

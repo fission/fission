@@ -19,10 +19,10 @@ log "Route $route_name created"
 
 sleep 5
 
-log "Verifying to route in ingress"
-
+log "Ingresses matching this trigger:"
 kubectl get ing -l 'functionName='$functionName',triggerName='$route_name --all-namespaces -o=json
 
+log "Verifying to route value in ingress"
 actual_route=$(kubectl -n fission get ing -l 'functionName='$functionName',triggerName='$route_name --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].http.paths[0].path}')
 
 if [ $actual_route != $relativeUrl ]
