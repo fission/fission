@@ -28,7 +28,7 @@ fission env create --name nodejs --image fission/node-env
 
 echo "Creating function"
 fn=hello-$(date +%s)
-fission fn create --name $fn --env nodejs --code $DIR/main.js --method GET
+fission fn create --name $fn --env nodejs --code $DIR/main_error.js --method GET
 ##trap "fission fn delete --name $fn" EXIT
 
 echo "Creating message queue trigger"
