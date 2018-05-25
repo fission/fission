@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 #
 # Common methods used for testing function update

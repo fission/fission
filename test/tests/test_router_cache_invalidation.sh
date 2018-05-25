@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 set -euo pipefail
 # 1. This test first creates a python function with a route
