@@ -4,6 +4,16 @@ if [ -d ${SRC_PKG} ]
 then
     echo "Building in directory ${SRC_PKG}"
     cd ${SRC_PKG}
+
+    if [ -f glide.yaml ]; then
+        go get -u github.com/Masterminds/glide
+        glide install
+    fi
+
+    if [ -d vendor ]; then
+        cp -r vendor/* /usr/src/
+    fi
+
     go build -buildmode=plugin -i -o ${DEPLOY_PKG} .
 elif [ -f ${SRC_PKG} ]
 then
