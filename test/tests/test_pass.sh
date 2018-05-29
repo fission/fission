@@ -1,5 +1,5 @@
 #!/bin/bash
-#test:disabled
+test:disabled
 
 set -euo pipefail
 # This doesn't test fission, just the test framework. It ensures we
