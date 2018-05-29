@@ -18,13 +18,10 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
-	version "github.com/fission/fission"
+	"github.com/fission/fission"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,20 +42,6 @@ func getKubeConfigPath() string {
 		}
 	}
 	return kubeConfig
-}
-
-func getFissionAPIVersion(apiUrl string) (string, error) {
-	resp, err := http.Get(apiUrl)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimRight(string(body), "\n"), nil
 }
 
 func getServerUrl() string {
@@ -87,15 +70,16 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = version.Version
+	app.Version = fission.Version
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		clientVer := version.VersionInfo().String()
+		clientVer := fission.BuildInfo().String()
 		fmt.Printf("Client Version: %v\n", clientVer)
-		serverVer, err := getFissionAPIVersion(getServerUrl())
+		serverInfo, err := getClient(getServerUrl()).ServerInfo()
 		if err != nil {
 			fmt.Printf("Error getting Fission API version: %v", err)
 		} else {
+			serverVer := serverInfo.Build.String()
 			fmt.Printf("Server Version: %v\n", serverVer)
 		}
 	}

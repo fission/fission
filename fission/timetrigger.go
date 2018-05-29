@@ -28,19 +28,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 )
 
-func getCronNextNActivationTime(cronSpec string, round int) error {
+func getAPITimeInfo(client *client.Client) time.Time {
+	serverInfo, err := client.ServerInfo()
+	if err != nil {
+		fatal(fmt.Sprintf("Error syncing server time information: %v", err))
+	}
+	return serverInfo.ServerTime.CurrentTime
+}
+
+func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int) error {
 	sched, err := cron.Parse(cronSpec)
 	if err != nil {
 		return err
 	}
 
-	t := time.Now()
+	fmt.Printf("Current Server Time: \t%v\n", serverTime.Format(time.RFC3339))
+
 	for i := 0; i < round; i++ {
-		t = sched.Next(t)
-		fmt.Printf("Next %v invocation: %v\n", i+1, t.Format(time.RFC3339))
+		serverTime = sched.Next(serverTime)
+		fmt.Printf("Next %v invocation: \t%v\n", i+1, serverTime.Format(time.RFC3339))
 	}
 
 	return nil
@@ -92,7 +102,7 @@ func ttCreate(c *cli.Context) error {
 
 	fmt.Printf("trigger '%v' created\n", name)
 
-	err = getCronNextNActivationTime(cronSpec, 1)
+	err = getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), 1)
 	checkErr(err, "pass cron spec examination")
 
 	return err
@@ -141,7 +151,7 @@ func ttUpdate(c *cli.Context) error {
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
 
-	err = getCronNextNActivationTime(newCron, 1)
+	err = getCronNextNActivationTime(newCron, getAPITimeInfo(client), 1)
 	checkErr(err, "pass cron spec examination")
 
 	return nil
@@ -185,13 +195,15 @@ func ttList(c *cli.Context) error {
 }
 
 func ttTest(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
 	round := c.Int("round")
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
 		fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	err := getCronNextNActivationTime(cronSpec, round)
+	err := getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), round)
 	checkErr(err, "pass cron spec examination")
 
 	return nil
