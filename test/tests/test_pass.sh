@@ -1,5 +1,5 @@
 #!/bin/bash
-#test:disabled
+test:disabled
 
 set -euo pipefail
 
