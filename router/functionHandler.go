@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -29,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	fissionctx "github.com/fission/fission/context"
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 )
@@ -38,13 +40,12 @@ type functionHandler struct {
 	executor    *executorClient.Client
 	function    *metav1.ObjectMeta
 	httpTrigger *crd.HTTPTrigger
+	ctx         context.Context
 }
 
 // A layer on top of http.DefaultTransport, with retries.
 type RetryingRoundTripper struct {
-	maxRetries     int
-	initialTimeout time.Duration
-	funcHandler    *functionHandler
+	funcHandler *functionHandler
 }
 
 // RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
@@ -92,7 +93,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	}
 
 	// set the timeout for transport context
-	timeout := roundTripper.initialTimeout
+	timeout := fissionctx.GetDialTimeout(roundTripper.funcHandler.ctx)
 	transport := http.DefaultTransport.(*http.Transport)
 
 	// cache lookup to get serviceUrl
@@ -102,7 +103,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		needExecutor = true
 	}
 
-	for i := 0; i < roundTripper.maxRetries-1; i++ {
+	maxRetries := fissionctx.GetMaxRetries(roundTripper.funcHandler.ctx)
+	for i := 0; i < maxRetries-1; i++ {
 		if needExecutor {
 			log.Printf("Calling getServiceForFunction for function: %s", roundTripper.funcHandler.function.Name)
 
@@ -148,7 +150,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		// over-riding default settings.
 		transport.DialContext = (&net.Dialer{
 			Timeout:   timeout,
-			KeepAlive: 30 * time.Second,
+			KeepAlive: fissionctx.GetAliveTimeout(roundTripper.funcHandler.ctx),
 		}).DialContext
 
 		overhead := time.Since(startTime)
@@ -229,9 +231,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: &RetryingRoundTripper{
-			initialTimeout: 50 * time.Millisecond,
-			maxRetries:     10,
-			funcHandler:    fh,
+			funcHandler: fh,
 		},
 	}
 

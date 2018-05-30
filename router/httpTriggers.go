@@ -36,6 +36,7 @@ import (
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
+	context.Context
 
 	fissionClient     *crd.FissionClient
 	executor          *executorClient.Client
@@ -49,7 +50,7 @@ type HTTPTriggerSet struct {
 	funcController    k8sCache.Controller
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
+func makeHTTPTriggerSet(ctx context.Context, fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	executor *executorClient.Client, crdClient *rest.RESTClient) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
 		functionServiceMap: fmap,
@@ -61,10 +62,10 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
 	if httpTriggerSet.crdClient != nil {
-		tStore, tController = httpTriggerSet.initTriggerController()
+		tStore, tController = httpTriggerSet.initTriggerController(ctx)
 		httpTriggerSet.triggerStore = tStore
 		httpTriggerSet.triggerController = tController
-		fnStore, fnController = httpTriggerSet.initFunctionController()
+		fnStore, fnController = httpTriggerSet.initFunctionController(ctx)
 		httpTriggerSet.funcStore = fnStore
 		httpTriggerSet.funcController = fnController
 	}
@@ -74,7 +75,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter, resolver *functionReferenceResolver) {
 	ts.resolver = resolver
 	ts.mutableRouter = mr
-	mr.updateRouter(ts.getRouter())
+	mr.updateRouter(ts.getRouter(ctx))
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
@@ -93,7 +94,7 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (ts *HTTPTriggerSet) getRouter() *mux.Router {
+func (ts *HTTPTriggerSet) getRouter(ctx context.Context) *mux.Router {
 	muxRouter := mux.NewRouter()
 
 	// HTTP triggers setup by the user
@@ -121,6 +122,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			function:    rr.functionMetadata,
 			executor:    ts.executor,
 			httpTrigger: &trigger,
+			ctx:         ctx,
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
@@ -165,34 +167,34 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *crd.HTTPTrigger, err err
 	// TODO
 }
 
-func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Controller) {
+func (ts *HTTPTriggerSet) initTriggerController(ctx context.Context) (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "httptriggers", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.HTTPTrigger{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 			DeleteFunc: func(obj interface{}) {
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 		})
 	return store, controller
 }
 
-func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Controller) {
+func (ts *HTTPTriggerSet) initFunctionController(ctx context.Context) (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 			DeleteFunc: func(obj interface{}) {
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				fn := newObj.(*crd.Function)
@@ -207,7 +209,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 						break
 					}
 				}
-				ts.syncTriggers()
+				ts.syncTriggers(ctx)
 			},
 		})
 	return store, controller
@@ -219,7 +221,7 @@ func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Co
 	}()
 }
 
-func (ts *HTTPTriggerSet) syncTriggers() {
+func (ts *HTTPTriggerSet) syncTriggers(ctx context.Context) {
 	// get triggers
 	latestTriggers := ts.triggerStore.List()
 	triggers := make([]crd.HTTPTrigger, len(latestTriggers))
@@ -237,5 +239,5 @@ func (ts *HTTPTriggerSet) syncTriggers() {
 	ts.functions = functions
 
 	// make a new router and use it
-	ts.mutableRouter.updateRouter(ts.getRouter())
+	ts.mutableRouter.updateRouter(ts.getRouter(ctx))
 }
