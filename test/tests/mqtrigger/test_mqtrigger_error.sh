@@ -16,8 +16,7 @@ resptopic="foo.foo"
 errortopic="foo.error"
 maxretries=1
 # FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
-expectedRespOutput="[foo.error]: '404 page not found
-'"
+expectedRespOutput="[foo.error]: 'Hello, World!'"
 
 echo "Pre-test cleanup"
 fission env delete --name nodejs || true
@@ -45,7 +44,7 @@ sleep 5
 # Send a message
 #
 echo "Sending message"
-go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic "Giraffes"
+go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic ""
 
 #
 # Wait for message on error topic
