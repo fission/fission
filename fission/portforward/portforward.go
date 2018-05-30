@@ -128,12 +128,18 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, n
 
 	// make a useful error message if there is more than one install
 	if len(podList.Items) > 1 {
-		namespaces := make([]string, 0)
+		namespaces := make(map[string]struct{})
+		nsList := make([]string, 0)
 		for _, p := range podList.Items {
-			namespaces = append(namespaces, p.Namespace)
+			if _, ok := namespaces[p.Namespace]; !ok {
+				namespaces[p.Namespace] = struct{}{}
+				nsList = append(nsList, p.Namespace)
+			}
 		}
-		log.Fatal(fmt.Sprintf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
-			len(podList.Items), strings.Join(namespaces, " ")))
+		if len(nsList) > 1 {
+			log.Fatal(fmt.Sprintf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+				len(namespaces), strings.Join(nsList, " ")))
+		}
 	}
 
 	// pick the first pod
