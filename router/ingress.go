@@ -22,7 +22,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
@@ -46,10 +45,16 @@ func createIngress(trigger *crd.HTTPTrigger, kubeClient *kubernetes.Clientset) {
 		return
 	}
 
+	_, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(trigger.Metadata.Name, v1.GetOptions{})
+	if err == nil {
+		log.Printf("Ingress for trigger exists already %v", trigger.Metadata.Name)
+		return
+	}
+
 	ing := &v1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:       getDeployLabels(trigger),
-			GenerateName: "ingress-" + trigger.Spec.FunctionReference.Name + "-",
+			Labels: getDeployLabels(trigger),
+			Name:   trigger.Metadata.Name,
 			// The Ingress NS MUST be same as Router NS, check long discussion:
 			// https://github.com/kubernetes/kubernetes/issues/17088
 			// We need to revisit this in future, once Kubernetes supports cross namespace ingress
@@ -80,10 +85,12 @@ func createIngress(trigger *crd.HTTPTrigger, kubeClient *kubernetes.Clientset) {
 		},
 	}
 
-	_, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Create(ing)
+	_, err = kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Create(ing)
 	if err != nil {
 		log.Printf("Failed to create ingress: %v", err)
+		return
 	}
+	log.Printf("Created ingress successfully for trigger %v", trigger.Metadata.Name)
 }
 
 func getDeployLabels(trigger *crd.HTTPTrigger) map[string]string {
@@ -99,14 +106,10 @@ func deleteIngress(trigger *crd.HTTPTrigger, kubeClient *kubernetes.Clientset) {
 		return
 	}
 
-	ingressList, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).List(v1.ListOptions{
-		LabelSelector: labels.Set(getDeployLabels(trigger)).AsSelector().String(),
-	})
+	ingress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(trigger.Metadata.Name, v1.GetOptions{})
 	if err != nil {
-		log.Printf("Failed to get ingress for trigger: %v, %v", err, trigger)
+		log.Printf("Failed to get ingress when deleting trigger: %v, %v", err, trigger)
 	}
-
-	ingress := filterIngress(ingressList, trigger)
 
 	err = kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Delete(ingress.Name, &v1.DeleteOptions{})
 
@@ -129,14 +132,11 @@ func updateIngress(oldT *crd.HTTPTrigger, newT *crd.HTTPTrigger, kubeClient *kub
 	}
 
 	if newT.Spec.Host != oldT.Spec.Host || newT.Spec.RelativeURL != oldT.Spec.RelativeURL {
-		ingressList, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).List(v1.ListOptions{
-			LabelSelector: labels.Set(getDeployLabels(oldT)).AsSelector().String(),
-		})
+		log.Printf("Updating ingress for trigger %v", oldT.Metadata.Name)
+		ingress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(oldT.Metadata.Name, v1.GetOptions{})
 		if err != nil {
-			log.Printf("Failed to get ingress for trigger: %v", err)
+			log.Printf("Failed to get ingress when updating trigger: %v", err)
 		}
-
-		ingress := filterIngress(ingressList, oldT)
 
 		if newT.Spec.Host != oldT.Spec.Host {
 			ingress.Spec.Rules[0].Host = newT.Spec.Host
@@ -152,12 +152,4 @@ func updateIngress(oldT *crd.HTTPTrigger, newT *crd.HTTPTrigger, kubeClient *kub
 		}
 	}
 
-}
-
-func filterIngress(iList *v1beta1.IngressList, trigger *crd.HTTPTrigger) *v1beta1.Ingress {
-	if len(iList.Items) > 1 {
-		log.Printf("Found more than one ingress, using the first one: %v", iList)
-		//TODO: May be check if ingress name uses convention - ingress-funcname-* instead of randomly selecting first??
-	}
-	return &iList.Items[0]
 }
