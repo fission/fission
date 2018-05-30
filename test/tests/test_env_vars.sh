@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#test:disabled
 
 set -euo pipefail
 

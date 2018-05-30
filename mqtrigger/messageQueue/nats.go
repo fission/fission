@@ -110,9 +110,6 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			"Content-Type":                   trigger.Spec.ContentType,
 		}
 
-		log.Info("Making sure the NATS message handler recognizes a valid error topic: ", trigger.Spec.ErrorTopic)
-		log.Info("And max retries value: ", trigger.Spec.MaxRetries)
-
 		// Create request
 		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
 
@@ -125,17 +122,9 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			req.Header.Add(k, v)
 		}
 
-		/*
-			Cases:
-				HTTP response is nil 							-> Retry if within max retries limit, else return
-				HTTP response body could not be read 			-> Return
-				HTTP request returned error or non-200 status	-> Publish error to error queue if specified and return
-				HTTP request did not return error and 200 status-> Ack the message and publish response to resp topic
-		*/
-
 		var resp *http.Response
-		// Number of retries is required to be between 1 and 5, inclusive
-		for attempt := 0; attempt < trigger.Spec.MaxRetries; attempt++ {
+		// Number of retries is required to be between 0 (default) and 5, inclusive
+		for attempt := -1; attempt < trigger.Spec.MaxRetries; attempt++ {
 			// Make the request
 			log.Warningf("Request : %v", req)
 			resp, err = http.DefaultClient.Do(req)
@@ -149,7 +138,6 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			}
 		}
 
-		// Where should the following line go?
 		defer resp.Body.Close()
 
 		if resp == nil {
@@ -165,20 +153,17 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 
 		// Only the latest error response will be published to error topic
 		if err != nil || resp.StatusCode != 200 {
-			log.Errorf("Request to %v failed after %v retries, err : %v", url, trigger.Spec.MaxRetries, err)
-			log.Info("Attempting to publish error to error queue, if defined.")
-			log.Info("The response body is: %v", body)
-
 			if len(trigger.Spec.ErrorTopic) > 0 {
 				publishErr := nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
 				if publishErr != nil {
 					log.Error("Failed to publish error to error topic: %v", err)
+					// Do not ack message, quit
+					return
 				}
 			}
-			return
 		}
 
-		// trigger acks message only if a request done successfully
+		// Trigger acks message only if a request was processed successfully
 		err = msg.Ack()
 		if err != nil {
 			log.Warningf("Failed to ack message: %v", err)
