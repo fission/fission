@@ -2,6 +2,7 @@ kind: ArchiveUploadSpec
 name: hello-go
 include:
 - hello.go
+- build.sh
 
 ---
 apiVersion: fission.io/v1
@@ -17,6 +18,7 @@ spec:
   source:
     type: url
     url: archive://hello-go
+  buildcmd: "./build.sh"
 status:
   buildstatus: pending
 
