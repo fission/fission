@@ -22,20 +22,20 @@ func findFreePort() (string, error) {
 	}
 
 	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
-	file, err := listener.(*net.TCPListener).File()
+	/*file, err := listener.(*net.TCPListener).File()
 	if err != nil {
 		return "", nil
-	}
+	}*/
 
 	err = listener.Close()
 	if err != nil {
 		return "", err
 	}
 
-	err = file.Close()
+	/*err = file.Close()
 	if err != nil {
 		return "", err
-	}
+	}*/
 
 	return port, nil
 }
