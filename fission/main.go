@@ -202,6 +202,7 @@ func main() {
 	{Name: "update", Usage: "Update message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtTopicFlag, mqtRespTopicFlag, mqtErrorTopicFlag, mqtMaxRetries, mqtFnNameFlag, mqtMsgContentType}, Action: mqtUpdate},
 	{Name: "delete", Usage: "Delete message queue trigger", Flags: []cli.Flag{mqtNameFlag}, Action: mqtDelete},
 	{Name: "list", Usage: "List message queue triggers", Flags: []cli.Flag{mqtMQTypeFlag}, Action: mqtList},
+
 	}
 
 	// environments
