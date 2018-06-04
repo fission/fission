@@ -161,7 +161,7 @@ func main() {
 
 	// timetriggers
 	ttNameFlag := cli.StringFlag{Name: "name", Usage: "Time Trigger name"}
-	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec. e.g. '5 * * * * *' the function will be invoked at 5 seconds every minute. Or more descriptive way like '@every 5m', '@hourly'"}
+	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}
 	ttFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	ttRoundFlag := cli.IntFlag{Name: "round", Value: 1, Usage: "Get next N rounds of invocation time"}
 	ttSubcommands := []cli.Command{
