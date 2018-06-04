@@ -251,7 +251,7 @@ build_charts() {
 }
 
 
-# Build pre-install-checks image
+# Build pre-upgrade-checks image
 build_pre_upgrade_checks_image() {
     local version=$1
     local date=$2
@@ -268,7 +268,7 @@ build_pre_upgrade_checks_image() {
     popd
 }
 
-# Push pre-install-checks image
+# Push pre-upgrade-checks image
 push_pre_upgrade_checks_image() {
     local version=$1
     local tag=fission/pre-upgrade-checks:$version
@@ -331,7 +331,7 @@ push_all() {
     push_logger_image $version
     push_logger_image latest
 
-    push_pre_install_checks_image $version
+    push_pre_upgrade_checks_image $version
     push_pre_upgrade_checks_image latest
 }
 
