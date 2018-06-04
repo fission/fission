@@ -161,7 +161,7 @@ func main() {
 
 	// timetriggers
 	ttNameFlag := cli.StringFlag{Name: "name", Usage: "Time Trigger name"}
-	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec ('0 30 * * * *', '@every 5m', '@hourly')"}
+	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec. e.g. '5 * * * * *' the function will be invoked at 5 seconds every minute. Or more descriptive way like '@every 5m', '@hourly'"}
 	ttFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
 	ttRoundFlag := cli.IntFlag{Name: "round", Value: 1, Usage: "Get next N rounds of invocation time"}
 	ttSubcommands := []cli.Command{
@@ -170,7 +170,7 @@ func main() {
 		{Name: "update", Usage: "Update time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag, ttCronFlag, ttFnNameFlag}, Action: ttUpdate},
 		{Name: "delete", Usage: "Delete time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag}, Action: ttDelete},
 		{Name: "list", Usage: "List time triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: ttList},
-		{Name: "test", Usage: "Test time trigger cron spec", Flags: []cli.Flag{ttCronFlag, ttRoundFlag}, Action: ttTest},
+		{Name: "showschedule", Aliases: []string{"show"}, Usage: "Show schedule for cron spec", Flags: []cli.Flag{ttCronFlag, ttRoundFlag}, Action: ttTest},
 	}
 
 	// Message queue trigger
