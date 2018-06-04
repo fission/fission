@@ -18,7 +18,9 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -87,4 +89,26 @@ func (c *Client) handleCreateResponse(resp *http.Response) ([]byte, error) {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	return body, err
+}
+
+func (c *Client) ServerInfo() (*fission.ServerInfo, error) {
+	url := fmt.Sprintf(c.Url)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &fission.ServerInfo{}
+	err = json.Unmarshal(body, info)
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }

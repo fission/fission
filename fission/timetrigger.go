@@ -20,14 +20,41 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
+	"github.com/robfig/cron"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 )
+
+func getAPITimeInfo(client *client.Client) time.Time {
+	serverInfo, err := client.ServerInfo()
+	if err != nil {
+		fatal(fmt.Sprintf("Error syncing server time information: %v", err))
+	}
+	return serverInfo.ServerTime.CurrentTime
+}
+
+func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int) error {
+	sched, err := cron.Parse(cronSpec)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Current Server Time: \t%v\n", serverTime.Format(time.RFC3339))
+
+	for i := 0; i < round; i++ {
+		serverTime = sched.Next(serverTime)
+		fmt.Printf("Next %v invocation: \t%v\n", i+1, serverTime.Format(time.RFC3339))
+	}
+
+	return nil
+}
 
 func ttCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
@@ -40,11 +67,12 @@ func ttCreate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+
 	fnNamespace := c.String("fnNamespace")
 
-	cron := c.String("cron")
-	if len(cron) == 0 {
-		fatal("Need a cron spec like '0 30 * * *', '@every 1h30m', or '@hourly'; use --cron")
+	cronSpec := c.String("cron")
+	if len(cronSpec) == 0 {
+		fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	tt := &crd.TimeTrigger{
@@ -53,7 +81,7 @@ func ttCreate(c *cli.Context) error {
 			Namespace: fnNamespace,
 		},
 		Spec: fission.TimeTriggerSpec{
-			Cron: cron,
+			Cron: cronSpec,
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
@@ -73,6 +101,10 @@ func ttCreate(c *cli.Context) error {
 	checkErr(err, "create Time trigger")
 
 	fmt.Printf("trigger '%v' created\n", name)
+
+	err = getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), 1)
+	checkErr(err, "pass cron spec examination")
+
 	return err
 }
 
@@ -118,6 +150,10 @@ func ttUpdate(c *cli.Context) error {
 	checkErr(err, "update Time trigger")
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
+
+	err = getCronNextNActivationTime(newCron, getAPITimeInfo(client), 1)
+	checkErr(err, "pass cron spec examination")
+
 	return nil
 }
 
@@ -154,6 +190,21 @@ func ttList(c *cli.Context) error {
 			tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}
 	w.Flush()
+
+	return nil
+}
+
+func ttTest(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
+	round := c.Int("round")
+	cronSpec := c.String("cron")
+	if len(cronSpec) == 0 {
+		fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+	}
+
+	err := getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), round)
+	checkErr(err, "pass cron spec examination")
 
 	return nil
 }
