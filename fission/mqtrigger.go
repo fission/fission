@@ -68,6 +68,14 @@ func mqtCreate(c *cli.Context) error {
 		fatal("Listen topic should not equal to response topic")
 	}
 
+	errorTopic := c.String("errortopic")
+
+	maxRetries := c.Int("maxretries")
+
+	if maxRetries < 1 || maxRetries > 5 {
+		fatal("Maximum number of retries must be between 1 and 5, default is 0")
+	}
+
 	contentType := c.String("contenttype")
 	if len(contentType) == 0 {
 		contentType = "application/json"
@@ -143,6 +151,20 @@ func mqtUpdate(c *cli.Context) error {
 		mqt.Spec.ResponseTopic = respTopic
 		updated = true
 	}
+
+	if len(errorTopic) > 0 {
+		mqt.Spec.ErrorTopic = errorTopic
+		updated = true
+	}
+
+	// Default number of max retries is 0
+	mqt.Spec.MaxRetries = 0
+
+	if maxRetries > -1 && maxRetries < 6 {
+		mqt.Spec.MaxRetries = maxRetries
+		updated = true
+	}
+
 	if len(fnName) > 0 {
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
@@ -190,8 +212,9 @@ func mqtList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "PUB_MSG_CONTENT_TYPE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE")
+
 	for _, mqt := range mqts {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
 			mqt.Metadata.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ContentType)

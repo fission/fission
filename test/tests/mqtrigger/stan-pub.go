@@ -10,12 +10,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/nats-io/go-nats-streaming"
 	"log"
 	"os"
 	"sync"
 	"time"
-
-	"github.com/nats-io/go-nats-streaming"
 )
 
 var usageStr = `
