@@ -41,7 +41,7 @@ Options:
   --fn-pod-namespace=<podNamespace>                        Namespace where function pods get deployed.
   --envbuilder-namespace=<envBuilderNamespace>             Namespace where builder env pods are deployed.`
 
-	arguments, err := docopt.Parse(usage, nil, true, fission.VersionInfo().String(), false)
+	arguments, err := docopt.Parse(usage, nil, true, fission.BuildInfo().String(), false)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
