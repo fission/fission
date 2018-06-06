@@ -57,7 +57,7 @@ func envCreate(c *cli.Context) error {
 
 	envList, err := client.EnvironmentList(envNamespace)
 	if err == nil && len(envList) > 0 {
-		verbose("%d environment(s) are present in the %s namespace.  These environments are not isolated from each other; use separate namespaces if you need isolation.", len(envList), envNamespace)
+		verbose(2, "%d environment(s) are present in the %s namespace.  These environments are not isolated from each other; use separate namespaces if you need isolation.", len(envList), envNamespace)
 	}
 
 	var poolsize int
