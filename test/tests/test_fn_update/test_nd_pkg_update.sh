@@ -57,4 +57,14 @@ sleep 5
 
 timeout 60 bash -c "test_fn $fn_name 'fission'"
 
+
+log "[2] Updating function with updated package"
+fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
+
+log "[2] Waiting for deployment to update"
+sleep 5
+
+timeout 60 bash -c "test_fn $fn_name 'fission'"
+
+
 log "Update function for new deployment executor passed"
