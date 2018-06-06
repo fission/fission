@@ -47,6 +47,10 @@ timeout 60 bash -c "test_fn $fn_name 'world'"
 
 log "Updating the archive"
 sed -i 's/world/fission/' test_dir/hello.py
+
+log "Source file after change:"
+cat test_dir/hello.py
+
 zip -jr test-deploy-pkg.zip test_dir/
 
 log "Updating function with updated package"
@@ -59,7 +63,7 @@ log "Doing a HTTP Get on function"
 response0=$(curl http://$FISSION_ROUTER/$fn_name)
 
 log "Checking for valid response"
-echo $response
+echo $response0
 log "Checking for expected value"
 echo $response0 | grep -i "fission"
 
