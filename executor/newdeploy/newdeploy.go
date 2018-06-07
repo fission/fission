@@ -147,10 +147,10 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 
 	targetFilename := "user"
 
-	gracePeriodSeconds := int64(1 * 10)
-	if env.Spec.TerminationGracePeriod > 0 {
-		gracePeriodSeconds = env.Spec.TerminationGracePeriod
-	}
+	gracePeriodSeconds := int64(1 * 30)
+	//if env.Spec.TerminationGracePeriod > 0 {
+	//	gracePeriodSeconds = env.Spec.TerminationGracePeriod
+	//}
 
 	fmt.Println("nd gracePeriodSeconds=", gracePeriodSeconds)
 

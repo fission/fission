@@ -479,10 +479,10 @@ func (gp *GenericPool) createPool() error {
 
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
-	gracePeriodSeconds := int64(1 * 10)
-	if gp.env.Spec.TerminationGracePeriod > 0 {
-		gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
-	}
+	gracePeriodSeconds := int64(1 * 30)
+	//if gp.env.Spec.TerminationGracePeriod > 0 {
+	//	gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
+	//}
 
 	fmt.Println("pm gracePeriodSeconds=", gracePeriodSeconds)
 
