@@ -16,7 +16,7 @@ cp ../test_secret_cfgmap/cfgmap.py.template cfgmap.py
 sed -i "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" cfgmap.py
 
 log "Creating env $env"
-fission env create --name $env --image fission/python-env
+fission env create --name $env --image fission/python-env --graceperiod 1
 trap "fission env delete --name $env" EXIT
 
 log "Creating configmap $old_cfgmap"

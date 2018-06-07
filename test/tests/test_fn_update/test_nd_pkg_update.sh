@@ -32,7 +32,7 @@ printf 'def main():\n    return "Hello, world!"' > test_dir/hello.py
 zip -jr test-deploy-pkg.zip test_dir/
 
 log "Creating environment"
-fission env create --name $env --image fission/python-env:latest --builder fission/python-builder:latest --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 2
+fission env create --name $env --image fission/python-env:latest --builder fission/python-builder:latest --mincpu 40 --maxcpu 80 --minmemory 64 --maxmemory 128 --poolsize 2 --graceperiod 1
 
 log "Creating functiom"
 fission fn create --name $fn_name --env $env --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
