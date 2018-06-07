@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/fission/log"
 	"github.com/fsnotify/fsnotify"
 	"github.com/ghodss/yaml"
 	multierror "github.com/hashicorp/go-multierror"
@@ -40,6 +39,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 const SPEC_API_VERSION = "fission.io/v1"

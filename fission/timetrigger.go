@@ -22,7 +22,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/fission/fission/fission/log"
 	"github.com/robfig/cron"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
@@ -31,6 +30,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 func getAPITimeInfo(client *client.Client) time.Time {

@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	"github.com/fission/fission/fission/log"
 	"github.com/urfave/cli"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,6 +30,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {

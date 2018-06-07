@@ -25,13 +25,13 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/fission/fission/fission/log"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 func getFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]crd.Function, error) {

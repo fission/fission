@@ -11,12 +11,12 @@ import (
 	"strings"
 
 	"github.com/dchest/uniuri"
-	"github.com/fission/fission/fission/log"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/v1"
 )
 

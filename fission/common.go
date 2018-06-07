@@ -31,13 +31,13 @@ import (
 	"strings"
 
 	"github.com/dchest/uniuri"
-	"github.com/fission/fission/fission/log"
 	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 	storageSvcClient "github.com/fission/fission/storagesvc/client"
 )
 

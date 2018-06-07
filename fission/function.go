@@ -28,8 +28,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/fission/fission/fission/log"
-	"github.com/fission/fission/fission/portforward"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	apiv1 "k8s.io/api/core/v1"
@@ -38,7 +36,9 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/logdb"
+	"github.com/fission/fission/fission/portforward"
 )
 
 func printPodLogs(c *cli.Context) error {

@@ -23,7 +23,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/fission/fission/fission/log"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +30,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 // returns one of http.Method*
