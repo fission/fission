@@ -17,8 +17,6 @@ test_fn() {
         break
       fi
       kubectl describe endpoints -n $FUNCTION_NAMESPACE
-      kubectl describe svc -n $FUNCTION_NAMESPACE
-      kubectl describe pods -n $FUNCTION_NAMESPACE
       sleep 1
     done
 }
