@@ -147,7 +147,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 
 	targetFilename := "user"
 
-	gracePeriodSeconds := int64(6 * 60)
+	gracePeriodSeconds := fission.DefaultTerminationGracePeriod
 	if env.Spec.TerminationGracePeriod > 0 {
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
