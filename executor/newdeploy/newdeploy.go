@@ -152,6 +152,8 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
+	fmt.Println("nd gracePeriodSeconds=", gracePeriodSeconds)
+
 	fetchReq := &fetcher.FetchRequest{
 		FetchType: fetcher.FETCH_DEPLOYMENT,
 		Package: metav1.ObjectMeta{

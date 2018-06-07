@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#test:disabled
 set -euo pipefail
 # 1. This test first creates a python function with a route
 # 2. Makes a curl request to the route and verifies http.StatusOK is received.
