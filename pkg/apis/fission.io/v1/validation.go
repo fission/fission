@@ -449,26 +449,27 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 func (spec RecorderSpec) Validate() error {
 	var result *multierror.Error
 
-	switch spec.BackendType {
-	case RecorderBackendTypeRedis, RecorderBackendTypeMongoDB: // no op
-	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "RecorderSpec.BackendType", spec.BackendType, "not a supported backend type"))
-	}
-	for _, functionRef := range spec.Functions {
-		result = multierror.Append(result, functionRef.Validate())
-	}
-	// TODO: Find a way to validate all the triggers sensibly
+	// TODO: Function validation
+	//if len(spec.Function.Name) != 0 {
+	//	result = multierror.Append(result, spec.Function.Validate())
+	//}
+
+	// TODO: Triggers validation
+	//for _, trigger := range spec.Triggers {
+	//	result = multierror.Append(result, trigger.Validate())
+	//}
 
 	if len(spec.Name) == 0 {
 		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "RecorderSpec.Name", spec.Name, "not a valid name"))
 	}
-	if len(spec.RetentionPolicy) == 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "RecorderSpec.RetentionPolicy", spec.Name, "not a valid retention policy"))
-	}
-	if len(spec.EvictionPolicy) == 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "RecorderSpec.EvictionPolicy", spec.Name, "not a valid eviction policy"))
-	}
+	//if len(spec.RetentionPolicy) == 0 {
+	//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "RecorderSpec.RetentionPolicy", spec.Name, "not a valid retention policy"))
+	//}
+	//if len(spec.EvictionPolicy) == 0 {
+	//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "RecorderSpec.EvictionPolicy", spec.Name, "not a valid eviction policy"))
+	//}
 
+	//log.Info("This is the RecorderSpec validation result: %v", result)
 	return result.ErrorOrNil()
 }
 

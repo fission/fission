@@ -17,20 +17,26 @@ limitations under the License.
 package router
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/satori/go.uuid"
+	"github.com/sirupsen/logrus"
 
+	executorClient "github.com/fission/fission/executor/client"
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	executorClient "github.com/fission/fission/executor/client"
+	"github.com/fission/fission/redis"
 )
 
 type tsRoundTripperParams struct {
@@ -42,10 +48,13 @@ type tsRoundTripperParams struct {
 
 type functionHandler struct {
 	fmap                 *functionServiceMap
+	frmap                *functionRecorderMap
+	trmap                *triggerRecorderMap
 	executor             *executorClient.Client
 	function             *metav1.ObjectMeta
 	httpTrigger          *crd.HTTPTrigger
 	tsRoundTripperParams *tsRoundTripperParams
+	recorderName         string
 }
 
 // A layer on top of http.DefaultTransport, with retries.
@@ -82,6 +91,27 @@ type RetryingRoundTripper struct {
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var needExecutor, serviceUrlFromExecutor bool
 	var serviceUrl *url.URL
+
+	// TODO: Keep? --> Needed for queries encoded in URL before they're stripped by the proxy
+	var originalUrl url.URL
+	originalUrl = *req.URL
+
+	// Iff this request needs to be recorded, we save the body
+	var postedBody string
+	if len(roundTripper.funcHandler.recorderName) > 0 {
+		if req.ContentLength > 0 {
+			p := make([]byte, req.ContentLength)
+			buf, _ := ioutil.ReadAll(req.Body)
+			// We need two io readers because a single reader will drain the buffer, hence we keep a replacement copy
+			rdr1 := ioutil.NopCloser(bytes.NewBuffer(buf))
+			rdr2 := ioutil.NopCloser(bytes.NewBuffer(buf))
+
+			rdr1.Read(p)
+			postedBody = string(p)
+			logrus.Info(fmt.Sprintf("%v", postedBody))
+			req.Body = rdr2
+		}
+	}
 
 	// Metrics stuff
 	startTime := time.Now()
@@ -177,6 +207,27 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			functionCallCompleted(funcMetricLabels, httpMetricLabels,
 				overhead, time.Since(startTime), resp.ContentLength)
 
+			// if transport.RoundTrip succeeds and it was a cached entry, then tapService
+			if !serviceUrlFromExecutor {
+				go roundTripper.funcHandler.tapService(serviceUrl)
+			}
+
+			trigger := ""
+			if roundTripper.funcHandler.httpTrigger != nil {
+				trigger = roundTripper.funcHandler.httpTrigger.Metadata.Name
+			} else {
+				log.Println("No trigger attached.") // Wording?
+			}
+
+			if len(roundTripper.funcHandler.recorderName) > 0 {
+				redis.Record(
+					trigger,
+					roundTripper.funcHandler.recorderName,
+					req.Header.Get("X-Fission-ReqUID"), req, originalUrl, postedBody, resp, roundTripper.funcHandler.function.Namespace,
+					time.Now().UnixNano(),
+				)
+			}
+
 			// return response back to user
 			return resp, nil
 		}
@@ -225,6 +276,14 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	vars := mux.Vars(request)
 	for k, v := range vars {
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
+	}
+
+	var reqUID string
+	if len(fh.recorderName) > 0 {
+		UID := strings.ToLower(uuid.NewV4().String())
+		reqUID = "REQ" + UID
+		request.Header.Add("X-Fission-ReqUID", reqUID)
+		log.Print("Record request with ReqUID: ", reqUID)
 	}
 
 	// system params

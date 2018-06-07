@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2018 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,8 +24,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/crd"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/redis/build/gen"
 )
 
 func (c *Client) RecorderCreate(r *crd.Recorder) (*metav1.ObjectMeta, error) {
@@ -38,7 +39,7 @@ func (c *Client) RecorderCreate(r *crd.Recorder) (*metav1.ObjectMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO: Which url should be used here?
+
 	resp, err := http.Post(c.url("recorders"), "application/json", bytes.NewReader(reqbody))
 	if err != nil {
 		return nil, err
@@ -60,7 +61,6 @@ func (c *Client) RecorderCreate(r *crd.Recorder) (*metav1.ObjectMeta, error) {
 }
 
 func (c *Client) RecorderGet(m *metav1.ObjectMeta) (*crd.Recorder, error) {
-	// TODO: What urls should be used here?
 	relativeUrl := fmt.Sprintf("recorders/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
@@ -83,7 +83,6 @@ func (c *Client) RecorderGet(m *metav1.ObjectMeta) (*crd.Recorder, error) {
 
 	return &r, nil
 }
-
 
 func (c *Client) RecorderUpdate(recorder *crd.Recorder) (*metav1.ObjectMeta, error) {
 	err := recorder.Validate()
@@ -116,19 +115,14 @@ func (c *Client) RecorderUpdate(recorder *crd.Recorder) (*metav1.ObjectMeta, err
 	return &m, nil
 }
 
-
 func (c *Client) RecorderDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("recorders/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	return c.delete(relativeUrl)
 }
 
-
-func (c *Client) RecorderList(backendType string, ns string) ([]crd.Recorder, error) {
-	relativeUrl := "triggers/"
-	if len(backendType) > 0 {
-		relativeUrl += fmt.Sprintf("?backendtype=%v&namespace=%v", backendType, ns)
-	}
+func (c *Client) RecorderList(ns string) ([]crd.Recorder, error) {
+	relativeUrl := "recorders"
 
 	resp, err := http.Get(c.url(relativeUrl))
 	if err != nil {
@@ -150,3 +144,96 @@ func (c *Client) RecorderList(backendType string, ns string) ([]crd.Recorder, er
 	return recorders, nil
 }
 
+// TODO: Move to different file?
+func (c *Client) RecordsByFunction(function string) ([]*redisCache.RecordedEntry, error) {
+	relativeUrl := fmt.Sprintf("records/function/%v", function)
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]*redisCache.RecordedEntry, 0)
+	err = json.Unmarshal(body, &records)
+	if err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+func (c *Client) RecordsAll() ([]*redisCache.RecordedEntry, error) {
+	relativeUrl := "records"
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]*redisCache.RecordedEntry, 0)
+	err = json.Unmarshal(body, &records)
+	if err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+func (c *Client) RecordsByTrigger(trigger string) ([]*redisCache.RecordedEntry, error) {
+	relativeUrl := fmt.Sprintf("records/trigger/%v", trigger)
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]*redisCache.RecordedEntry, 0)
+	err = json.Unmarshal(body, &records)
+	if err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+func (c *Client) RecordsByTime(from string, to string) ([]*redisCache.RecordedEntry, error) {
+	relativeUrl := "records/time"
+	relativeUrl += fmt.Sprintf("?from=%v&to=%v", from, to)
+
+	resp, err := http.Get(c.url(relativeUrl))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := c.handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]*redisCache.RecordedEntry, 0)
+	err = json.Unmarshal(body, &records)
+	if err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}

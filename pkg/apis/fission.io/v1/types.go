@@ -153,11 +153,19 @@ type (
 		Items []MessageQueueTrigger `json:"items"`
 	}
 
-	// TODO: Should this be here?
+	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Recorder struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta       `json:"metadata"`
-		Spec            RecorderSpec `json:"spec"`
+		Metadata        metav1.ObjectMeta `json:"metadata"`
+		Spec            RecorderSpec      `json:"spec"`
+	}
+
+	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	RecorderList struct {
+		metav1.TypeMeta `json:",inline"`
+		Metadata        metav1.ListMeta `json:"metadata"`
+
+		Items []Recorder `json:"items"`
 	}
 )
 
@@ -192,6 +200,10 @@ func (p *Package) GetObjectKind() schema.ObjectKind {
 	return &p.TypeMeta
 }
 
+func (r *Recorder) GetObjectKind() schema.ObjectKind {
+	return &r.TypeMeta
+}
+
 func (f *Function) GetObjectMeta() metav1.Object {
 	return &f.Metadata
 }
@@ -212,6 +224,10 @@ func (m *MessageQueueTrigger) GetObjectMeta() metav1.Object {
 }
 func (p *Package) GetObjectMeta() metav1.Object {
 	return &p.Metadata
+}
+
+func (r *Recorder) GetObjectMeta() metav1.Object {
+	return &r.Metadata
 }
 
 func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
@@ -235,6 +251,9 @@ func (ml *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
 func (pl *PackageList) GetObjectKind() schema.ObjectKind {
 	return &pl.TypeMeta
 }
+func (rl *RecorderList) GetObjectKind() schema.ObjectKind {
+	return &rl.TypeMeta
+}
 
 func (fl *FunctionList) GetListMeta() metav1.ListInterface {
 	return &fl.Metadata
@@ -256,6 +275,9 @@ func (ml *MessageQueueTriggerList) GetListMeta() metav1.ListInterface {
 }
 func (pl *PackageList) GetListMeta() metav1.ListInterface {
 	return &pl.Metadata
+}
+func (rl *RecorderList) GetListMeta() metav1.ListInterface {
+	return &rl.Metadata
 }
 
 func validateMetadata(field string, m metav1.ObjectMeta) error {
