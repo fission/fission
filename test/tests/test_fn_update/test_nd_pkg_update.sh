@@ -59,6 +59,6 @@ fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hel
 log "Waiting for deployment to update"
 sleep 5
 
-timeout 60 bash -c "test_fn $fn_name 'fission'"
+timeout 120 bash -c "test_fn $fn_name 'fission'"
 
 log "Update function for new deployment executor passed"
