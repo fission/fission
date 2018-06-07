@@ -59,15 +59,6 @@ fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hel
 log "Waiting for deployment to update"
 sleep 5
 
-log "Doing a HTTP Get on function"
-response0=$(curl http://$FISSION_ROUTER/$fn_name)
-
-log "Checking for valid response"
-echo $response0
-log "Checking for expected value"
-echo $response0 | grep -i "fission"
-
-kubectl logs -n $FUNCTION_NAMESPACE -lfunctionName=$fn_name -c fetcher
-kubectl logs -n $FUNCTION_NAMESPACE -lfunctionName=$fn_name -c $fn_name
+timeout 60 bash -c "test_fn $fn_name 'fission'"
 
 log "Update function for new deployment executor passed"
