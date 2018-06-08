@@ -97,6 +97,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 	// cache lookup to get serviceUrl
 	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(roundTripper.funcHandler.function)
+	fmt.Println("Svc URL from Cache:", serviceUrl)
 	if err != nil || serviceUrl == nil {
 		// cache miss or nil entry in cache
 		needExecutor = true
@@ -117,6 +118,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			// parse the address into url
 			serviceUrl, err = url.Parse(fmt.Sprintf("http://%v", service))
+			fmt.Println("SvcURL from executor=", serviceUrl)
 			if err != nil {
 				return nil, err
 			}
@@ -154,7 +156,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		overhead := time.Since(startTime)
 
 		// forward the request to the function service
+		fmt.Println("Req before sending to function:", req)
 		resp, err = transport.RoundTrip(req)
+		fmt.Println("resp from executor:", resp)
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
