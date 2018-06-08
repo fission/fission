@@ -1,6 +1,6 @@
 #!/bin/bash
 
-
+#test:disabled
 # we may not need this to run as a pre-check-in test for every PR. but only once in a while to ensure nothing's broken.
 
 set -euo pipefail

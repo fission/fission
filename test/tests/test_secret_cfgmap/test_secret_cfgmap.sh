@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#test:disabled
+
 set -euo pipefail
 
 ROOT=$(dirname $0)/../..

@@ -12,10 +12,12 @@ test_fn() {
 
     while true; do
       response0=$(curl http://$FISSION_ROUTER/$1)
+      echo "Resp" $response0
       echo $response0 | grep -i $2
       if [[ $? -eq 0 ]]; then
         break
       fi
+      kubectl describe endpoints -n $FUNCTION_NAMESPACE
       sleep 1
     done
 }

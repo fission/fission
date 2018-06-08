@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#test:disabled
 set -euo pipefail
 
 # Create a function with source package in python 

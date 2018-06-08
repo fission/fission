@@ -47,6 +47,10 @@ timeout 60 bash -c "test_fn $fn_name 'world'"
 
 log "Updating the archive"
 sed -i 's/world/fission/' test_dir/hello.py
+
+log "Source file after change:"
+cat test_dir/hello.py
+
 zip -jr test-deploy-pkg.zip test_dir/
 
 log "Updating function with updated package"
@@ -55,6 +59,6 @@ fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hel
 log "Waiting for deployment to update"
 sleep 5
 
-timeout 60 bash -c "test_fn $fn_name 'fission'"
+timeout 180 bash -c "test_fn $fn_name 'fission'"
 
 log "Update function for new deployment executor passed"
