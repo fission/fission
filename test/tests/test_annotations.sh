@@ -10,7 +10,7 @@ FN=foo-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
 BUILDER_NS=fission-builder
-LIST_ANNOTATIONS='go-template={{range $key,$value := .metadata.annotations}}{{$key}}: {{$value}}{{"\n"}}{{end}}'
+LIST_ANNOTATIONS=go-template='{{range $key,$value := .metadata.annotations}}{{$key}}: {{$value}}{{"\n"}}{{end}}'
 
 # fs
 TEST_DIR=/tmp/${TEST_ID}
@@ -75,8 +75,7 @@ function retry {
 
 # Deploy environment (using kubectl because the Fission cli does not support the container arguments)
 ANNOTATION_KEY="foo"
-ANNOTATION_RUNTIME_VALUE="runtime-bar"
-ANNOTATION_BUILDER_VALUE="builder-bar"
+ANNOTATION_VALUE="bar"
 echo "Writing environment config to $ENV_SPEC_FILE"
 cat > $ENV_SPEC_FILE <<- EOM
 apiVersion: fission.io/v1
@@ -84,17 +83,14 @@ kind: Environment
 metadata:
   name: ${ENV}
   namespace: ${RESOURCE_NS}
+  annotations:
+    ${ANNOTATION_KEY}: ${ANNOTATION_VALUE}
 spec:
   builder:
     command: build
     image: gcr.io/fission-ci/python-env-builder:test
-    annotations:
-      ${ANNOTATION_KEY}: ${ANNOTATION_BUILDER_VALUE}
-
   runtime:
     image: gcr.io/fission-ci/python-env:test
-    annotations:
-      ${ANNOTATION_KEY}: ${ANNOTATION_RUNTIME_VALUE}
   version: 2
   poolsize: 1
 EOM
@@ -111,34 +107,34 @@ echo "builder pod: ${buildPod}."
 
 # Ensure pods are running/ready
 log "Waiting for ${FUNCTION_NS} ${ENV} to be available..."
-echo "> kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS}"
-retry kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} > /dev/null
+echo "> kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o \"${LIST_ANNOTATIONS}\""
+retry kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" > /dev/null
 log "Runtime pod ready."
 
 log "Waiting for ${BUILDER_NS} ${ENV} to be available..."
-echo "> kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS}"
-retry kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} > /dev/null
+echo "> kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o \"${LIST_ANNOTATIONS}\""
+retry kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" > /dev/null
 log "Builder pod ready."
 
 # Check if the annotation is set on the runtime pod
 status=0
-if kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} | grep "${ANNOTATION_KEY}: ${ANNOTATION_RUNTIME_VALUE}"; then
+if kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" | grep "${ANNOTATION_KEY}: ${ANNOTATION_VALUE}"; then
     log "Runtime annotation is correct."
 else
-    log "Runtime does not contain expected annotation: ${ANNOTATION_KEY}: ${ANNOTATION_RUNTIME_VALUE}"
+    log "Runtime does not contain expected annotation: ${ANNOTATION_KEY}: ${ANNOTATION_VALUE}"
     echo "--- Runtime Env ---"
-    kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} || true
+    kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" || true
     echo "--- End Runtime Env ---"
     status=5
 fi
 
 # Check if the annotation is set on the builder pod
-if kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} | grep "${ANNOTATION_KEY}: ${ANNOTATION_BUILDER_VALUE}" ; then
+if kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" | grep "${ANNOTATION_KEY}: ${ANNOTATION_VALUE}" ; then
     log "Builder annotation is correct."
 else
-    log "Builder does not contain expected annotation: ${ANNOTATION_KEY}: ${ANNOTATION_BUILDER_VALUE}"
+    log "Builder does not contain expected annotation: ${ANNOTATION_KEY}: ${ANNOTATION_VALUE}"
     echo "--- Builder Env ---"
-    kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o ${LIST_ANNOTATIONS} || true
+    kubectl -n ${FUNCTION_NS} get pod ${runtimePod} -o "${LIST_ANNOTATIONS}" || true
     echo "--- End Builder Env ---"
     status=5
 fi
