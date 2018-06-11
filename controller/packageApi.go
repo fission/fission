@@ -18,9 +18,11 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -64,12 +66,14 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure size limits
 	if len(f.Spec.Source.Literal) > int(fission.ArchiveLiteralSizeLimit) {
-		err := fission.MakeError(fission.ErrorInvalidArgument, "Package literal larger than 256K")
+		err := fission.MakeError(fission.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(fission.ArchiveLiteralSizeLimit))))
 		a.respondWithError(w, err)
 		return
 	}
 	if len(f.Spec.Deployment.Literal) > int(fission.ArchiveLiteralSizeLimit) {
-		err := fission.MakeError(fission.ErrorInvalidArgument, "Package literal larger than 256K")
+		err := fission.MakeError(fission.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(fission.ArchiveLiteralSizeLimit))))
 		a.respondWithError(w, err)
 		return
 	}
