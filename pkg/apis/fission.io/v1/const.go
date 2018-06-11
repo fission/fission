@@ -73,8 +73,25 @@ const (
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = "name"
 
+	FunctionReferenceTypeFunctionWeights = "function-weights"
+
 	// Other function reference types we'd like to support:
 	//   Versioned function, latest version
 	//   Versioned function. by semver "latest compatible"
 	//   Set of function references (recursively), by percentage of traffic
+)
+
+const (
+	// failure type currently supported is http status code. This could be extended
+	// in the future.
+	FailureTypeStatusCode FailureType = "status-code"
+
+	// Status of canary config can be one of the following
+	CanaryConfigStatusPending   = "pending"
+	CanaryConfigStatusSucceeded = "succeeded"
+	CanaryConfigStatusFailed    = "failed"
+	CanaryConfigStatusAborted   = "aborted"
+
+	// set a max number for iterations to prevent infinite processing of canary config
+	MaxIterationsForCanaryConfig = 10
 )

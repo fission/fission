@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 )
@@ -60,27 +59,64 @@ func getMethod(method string) string {
 	return ""
 }
 
-func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNamespace string) {
-	meta := &metav1.ObjectMeta{
-		Name:      fnName,
-		Namespace: fnNamespace,
+func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fission.FunctionReference, error) {
+	if len(functionList) == 1 {
+		return &fission.FunctionReference{
+			Type: fission.FunctionReferenceTypeFunctionName,
+			Name: functionList[0],
+		}, nil
+	} else if len(functionList) == 2 {
+		if len(functionWeightsList) != 2 {
+			return nil, fmt.Errorf("weights of the function need to be specified when 2 functions are supplied")
+		}
+
+		totalWeight := functionWeightsList[0] + functionWeightsList[1]
+		if totalWeight != 100 {
+			log.Fatal("The function weights should add up to 100")
+		}
+
+		functionWeights := make(map[string]int, 0)
+		for index := range functionList {
+			functionWeights[functionList[index]] = functionWeightsList[index]
+		}
+
+		return &fission.FunctionReference{
+			Type:            fission.FunctionReferenceTypeFunctionWeights,
+			FunctionWeights: functionWeights,
+		}, nil
 	}
 
-	_, err := fissionClient.FunctionGet(meta)
-	if err != nil {
-		fmt.Printf("function '%v' does not exist, use 'fission function create --name %v ...' to create the function\n", fnName, fnName)
-	}
+	return nil, fmt.Errorf("the number of functions in a trigger can be 1 or 2(for canary feature along with their weights)")
 }
 
 func htCreate(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 
-	fnName := c.String("function")
-	if len(fnName) == 0 {
+	functionList := c.StringSlice("function")
+	functionWeightsList := c.IntSlice("weight")
+
+	if len(functionList) == 0 {
 		log.Fatal("Need a function name to create a trigger, use --function")
 	}
+
+	functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	triggerName := c.String("name")
 	fnNamespace := c.String("fnNamespace")
 	spec := c.Bool("spec")
+
+	m := &metav1.ObjectMeta{
+		Name:      triggerName,
+		Namespace: fnNamespace,
+	}
+
+	htTrigger, err := client.HTTPTriggerGet(m)
+	if htTrigger != nil {
+		util.CheckErr(fmt.Errorf("duplicate trigger exists"), "choose a different name or leave it empty for fission to auto-generate it")
+	}
 
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
@@ -97,7 +133,10 @@ func htCreate(c *cli.Context) error {
 
 	// For Specs, the spec validate checks for function reference
 	if !spec {
-		checkFunctionExistence(client, fnName, fnNamespace)
+		err = util.CheckFunctionExistence(client, functionList, fnNamespace)
+		if err != nil {
+			log.Warn(err.Error())
+		}
 	}
 
 	createIngress := false
@@ -108,7 +147,9 @@ func htCreate(c *cli.Context) error {
 	host := c.String("host")
 
 	// just name triggers by uuid.
-	triggerName := uuid.NewV4().String()
+	if triggerName == "" {
+		triggerName = uuid.NewV4().String()
+	}
 
 	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -116,14 +157,11 @@ func htCreate(c *cli.Context) error {
 			Namespace: fnNamespace,
 		},
 		Spec: fission.HTTPTriggerSpec{
-			Host:        host,
-			RelativeURL: triggerUrl,
-			Method:      getMethod(method),
-			FunctionReference: fission.FunctionReference{
-				Type: fission.FunctionReferenceTypeFunctionName,
-				Name: fnName,
-			},
-			CreateIngress: createIngress,
+			Host:              host,
+			RelativeURL:       triggerUrl,
+			Method:            getMethod(method),
+			FunctionReference: *functionRef,
+			CreateIngress:     createIngress,
 		},
 	}
 
@@ -135,7 +173,7 @@ func htCreate(c *cli.Context) error {
 		return nil
 	}
 
-	_, err := client.HTTPTriggerCreate(ht)
+	_, err = client.HTTPTriggerCreate(ht)
 	util.CheckErr(err, "create HTTP trigger")
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
@@ -143,7 +181,39 @@ func htCreate(c *cli.Context) error {
 }
 
 func htGet(c *cli.Context) error {
-	return nil
+	cliClient := util.GetApiClient(c.GlobalString("server"))
+
+	name := c.String("name")
+	ns := c.String("fnNamespace")
+
+	m := &metav1.ObjectMeta{
+		Name:      name,
+		Namespace: ns,
+	}
+
+	htTrigger, err := cliClient.HTTPTriggerGet(m)
+	util.CheckErr(err, "get http trigger")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 1, 1, ' ', 0)
+
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "METHOD", "RELATIVE-URL", "FUNCTION-REFERENCE-TYPE", "FUNCTION(s)")
+
+	function := ""
+	if htTrigger.Spec.FunctionReference.Type == fission.FunctionReferenceTypeFunctionName {
+		function = htTrigger.Spec.FunctionReference.Name
+	} else {
+		for k, v := range htTrigger.Spec.FunctionReference.FunctionWeights {
+			function += fmt.Sprintf("%s:%v ", k, v)
+		}
+	}
+
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+		htTrigger.Metadata.Name, htTrigger.Metadata.UID, htTrigger.Spec.Method, htTrigger.Spec.RelativeURL,
+		htTrigger.Spec.FunctionReference.Type, function)
+
+	w.Flush()
+
+	return err
 }
 
 func htUpdate(c *cli.Context) error {
@@ -161,9 +231,28 @@ func htUpdate(c *cli.Context) error {
 	util.CheckErr(err, "get HTTP trigger")
 
 	if c.IsSet("function") {
-		ht.Spec.FunctionReference.Name = c.String("function")
+		// get the functions and their weights if specified
+		functionList := c.StringSlice("function")
+		err := util.CheckFunctionExistence(client, functionList, triggerNamespace)
+		if err != nil {
+			if err != nil {
+				log.Warn(err.Error())
+			}
+		}
+
+		var functionWeightsList []int
+		if c.IsSet("weight") {
+			functionWeightsList = c.IntSlice("weight")
+		}
+
+		// set function reference
+		functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		ht.Spec.FunctionReference = *functionRef
 	}
-	checkFunctionExistence(client, ht.Spec.FunctionReference.Name, triggerNamespace)
 
 	if c.IsSet("createingress") {
 		ht.Spec.CreateIngress = c.Bool("createingress")

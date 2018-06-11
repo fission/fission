@@ -19,8 +19,10 @@ package router
 import (
 	"bytes"
 	"fmt"
+	"github.com/gorilla/mux"
+	"github.com/satori/go.uuid"
 	"io/ioutil"
-	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -28,9 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/satori/go.uuid"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
@@ -47,19 +47,26 @@ type tsRoundTripperParams struct {
 }
 
 type functionHandler struct {
-	fmap                 *functionServiceMap
-	frmap                *functionRecorderMap
-	trmap                *triggerRecorderMap
-	executor             *executorClient.Client
-	function             *metav1.ObjectMeta
-	httpTrigger          *crd.HTTPTrigger
-	tsRoundTripperParams *tsRoundTripperParams
-	recorderName         string
+	fmap                     *functionServiceMap
+	frmap                    *functionRecorderMap
+	trmap                    *triggerRecorderMap
+	executor                 *executorClient.Client
+	function                 *metav1.ObjectMeta
+	httpTrigger              *crd.HTTPTrigger
+	functionMetadataMap      map[string]*metav1.ObjectMeta
+	fnWeightDistributionList []FunctionWeightDistribution
+	tsRoundTripperParams     *tsRoundTripperParams
+	recorderName             string
 }
 
 // A layer on top of http.DefaultTransport, with retries.
 type RetryingRoundTripper struct {
 	funcHandler *functionHandler
+}
+
+func init() {
+	// just seeding the random number for getting the canary function
+	rand.Seed(time.Now().UnixNano())
 }
 
 // RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
@@ -108,7 +115,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			rdr1.Read(p)
 			postedBody = string(p)
-			logrus.Info(fmt.Sprintf("%v", postedBody))
+			log.Info(fmt.Sprintf("%v", postedBody))
 			req.Body = rdr2
 		}
 	}
@@ -136,6 +143,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(roundTripper.funcHandler.function)
 	if err != nil || serviceUrl == nil {
 		// cache miss or nil entry in cache
+		log.Printf("Setting needExecutor to true for function : %s", roundTripper.funcHandler.function.Name)
 		needExecutor = true
 	}
 
@@ -149,6 +157,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
 				roundTripper.funcHandler.function)
 			if err != nil {
+				log.Printf("Err from GetServiceForFunction : %v", err)
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
 				return nil, err
@@ -161,6 +170,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			}
 
 			// add the address in router's cache
+			log.Printf("assigning serviceUrl : %s for function : %s", service, roundTripper.funcHandler.function.Name)
 			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
 
 			// flag denotes that service was not obtained from cache, instead, created just now by executor
@@ -271,7 +281,7 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 	fh.executor.TapService(serviceUrl)
 }
 
-func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	// retrieve url params and add them to request header
 	vars := mux.Vars(request)
 	for k, v := range vars {
@@ -284,6 +294,18 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		reqUID = "REQ" + UID
 		request.Header.Add("X-Fission-ReqUID", reqUID)
 		log.Print("Record request with ReqUID: ", reqUID)
+	}
+
+	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == fission.FunctionReferenceTypeFunctionWeights {
+		// canary deployment. need to determine the function to send request to now
+		fnMetadata := getCanaryBackend(fh.functionMetadataMap, fh.fnWeightDistributionList)
+		if fnMetadata == nil {
+			log.Printf("Error getting canary backend ")
+			// TODO : write error to responseWrite and return response
+			return
+		}
+		fh.function = fnMetadata
+		log.Debugf("chosen fnBackend's metadata : %+v", fh.function)
 	}
 
 	// system params
@@ -299,9 +321,44 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: &RetryingRoundTripper{
-			funcHandler: fh,
+			funcHandler: &fh,
 		},
 	}
 
 	proxy.ServeHTTP(responseWriter, request)
+}
+
+// findCeil picks a function from the functionWeightDistribution list based on the
+// random number generated. It uses the prefix calculated for the function weights.
+func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string {
+	low := 0
+	high := len(wtDistrList) - 1
+
+	for {
+		if low >= high {
+			break
+		}
+
+		mid := low + high/2
+		if randomNumber >= wtDistrList[mid].sumPrefix {
+			low = mid + 1
+		} else {
+			high = mid
+		}
+	}
+
+	if wtDistrList[low].sumPrefix >= randomNumber {
+		return wtDistrList[low].name
+	} else {
+		return ""
+	}
+}
+
+// picks a function to route to based on a random number generated
+func getCanaryBackend(fnMetadatamap map[string]*metav1.ObjectMeta, fnWtDistributionList []FunctionWeightDistribution) *metav1.ObjectMeta {
+	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)-1].sumPrefix + 1)
+
+	fnName := findCeil(randomNumber, fnWtDistributionList)
+
+	return fnMetadatamap[fnName]
 }

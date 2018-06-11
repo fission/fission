@@ -171,7 +171,7 @@ set_environment() {
 }
 
 generate_test_id() {
-    echo $(date|md5sum|cut -c1-6)
+    echo $(cat /dev/urandom | tr -dc 'a-z' | fold -w 6 | head -n 1)
 }
 
 helm_install_fission() {
@@ -192,7 +192,7 @@ helm_install_fission() {
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage
+    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
 
     timeout 30 bash -c "helm_setup"
 
@@ -204,6 +204,9 @@ helm_install_fission() {
     do
         sleep 5
     done
+
+    # only for tests, mv the prefetched prometheus chart to fission-all so helm install fission will install prometheus too
+    mv $ROOT/test/charts $ROOT/charts/fission-all/
 
     echo "Installing fission"
     helm install		\
