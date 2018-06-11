@@ -160,9 +160,6 @@ func mqtUpdate(c *cli.Context) error {
 		mqt.Spec.ErrorTopic = errorTopic
 		updated = true
 	}
-	// Default number of max retries is 0
-	mqt.Spec.MaxRetries = 0
-
 	if maxRetries > -1 {
 		mqt.Spec.MaxRetries = maxRetries
 		updated = true
