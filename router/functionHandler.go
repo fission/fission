@@ -94,7 +94,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	// set the timeout for transport context
 	timeout := roundTripper.initialTimeout
 	transport := http.DefaultTransport.(*http.Transport)
-	transport.DisableKeepAlives = true
+	//transport.DisableKeepAlives = true
 
 	// cache lookup to get serviceUrl
 	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(roundTripper.funcHandler.function)
