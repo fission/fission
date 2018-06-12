@@ -93,6 +93,12 @@ func htCreate(c *cli.Context) error {
 	}
 
 	checkFunctionExistence(client, fnName, fnNamespace)
+	createIngress := false
+	if c.IsSet("createingress") {
+		createIngress = c.Bool("createingress")
+	}
+
+	host := c.String("host")
 
 	// just name triggers by uuid.
 	triggerName := uuid.NewV4().String()
@@ -103,12 +109,14 @@ func htCreate(c *cli.Context) error {
 			Namespace: fnNamespace,
 		},
 		Spec: fission.HTTPTriggerSpec{
+			Host:        host,
 			RelativeURL: triggerUrl,
 			Method:      getMethod(method),
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
 			},
+			CreateIngress: createIngress,
 		},
 	}
 
@@ -157,6 +165,14 @@ func htUpdate(c *cli.Context) error {
 		ht.Spec.FunctionReference.Name = newFn
 	}
 
+	if c.IsSet("createingress") {
+		ht.Spec.CreateIngress = c.Bool("createingress")
+	}
+
+	if c.IsSet("host") {
+		ht.Spec.Host = c.String("host")
+	}
+
 	_, err = client.HTTPTriggerUpdate(ht)
 	checkErr(err, "update HTTP trigger")
 
@@ -191,10 +207,10 @@ func htList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "FUNCTION_NAME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "INGRESS", "FUNCTION_NAME")
 	for _, ht := range hts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.FunctionReference.Name)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+			ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.CreateIngress, ht.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

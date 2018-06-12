@@ -18,13 +18,10 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
-	version "github.com/fission/fission"
+	"github.com/fission/fission"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,20 +42,6 @@ func getKubeConfigPath() string {
 		}
 	}
 	return kubeConfig
-}
-
-func getFissionAPIVersion(apiUrl string) (string, error) {
-	resp, err := http.Get(apiUrl)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimRight(string(body), "\n"), nil
 }
 
 func getServerUrl() string {
@@ -87,16 +70,17 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = version.Version
+	app.Version = fission.Version
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		clientVer := version.VersionInfo().String()
+		clientVer := fission.BuildInfo().String()
 		fmt.Printf("Client Version: %v\n", clientVer)
-		serverVer, err := getFissionAPIVersion(getServerUrl())
+		serverInfo, err := getClient(getServerUrl()).ServerInfo()
 		if err != nil {
 			fmt.Printf("Error getting Fission API version: %v", err)
 		} else {
-			fmt.Printf("Server Version: %v", serverVer)
+			serverVer := serverInfo.Build.String()
+			fmt.Printf("Server Version: %v\n", serverVer)
 		}
 	}
 
@@ -164,24 +148,29 @@ func main() {
 	// httptriggers
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
 	htFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
+	htHostFlag := cli.StringFlag{Name: "host", Usage: "FQDN of the network host for route"}
+	htIngressFlag := cli.BoolFlag{Name: "createingress", Usage: "Creates ingress with same URL, defaults to false"}
 	htSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, fnNameFlag, fnNamespaceFlag, specSaveFlag}, Action: htCreate},
+
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag, htFnNameFlag, htHostFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag}, Action: htCreate},
 		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htMethodFlag, htUrlFlag}, Action: htGet},
-		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag}, Action: htUpdate},
+		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htHostFlag, htIngressFlag}, Action: htUpdate},
 		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag}, Action: htDelete},
 		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: htList},
 	}
 
 	// timetriggers
 	ttNameFlag := cli.StringFlag{Name: "name", Usage: "Time Trigger name"}
-	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time Trigger cron spec ('0 30 * * *', '@every 5m', '@hourly')"}
+	ttCronFlag := cli.StringFlag{Name: "cron", Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}
 	ttFnNameFlag := cli.StringFlag{Name: "function", Usage: "Function name"}
+	ttRoundFlag := cli.IntFlag{Name: "round", Value: 1, Usage: "Get next N rounds of invocation time"}
 	ttSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create Time trigger", Flags: []cli.Flag{ttNameFlag, ttFnNameFlag, fnNamespaceFlag, ttCronFlag, specSaveFlag}, Action: ttCreate},
-		{Name: "get", Usage: "Get Time trigger", Flags: []cli.Flag{triggerNamespaceFlag}, Action: ttGet},
-		{Name: "update", Usage: "Update Time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag, ttCronFlag, ttFnNameFlag}, Action: ttUpdate},
-		{Name: "delete", Usage: "Delete Time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag}, Action: ttDelete},
-		{Name: "list", Usage: "List Time triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: ttList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create time trigger", Flags: []cli.Flag{ttNameFlag, ttFnNameFlag, fnNamespaceFlag, ttCronFlag, specSaveFlag}, Action: ttCreate},
+		{Name: "get", Usage: "Get time trigger", Flags: []cli.Flag{triggerNamespaceFlag}, Action: ttGet},
+		{Name: "update", Usage: "Update time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag, ttCronFlag, ttFnNameFlag}, Action: ttUpdate},
+		{Name: "delete", Usage: "Delete time trigger", Flags: []cli.Flag{ttNameFlag, triggerNamespaceFlag}, Action: ttDelete},
+		{Name: "list", Usage: "List time triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: ttList},
+		{Name: "showschedule", Aliases: []string{"show"}, Usage: "Show schedule for cron spec", Flags: []cli.Flag{ttCronFlag, ttRoundFlag}, Action: ttTest},
 	}
 
 	// Message queue trigger
@@ -257,13 +246,6 @@ func main() {
 		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2+ install", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeRestoreState},
 	}
 
-	migrateFileFlag := cli.StringFlag{Name: "file", Usage: "JSON file containing all CRDs"}
-	migrateSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Dump all state from a pre-0.4 Fission installation (which used ThirdPartyResources) into a JSON file", Flags: []cli.Flag{migrateFileFlag}, Action: migrateDumpTPR},
-		{Name: "delete", Usage: "Delete all TPRs", Flags: []cli.Flag{}, Action: migrateDeleteTPR},
-		{Name: "restore", Usage: "Restore state dumped from a pre-0.4 Fission cluster. Requires Fission 0.4, which uses Kubernetes CustomResources.", Flags: []cli.Flag{migrateFileFlag}, Action: migrateRestoreCRD},
-	}
-
 	// specs
 	specDirFlag := cli.StringFlag{Name: "specdir", Usage: "Directory to store specs, defaults to ./specs"}
 	specNameFlag := cli.StringFlag{Name: "name", Usage: "(optional) Name for the app, applied to resources as a Kubernetes annotation"}
@@ -288,7 +270,6 @@ func main() {
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
-		{Name: "tpr2crd", Aliases: []string{}, Usage: "Migrate tool for TPR to CRD", Subcommands: migrateSubCommands},
 	}
 
 	app.Before = cliHook

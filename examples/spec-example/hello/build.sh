@@ -3,7 +3,7 @@
 set -e
 
 # check syntax
-python -m compileall -l ${SRC_PKG}
+python3 -m compileall -l ${SRC_PKG}
 
 # install deps
-pip install -r ${SRC_PKG}/requirements.txt -t ${SRC_PKG} && cp -r ${SRC_PKG} ${DEPLOY_PKG}
+pip3 install -r ${SRC_PKG}/requirements.txt -t ${SRC_PKG} && cp -r ${SRC_PKG} ${DEPLOY_PKG}

@@ -20,12 +20,12 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
@@ -76,7 +76,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				if err != nil {
 					log.Printf("Error : %v creating %s RoleBinding", err, fission.SecretConfigMapGetterRB)
 				} else {
-					log.Printf("Successfully set up rolebinding for fetcher SA: %s.%s, in func's ns for func : %s", fission.FissionFetcherSA, envNs, fn.Metadata.Name, fn.Metadata.Namespace)
+					log.Printf("Successfully set up rolebinding for fetcher SA: %s.%s, in func's ns for func : %s/%s", fission.FissionFetcherSA, envNs, fn.Metadata.Namespace, fn.Metadata.Name)
 				}
 
 				if istioEnabled {

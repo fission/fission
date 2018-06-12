@@ -18,6 +18,7 @@ package fission
 
 import (
 	"encoding/json"
+	"time"
 )
 
 var (
@@ -27,22 +28,53 @@ var (
 )
 
 type (
-	Info struct {
+	BuildMeta struct {
 		GitCommit string `json:"GitCommit,omitempty"`
 		BuildDate string `json:"BuildDate,omitempty"`
 		Version   string `json:"Version,omitempty"`
 	}
+
+	Time struct {
+		Timezone    string    `json:"Timezone,omitempty"`
+		CurrentTime time.Time `json:"CurrentTime,omitempty"`
+	}
+
+	ServerInfo struct {
+		Build      BuildMeta `json:"Build,omitempty"`
+		ServerTime Time      `json:"ServerTime,omitempty"`
+	}
 )
 
-func VersionInfo() Info {
-	return Info{
+func BuildInfo() BuildMeta {
+	return BuildMeta{
 		GitCommit: GitCommit,
 		BuildDate: BuildDate,
 		Version:   Version,
 	}
 }
 
-func (info Info) String() string {
+func (info BuildMeta) String() string {
+	v, _ := json.Marshal(info)
+	return string(v)
+}
+
+func TimeInfo() Time {
+	t := time.Now()
+	zone, _ := t.Local().Zone()
+	return Time{
+		Timezone:    zone,
+		CurrentTime: t,
+	}
+}
+
+func ApiInfo() ServerInfo {
+	return ServerInfo{
+		Build:      BuildInfo(),
+		ServerTime: TimeInfo(),
+	}
+}
+
+func (info ServerInfo) String() string {
 	v, _ := json.Marshal(info)
 	return string(v)
 }

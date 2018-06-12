@@ -140,7 +140,7 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
-	version := fmt.Sprintf("Fission Bundle Version: %v", fission.VersionInfo().String())
+	version := fmt.Sprintf("Fission Bundle Version: %v", fission.BuildInfo().String())
 	arguments, err := docopt.Parse(usage, nil, true, version, false)
 	if err != nil {
 		log.Fatalf("Error: %v", err)

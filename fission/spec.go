@@ -520,6 +520,12 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 // readSpecs reads all specs in the specified directory and returns a parsed set of
 // fission resources.
 func readSpecs(specDir string) (*FissionResources, error) {
+
+	// make sure spec directory exists before continue
+	if _, err := os.Stat(specDir); os.IsNotExist(err) {
+		fatal(fmt.Sprintf("Spec directory %v doesn't exist. Please check directory path or run \"fission spec init\" to create it.", specDir))
+	}
+
 	fr := FissionResources{
 		packages:                make([]crd.Package, 0),
 		functions:               make([]crd.Function, 0),
