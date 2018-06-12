@@ -155,13 +155,9 @@ func htUpdate(c *cli.Context) error {
 	checkErr(err, "get HTTP trigger")
 
 	if c.IsSet("function") {
-		newFn := c.String("function")
-		checkFunctionExistence(client, newFn, triggerNamespace)
-		ht.Spec.FunctionReference.Name = newFn
-	} else {
-		fnName := ht.Spec.FunctionReference.Name
-		checkFunctionExistence(client, fnName, triggerNamespace)
+		ht.Spec.FunctionReference.Name = c.String("function")
 	}
+	checkFunctionExistence(client, ht.Spec.FunctionReference.Name, triggerNamespace)
 
 	if c.IsSet("createingress") {
 		ht.Spec.CreateIngress = c.Bool("createingress")
