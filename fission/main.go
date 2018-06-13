@@ -196,7 +196,7 @@ func main() {
 	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
 	envBuilderImageFlag := cli.StringFlag{Name: "builder", Usage: "Environment builder image URL (optional)"}
 	envBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for environment builder to build source package (optional)"}
-	envExtractArchiveFlag := cli.BoolFlag{Name: "extractarchive, extract", Usage: "Extract the archive into a directory, defaults to false"}
+	envExtractArchiveFlag := cli.BoolFlag{Name: "extractarchive, extract", Usage: "Extract the archive into a directory, defaults to true"}
 	envExternalNetworkFlag := cli.BoolFlag{Name: "externalnetwork", Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
 	envTerminationGracePeriodFlag := cli.Int64Flag{Name: "graceperiod, period", Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
 	envVersionFlag := cli.IntFlag{Name: "version", Value: 1, Usage: "Environment API version (1 means v1 interface)"}
