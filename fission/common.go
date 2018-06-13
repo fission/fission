@@ -149,20 +149,6 @@ func createArchive(client *client.Client, fileName string, specFile string) *fis
 		archive.Type = fission.ArchiveTypeLiteral
 		archive.Literal = contents
 	} else {
-		// make a kubernetes client
-		_, kubeClient, _, err := crd.GetKubernetesClient()
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-
-		fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-
-		// get svc end point for storagesvc
-		service, err := kubeClient.CoreV1().Services(fissionNamespace).Get("storagesvc", metav1.GetOptions{})
-		if err != nil {
-			log.Fatal(fmt.Sprintf("Error getting storage service object from kubernetes :%v", err.Error()))
-		}
-
 		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
 		ssClient := storageSvcClient.MakeClient(u)
 
@@ -170,13 +156,17 @@ func createArchive(client *client.Client, fileName string, specFile string) *fis
 		id, err := ssClient.Upload(fileName, nil)
 		checkErr(err, fmt.Sprintf("upload file %v", fileName))
 
-		// this needs to be storagesvc.fission
-		storageSvcEndpoint := fmt.Sprintf("http://%s.%s/", service.Name, service.Namespace)
-		storageServiceClient := storageSvcClient.MakeClient(storageSvcEndpoint)
-		archiveUrl := storageServiceClient.GetUrl(id)
+		storageSvc, err := client.GetSvcURL("application=fission-storage")
+		storageSvcURL := "http://" + storageSvc
+		checkErr(err, "get fission storage service name")
+
+		// We make a new client with actual URL of Storage service so that the URL is not
+		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
+		pkgClient := storageSvcClient.MakeClient(storageSvcURL)
+		archiveURL := pkgClient.GetUrl(id)
 
 		archive.Type = fission.ArchiveTypeUrl
-		archive.URL = archiveUrl
+		archive.URL = archiveURL
 
 		csum, err := fileChecksum(fileName)
 		checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
