@@ -83,6 +83,11 @@ func (c *Client) GetSvcURL(label string) (string, error) {
 		return "", err
 	}
 
+	if resp == nil {
+		return "", fmt.Errorf("Failed to find service for given label: %v", label)
+	}
+
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -90,6 +95,5 @@ func (c *Client) GetSvcURL(label string) (string, error) {
 
 	storageSvc := string(body)
 
-	defer resp.Body.Close()
 	return storageSvc, err
 }
