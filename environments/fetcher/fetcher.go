@@ -29,13 +29,14 @@ type (
 	FetchRequestType int
 
 	FetchRequest struct {
-		FetchType     FetchRequestType             `json:"fetchType"`
-		Package       metav1.ObjectMeta            `json:"package"`
-		Url           string                       `json:"url"`
-		StorageSvcUrl string                       `json:"storagesvcurl"`
-		Filename      string                       `json:"filename"`
-		Secrets       []fission.SecretReference    `json:"secretList"`
-		ConfigMaps    []fission.ConfigMapReference `json:"configMapList"`
+		FetchType      FetchRequestType             `json:"fetchType"`
+		Package        metav1.ObjectMeta            `json:"package"`
+		Url            string                       `json:"url"`
+		StorageSvcUrl  string                       `json:"storagesvcurl"`
+		Filename       string                       `json:"filename"`
+		Secrets        []fission.SecretReference    `json:"secretList"`
+		ConfigMaps     []fission.ConfigMapReference `json:"configMapList"`
+		ExtractArchive bool                         `json:"extractarchive"`
 	}
 
 	// UploadRequest send from builder manager describes which
@@ -292,8 +293,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 	}
 
-	// check file type here, if the file is a zip file unarchive it.
-	if archiver.Zip.Match(tmpPath) {
+	if archiver.Zip.Match(tmpPath) && req.ExtractArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
@@ -301,6 +301,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			log.Println(err.Error())
 			return http.StatusInternalServerError, err
 		}
+
 		tmpPath = tmpUnarchivePath
 	}
 
