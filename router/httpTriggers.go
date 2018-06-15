@@ -101,7 +101,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 
 	// HTTP triggers setup by the user
 	homeHandled := false
-	for _, trigger := range ts.triggers {
+	for i := range ts.triggers {
+		trigger := ts.triggers[i]
 
 		// resolve function reference
 		rr, err := ts.resolver.resolve(trigger.Metadata.Namespace, &trigger.Spec.FunctionReference)
