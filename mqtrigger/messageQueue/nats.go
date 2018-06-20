@@ -130,7 +130,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			// Make the request
 			resp, err = http.DefaultClient.Do(req)
 			if err != nil {
-				log.Error(err)
+				log.Error("Error invoking function for trigger %v: %v", trigger.Metadata.Name, err)
 				continue
 			}
 			if resp == nil {
