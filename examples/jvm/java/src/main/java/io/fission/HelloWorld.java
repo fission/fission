@@ -1,5 +1,6 @@
 package io.fission;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 
 import org.springframework.http.RequestEntity;
@@ -19,7 +20,7 @@ public class HelloWorld implements FissionFunction<RequestEntity, FissionContext
 	@Override
 	public ResponseEntity call(RequestEntity req, FissionContext context) {
 		
-		LinkedHashMap json = (LinkedHashMap) req.getBody();
+		HashMap json = (HashMap) req.getBody();
 		
 		ObjectMapper mapper = new ObjectMapper();
 		Person p = null;

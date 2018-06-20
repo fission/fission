@@ -23,21 +23,7 @@ public class Server {
 		
 	private FissionFunction fn;
 
-	
-	/*
-	@GetMapping("/")
-	ResponseEntity<Object> home(@RequestParam Map<String, String> params) throws JsonProcessingException {
-		ObjectMapper mapper = new ObjectMapper();
-		String json = "";
-
-		json = mapper.writeValueAsString(params);
-		
-		if (fn == null ) {
-			return ResponseEntity.badRequest().body("Container not specialized");
-		} else {
-			return ResponseEntity.ok(fn.apply(json));
-		}
-	} */
+	private static final int CLASS_LENGTH = 6;
 	
 	@RequestMapping("/")
 	ResponseEntity<Object> home(RequestEntity<?> req){
@@ -90,7 +76,7 @@ public class Server {
     		    if(je.isDirectory() || !je.getName().endsWith(".class")){
     		        continue;
     		    }
-    		    String className = je.getName().substring(0,je.getName().length()-6);
+    		    String className = je.getName().substring(0,je.getName().length()-CLASS_LENGTH);
     		    className = className.replace('/', '.');
     		    System.out.println("Class="+ className);
     		    cl.loadClass(className);
