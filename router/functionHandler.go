@@ -94,6 +94,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	// set the timeout for transport context
 	timeout := roundTripper.initialTimeout
 	transport := http.DefaultTransport.(*http.Transport)
+	// Disables caching, Please refer to issue and specifically comment: https://github.com/fission/fission/issues/723#issuecomment-398781995
 	transport.DisableKeepAlives = true
 
 	// cache lookup to get serviceUrl
