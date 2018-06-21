@@ -1,6 +1,4 @@
 #!/bin/bash
-# Disabling for https://github.com/fission/fission/issues/723 will enable after resolution/cluster upgrade
-#test:disabled
 
 set -euo pipefail
 
