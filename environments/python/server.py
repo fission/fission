@@ -98,14 +98,14 @@ class FuncApp(Flask):
 
 app = FuncApp(__name__, logging.DEBUG)
 
-app.logger.info("Starting server")
-
 #
 # TODO: this starts the built-in server, which isn't the most
 # efficient.  We should use something better.
 #
 if os.environ.get("WSGI_FRAMEWORK") == "GEVENT":
+    app.logger.info("Starting gevent based server")
     svc = WSGIServer(('0.0.0.0', 8888), app)
     svc.serve_forever()
 else:
+    app.logger.info("Starting bjoern based server")
     bjoern.run(app, '0.0.0.0', 8888, reuse_port=True)
