@@ -63,4 +63,4 @@ import:
 - package: github.com/hashicorp/errwrap
 - package: github.com/prometheus/client_golang
   version: v0.8.0
-
+- package: github.com/dustin/go-humanize
