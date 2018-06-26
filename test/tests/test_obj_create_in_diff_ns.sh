@@ -67,7 +67,7 @@ internal_route_test_1() {
 
 new_deploy_mgr_and_internal_route_test_2() {
     log "Starting new_deploy_mgr_and_internal_route_test_1 with env in default ns"
-    fission env create --name python --image fission/python-env
+    fission env create --name python --image fission/python-env --graceperiod 1
     fission fn create --name func5 --env python --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
     sleep 15
 

@@ -182,6 +182,14 @@ const (
 )
 
 const (
+	// Pods might still be running user functions, so we give them
+	// a few minutes before terminating them.  This time is the
+	// maximum function runtime, plus the time a router might
+	// still route to an old instance, i.e. router cache expiry time.
+	DefaultTerminationGracePeriod int64 = int64(6 * 60)
+)
+
+const (
 	FissionBuilderSA = "fission-builder"
 	FissionFetcherSA = "fission-fetcher"
 

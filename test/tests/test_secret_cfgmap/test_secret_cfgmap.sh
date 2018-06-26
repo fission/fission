@@ -53,7 +53,7 @@ log "Pre-test cleanup"
 fission env delete --name python || true
 
 log "Creating python env"
-fission env create --name python --image fission/python-env
+fission env create --name python --image fission/python-env --graceperiod 1
 trap "fission env delete --name python" EXIT
 
 log "Creating secret"

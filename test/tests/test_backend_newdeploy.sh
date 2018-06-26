@@ -9,7 +9,7 @@ log "NewDeploy ExecutorType: Pre-test cleanup"
 fission env delete --name nodejs || true
 
 log "Creating nodejs env"
-fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256 --graceperiod 1
 trap "fission env delete --name nodejs" EXIT
 
 # TODO Imporve test code by reusing common blocks

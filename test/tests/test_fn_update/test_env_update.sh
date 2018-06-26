@@ -11,7 +11,7 @@ env_new=python-$(date +%N)
 fn=hellopy-$(date +%N)
 
 log "Creating env $env_old"
-fission env create --name $env_old --image fission/python-env
+fission env create --name $env_old --image fission/python-env --graceperiod 1
 trap "fission env delete --name $env_old" EXIT
 
 log "Creating function $fn"

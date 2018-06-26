@@ -16,7 +16,7 @@ cp ../test_secret_cfgmap/secret.py.template secret.py
 sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
 
 log "Creating env $env"
-fission env create --name $env --image fission/python-env
+fission env create --name $env --image fission/python-env --graceperiod 1
 trap "fission env delete --name $env" EXIT
 
 log "Creating secret $old_secret"
