@@ -1,31 +1,17 @@
 package io.fission;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.fission.FissionFunction;
-import io.fission.FissionContext;
+import io.fission.Function;
+import io.fission.Context;
 
-public class HelloWorld implements FissionFunction<RequestEntity, FissionContext> {
+public class HelloWorld implements Function {
 	
-	public HelloWorld() {
-		System.out.println("Initialized the Function class");	
-	}
-
 	@Override
-	public ResponseEntity call(RequestEntity req, FissionContext context) {
-		
-		HashMap json = (HashMap) req.getBody();
-		
-		ObjectMapper mapper = new ObjectMapper();
-		Person p = null;
-		p = mapper.convertValue(json, Person.class);
-		return ResponseEntity.ok("Hello Mr. "+ p.getName() + " Happy"+ p.getAge());	
+	public ResponseEntity<?> call(RequestEntity req, Context context) {
+		return ResponseEntity.ok("Hello World!");	
 	}	 
 
 }

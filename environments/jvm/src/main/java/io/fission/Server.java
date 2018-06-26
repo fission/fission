@@ -8,6 +8,8 @@ import java.net.URLClassLoader;
 import java.util.Enumeration;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.springframework.boot.*;
 import org.springframework.boot.autoconfigure.*;
@@ -15,26 +17,26 @@ import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import io.fission.FissionFunction;
+import io.fission.Function;
 
 @RestController
 @EnableAutoConfiguration
 public class Server {
 		
-	private FissionFunction fn;
+	private Function fn;
 
 	private static final int CLASS_LENGTH = 6;
 	
-	@RequestMapping("/")
+	private static Logger logger = Logger.getGlobal();
+	
+	@RequestMapping(value = "/", method = { RequestMethod.GET, RequestMethod.POST, RequestMethod.DELETE, RequestMethod.PUT })
 	ResponseEntity<Object> home(RequestEntity<?> req){
 		if (fn == null ) {
 			return ResponseEntity.badRequest().body("Container not specialized");
 		} else {
-			return ((ResponseEntity<Object>) ((FissionFunction<RequestEntity, FissionContext>) fn).call(req, null));
+			return ((ResponseEntity<Object>) ((Function) fn).call(req, null));
 		}
-	}
-	//TODO Add mapping for other methods too.
-	
+	}	
 
     @PostMapping(path = "/v2/specialize", consumes = "application/json")
     ResponseEntity<String> specialize(@RequestBody FunctionLoadRequest req){
@@ -45,7 +47,7 @@ public class Server {
     	}
     	
     	String entryPoint = req.getFunctionName();
-    	System.out.println("Entrypoint class:"+ entryPoint);
+    	logger.log(Level.INFO, "Entrypoint class:"+ entryPoint);
     	if (entryPoint == null) {
     		return ResponseEntity.badRequest().body("Entrypoint class is missing in the function");
     	}
@@ -78,12 +80,11 @@ public class Server {
     		    }
     		    String className = je.getName().substring(0,je.getName().length()-CLASS_LENGTH);
     		    className = className.replace('/', '.');
-    		    System.out.println("Class="+ className);
     		    cl.loadClass(className);
     		}
     		
     		// Instantiate the function class
-			fn = (FissionFunction<RequestEntity, FissionContext>) cl.loadClass(entryPoint).newInstance();
+			fn = (Function) cl.loadClass(entryPoint).newInstance();
 			
 		} catch (MalformedURLException e) {
 			e.printStackTrace();
@@ -110,8 +111,7 @@ public class Server {
 			}
 		}
     	long elapsedTime = System.nanoTime() - startTime;
-    	System.out.println("Specialize call done in: " + elapsedTime/1000000 +" ms");
-
+    	logger.log(Level.INFO, "Specialize call done in: " + elapsedTime/1000000 +" ms");
 		return ResponseEntity.ok("Done");
     }
 
