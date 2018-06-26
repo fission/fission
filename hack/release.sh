@@ -250,6 +250,24 @@ build_charts() {
     popd
 }
 
+build_yamls() {
+    local version=$1
+
+    mkdir -p ${BUILDDIR}/yamls
+    pushd ${DIR}/charts
+    find . -iname *.~?~ | xargs rm
+
+    for c in fission-all fission-core
+    do
+        # for minikube and other environment not support ELB
+        helm template ${c} -n ${c}-${version} --set serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
+        # for environments support ELB
+        helm template ${c} -n ${c}-${version} > ${c}-${version}.yaml
+        mv *.yaml ${BUILDDIR}/yamls/
+    done
+
+    popd
+}
 
 # Build pre-upgrade-checks image
 build_pre_upgrade_checks_image() {
@@ -410,6 +428,32 @@ attach_github_release_charts() {
 
 }
 
+attach_github_release_yamls() {
+    local version=$1
+    local gittag=$version
+
+    for c in fission-all fission-core
+    do
+        # YAML
+        gothub upload \
+           --replace \
+           --user fission \
+           --repo fission \
+           --tag $gittag \
+           --name ${c}-${version}-minikube.yaml \
+           --file $BUILDDIR/yamls/${c}-${version}-minikube.yaml
+
+        gothub upload \
+           --replace \
+           --user fission \
+           --repo fission \
+           --tag $gittag \
+           --name ${c}-${version}.yaml \
+           --file $BUILDDIR/yamls/${c}-${version}.yaml
+    done
+
+}
+
 generate_changelog() {
     local version=$1
 
@@ -465,9 +509,11 @@ push_all $version
 build_and_push_all_envs $version
 build_and_push_all_env_builders $version
 build_charts $version
+build_yamls $version
 
 tag_and_release $version
 attach_github_release_cli $version
 attach_github_release_charts $version
+attach_github_release_yamls $version
 
 generate_changelog $version
