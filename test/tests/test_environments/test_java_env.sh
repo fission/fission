@@ -10,25 +10,11 @@ cleanup() {
     fission env delete --name jvm
 }
 
-test_fn() {
-    echo "Doing an HTTP GET on the function's route"
-    echo "Checking for valid response"
-
-    while true; do
-      response0=$(curl http://$FISSION_ROUTER/fission-function/$1)
-      echo $response0 | grep -i $2
-      if [[ $? -eq 0 ]]; then
-        break
-      fi
-      sleep 1
-    done
-}
-export -f test_fn
-
 cd $ROOT/examples/jvm/java
 
 log "Creating the jar from application"
 #Using Docker to build Jar so that maven & other Java dependencies are not needed on CI server
+docker build -t javaex .
 docker run --name javabuilder javaex 
 docker cp javabuilder:/usr/src/myapp/target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar .
 docker rm -f javabuilder
@@ -46,7 +32,13 @@ log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function"
-timeout 60 bash -c "test_fn hellop 'Hello World'"
+response=$(curl http://$FISSION_ROUTER/fission-function/hellop)
+
+log "Checking for valid response"
+echo $response | grep -i hello
 
 log "Testing new deployment function"
-timeout 60 bash -c "test_fn hellon 'Hello World'"
+response=$(curl http://$FISSION_ROUTER//fission-function/hellon)
+
+log "Checking for valid response"
+echo $response | grep -i hello
