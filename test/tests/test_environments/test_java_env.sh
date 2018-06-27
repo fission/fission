@@ -24,19 +24,25 @@ fission fn create --name hellop --deploy target/hello-world-1.0-SNAPSHOT-jar-wit
 fission fn create --name hellon --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env jvm --executortype newdeploy --entrypoint io.fission.HelloWorld
 trap cleanup EXIT
 
+log "Creating route for pool manager function"
+fission route create --function hellop --url /hellop --method GET
+
+log "Creating route for new deployment function"
+fission route create --function hellon --url /hellon --method GET
+
 log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function"
-response=$(curl http://$FISSION_ROUTER/fission-function/hellop)
+response=$(curl http://$FISSION_ROUTER/hellop)
 
 log "Checking for valid response"
-echo $response
+log "Response: $response"
 echo $response | grep -i hello
 
 log "Testing new deployment function"
-echo $response
 response=$(curl http://$FISSION_ROUTER//fission-function/hellon)
 
+log "Response: $response"
 log "Checking for valid response"
 echo $response | grep -i hello
