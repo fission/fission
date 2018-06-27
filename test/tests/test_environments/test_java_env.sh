@@ -23,6 +23,8 @@ test_fn() {
     done
 }
 
+export -f test_fn
+
 cd $ROOT/examples/jvm/java
 
 log "Creating the jar from application"
