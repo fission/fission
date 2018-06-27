@@ -19,9 +19,9 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 		<dependency>
-		    <groupId>io.fission</groupId>
-		    <artifactId>fission-java-core</artifactId>
-		    <version>0.0.2-SNAPSHOT</version>
+			<groupId>io.fission</groupId>
+			<artifactId>fission-java-core</artifactId>
+			<version>0.0.2-SNAPSHOT</version>
 		</dependency>        
     </dependencies>
 
