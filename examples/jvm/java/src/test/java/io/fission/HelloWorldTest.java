@@ -9,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
 
 public class HelloWorldTest {
-	
+
 	public void testResponse() {
 		HelloWorld hw = new HelloWorld();
 		RequestEntity request = null;
