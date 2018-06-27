@@ -41,6 +41,7 @@ build_and_push_builder $BUILDER_IMAGE:$TAG
 ENV='python'
 
 build_and_push_env_runtime $ENV $REPO/$ENV-env:$TAG
+build_and_push_env_runtime jvm $REPO/jvm-env:$TAG
 
 build_and_push_env_builder $ENV $REPO/$ENV-env-builder:$TAG $BUILDER_IMAGE:$TAG
 
