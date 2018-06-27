@@ -10,6 +10,19 @@ cleanup() {
     fission env delete --name jvm
 }
 
+test_fn() {
+    echo "Checking for valid response"
+
+    while true; do
+      response0=$(curl http://$FISSION_ROUTER/$1)
+      echo $response0 | grep -i $2
+      if [[ $? -eq 0 ]]; then
+        break
+      fi
+      sleep 1
+    done
+}
+
 cd $ROOT/examples/jvm/java
 
 log "Creating the jar from application"
@@ -34,15 +47,7 @@ log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function"
-response=$(curl http://$FISSION_ROUTER/hellop)
-
-log "Checking for valid response"
-log "Response: $response"
-echo $response | grep -i hello
+timeout 60 bash -c "test_fn hellop 'Hello'"
 
 log "Testing new deployment function"
-response=$(curl http://$FISSION_ROUTER//fission-function/hellon)
-
-log "Response: $response"
-log "Checking for valid response"
-echo $response | grep -i hello
+timeout 60 bash -c "test_fn hellon 'Hello'"
