@@ -155,6 +155,11 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 		overhead := time.Since(startTime)
 
+		// tapService before invoking roundTrip for the serviceUrl
+		if !serviceUrlFromExecutor {
+			go roundTripper.funcHandler.tapService(serviceUrl)
+		}
+
 		// forward the request to the function service
 		resp, err = transport.RoundTrip(req)
 		if err == nil {
@@ -164,11 +169,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			functionCallCompleted(funcMetricLabels, httpMetricLabels,
 				overhead, time.Since(startTime), resp.ContentLength)
-
-			// if transport.RoundTrip succeeds and it was a cached entry, then tapService
-			if !serviceUrlFromExecutor {
-				go roundTripper.funcHandler.tapService(serviceUrl)
-			}
 
 			// return response back to user
 			return resp, nil
