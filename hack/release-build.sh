@@ -230,7 +230,7 @@ build_yamls() {
 
     mkdir -p ${BUILDDIR}/yamls
     pushd ${DIR}/charts
-    find . -iname *.~?~ | xargs rm
+    find . -iname *.~?~ | xargs -r rm
 
     for c in fission-all fission-core
     do
@@ -282,7 +282,6 @@ build_all() {
     build_builder_image $version $date $gitcommit
     build_logger_image $version
     build_all_cli $version $date $gitcommit
-    build_charts $version
     build_pre_upgrade_checks_image $version $date $gitcommit
 }
 
