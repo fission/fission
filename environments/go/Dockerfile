@@ -10,12 +10,12 @@ ADD server.go   ${APP}
 
 WORKDIR ${APP}
 RUN go get
-RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' -o /server server.go
+RUN go build -a -o /server server.go
 
-FROM alpine:3.7
+FROM ubuntu:18.04
 WORKDIR /
 COPY --from=builder /server /
-RUN apk -U add ca-certificates
+RUN apt update && apt install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/server"]
 EXPOSE 8888
