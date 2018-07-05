@@ -54,10 +54,10 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcName))
 
 	fetchReq := &fetcher.FetchRequest{
-		FetchType:      fetcher.FETCH_SOURCE,
-		Package:        pkg.Metadata,
-		Filename:       srcPkgFilename,
-		ExtractArchive: true,
+		FetchType:        fetcher.FETCH_SOURCE,
+		Package:          pkg.Metadata,
+		Filename:         srcPkgFilename,
+		NoExtractArchive: false,
 	}
 
 	// send fetch request to fetcher
