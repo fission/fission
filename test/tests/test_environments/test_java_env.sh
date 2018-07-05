@@ -32,7 +32,7 @@ log "Creating the jar from application"
 docker run -it --rm  -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.5-jdk-8 mvn clean package
 
 log "Creating environment for Java"
-fission env create --name jvm --image gcr.io/fission-ci/jvm-env:test --version 2 --noextract=true
+fission env create --name jvm --image gcr.io/fission-ci/jvm-env:test --version 2 --keeparchive=true
 
 log "Creating pool manager & new deployment function for Java"
 fission fn create --name hellop --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env jvm --entrypoint io.fission.HelloWorld
