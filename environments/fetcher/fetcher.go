@@ -293,7 +293,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 	}
 
-	if archiver.Zip.Match(tmpPath) && !req.NotExtractArchive {
+	if archiver.Zip.Match(tmpPath) && !req.NoExtractArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
