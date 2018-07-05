@@ -387,10 +387,10 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
 			Name:      fn.Spec.Package.PackageRef.Name,
 		},
-		Filename:         targetFilename,
-		Secrets:          fn.Spec.Secrets,
-		ConfigMaps:       fn.Spec.ConfigMaps,
-		NoExtractArchive: gp.env.Spec.NoExtractArchive,
+		Filename:    targetFilename,
+		Secrets:     fn.Spec.Secrets,
+		ConfigMaps:  fn.Spec.ConfigMaps,
+		KeepArchive: gp.env.Spec.KeepArchive,
 	})
 	if err != nil {
 		return err

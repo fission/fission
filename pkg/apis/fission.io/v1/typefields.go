@@ -271,9 +271,9 @@ type (
 		// Optional, defaults to 360 seconds
 		TerminationGracePeriod int64
 
-		// NoExtractArchive is used by fetcher to determine if the extracted archive
+		// KeepArchive is used by fetcher to determine if the extracted archive
 		// or unarchived file should be placed, which is then used by specialize handler
-		NoExtractArchive bool `json:"noextract"`
+		KeepArchive bool `json:"keeparchive"`
 	}
 
 	AllowedFunctionsPerContainer string

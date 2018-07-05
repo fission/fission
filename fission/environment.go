@@ -93,10 +93,7 @@ func envCreate(c *cli.Context) error {
 		}
 	}
 
-	noExtractArchive := false
-	if c.IsSet("noextract") {
-		noExtractArchive = c.Bool("noextract")
-	}
+	keepArchive := c.Bool("keeparchive")
 
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
@@ -124,7 +121,7 @@ func envCreate(c *cli.Context) error {
 			Resources:                    resourceReq,
 			AllowAccessToExternalNetwork: envExternalNetwork,
 			TerminationGracePeriod:       envGracePeriod,
-			NoExtractArchive:             noExtractArchive,
+			KeepArchive:                  keepArchive,
 		},
 	}
 
@@ -212,6 +209,10 @@ func envUpdate(c *cli.Context) error {
 
 	if c.IsSet("period") {
 		env.Spec.TerminationGracePeriod = c.Int64("period")
+	}
+
+	if c.IsSet("keeparchive") {
+		env.Spec.KeepArchive = c.Bool("keeparchive")
 	}
 
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
