@@ -40,7 +40,7 @@ export -f test_fn
 cd $ROOT/examples/go
 
 log "Creating environment for Golang"
-fission env create --name go --image gcr.io/fission-ci/go-env:test --builder gcr.io/fission-ci/go-builder:test --period 5
+fission env create --name go --image gcr.io/fission-ci/go-env:test --builder gcr.io/fission-ci/go-env-builder:test --period 5
 
 timeout 90 bash -c "wait_for_builder"
 
