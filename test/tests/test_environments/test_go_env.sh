@@ -36,14 +36,14 @@ fission fn create --name hello-go-nd --env go --src hello.go --entrypoint Handle
 trap cleanup EXIT
 
 log "Creating route for new deployment function"
-fission route create --function hello-go-poolmgr --url /hello-go --method GET
-fission route create --function hello-go-nd --url /hello-go --method GET
+fission route create --function hello-go-poolmgr --url /hello-go-poolmgr --method GET
+fission route create --function hello-go-nd --url /hello-go-nd --method GET
 
 log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function"
-timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello, world!'"
+timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello'"
 
 log "Testing new deployment function"
 timeout 60 bash -c "test_fn hello-go-nd 'Hello'"
