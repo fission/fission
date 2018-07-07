@@ -1,12 +1,23 @@
-# 0.9.0
-[Documentation](https://docs.fission.io/0.9.0/)
-## Downloads for 0.9.0
+# 0.9.1
+[Documentation](https://docs.fission.io/0.9.1/)
+## Downloads for 0.9.1
 
 
 filename | sha256 hash
 -------- | -----------
 
 # Change Log
+
+## [0.9.1](https://github.com/fission/fission/tree/0.9.1) (2018-07-07)
+[Full Changelog](https://github.com/fission/fission/compare/0.9.0...0.9.1)
+
+**Merged pull requests:**
+
+- Committing changelog. [\#780](https://github.com/fission/fission/pull/780) ([smruthi2187](https://github.com/smruthi2187))
+- Changes in charts for release 0.9.0 [\#778](https://github.com/fission/fission/pull/778) ([smruthi2187](https://github.com/smruthi2187))
+- Change flag name to KeepArchive for backward compatibility [\#787](https://github.com/fission/fission/pull/787) ([life1347](https://github.com/life1347))
+- Fix go env plugin [\#784](https://github.com/fission/fission/pull/784) ([life1347](https://github.com/life1347))
+- Fix “rm: missing operand” in release script [\#779](https://github.com/fission/fission/pull/779) ([life1347](https://github.com/life1347))
 
 ## [0.9.0](https://github.com/fission/fission/tree/0.9.0) (2018-07-04)
 [Full Changelog](https://github.com/fission/fission/compare/0.8.0...0.9.0)
