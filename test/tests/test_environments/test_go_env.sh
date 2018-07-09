@@ -11,9 +11,11 @@ cleanup() {
 }
 
 wait_for_builder() {
+    JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+
     # wait for tiller ready
     while true; do
-      kubectl --namespace fission-builder get pod -l envName=go|grep Running
+      kubectl --namespace fission-builder get pod -l envName=go -o jsonpath="$JSONPATH" | grep "Ready=True"
       if [[ $? -eq 0 ]]; then
           break
       fi
