@@ -1,4 +1,4 @@
-# Fission: JVM Environment
+# Fission: Java and JVM Environment
 
 This is the JVM environment for Fission.
 
