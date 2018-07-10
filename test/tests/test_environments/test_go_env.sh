@@ -56,7 +56,7 @@ fission route create --function hello-go-poolmgr --url /hello-go-poolmgr --metho
 fission route create --function hello-go-nd --url /hello-go-nd --method GET
 
 log "Waiting for router & pools to catch up"
-sleep 5
+sleep 15
 
 log "Testing pool manager function"
 timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello'"
