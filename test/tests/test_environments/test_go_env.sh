@@ -82,7 +82,8 @@ timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello'"
 log "Testing new deployment function"
 timeout 60 bash -c "test_fn hello-go-nd 'Hello'"
 
-zip -r vendor.zip vendor-example
+# Create zip file without top level directory (vendor-example)
+cd vendor-example && zip -r vendor.zip *
 
 pkgName=$(fission package create --src vendor.zip --env go| cut -f2 -d' '| tr -d \')
 
