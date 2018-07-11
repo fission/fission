@@ -1,8 +1,8 @@
 package main
 
 import (
-    "go/vendordir/test"
-    "net/http"
+	"go/vendordir/test"
+	"net/http"
 )
 
 // Handler is the entry point for this fission function
