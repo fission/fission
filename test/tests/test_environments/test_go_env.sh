@@ -62,7 +62,7 @@ timeout 90 bash -c "wait_for_builder"
 
 pkgName=$(fission package create --src hello.go --env go| cut -f2 -d' '| tr -d \')
 
-# wait for build to finish at most 60s
+# wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"
 
 log "Creating pool manager & new deployment function for Golang"
@@ -74,10 +74,30 @@ fission route create --function hello-go-poolmgr --url /hello-go-poolmgr --metho
 fission route create --function hello-go-nd --url /hello-go-nd --method GET
 
 log "Waiting for router & pools to catch up"
-sleep 15
+sleep 5
 
 log "Testing pool manager function"
 timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello'"
 
 log "Testing new deployment function"
 timeout 60 bash -c "test_fn hello-go-nd 'Hello'"
+
+zip -r vendor.zip vendor-example
+
+pkgName=$(fission package create --src vendor.zip --env go| cut -f2 -d' '| tr -d \')
+
+# wait for build to finish at most 90s
+timeout 90 bash -c "waitBuild $pkgName"
+
+log "Update function package"
+fission fn update --name hello-go-poolmgr --pkg $pkgName
+fission fn update --name hello-go-nd --pkg $pkgName
+
+log "Waiting for router & pools to catch up"
+sleep 5
+
+log "Testing pool manager function with new package"
+timeout 60 bash -c "test_fn hello-go-poolmgr 'vendor'"
+
+log "Testing new deployment function with new package"
+timeout 60 bash -c "test_fn hello-go-nd 'vendor'"
