@@ -154,10 +154,7 @@ build_fission_cli() {
     popd
 }
 
-clean_tpr_crd_resources() {
-    # clean tpr & crd resources to avoid testing error (ex. no kind "HttptriggerList" is registered for version "fission.io/v1")
-    # thirdpartyresources part should be removed after kubernetes test cluster is upgrade to 1.8+
-    kubectl --namespace default get thirdpartyresources| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete thirdpartyresources @" || true
+clean_crd_resources() {
     kubectl --namespace default get crd| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete crd @"  || true
 }
 
@@ -504,7 +501,7 @@ install_and_test() {
     controllerPort=31234
     routerPort=31235
 
-    clean_tpr_crd_resources
+    clean_crd_resources
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
