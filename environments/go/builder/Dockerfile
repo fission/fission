@@ -5,9 +5,9 @@ FROM ${BUILDER_IMAGE}
 
 FROM golang:${GO_VERSION}
 
-COPY --from=0 /builder /builder
-
 ENV GOPATH /usr
+WORKDIR ${GOPATH}
 
+COPY --from=0 /builder /builder
 ADD build.sh /usr/local/bin/build
 

@@ -126,6 +126,10 @@ spec:
         env:
           - name: FISSION_FUNCTION_NAMESPACE
             value: "{{ .Values.functionNamespace }}"
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -171,6 +175,14 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+          - name: ROUTER_ROUND_TRIP_TIMEOUT
+            value: {{ .Values.routerRoundTripTimeout | default "50ms" | quote }}
+          - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
+            value: {{ .Values.routerRoundTripTimeoutExponent | default 2 | quote }}
+          - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
+            value: {{ .Values.routerRoundTripKeepAliveTime | default "30s" | quote }}
+          - name: ROUTER_ROUND_TRIP_MAX_RETRIES
+            value: {{ .Values.routerRoundTripMaxRetries | default 10 | quote }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
@@ -240,6 +252,14 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: FETCHER_MINCPU
+          value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
+        - name: FETCHER_MINMEM
+          value: {{ .Values.fetcherMinMem | default "16Mi" | quote }}
+        - name: FETCHER_MAXCPU
+          value: {{ .Values.fetcherMaxCpu | default "40m" | quote }}
+        - name: FETCHER_MAXMEM
+          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -587,6 +607,7 @@ spec:
     metadata:
       labels:
         svc: storagesvc
+        application: fission-storage
     spec:
       containers:
       - name: storagesvc

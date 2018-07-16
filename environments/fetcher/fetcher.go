@@ -36,6 +36,7 @@ type (
 		Filename      string                       `json:"filename"`
 		Secrets       []fission.SecretReference    `json:"secretList"`
 		ConfigMaps    []fission.ConfigMapReference `json:"configMapList"`
+		KeepArchive   bool                         `json:"keeparchive"`
 	}
 
 	// UploadRequest send from builder manager describes which
@@ -292,8 +293,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 	}
 
-	// check file type here, if the file is a zip file unarchive it.
-	if archiver.Zip.Match(tmpPath) {
+	if archiver.Zip.Match(tmpPath) && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
@@ -301,6 +301,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 			log.Println(err.Error())
 			return http.StatusInternalServerError, err
 		}
+
 		tmpPath = tmpUnarchivePath
 	}
 

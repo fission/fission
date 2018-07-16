@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {
@@ -51,13 +52,15 @@ func envCreate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		fatal("Need a name, use --name.")
+		log.Fatal("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
 	envList, err := client.EnvironmentList(envNamespace)
 	if err == nil && len(envList) > 0 {
-		verbose(2, "%d environment(s) are present in the %s namespace.  These environments are not isolated from each other; use separate namespaces if you need isolation.", len(envList), envNamespace)
+		log.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
+			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
+			len(envList), envNamespace)
 	}
 
 	var poolsize int
@@ -69,7 +72,7 @@ func envCreate(c *cli.Context) error {
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
-		fatal("Need an image, use --image.")
+		log.Fatal("Need an image, use --image.")
 	}
 
 	envVersion := c.Int("version")
@@ -89,6 +92,8 @@ func envCreate(c *cli.Context) error {
 			envBuildCmd = "build"
 		}
 	}
+
+	keepArchive := c.Bool("keeparchive")
 
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
@@ -116,6 +121,7 @@ func envCreate(c *cli.Context) error {
 			Resources:                    resourceReq,
 			AllowAccessToExternalNetwork: envExternalNetwork,
 			TerminationGracePeriod:       envGracePeriod,
+			KeepArchive:                  keepArchive,
 		},
 	}
 
@@ -139,7 +145,7 @@ func envGet(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		fatal("Need a name, use --name.")
+		log.Fatal("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -163,7 +169,7 @@ func envUpdate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		fatal("Need a name, use --name.")
+		log.Fatal("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -173,7 +179,7 @@ func envUpdate(c *cli.Context) error {
 	envExternalNetwork := c.Bool("externalnetwork")
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
-		fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
+		log.Fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
@@ -187,7 +193,7 @@ func envUpdate(c *cli.Context) error {
 	}
 
 	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
-		fatal("Version 1 Environments do not support builders. Must specify --version=2.")
+		log.Fatal("Version 1 Environments do not support builders. Must specify --version=2.")
 	}
 
 	if len(envBuilderImg) > 0 {
@@ -205,6 +211,10 @@ func envUpdate(c *cli.Context) error {
 		env.Spec.TerminationGracePeriod = c.Int64("period")
 	}
 
+	if c.IsSet("keeparchive") {
+		env.Spec.KeepArchive = c.Bool("keeparchive")
+	}
+
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
@@ -219,7 +229,7 @@ func envDelete(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		fatal("Need a name , use --name.")
+		log.Fatal("Need a name , use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -269,7 +279,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		mincpu := c.Int("mincpu")
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			fatal("Failed to parse mincpu")
+			log.Fatal("Failed to parse mincpu")
 		}
 		requestResources[v1.ResourceCPU] = cpuRequest
 	}
@@ -278,7 +288,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		minmem := c.Int("minmemory")
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			fatal("Failed to parse minmemory")
+			log.Fatal("Failed to parse minmemory")
 		}
 		requestResources[v1.ResourceMemory] = memRequest
 	}
@@ -294,7 +304,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxcpu := c.Int("maxcpu")
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			fatal("Failed to parse maxcpu")
+			log.Fatal("Failed to parse maxcpu")
 		}
 		limitResources[v1.ResourceCPU] = cpuLimit
 	}
@@ -303,7 +313,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxmem := c.Int("maxmemory")
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			fatal("Failed to parse maxmemory")
+			log.Fatal("Failed to parse maxmemory")
 		}
 		limitResources[v1.ResourceMemory] = memLimit
 	}

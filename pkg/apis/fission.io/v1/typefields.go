@@ -270,6 +270,10 @@ type (
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
 		// Optional, defaults to 360 seconds
 		TerminationGracePeriod int64
+
+		// KeepArchive is used by fetcher to determine if the extracted archive
+		// or unarchived file should be placed, which is then used by specialize handler
+		KeepArchive bool `json:"keeparchive"`
 	}
 
 	AllowedFunctionsPerContainer string
@@ -302,6 +306,8 @@ type (
 		MessageQueueType  MessageQueueType  `json:"messageQueueType"`
 		Topic             string            `json:"topic"`
 		ResponseTopic     string            `json:"respTopic,omitempty"`
+		ErrorTopic        string            `json:"errorTopic"`
+		MaxRetries        int               `json:"maxRetries"`
 		ContentType       string            `json:"contentType"`
 	}
 

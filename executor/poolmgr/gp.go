@@ -387,9 +387,10 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
 			Name:      fn.Spec.Package.PackageRef.Name,
 		},
-		Filename:   targetFilename,
-		Secrets:    fn.Spec.Secrets,
-		ConfigMaps: fn.Spec.ConfigMaps,
+		Filename:    targetFilename,
+		Secrets:     fn.Spec.Secrets,
+		ConfigMaps:  fn.Spec.ConfigMaps,
+		KeepArchive: gp.env.Spec.KeepArchive,
 	})
 	if err != nil {
 		return err
@@ -484,10 +485,12 @@ func (gp *GenericPool) createPool() error {
 		gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
 	}
 
-	podAnnotation := make(map[string]string)
-
+	podAnnotations := gp.env.Metadata.Annotations
+	if podAnnotations == nil {
+		podAnnotations = make(map[string]string)
+	}
 	if gp.useIstio && gp.env.Spec.AllowAccessToExternalNetwork {
-		podAnnotation["sidecar.istio.io/inject"] = "false"
+		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
 	deployment := &v1beta1.Deployment{
@@ -503,7 +506,7 @@ func (gp *GenericPool) createPool() error {
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      gp.labelsForPool,
-					Annotations: podAnnotation,
+					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{

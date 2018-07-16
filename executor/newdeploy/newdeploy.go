@@ -158,9 +158,10 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
 			Name:      fn.Spec.Package.PackageRef.Name,
 		},
-		Filename:   targetFilename,
-		Secrets:    fn.Spec.Secrets,
-		ConfigMaps: fn.Spec.ConfigMaps,
+		Filename:    targetFilename,
+		Secrets:     fn.Spec.Secrets,
+		ConfigMaps:  fn.Spec.ConfigMaps,
+		KeepArchive: env.Spec.KeepArchive,
 	}
 
 	loadReq := fission.FunctionLoadRequest{
@@ -184,9 +185,12 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 		return nil, err
 	}
 
-	podAnnotation := make(map[string]string)
+	podAnnotations := env.Metadata.Annotations
+	if podAnnotations == nil {
+		podAnnotations = make(map[string]string)
+	}
 	if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
-		podAnnotation["sidecar.istio.io/inject"] = "false"
+		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 	resources := deploy.getResources(env, fn)
 
@@ -203,7 +207,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      deployLabels,
-					Annotations: podAnnotation,
+					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{
