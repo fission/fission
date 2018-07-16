@@ -29,14 +29,14 @@ type (
 	FetchRequestType int
 
 	FetchRequest struct {
-		FetchType      FetchRequestType             `json:"fetchType"`
-		Package        metav1.ObjectMeta            `json:"package"`
-		Url            string                       `json:"url"`
-		StorageSvcUrl  string                       `json:"storagesvcurl"`
-		Filename       string                       `json:"filename"`
-		Secrets        []fission.SecretReference    `json:"secretList"`
-		ConfigMaps     []fission.ConfigMapReference `json:"configMapList"`
-		ExtractArchive bool                         `json:"extractarchive"`
+		FetchType     FetchRequestType             `json:"fetchType"`
+		Package       metav1.ObjectMeta            `json:"package"`
+		Url           string                       `json:"url"`
+		StorageSvcUrl string                       `json:"storagesvcurl"`
+		Filename      string                       `json:"filename"`
+		Secrets       []fission.SecretReference    `json:"secretList"`
+		ConfigMaps    []fission.ConfigMapReference `json:"configMapList"`
+		KeepArchive   bool                         `json:"keeparchive"`
 	}
 
 	// UploadRequest send from builder manager describes which
@@ -293,7 +293,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 	}
 
-	if archiver.Zip.Match(tmpPath) && req.ExtractArchive {
+	if archiver.Zip.Match(tmpPath) && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)

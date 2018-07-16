@@ -828,8 +828,8 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 		// does the archive exist already?
 		if url, ok := availableArchives[ar.Checksum.Sum]; ok {
 			fmt.Printf("archive %v exists, not uploading\n", name)
-			a := archiveFiles[name]
-			a.URL = url
+			ar.URL = url
+			archiveFiles[name] = ar
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
