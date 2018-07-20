@@ -89,7 +89,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 		log.Printf("Skipping continuous trigger updates")
 		return
 	}
-	go ts.syncTriggers()
+	go ts.updateRouter()
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
 }
