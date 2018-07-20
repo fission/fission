@@ -38,17 +38,18 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
-	fissionClient     *crd.FissionClient
-	kubeClient        *kubernetes.Clientset
-	executor          *executorClient.Client
-	resolver          *functionReferenceResolver
-	crdClient         *rest.RESTClient
-	triggers          []crd.HTTPTrigger
-	triggerStore      k8sCache.Store
-	triggerController k8sCache.Controller
-	functions         []crd.Function
-	funcStore         k8sCache.Store
-	funcController    k8sCache.Controller
+	fissionClient              *crd.FissionClient
+	kubeClient                 *kubernetes.Clientset
+	executor                   *executorClient.Client
+	resolver                   *functionReferenceResolver
+	crdClient                  *rest.RESTClient
+	triggers                   []crd.HTTPTrigger
+	triggerStore               k8sCache.Store
+	triggerController          k8sCache.Controller
+	functions                  []crd.Function
+	funcStore                  k8sCache.Store
+	funcController             k8sCache.Controller
+	updateRouterRequestChannel chan struct{}
 
 	tsRoundTripperParams *tsRoundTripperParams
 }
@@ -56,13 +57,14 @@ type HTTPTriggerSet struct {
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
-		functionServiceMap:   fmap,
-		triggers:             []crd.HTTPTrigger{},
-		fissionClient:        fissionClient,
-		kubeClient:           kubeClient,
-		executor:             executor,
-		crdClient:            crdClient,
-		tsRoundTripperParams: params,
+		functionServiceMap:         fmap,
+		triggers:                   []crd.HTTPTrigger{},
+		fissionClient:              fissionClient,
+		kubeClient:                 kubeClient,
+		executor:                   executor,
+		crdClient:                  crdClient,
+		updateRouterRequestChannel: make(chan struct{}),
+		tsRoundTripperParams:       params,
 	}
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -87,6 +89,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 		log.Printf("Skipping continuous trigger updates")
 		return
 	}
+	go ts.syncTriggers()
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
 }
@@ -236,22 +239,28 @@ func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Co
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {
-	// get triggers
-	latestTriggers := ts.triggerStore.List()
-	triggers := make([]crd.HTTPTrigger, len(latestTriggers))
-	for _, t := range latestTriggers {
-		triggers = append(triggers, *t.(*crd.HTTPTrigger))
-	}
-	ts.triggers = triggers
+	ts.updateRouterRequestChannel <- struct{}{}
+}
 
-	// get functions
-	latestFunctions := ts.funcStore.List()
-	functions := make([]crd.Function, len(latestFunctions))
-	for _, f := range latestFunctions {
-		functions = append(functions, *f.(*crd.Function))
-	}
-	ts.functions = functions
+func (ts *HTTPTriggerSet) updateRouter() {
+	for range ts.updateRouterRequestChannel {
+		// get triggers
+		latestTriggers := ts.triggerStore.List()
+		triggers := make([]crd.HTTPTrigger, len(latestTriggers))
+		for _, t := range latestTriggers {
+			triggers = append(triggers, *t.(*crd.HTTPTrigger))
+		}
+		ts.triggers = triggers
 
-	// make a new router and use it
-	ts.mutableRouter.updateRouter(ts.getRouter())
+		// get functions
+		latestFunctions := ts.funcStore.List()
+		functions := make([]crd.Function, len(latestFunctions))
+		for _, f := range latestFunctions {
+			functions = append(functions, *f.(*crd.Function))
+		}
+		ts.functions = functions
+
+		// make a new router and use it
+		ts.mutableRouter.updateRouter(ts.getRouter())
+	}
 }
