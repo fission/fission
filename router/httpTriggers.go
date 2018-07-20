@@ -195,6 +195,11 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				oldTrigger := oldObj.(*crd.HTTPTrigger)
 				newTrigger := newObj.(*crd.HTTPTrigger)
+
+				if oldTrigger.Metadata.ResourceVersion == newTrigger.Metadata.ResourceVersion {
+					return
+				}
+
 				go updateIngress(oldTrigger, newTrigger, ts.kubeClient)
 				ts.syncTriggers()
 			},
@@ -214,7 +219,13 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				ts.syncTriggers()
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldFn := oldObj.(*crd.Function)
 				fn := newObj.(*crd.Function)
+
+				if oldFn.Metadata.ResourceVersion == fn.Metadata.ResourceVersion {
+					return
+				}
+
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					if key.functionReference.Name == fn.Metadata.Name &&
