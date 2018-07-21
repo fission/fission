@@ -173,7 +173,7 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	fnNamespace := functionArg.FnNamespace
 	envNamespace := functionArg.EnvNamespace
 
-	resourceReq := getResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
+	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
 	targetCPU = GetTargetCPU(targetCPU)
 
 	// user wants a spec, create a yaml file with package and function

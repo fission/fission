@@ -28,25 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
-
-func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {
-	fnList, err := client.FunctionList(metav1.NamespaceAll)
-	if err != nil {
-		return nil, err
-	}
-	fns := []crd.Function{}
-	for _, fn := range fnList {
-		if fn.Spec.Environment.Name == envName && fn.Spec.Environment.Namespace == envNamespace {
-			fns = append(fns, fn)
-		}
-	}
-	return fns, nil
-}
 
 func envCreate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
