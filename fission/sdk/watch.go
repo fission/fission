@@ -83,12 +83,12 @@ func WCreateCli(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", watchName)
 		err := specSave(*w, specFile)
-		checkErr(err, "create kubernetes watch spec")
+		CheckErr(err, "create kubernetes watch spec")
 		return nil
 	}
 
 	_, err := client.WatchCreate(w)
-	checkErr(err, "create watch")
+	CheckErr(err, "create watch")
 
 	fmt.Printf("watch '%v' created\n", w.Metadata.Name)
 	return err
@@ -119,7 +119,7 @@ func WDeleteCli(c *cli.Context) error {
 		Name:      wName,
 		Namespace: wNs,
 	})
-	checkErr(err, "delete watch")
+	CheckErr(err, "delete watch")
 
 	fmt.Printf("watch '%v' deleted\n", wName)
 	return nil
@@ -131,7 +131,7 @@ func WListCli(c *cli.Context) error {
 	wNs := c.String("triggerns")
 
 	ws, err := client.WatchList(wNs)
-	checkErr(err, "list watches")
+	CheckErr(err, "list watches")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

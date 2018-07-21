@@ -134,12 +134,12 @@ func EnvCreateCli(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("env-%v.yaml", envName)
 		err := specSave(*env, specFile)
-		checkErr(err, "create environment spec")
+		CheckErr(err, "create environment spec")
 		return nil
 	}
 
 	_, err = client.EnvironmentCreate(env)
-	checkErr(err, "create environment")
+	CheckErr(err, "create environment")
 
 	fmt.Printf("environment '%v' created\n", envName)
 	return err
@@ -159,7 +159,7 @@ func EnvGetCli(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	env, err := client.EnvironmentGet(m)
-	checkErr(err, "get environment")
+	CheckErr(err, "get environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
@@ -191,7 +191,7 @@ func EnvUpdateCli(c *cli.Context) error {
 		Name:      envName,
 		Namespace: envNamespace,
 	})
-	checkErr(err, "find environment")
+	CheckErr(err, "find environment")
 
 	if len(envImg) > 0 {
 		env.Spec.Runtime.Image = envImg
@@ -223,7 +223,7 @@ func EnvUpdateCli(c *cli.Context) error {
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
-	checkErr(err, "update environment")
+	CheckErr(err, "update environment")
 
 	fmt.Printf("environment '%v' updated\n", envName)
 	return nil
@@ -243,7 +243,7 @@ func EnvDeleteCli(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	err := client.EnvironmentDelete(m)
-	checkErr(err, "delete environment")
+	CheckErr(err, "delete environment")
 
 	fmt.Printf("environment '%v' deleted\n", envName)
 	return nil
@@ -254,7 +254,7 @@ func EnvListCli(c *cli.Context) error {
 	envNamespace := c.String("envNamespace")
 
 	envs, err := client.EnvironmentList(envNamespace)
-	checkErr(err, "list environments")
+	CheckErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")

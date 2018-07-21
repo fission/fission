@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
+	"github.com/fission/fission/fission/sdk"
 )
 
 func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {
@@ -48,7 +49,7 @@ func getFunctionsByEnvironment(client *client.Client, envName, envNamespace stri
 }
 
 func envCreate(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
@@ -129,19 +130,19 @@ func envCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("env-%v.yaml", envName)
 		err := specSave(*env, specFile)
-		checkErr(err, "create environment spec")
+		sdk.CheckErr(err, "create environment spec")
 		return nil
 	}
 
 	_, err = client.EnvironmentCreate(env)
-	checkErr(err, "create environment")
+	sdk.CheckErr(err, "create environment")
 
 	fmt.Printf("environment '%v' created\n", envName)
 	return err
 }
 
 func envGet(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
@@ -154,7 +155,7 @@ func envGet(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	env, err := client.EnvironmentGet(m)
-	checkErr(err, "get environment")
+	sdk.CheckErr(err, "get environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
@@ -165,7 +166,7 @@ func envGet(c *cli.Context) error {
 }
 
 func envUpdate(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
@@ -186,7 +187,7 @@ func envUpdate(c *cli.Context) error {
 		Name:      envName,
 		Namespace: envNamespace,
 	})
-	checkErr(err, "find environment")
+	sdk.CheckErr(err, "find environment")
 
 	if len(envImg) > 0 {
 		env.Spec.Runtime.Image = envImg
@@ -218,14 +219,14 @@ func envUpdate(c *cli.Context) error {
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
-	checkErr(err, "update environment")
+	sdk.CheckErr(err, "update environment")
 
 	fmt.Printf("environment '%v' updated\n", envName)
 	return nil
 }
 
 func envDelete(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
@@ -238,18 +239,18 @@ func envDelete(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	err := client.EnvironmentDelete(m)
-	checkErr(err, "delete environment")
+	sdk.CheckErr(err, "delete environment")
 
 	fmt.Printf("environment '%v' deleted\n", envName)
 	return nil
 }
 
 func envList(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 	envNamespace := c.String("envNamespace")
 
 	envs, err := client.EnvironmentList(envNamespace)
-	checkErr(err, "list environments")
+	sdk.CheckErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")

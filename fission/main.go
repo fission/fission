@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/portforward"
+	"github.com/fission/fission/fission/sdk"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -81,7 +82,7 @@ func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
 		clientVer := fission.BuildInfo().String()
 		fmt.Printf("Client Version: %v\n", clientVer)
-		serverInfo, err := getClient(getServerUrl()).ServerInfo()
+		serverInfo, err := sdk.GetClient(getServerUrl()).ServerInfo()
 		if err != nil {
 			fmt.Printf("Error getting Fission API version: %v", err)
 		} else {

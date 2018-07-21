@@ -23,6 +23,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/fission/fission/fission/sdk"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,7 +73,7 @@ func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNames
 }
 
 func htCreate(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
@@ -125,12 +126,12 @@ func htCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
 		err := specSave(*ht, specFile)
-		checkErr(err, "create HTTP trigger spec")
+		sdk.CheckErr(err, "create HTTP trigger spec")
 		return nil
 	}
 
 	_, err := client.HTTPTriggerCreate(ht)
-	checkErr(err, "create HTTP trigger")
+	sdk.CheckErr(err, "create HTTP trigger")
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
 	return err
@@ -141,7 +142,7 @@ func htGet(c *cli.Context) error {
 }
 
 func htUpdate(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
 		log.Fatal("Need name of trigger, use --name")
@@ -160,7 +161,7 @@ func htUpdate(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	checkErr(err, "get HTTP trigger")
+	sdk.CheckErr(err, "get HTTP trigger")
 
 	if len(newFn) > 0 {
 		ht.Spec.FunctionReference.Name = newFn
@@ -175,14 +176,14 @@ func htUpdate(c *cli.Context) error {
 	}
 
 	_, err = client.HTTPTriggerUpdate(ht)
-	checkErr(err, "update HTTP trigger")
+	sdk.CheckErr(err, "update HTTP trigger")
 
 	fmt.Printf("trigger '%v' updated\n", htName)
 	return nil
 }
 
 func htDelete(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
 		log.Fatal("Need name of trigger to delete, use --name")
@@ -193,18 +194,18 @@ func htDelete(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	checkErr(err, "delete trigger")
+	sdk.CheckErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", htName)
 	return nil
 }
 
 func htList(c *cli.Context) error {
-	client := getClient(c.GlobalString("server"))
+	client := sdk.GetClient(c.GlobalString("server"))
 	triggerNamespace := c.String("triggerNamespace")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
-	checkErr(err, "list HTTP triggers")
+	sdk.CheckErr(err, "list HTTP triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

@@ -57,9 +57,9 @@ func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 
 	// replace in-cluster storage service host with controller server url
 	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage/" + u.RequestURI()
-	reader, err := downloadURL(fileDownloadUrl)
+	reader, err := DownloadURL(fileDownloadUrl)
 
-	checkErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
+	CheckErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
 	return reader
 }
 
@@ -118,10 +118,10 @@ func PkgUpdateCli(c *cli.Context) error {
 		Namespace: pkgNamespace,
 		Name:      pkgName,
 	})
-	checkErr(err, "get package")
+	CheckErr(err, "get package")
 
 	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-	checkErr(err, "get function list")
+	CheckErr(err, "get function list")
 
 	if !force && len(fnList) > 1 {
 		log.Fatal("Package is used by multiple functions, use --force to force update")
@@ -133,7 +133,7 @@ func PkgUpdateCli(c *cli.Context) error {
 	for _, fn := range fnList {
 		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
 		_, err := client.FunctionUpdate(&fn)
-		checkErr(err, "update function")
+		CheckErr(err, "update function")
 	}
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
@@ -160,7 +160,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 
 	if len(srcArchiveName) > 0 {
 		var err error
-		srcArchiveMetadata, err = createArchive(client, srcArchiveName, "")
+		srcArchiveMetadata, err = CreateArchive(client, srcArchiveName, "")
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +170,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 
 	if len(deployArchiveName) > 0 {
 		var err error
-		deployArchiveMetadata, err = createArchive(client, deployArchiveName, "")
+		deployArchiveMetadata, err = CreateArchive(client, deployArchiveName, "")
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +186,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	newPkgMeta, err := client.PackageUpdate(pkg)
-	checkErr(err, "update package")
+	CheckErr(err, "update package")
 
 	return newPkgMeta, nil
 }
@@ -221,7 +221,7 @@ func PkgSourceGetCli(c *cli.Context) error {
 	}
 
 	if len(output) > 0 {
-		return writeArchiveToFile(output, reader)
+		return WriteArchiveToFile(output, reader)
 	} else {
 		_, err := io.Copy(os.Stdout, reader)
 		return err
@@ -258,7 +258,7 @@ func PkgDeployGetCli(c *cli.Context) error {
 	}
 
 	if len(output) > 0 {
-		return writeArchiveToFile(output, reader)
+		return WriteArchiveToFile(output, reader)
 	} else {
 		_, err := io.Copy(os.Stdout, reader)
 		return err
@@ -308,7 +308,7 @@ func PkgListCli(c *cli.Context) error {
 	if listOrphans {
 		for _, pkg := range pkgList {
 			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-			checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 			if len(fnList) == 0 {
 				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
 			}
@@ -334,7 +334,7 @@ func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
 	// range through all packages and find out the ones not referenced by any function
 	for _, pkg := range pkgList {
 		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkgNamespace)
-		checkErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+		CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 		if len(fnList) == 0 {
 			err = deletePackage(client, pkg.Metadata.Name, pkgNamespace)
 			if err != nil {
@@ -375,7 +375,7 @@ func PkgDeleteCli(c *cli.Context) error {
 			Namespace: pkgNamespace,
 			Name:      pkgName,
 		})
-		checkErr(err, "find package")
+		CheckErr(err, "find package")
 
 		fnList, err := getFunctionsByPackage(client, pkgName, pkgNamespace)
 
@@ -391,7 +391,7 @@ func PkgDeleteCli(c *cli.Context) error {
 		fmt.Printf("Package '%v' deleted\n", pkgName)
 	} else {
 		err := deleteOrphanPkgs(client, pkgNamespace)
-		checkErr(err, "error deleting orphan packages")
+		CheckErr(err, "error deleting orphan packages")
 		fmt.Println("Orphan packages deleted")
 	}
 

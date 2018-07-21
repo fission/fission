@@ -94,17 +94,17 @@ func TtCreateCli(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", name)
 		err := specSave(*tt, specFile)
-		checkErr(err, "create time trigger spec")
+		CheckErr(err, "create time trigger spec")
 		return nil
 	}
 
 	_, err := client.TimeTriggerCreate(tt)
-	checkErr(err, "create Time trigger")
+	CheckErr(err, "create Time trigger")
 
 	fmt.Printf("trigger '%v' created\n", name)
 
 	err = getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), 1)
-	checkErr(err, "pass cron spec examination")
+	CheckErr(err, "pass cron spec examination")
 
 	return err
 }
@@ -125,7 +125,7 @@ func TtUpdateCli(c *cli.Context) error {
 		Name:      ttName,
 		Namespace: ttNs,
 	})
-	checkErr(err, "get time trigger")
+	CheckErr(err, "get time trigger")
 
 	updated := false
 	newCron := c.String("cron")
@@ -148,12 +148,12 @@ func TtUpdateCli(c *cli.Context) error {
 	}
 
 	_, err = client.TimeTriggerUpdate(tt)
-	checkErr(err, "update Time trigger")
+	CheckErr(err, "update Time trigger")
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
 
 	err = getCronNextNActivationTime(newCron, getAPITimeInfo(client), 1)
-	checkErr(err, "pass cron spec examination")
+	CheckErr(err, "pass cron spec examination")
 
 	return nil
 }
@@ -170,7 +170,7 @@ func TtDeleteCli(c *cli.Context) error {
 		Name:      ttName,
 		Namespace: ttNs,
 	})
-	checkErr(err, "delete trigger")
+	CheckErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", ttName)
 	return nil
@@ -181,7 +181,7 @@ func TtListCli(c *cli.Context) error {
 	ttNs := c.String("triggerns")
 
 	tts, err := client.TimeTriggerList(ttNs)
-	checkErr(err, "list Time triggers")
+	CheckErr(err, "list Time triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
@@ -205,7 +205,7 @@ func TtTestCli(c *cli.Context) error {
 	}
 
 	err := getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), round)
-	checkErr(err, "pass cron spec examination")
+	CheckErr(err, "pass cron spec examination")
 
 	return nil
 }

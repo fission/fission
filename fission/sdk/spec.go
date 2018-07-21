@@ -158,15 +158,15 @@ func SpecInitCli(c *cli.Context) error {
 	if len(name) == 0 {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
-		checkErr(err, "get current working directory")
+		CheckErr(err, "get current working directory")
 		basename := filepath.Base(dir)
-		name = kubifyName(basename)
+		name = KubifyName(basename)
 	}
 
 	// Create spec dir
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
-	checkErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
+	CheckErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
 
 	// Add a bit of documentation to the spec dir here
 	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)
@@ -188,7 +188,7 @@ func SpecInitCli(c *cli.Context) error {
 		UID: uuid.NewV4().String(),
 	}
 	err = writeDeploymentConfig(specDir, &dc)
-	checkErr(err, "write deployment config")
+	CheckErr(err, "write deployment config")
 
 	// Other possible things to do here:
 	// - add example specs to the dir to make it easy to manually
@@ -226,7 +226,7 @@ func SpecValidateCli(c *cli.Context) error {
 	// this will error on parse errors and on duplicates
 	specDir := getSpecDir(c)
 	fr, err := readSpecs(specDir)
-	checkErr(err, "read specs")
+	CheckErr(err, "read specs")
 
 	// this does the rest of the checks, like dangling refs
 	err = fr.validate()
@@ -635,56 +635,56 @@ func SpecApplyCli(c *cli.Context) error {
 
 	if watchResources || waitForBuild {
 		// init package build watcher
-		pbw = makePackageBuildWatcher(fclient)
+		pbw = MakePackageBuildWatcher(fclient)
 	}
 
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
-		checkErr(err, "create file watcher")
+		CheckErr(err, "create file watcher")
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-			checkErr(err, "scan project files")
+			CheckErr(err, "scan project files")
 
 			if ignoreFile(path) {
 				return nil
 			}
 			err = watcher.Add(path)
-			checkErr(err, fmt.Sprintf("watch path %v", path))
+			CheckErr(err, fmt.Sprintf("watch path %v", path))
 			return nil
 		})
-		checkErr(err, "scan files to watch")
+		CheckErr(err, "scan files to watch")
 	}
 
 	for {
 		// read all specs
 		fr, err := readSpecs(specDir)
-		checkErr(err, "read specs")
+		CheckErr(err, "read specs")
 
 		// validate
 		err = fr.validate()
-		checkErr(err, "validate specs")
+		CheckErr(err, "validate specs")
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(fclient, specDir, fr, deleteResources)
-		checkErr(err, "apply specs")
+		CheckErr(err, "apply specs")
 		printApplyStatus(as)
 
 		if watchResources || waitForBuild {
 			// watch package builds
-			pbw.addPackages(pkgMetas)
+			pbw.AddPackages(pkgMetas)
 		}
 
 		ctx, pkgWatchCancel := context.WithCancel(context.Background())
 
 		if watchResources {
 			// if we're watching for files, we don't need to wait for builds to complete
-			go pbw.watch(ctx)
+			go pbw.Watch(ctx)
 		} else if waitForBuild {
 			// synchronously wait for build if --wait was specified
-			pbw.watch(ctx)
+			pbw.Watch(ctx)
 		}
 
 		if !watchResources {
@@ -710,11 +710,11 @@ func SpecApplyCli(c *cli.Context) error {
 				pkgWatchCancel()
 
 				err = waitForFileWatcherToSettleDown(watcher)
-				checkErr(err, "watching files")
+				CheckErr(err, "watching files")
 
 				break waitloop
 			case err := <-watcher.Errors:
-				checkErr(err, "watching files")
+				CheckErr(err, "watching files")
 			}
 		}
 	}
@@ -774,7 +774,7 @@ func SpecDestroyCli(c *cli.Context) error {
 
 	// read everything
 	fr, err := readSpecs(specDir)
-	checkErr(err, "read specs")
+	CheckErr(err, "read specs")
 
 	// set desired state to nothing, but keep the UID so "apply" can find it
 	emptyFr := FissionResources{}
@@ -782,7 +782,7 @@ func SpecDestroyCli(c *cli.Context) error {
 
 	// "apply" the empty state
 	_, _, err = applyResources(fclient, specDir, &emptyFr, true)
-	checkErr(err, "delete resources")
+	CheckErr(err, "delete resources")
 
 	return nil
 }
@@ -833,7 +833,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
-			uploadedAr, err := createArchive(fclient, ar.URL, "")
+			uploadedAr, err := CreateArchive(fclient, ar.URL, "")
 			if err != nil {
 				return err
 			}
@@ -984,19 +984,19 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	}
 
 	// figure out if we're making a literal or a URL-based archive
-	fileSize, err := fileSize(archiveFileName)
+	fileSize, err := FileSize(archiveFileName)
 	if err != nil {
 		return nil, err
 	}
 	if fileSize < fission.ArchiveLiteralSizeLimit {
-		contents := getContents(archiveFileName)
+		contents := GetContents(archiveFileName)
 		return &fission.Archive{
 			Type:    fission.ArchiveTypeLiteral,
 			Literal: contents,
 		}, nil
 	} else {
 		// checksum
-		csum, err := fileChecksum(archiveFileName)
+		csum, err := FileChecksum(archiveFileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}

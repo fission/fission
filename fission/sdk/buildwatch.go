@@ -42,7 +42,7 @@ type (
 	}
 )
 
-func makePackageBuildWatcher(fclient *client.Client) *PackageBuildWatcher {
+func MakePackageBuildWatcher(fclient *client.Client) *PackageBuildWatcher {
 	return &PackageBuildWatcher{
 		fclient:  fclient,
 		finished: make(map[string]bool),
@@ -50,13 +50,13 @@ func makePackageBuildWatcher(fclient *client.Client) *PackageBuildWatcher {
 	}
 }
 
-func (w *PackageBuildWatcher) addPackages(pkgMeta map[string]metav1.ObjectMeta) {
+func (w *PackageBuildWatcher) AddPackages(pkgMeta map[string]metav1.ObjectMeta) {
 	for k, v := range pkgMeta {
 		w.pkgMeta[k] = v
 	}
 }
 
-func (w *PackageBuildWatcher) watch(ctx context.Context) {
+func (w *PackageBuildWatcher) Watch(ctx context.Context) {
 	for {
 		// non-blocking check if we're cancelled
 		select {
@@ -67,7 +67,7 @@ func (w *PackageBuildWatcher) watch(ctx context.Context) {
 
 		// poll list of packages (TODO: convert to watch)
 		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
-		checkErr(err, "Getting list of packages")
+		CheckErr(err, "Getting list of packages")
 
 		// find packages that (a) are in the app spec and (b) have an interesting
 		// build status (either succeeded or failed; not "none")

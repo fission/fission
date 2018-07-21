@@ -159,15 +159,15 @@ func specInit(c *cli.Context) error {
 	if len(name) == 0 {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
-		checkErr(err, "get current working directory")
+		sdk.CheckErr(err, "get current working directory")
 		basename := filepath.Base(dir)
-		name = kubifyName(basename)
+		name = sdk.KubifyName(basename)
 	}
 
 	// Create spec dir
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
-	checkErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
+	sdk.CheckErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
 
 	// Add a bit of documentation to the spec dir here
 	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)
@@ -189,7 +189,7 @@ func specInit(c *cli.Context) error {
 		UID: uuid.NewV4().String(),
 	}
 	err = writeDeploymentConfig(specDir, &dc)
-	checkErr(err, "write deployment config")
+	sdk.CheckErr(err, "write deployment config")
 
 	// Other possible things to do here:
 	// - add example specs to the dir to make it easy to manually
@@ -227,7 +227,7 @@ func specValidate(c *cli.Context) error {
 	// this will error on parse errors and on duplicates
 	specDir := getSpecDir(c)
 	fr, err := readSpecs(specDir)
-	checkErr(err, "read specs")
+	sdk.CheckErr(err, "read specs")
 
 	// this does the rest of the checks, like dangling refs
 	err = fr.validate()
@@ -624,7 +624,7 @@ func waitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
 // etc, while doing an apply, they will get a partially applied deployment.  However,
 // they can retry their apply command once they're back online.
 func specApply(c *cli.Context) error {
-	fclient := getClient(c.GlobalString("server"))
+	fclient := sdk.GetClient(c.GlobalString("server"))
 	specDir := getSpecDir(c)
 
 	deleteResources := c.Bool("delete")
@@ -636,56 +636,56 @@ func specApply(c *cli.Context) error {
 
 	if watchResources || waitForBuild {
 		// init package build watcher
-		pbw = makePackageBuildWatcher(fclient)
+		pbw = sdk.MakePackageBuildWatcher(fclient)
 	}
 
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
-		checkErr(err, "create file watcher")
+		sdk.CheckErr(err, "create file watcher")
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-			checkErr(err, "scan project files")
+			sdk.CheckErr(err, "scan project files")
 
 			if ignoreFile(path) {
 				return nil
 			}
 			err = watcher.Add(path)
-			checkErr(err, fmt.Sprintf("watch path %v", path))
+			sdk.CheckErr(err, fmt.Sprintf("watch path %v", path))
 			return nil
 		})
-		checkErr(err, "scan files to watch")
+		sdk.CheckErr(err, "scan files to watch")
 	}
 
 	for {
 		// read all specs
 		fr, err := readSpecs(specDir)
-		checkErr(err, "read specs")
+		sdk.CheckErr(err, "read specs")
 
 		// validate
 		err = fr.validate()
-		checkErr(err, "validate specs")
+		sdk.CheckErr(err, "validate specs")
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(fclient, specDir, fr, deleteResources)
-		checkErr(err, "apply specs")
+		sdk.CheckErr(err, "apply specs")
 		printApplyStatus(as)
 
 		if watchResources || waitForBuild {
 			// watch package builds
-			pbw.addPackages(pkgMetas)
+			pbw.AddPackages(pkgMetas)
 		}
 
 		ctx, pkgWatchCancel := context.WithCancel(context.Background())
 
 		if watchResources {
 			// if we're watching for files, we don't need to wait for builds to complete
-			go pbw.watch(ctx)
+			go pbw.Watch(ctx)
 		} else if waitForBuild {
 			// synchronously wait for build if --wait was specified
-			pbw.watch(ctx)
+			pbw.Watch(ctx)
 		}
 
 		if !watchResources {
@@ -711,11 +711,11 @@ func specApply(c *cli.Context) error {
 				pkgWatchCancel()
 
 				err = waitForFileWatcherToSettleDown(watcher)
-				checkErr(err, "watching files")
+				sdk.CheckErr(err, "watching files")
 
 				break waitloop
 			case err := <-watcher.Errors:
-				checkErr(err, "watching files")
+				sdk.CheckErr(err, "watching files")
 			}
 		}
 	}
@@ -768,14 +768,14 @@ func pluralize(num int, word string) string {
 
 // specDestroy destroys everything in the spec.
 func specDestroy(c *cli.Context) error {
-	fclient := getClient(c.GlobalString("server"))
+	fclient := sdk.GetClient(c.GlobalString("server"))
 
 	// get specdir
 	specDir := getSpecDir(c)
 
 	// read everything
 	fr, err := readSpecs(specDir)
-	checkErr(err, "read specs")
+	sdk.CheckErr(err, "read specs")
 
 	// set desired state to nothing, but keep the UID so "apply" can find it
 	emptyFr := FissionResources{}
@@ -783,7 +783,7 @@ func specDestroy(c *cli.Context) error {
 
 	// "apply" the empty state
 	_, _, err = applyResources(fclient, specDir, &emptyFr, true)
-	checkErr(err, "delete resources")
+	sdk.CheckErr(err, "delete resources")
 
 	return nil
 }
@@ -834,7 +834,8 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
-			uploadedAr := createArchive(fclient, ar.URL, "")
+			uploadedAr, err := sdk.CreateArchive(fclient, ar.URL, "")
+			sdk.CheckErr(err, "create archive")
 			archiveFiles[name] = *uploadedAr
 		}
 	}
@@ -982,15 +983,17 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	}
 
 	// figure out if we're making a literal or a URL-based archive
-	if fileSize(archiveFileName) < fission.ArchiveLiteralSizeLimit {
-		contents := getContents(archiveFileName)
+	fileSize, err := sdk.FileSize(archiveFileName)
+	sdk.CheckErr(err, "get file size")
+	if fileSize < fission.ArchiveLiteralSizeLimit {
+		contents := sdk.GetContents(archiveFileName)
 		return &fission.Archive{
 			Type:    fission.ArchiveTypeLiteral,
 			Literal: contents,
 		}, nil
 	} else {
 		// checksum
-		csum, err := fileChecksum(archiveFileName)
+		csum, err := sdk.FileChecksum(archiveFileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}

@@ -59,7 +59,7 @@ func GetClient(serverUrl string) *client.Client {
 	return client.MakeClient(serverUrl)
 }
 
-func missingArgError(argName string) error {
+func MissingArgError(argName string) error {
 	var message string
 	if log.IsCliRun {
 		message = fmt.Sprintf("Missing --%v argument", argName)
@@ -69,20 +69,20 @@ func missingArgError(argName string) error {
 	return errors.New(message)
 }
 
-func checkErr(err error, msg string) {
+func CheckErr(err error, msg string) {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
 	}
 }
 
-func failedToError(err error, msg string) error {
+func FailedToError(err error, msg string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to %v: %v", msg, err)
 	}
 	return nil
 }
 
-func httpRequest(method, url, body string, headers []string) *http.Response {
+func HttpRequest(method, url, body string, headers []string) *http.Response {
 	if method == "" {
 		method = "GET"
 	}
@@ -95,33 +95,33 @@ func httpRequest(method, url, body string, headers []string) *http.Response {
 	}
 
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
-	checkErr(err, "create HTTP request")
+	CheckErr(err, "create HTTP request")
 
 	for _, header := range headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)
 		if len(headerKeyValue) != 2 {
-			checkErr(errors.New(""), "create request without appropriate headers")
+			CheckErr(errors.New(""), "create request without appropriate headers")
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	checkErr(err, "execute HTTP request")
+	CheckErr(err, "execute HTTP request")
 
 	return resp
 }
 
-func fileSize(filePath string) (int64, error) {
+func FileSize(filePath string) (int64, error) {
 	info, err := os.Stat(filePath)
-	checkErr(err, fmt.Sprintf("stat %v", filePath))
+	CheckErr(err, fmt.Sprintf("stat %v", filePath))
 	if err != nil {
 		return 0, err
 	}
 	return info.Size(), nil
 }
 
-func fileChecksum(fileName string) (*fission.Checksum, error) {
+func FileChecksum(fileName string) (*fission.Checksum, error) {
 	f, err := os.Open(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %v: %v", fileName, err)
@@ -141,24 +141,24 @@ func fileChecksum(fileName string) (*fission.Checksum, error) {
 }
 
 // upload a file and return a fission.Archive
-func createArchive(client *client.Client, fileName string, specFile string) (*fission.Archive, error) {
+func CreateArchive(client *client.Client, fileName string, specFile string) (*fission.Archive, error) {
 	var archive fission.Archive
 
 	// fetch archive from arbitrary url if fileName is a url
 	if strings.HasPrefix(fileName, "http://") || strings.HasPrefix(fileName, "https://") {
-		fileName = downloadToTempFile(fileName)
+		fileName = DownloadToTempFile(fileName)
 	}
 
 	if len(specFile) > 0 {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &ArchiveUploadSpec{
-			Name:         kubifyName(path.Base(fileName)),
+			Name:         KubifyName(path.Base(fileName)),
 			IncludeGlobs: []string{fileName},
 		}
 		// save the uploadspec
 		err := specSave(*aus, specFile)
 		if err != nil {
-			return &fission.Archive{}, failedToError(err, fmt.Sprintf("write spec file %v", specFile))
+			return &fission.Archive{}, FailedToError(err, fmt.Sprintf("write spec file %v", specFile))
 		}
 		// create the archive
 		ar := &fission.Archive{
@@ -168,12 +168,12 @@ func createArchive(client *client.Client, fileName string, specFile string) (*fi
 		return ar, nil
 	}
 
-	fileSize, err := fileSize(fileName)
+	fileSize, err := FileSize(fileName)
 	if err != nil {
 		return nil, err
 	}
 	if fileSize < fission.ArchiveLiteralSizeLimit {
-		contents := getContents(fileName)
+		contents := GetContents(fileName)
 		archive.Type = fission.ArchiveTypeLiteral
 		archive.Literal = contents
 	} else {
@@ -182,11 +182,11 @@ func createArchive(client *client.Client, fileName string, specFile string) (*fi
 
 		// TODO add a progress bar
 		id, err := ssClient.Upload(fileName, nil)
-		checkErr(err, fmt.Sprintf("upload file %v", fileName))
+		CheckErr(err, fmt.Sprintf("upload file %v", fileName))
 
 		storageSvc, err := client.GetSvcURL("application=fission-storage")
 		storageSvcURL := "http://" + storageSvc
-		checkErr(err, "get fission storage service name")
+		CheckErr(err, "get fission storage service name")
 
 		// We make a new client with actual URL of Storage service so that the URL is not
 		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
@@ -196,8 +196,8 @@ func createArchive(client *client.Client, fileName string, specFile string) (*fi
 		archive.Type = fission.ArchiveTypeUrl
 		archive.URL = archiveURL
 
-		csum, err := fileChecksum(fileName)
-		checkErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
+		csum, err := FileChecksum(fileName)
+		CheckErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
 
 		archive.Checksum = *csum
 	}
@@ -221,15 +221,15 @@ func CreatePackage(client *client.Client, pkgNamespace, envName, envNamespace, s
 			pkgStatus = fission.BuildStatusNone
 		}
 
-		arch, err = createArchive(client, deployArchiveName, specFile)
+		arch, err = CreateArchive(client, deployArchiveName, specFile)
 		if err != nil {
 			return nil, err
 		}
 		pkgSpec.Deployment = *arch
-		pkgName = kubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveName), uniuri.NewLen(4)))
+		pkgName = KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveName), uniuri.NewLen(4)))
 	}
 	if len(srcArchiveName) > 0 {
-		arch, err = createArchive(client, srcArchiveName, specFile)
+		arch, err = CreateArchive(client, srcArchiveName, specFile)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +237,7 @@ func CreatePackage(client *client.Client, pkgNamespace, envName, envNamespace, s
 
 		// set pending status to package
 		pkgStatus = fission.BuildStatusPending
-		pkgName = kubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveName), uniuri.NewLen(4)))
+		pkgName = KubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveName), uniuri.NewLen(4)))
 	}
 
 	if len(buildcmd) > 0 {
@@ -260,33 +260,33 @@ func CreatePackage(client *client.Client, pkgNamespace, envName, envNamespace, s
 
 	if len(specFile) > 0 {
 		err := specSave(*pkg, specFile)
-		checkErr(err, "save package spec")
+		CheckErr(err, "save package spec")
 		return &pkg.Metadata, nil
 	} else {
 		pkgMetadata, err := client.PackageCreate(pkg)
-		checkErr(err, "create package")
+		CheckErr(err, "create package")
 		return pkgMetadata, nil
 	}
 }
 
-func getContents(filePath string) []byte {
+func GetContents(filePath string) []byte {
 	var code []byte
 	var err error
 
 	code, err = ioutil.ReadFile(filePath)
-	checkErr(err, fmt.Sprintf("read %v", filePath))
+	CheckErr(err, fmt.Sprintf("read %v", filePath))
 	return code
 }
 
-func getTempDir() (string, error) {
+func GetTempDir() (string, error) {
 	tmpDir := uuid.NewV4().String()
 	tmpPath := filepath.Join(os.TempDir(), tmpDir)
 	err := os.Mkdir(tmpPath, 0744)
 	return tmpPath, err
 }
 
-func writeArchiveToFile(fileName string, reader io.Reader) error {
-	tmpDir, err := getTempDir()
+func WriteArchiveToFile(fileName string, reader io.Reader) error {
+	tmpDir, err := GetTempDir()
 	if err != nil {
 		return err
 	}
@@ -315,27 +315,27 @@ func writeArchiveToFile(fileName string, reader io.Reader) error {
 
 // downloadToTempFile fetches archive file from arbitrary url
 // and write it to temp file for further usage
-func downloadToTempFile(fileUrl string) string {
-	reader, err := downloadURL(fileUrl)
+func DownloadToTempFile(fileUrl string) string {
+	reader, err := DownloadURL(fileUrl)
 	defer reader.Close()
-	checkErr(err, fmt.Sprintf("download from url: %v", fileUrl))
+	CheckErr(err, fmt.Sprintf("download from url: %v", fileUrl))
 
-	tmpDir, err := getTempDir()
-	checkErr(err, "create temp directory")
+	tmpDir, err := GetTempDir()
+	CheckErr(err, "create temp directory")
 
 	tmpFilename := uuid.NewV4().String()
 	destination := filepath.Join(tmpDir, tmpFilename)
 	err = os.Mkdir(tmpDir, 0744)
-	checkErr(err, "create temp directory")
+	CheckErr(err, "create temp directory")
 
-	err = writeArchiveToFile(destination, reader)
-	checkErr(err, "write archive to file")
+	err = WriteArchiveToFile(destination, reader)
+	CheckErr(err, "write archive to file")
 
 	return destination
 }
 
 // downloadURL downloads file from given url
-func downloadURL(fileUrl string) (io.ReadCloser, error) {
+func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 	resp, err := http.Get(fileUrl)
 	if err != nil {
 		return nil, err
@@ -347,7 +347,7 @@ func downloadURL(fileUrl string) (io.ReadCloser, error) {
 }
 
 // make a kubernetes compliant name out of an arbitrary string
-func kubifyName(old string) string {
+func KubifyName(old string) string {
 	// Kubernetes maximum name length (for some names; others can be 253 chars)
 	maxLen := 63
 
@@ -355,17 +355,17 @@ func kubifyName(old string) string {
 
 	// replace disallowed chars with '-'
 	inv, err := regexp.Compile("[^-a-z0-9]")
-	checkErr(err, "compile regexp")
+	CheckErr(err, "compile regexp")
 	newName = string(inv.ReplaceAll([]byte(newName), []byte("-")))
 
 	// trim leading non-alphabetic
 	leadingnonalpha, err := regexp.Compile("^[^a-z]+")
-	checkErr(err, "compile regexp")
+	CheckErr(err, "compile regexp")
 	newName = string(leadingnonalpha.ReplaceAll([]byte(newName), []byte{}))
 
 	// trim trailing
 	trailing, err := regexp.Compile("[^a-z0-9]+$")
-	checkErr(err, "compile regexp")
+	CheckErr(err, "compile regexp")
 	newName = string(trailing.ReplaceAll([]byte(newName), []byte{}))
 
 	// truncate to length
@@ -387,8 +387,8 @@ func GetServerUrl() string {
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
-		fissionNamespace := getFissionNamespace()
-		kubeConfig := getKubeConfigPath()
+		fissionNamespace := GetFissionNamespace()
+		kubeConfig := GetKubeConfigPath()
 		localPort := portforward.Setup(
 			kubeConfig, fissionNamespace, "application=fission-api")
 		serverUrl = "http://127.0.0.1:" + localPort
@@ -398,12 +398,12 @@ func GetServerUrl() string {
 	return serverUrl
 }
 
-func getFissionNamespace() string {
+func GetFissionNamespace() string {
 	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
 	return fissionNamespace
 }
 
-func getKubeConfigPath() string {
+func GetKubeConfigPath() string {
 	kubeConfig := os.Getenv("KUBECONFIG")
 	if len(kubeConfig) == 0 {
 		home := os.Getenv("HOME")

@@ -125,12 +125,12 @@ func HtCreateCli(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
 		err := specSave(*ht, specFile)
-		checkErr(err, "create HTTP trigger spec")
+		CheckErr(err, "create HTTP trigger spec")
 		return nil
 	}
 
 	_, err := client.HTTPTriggerCreate(ht)
-	checkErr(err, "create HTTP trigger")
+	CheckErr(err, "create HTTP trigger")
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
 	return err
@@ -160,7 +160,7 @@ func HtUpdateCli(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	checkErr(err, "get HTTP trigger")
+	CheckErr(err, "get HTTP trigger")
 
 	if len(newFn) > 0 {
 		ht.Spec.FunctionReference.Name = newFn
@@ -175,7 +175,7 @@ func HtUpdateCli(c *cli.Context) error {
 	}
 
 	_, err = client.HTTPTriggerUpdate(ht)
-	checkErr(err, "update HTTP trigger")
+	CheckErr(err, "update HTTP trigger")
 
 	fmt.Printf("trigger '%v' updated\n", htName)
 	return nil
@@ -193,7 +193,7 @@ func HtDeleteCli(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	checkErr(err, "delete trigger")
+	CheckErr(err, "delete trigger")
 
 	fmt.Printf("trigger '%v' deleted\n", htName)
 	return nil
@@ -204,7 +204,7 @@ func HtListCli(c *cli.Context) error {
 	triggerNamespace := c.String("triggerNamespace")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
-	checkErr(err, "list HTTP triggers")
+	CheckErr(err, "list HTTP triggers")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
