@@ -24,11 +24,15 @@ import (
 var (
 	// global Verbosity of our CLI
 	Verbosity int
+	// IsCliRun is only set to true when running from CLI
+	IsCliRun bool
 )
 
 func Fatal(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
-	os.Exit(1)
+	if IsCliRun {
+		os.Exit(1)
+	}
 }
 
 func Warn(msg interface{}) {
