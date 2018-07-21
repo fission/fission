@@ -106,7 +106,7 @@ func MqtCreateCli(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", mqtName)
-		err := specSave(*mqt, specFile)
+		err := SpecSave(*mqt, specFile)
 		CheckErr(err, "create message queue trigger spec")
 		return nil
 	}

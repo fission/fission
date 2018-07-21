@@ -74,7 +74,7 @@ func (w *PackageBuildWatcher) Watch(ctx context.Context) {
 		keepWaiting := false
 		buildpkgs := make([]crd.Package, 0)
 		for _, pkg := range pkgs {
-			_, ok := w.pkgMeta[mapKey(&pkg.Metadata)]
+			_, ok := w.pkgMeta[MapKey(&pkg.Metadata)]
 			if !ok {
 				continue
 			}

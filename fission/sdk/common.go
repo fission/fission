@@ -156,7 +156,7 @@ func CreateArchive(client *client.Client, fileName string, specFile string) (*fi
 			IncludeGlobs: []string{fileName},
 		}
 		// save the uploadspec
-		err := specSave(*aus, specFile)
+		err := SpecSave(*aus, specFile)
 		if err != nil {
 			return &fission.Archive{}, FailedToError(err, fmt.Sprintf("write spec file %v", specFile))
 		}
@@ -259,7 +259,7 @@ func CreatePackage(client *client.Client, pkgNamespace, envName, envNamespace, s
 	}
 
 	if len(specFile) > 0 {
-		err := specSave(*pkg, specFile)
+		err := SpecSave(*pkg, specFile)
 		CheckErr(err, "save package spec")
 		return &pkg.Metadata, nil
 	} else {

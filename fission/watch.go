@@ -83,7 +83,7 @@ func wCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", watchName)
-		err := specSave(*w, specFile)
+		err := sdk.SpecSave(*w, specFile)
 		sdk.CheckErr(err, "create kubernetes watch spec")
 		return nil
 	}

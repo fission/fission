@@ -114,7 +114,7 @@ func envCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("env-%v.yaml", envName)
-		err := specSave(*env, specFile)
+		err := sdk.SpecSave(*env, specFile)
 		sdk.CheckErr(err, "create environment spec")
 		return nil
 	}

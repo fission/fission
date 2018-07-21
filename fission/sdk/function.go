@@ -278,7 +278,7 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 
 	// if we're writing a spec, don't create the function
 	if spec {
-		err = specSave(*function, specFile)
+		err = SpecSave(*function, specFile)
 		if err != nil {
 			return FailedToError(err, "create function spec")
 		}

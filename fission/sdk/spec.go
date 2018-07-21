@@ -18,7 +18,6 @@ package sdk
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -32,8 +31,6 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
-	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
@@ -92,7 +89,7 @@ fission.
 
 type (
 	FissionResources struct {
-		deploymentConfig        DeploymentConfig
+		DeploymentConfig        DeploymentConfig
 		packages                []crd.Package
 		functions               []crd.Function
 		environments            []crd.Environment
@@ -121,17 +118,9 @@ type (
 	}
 )
 
-func getSpecDir(c *cli.Context) string {
-	specDir := c.String("specdir")
-	if len(specDir) == 0 {
-		specDir = "specs"
-	}
-	return specDir
-}
-
 // writeDeploymentConfig serializes the DeploymentConfig to YAML and writes it to a new
 // fission-config.yaml in specDir.
-func writeDeploymentConfig(specDir string, dc *DeploymentConfig) error {
+func WriteDeploymentConfig(specDir string, dc *DeploymentConfig) error {
 	y, err := yaml.Marshal(dc)
 	if err != nil {
 		return err
@@ -148,57 +137,8 @@ func writeDeploymentConfig(specDir string, dc *DeploymentConfig) error {
 	return nil
 }
 
-// specInit just initializes an empty spec directory and adds some
-// sample YAMLs in there that might be useful.
-func SpecInitCli(c *cli.Context) error {
-	// Figure out spec directory
-	specDir := getSpecDir(c)
-
-	name := c.String("name")
-	if len(name) == 0 {
-		// come up with a name using the current dir
-		dir, err := filepath.Abs(".")
-		CheckErr(err, "get current working directory")
-		basename := filepath.Base(dir)
-		name = KubifyName(basename)
-	}
-
-	// Create spec dir
-	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
-	err := os.MkdirAll(specDir, 0755)
-	CheckErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
-
-	// Add a bit of documentation to the spec dir here
-	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)
-	if err != nil {
-		return err
-	}
-
-	// Write the deployment config
-	dc := DeploymentConfig{
-		TypeMeta: TypeMeta{
-			APIVersion: SPEC_API_VERSION,
-			Kind:       "DeploymentConfig",
-		},
-		Name: name,
-
-		// All resources will be annotated with the UID when they're created. This allows
-		// us to be idempotent, as well as to delete resources when their specs are
-		// removed.
-		UID: uuid.NewV4().String(),
-	}
-	err = writeDeploymentConfig(specDir, &dc)
-	CheckErr(err, "write deployment config")
-
-	// Other possible things to do here:
-	// - add example specs to the dir to make it easy to manually
-	//   add new ones
-
-	return nil
-}
-
 // validateFunctionReference checks a function reference
-func (fr *FissionResources) validateFunctionReference(functions map[string]bool, kind string, meta *metav1.ObjectMeta, funcRef fission.FunctionReference) error {
+func (fr *FissionResources) ValidateFunctionReference(functions map[string]bool, kind string, meta *metav1.ObjectMeta, funcRef fission.FunctionReference) error {
 	if funcRef.Type == fission.FunctionReferenceTypeFunctionName {
 		// triggers only reference functions in their own namespace
 		namespace := meta.Namespace
@@ -207,37 +147,20 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 			Namespace: namespace,
 			Name:      name,
 		}
-		if _, ok := functions[mapKey(m)]; !ok {
+		if _, ok := functions[MapKey(m)]; !ok {
 			return fmt.Errorf("%v: %v '%v' references unknown function '%v'",
 				fr.sourceMap.locations[kind][meta.Namespace][meta.Name],
 				kind,
 				meta.Name,
 				name)
 		} else {
-			functions[mapKey(m)] = true
+			functions[MapKey(m)] = true
 		}
 	}
 	return nil
 }
 
-// specValidate parses a set of specs and checks for references to
-// resources that don't exist.
-func SpecValidateCli(c *cli.Context) error {
-	// this will error on parse errors and on duplicates
-	specDir := getSpecDir(c)
-	fr, err := readSpecs(specDir)
-	CheckErr(err, "read specs")
-
-	// this does the rest of the checks, like dangling refs
-	err = fr.validate()
-	if err != nil {
-		fmt.Printf("Error validating specs: %v", err)
-	}
-
-	return nil
-}
-
-func (fr *FissionResources) validate() error {
+func (fr *FissionResources) Validate() error {
 	var result *multierror.Error
 
 	// check references: both dangling refs + garbage
@@ -256,7 +179,7 @@ func (fr *FissionResources) validate() error {
 	// index packages, check outgoing refs, mark archives that are referenced
 	packages := make(map[string]bool)
 	for _, p := range fr.packages {
-		packages[mapKey(&p.Metadata)] = false
+		packages[MapKey(&p.Metadata)] = false
 
 		// check archive refs from package
 		aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
@@ -301,7 +224,7 @@ func (fr *FissionResources) validate() error {
 	// index functions, check function package refs, mark referenced packages
 	functions := make(map[string]bool)
 	for _, f := range fr.functions {
-		functions[mapKey(&f.Metadata)] = false
+		functions[MapKey(&f.Metadata)] = false
 
 		pkgMeta := &metav1.ObjectMeta{
 			Name:      f.Spec.Package.PackageRef.Name,
@@ -310,7 +233,7 @@ func (fr *FissionResources) validate() error {
 
 		// check package ref from function
 		packageRefExists := func() bool {
-			_, ok := packages[mapKey(pkgMeta)]
+			_, ok := packages[MapKey(pkgMeta)]
 			return ok
 		}
 
@@ -334,7 +257,7 @@ func (fr *FissionResources) validate() error {
 				pkgMeta.Namespace,
 				pkgMeta.Name))
 		} else {
-			packages[mapKey(pkgMeta)] = true
+			packages[MapKey(pkgMeta)] = true
 		}
 	}
 
@@ -352,25 +275,25 @@ func (fr *FissionResources) validate() error {
 
 	// check function refs from triggers
 	for _, t := range fr.httpTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.kubernetesWatchTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.timeTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
 	}
 	for _, t := range fr.messageQueueTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
@@ -383,12 +306,12 @@ func (fr *FissionResources) validate() error {
 	return result.ErrorOrNil()
 }
 
-func (loc location) String() string {
+func (loc location) LocString() string {
 	return fmt.Sprintf("%v:%v", loc.path, loc.line)
 }
 
 // Keep track of source location of resources, and track duplicates
-func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMeta, loc *location) error {
+func (fr *FissionResources) TrackSourceMap(kind string, newobj *metav1.ObjectMeta, loc *location) error {
 	if _, exists := fr.sourceMap.locations[kind]; !exists {
 		fr.sourceMap.locations[kind] = make(map[string](map[string]location))
 	}
@@ -410,7 +333,7 @@ func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMet
 
 // parseYaml takes one yaml document, figures out its type, parses it, and puts it in
 // the right list in the given fission resources set.
-func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
+func (fr *FissionResources) ParseYaml(b []byte, loc *location) error {
 	var m *metav1.ObjectMeta
 
 	// Figure out the object type by unmarshaling into the TypeMeta struct; then
@@ -489,7 +412,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		fr.deploymentConfig = v
+		fr.DeploymentConfig = v
 	case "ArchiveUploadSpec":
 		var v ArchiveUploadSpec
 		err = yaml.Unmarshal(b, &v)
@@ -509,7 +432,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 
 	// add to source map, check for duplicates
 	if m != nil {
-		err = fr.trackSourceMap(tm.Kind, m, loc)
+		err = fr.TrackSourceMap(tm.Kind, m, loc)
 		if err != nil {
 			return err
 		}
@@ -520,7 +443,7 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 
 // readSpecs reads all specs in the specified directory and returns a parsed set of
 // fission resources.
-func readSpecs(specDir string) (*FissionResources, error) {
+func ReadSpecs(specDir string) (*FissionResources, error) {
 
 	// make sure spec directory exists before continue
 	if _, err := os.Stat(specDir); os.IsNotExist(err) {
@@ -565,7 +488,7 @@ func readSpecs(specDir string) (*FissionResources, error) {
 			d := []byte(strings.TrimSpace(string(doc)))
 			if len(d) != 0 {
 				// parse this document and add whatever is in it to fr
-				err = fr.parseYaml(d, &location{
+				err = fr.ParseYaml(d, &location{
 					path: path,
 					line: lines,
 				})
@@ -590,12 +513,12 @@ func readSpecs(specDir string) (*FissionResources, error) {
 	return &fr, nil
 }
 
-func ignoreFile(path string) bool {
+func IgnoreFile(path string) bool {
 	return (strings.Contains(path, "/.#") || // editor autosave files
 		strings.HasSuffix(path, "~")) // editor backups, usually
 }
 
-func waitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
+func WaitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
 	// Wait a bit for things to settle down in case a bunch of
 	// files changed; also drain all events that queue up during
 	// the wait interval.
@@ -613,133 +536,25 @@ func waitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
 	}
 }
 
-// specApply compares the specs in the spec/config/ directory to the
-// deployed resources on the cluster, and reconciles the differences
-// by creating, updating or deleting resources on the cluster.
-//
-// specApply is idempotent.
-//
-// specApply is *not* transactional -- if the user hits Ctrl-C, or their laptop dies
-// etc, while doing an apply, they will get a partially applied deployment.  However,
-// they can retry their apply command once they're back online.
-func SpecApplyCli(c *cli.Context) error {
-	fclient := GetClient(c.GlobalString("server"))
-	specDir := getSpecDir(c)
-
-	deleteResources := c.Bool("delete")
-	watchResources := c.Bool("watch")
-	waitForBuild := c.Bool("wait")
-
-	var watcher *fsnotify.Watcher
-	var pbw *PackageBuildWatcher
-
-	if watchResources || waitForBuild {
-		// init package build watcher
-		pbw = MakePackageBuildWatcher(fclient)
-	}
-
-	if watchResources {
-		var err error
-		watcher, err = fsnotify.NewWatcher()
-		CheckErr(err, "create file watcher")
-
-		// add watches
-		rootDir := filepath.Clean(specDir + "/..")
-		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-			CheckErr(err, "scan project files")
-
-			if ignoreFile(path) {
-				return nil
-			}
-			err = watcher.Add(path)
-			CheckErr(err, fmt.Sprintf("watch path %v", path))
-			return nil
-		})
-		CheckErr(err, "scan files to watch")
-	}
-
-	for {
-		// read all specs
-		fr, err := readSpecs(specDir)
-		CheckErr(err, "read specs")
-
-		// validate
-		err = fr.validate()
-		CheckErr(err, "validate specs")
-
-		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(fclient, specDir, fr, deleteResources)
-		CheckErr(err, "apply specs")
-		printApplyStatus(as)
-
-		if watchResources || waitForBuild {
-			// watch package builds
-			pbw.AddPackages(pkgMetas)
-		}
-
-		ctx, pkgWatchCancel := context.WithCancel(context.Background())
-
-		if watchResources {
-			// if we're watching for files, we don't need to wait for builds to complete
-			go pbw.Watch(ctx)
-		} else if waitForBuild {
-			// synchronously wait for build if --wait was specified
-			pbw.Watch(ctx)
-		}
-
-		if !watchResources {
-			pkgWatchCancel()
-			break
-		}
-
-		// listen for file watch events
-		fmt.Println("Watching files for changes...")
-
-	waitloop:
-		for {
-			select {
-			case e := <-watcher.Events:
-				if ignoreFile(e.Name) {
-					continue waitloop
-				}
-
-				fmt.Printf("Noticed a file change, reapplying specs...\n")
-
-				// Builds that finish after this cancellation will be
-				// printed in the next watchPackageBuildStatus call.
-				pkgWatchCancel()
-
-				err = waitForFileWatcherToSettleDown(watcher)
-				CheckErr(err, "watching files")
-
-				break waitloop
-			case err := <-watcher.Errors:
-				CheckErr(err, "watching files")
-			}
-		}
-	}
-	return nil
-}
-
 // printApplyStatus prints a summary of what changed on the cluster as the result of a spec apply
 // operation.
-func printApplyStatus(applyStatus map[string]resourceApplyStatus) {
+func PrintApplyStatus(applyStatus map[string]resourceApplyStatus) {
 	changed := false
 	for typ, ras := range applyStatus {
 		n := len(ras.created)
 		if n > 0 {
 			changed = true
-			fmt.Printf("%v %v created: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.created), ", "))
+			fmt.Printf("%v %v created: %v\n", n, Pluralize(n, typ), strings.Join(MetadataNames(ras.created), ", "))
 		}
 		n = len(ras.updated)
 		if n > 0 {
 			changed = true
-			fmt.Printf("%v %v updated: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.updated), ", "))
+			fmt.Printf("%v %v updated: %v\n", n, Pluralize(n, typ), strings.Join(MetadataNames(ras.updated), ", "))
 		}
 		n = len(ras.deleted)
 		if n > 0 {
 			changed = true
-			fmt.Printf("%v %v deleted: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.deleted), ", "))
+			fmt.Printf("%v %v deleted: %v\n", n, Pluralize(n, typ), strings.Join(MetadataNames(ras.deleted), ", "))
 		}
 	}
 
@@ -749,7 +564,7 @@ func printApplyStatus(applyStatus map[string]resourceApplyStatus) {
 }
 
 // metadataNames extracts a slice of names from a slice of object metadata.
-func metadataNames(ms []*metav1.ObjectMeta) []string {
+func MetadataNames(ms []*metav1.ObjectMeta) []string {
 	s := make([]string, len(ms))
 	for i, m := range ms {
 		s[i] = m.Name
@@ -758,37 +573,15 @@ func metadataNames(ms []*metav1.ObjectMeta) []string {
 }
 
 // pluralize returns the plural of word if num is zero or more than one.
-func pluralize(num int, word string) string {
+func Pluralize(num int, word string) string {
 	if num == 1 {
 		return word
 	}
 	return word + "s"
 }
 
-// specDestroy destroys everything in the spec.
-func SpecDestroyCli(c *cli.Context) error {
-	fclient := GetClient(c.GlobalString("server"))
-
-	// get specdir
-	specDir := getSpecDir(c)
-
-	// read everything
-	fr, err := readSpecs(specDir)
-	CheckErr(err, "read specs")
-
-	// set desired state to nothing, but keep the UID so "apply" can find it
-	emptyFr := FissionResources{}
-	emptyFr.deploymentConfig = fr.deploymentConfig
-
-	// "apply" the empty state
-	_, _, err = applyResources(fclient, specDir, &emptyFr, true)
-	CheckErr(err, "delete resources")
-
-	return nil
-}
-
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-func applyArchives(fclient *client.Client, specDir string, fr *FissionResources) error {
+func ApplyArchives(fclient *client.Client, specDir string, fr *FissionResources) error {
 
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fission.Archive)
@@ -798,7 +591,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 
 	// create archives locally and calculate checksums
 	for _, aus := range fr.archiveUploadSpecs {
-		ar, err := localArchiveFromSpec(specDir, &aus)
+		ar, err := LocalArchiveFromSpec(specDir, &aus)
 		if err != nil {
 			return err
 		}
@@ -860,23 +653,23 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]resourceApplyStatus, error) {
+func ApplyResources(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]resourceApplyStatus, error) {
 
 	applyStatus := make(map[string]resourceApplyStatus)
 
 	// upload archives that need to be uploaded. Changes archive references in fr.packages.
-	err := applyArchives(fclient, specDir, fr)
+	err := ApplyArchives(fclient, specDir, fr)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	_, ras, err := applyEnvironments(fclient, fr, delete)
+	_, ras, err := ApplyEnvironments(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "environment apply failed")
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(fclient, fr, delete)
+	pkgMeta, ras, err := ApplyPackages(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "package apply failed")
 	}
@@ -886,7 +679,7 @@ func applyResources(fclient *client.Client, specDir string, fr *FissionResources
 	// of the package. This ensures that various caches can invalidate themselves
 	// when the package changes.
 	for i, f := range fr.functions {
-		k := mapKey(&metav1.ObjectMeta{
+		k := MapKey(&metav1.ObjectMeta{
 			Namespace: f.Spec.Package.PackageRef.Namespace,
 			Name:      f.Spec.Package.PackageRef.Name,
 		})
@@ -902,31 +695,31 @@ func applyResources(fclient *client.Client, specDir string, fr *FissionResources
 		fr.functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
 
-	_, ras, err = applyFunctions(fclient, fr, delete)
+	_, ras, err = ApplyFunctions(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "function apply failed")
 	}
 	applyStatus["function"] = *ras
 
-	_, ras, err = applyHTTPTriggers(fclient, fr, delete)
+	_, ras, err = ApplyHTTPTriggers(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "HTTPTrigger apply failed")
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
-	_, ras, err = applyKubernetesWatchTriggers(fclient, fr, delete)
+	_, ras, err = ApplyKubernetesWatchTriggers(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "KubernetesWatchTrigger apply failed")
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
-	_, ras, err = applyTimeTriggers(fclient, fr, delete)
+	_, ras, err = ApplyTimeTriggers(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "TimeTrigger apply failed")
 	}
 	applyStatus["TimeTrigger"] = *ras
 
-	_, ras, err = applyMessageQueueTriggers(fclient, fr, delete)
+	_, ras, err = ApplyMessageQueueTriggers(fclient, fr, delete)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "MessageQueueTrigger apply failed")
 	}
@@ -937,7 +730,7 @@ func applyResources(fclient *client.Client, specDir string, fr *FissionResources
 
 // localArchiveFromSpec creates an archive on the local filesystem from the given spec,
 // and returns its path and checksum.
-func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Archive, error) {
+func LocalArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Archive, error) {
 	// get root dir
 	var rootDir string
 	if len(aus.RootDir) == 0 {
@@ -1013,36 +806,30 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	}
 }
 
-// specHelm creates a helm chart from a spec directory and a
-// deployment config.
-func SpecHelmCli(c *cli.Context) error {
-	return nil
-}
-
-func mapKey(m *metav1.ObjectMeta) string {
+func MapKey(m *metav1.ObjectMeta) string {
 	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
 }
 
-func applyDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) {
+func ApplyDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) {
 	if m.Annotations == nil {
 		m.Annotations = make(map[string]string)
 	}
-	m.Annotations[FISSION_DEPLOYMENT_NAME_KEY] = fr.deploymentConfig.Name
-	m.Annotations[FISSION_DEPLOYMENT_UID_KEY] = fr.deploymentConfig.UID
+	m.Annotations[FISSION_DEPLOYMENT_NAME_KEY] = fr.DeploymentConfig.Name
+	m.Annotations[FISSION_DEPLOYMENT_UID_KEY] = fr.DeploymentConfig.UID
 }
 
-func hasDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) bool {
+func HasDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) bool {
 	if m.Annotations == nil {
 		return false
 	}
 	uid, ok := m.Annotations[FISSION_DEPLOYMENT_UID_KEY]
-	if ok && uid == fr.deploymentConfig.UID {
+	if ok && uid == fr.DeploymentConfig.UID {
 		return true
 	}
 	return false
 }
 
-func waitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package, error) {
+func WaitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package, error) {
 	start := time.Now()
 	for {
 		if pkg.Status.BuildStatus != fission.BuildStatusRunning {
@@ -1063,7 +850,7 @@ func waitForPackageBuild(fclient *client.Client, pkg *crd.Package) (*crd.Package
 	}
 }
 
-func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyPackages(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.PackageList(metav1.NamespaceAll)
 	if err != nil {
@@ -1073,7 +860,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	// filter
 	objs := make([]crd.Package, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1081,7 +868,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	// index
 	existent := make(map[string]crd.Package)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1093,13 +880,13 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	// create or update desired state
 	for _, o := range fr.packages {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			keep := false
@@ -1115,7 +902,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 
 			if keep {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1123,7 +910,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
 				// wait for the package to have a non-running build status.
-				pkg, err := waitForPackageBuild(fclient, &o)
+				pkg, err := WaitForPackageBuild(fclient, &o)
 				if err != nil {
 					// log and ignore
 					fmt.Printf("Error waiting for package '%v' build, ignoring\n", o.Metadata.Name)
@@ -1136,7 +923,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1145,7 +932,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1153,7 +940,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.PackageDelete(&o.Metadata)
 				if err != nil {
@@ -1168,7 +955,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	return metadataMap, &ras, nil
 }
 
-func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.FunctionList(metav1.NamespaceAll)
 	if err != nil {
@@ -1178,7 +965,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	// filter
 	objs := make([]crd.Function, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1186,7 +973,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	// index
 	existent := make(map[string]crd.Function)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1198,18 +985,18 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	// create or update desired state
 	for _, o := range fr.functions {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1219,7 +1006,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1228,7 +1015,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1236,7 +1023,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.FunctionDelete(&o.Metadata)
 				if err != nil {
@@ -1251,7 +1038,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	return metadataMap, &ras, nil
 }
 
-func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyEnvironments(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.EnvironmentList(metav1.NamespaceAll)
 	if err != nil {
@@ -1261,7 +1048,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	// filter
 	objs := make([]crd.Environment, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1269,7 +1056,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	// index
 	existent := make(map[string]crd.Environment)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1281,18 +1068,18 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	// create or update desired state
 	for _, o := range fr.environments {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1302,7 +1089,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1311,7 +1098,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1319,7 +1106,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.EnvironmentDelete(&o.Metadata)
 				if err != nil {
@@ -1334,7 +1121,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.HTTPTriggerList(metav1.NamespaceAll)
 	if err != nil {
@@ -1344,7 +1131,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// filter
 	objs := make([]crd.HTTPTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1352,7 +1139,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// index
 	existent := make(map[string]crd.HTTPTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1364,18 +1151,18 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// create or update desired state
 	for _, o := range fr.httpTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1385,7 +1172,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1394,7 +1181,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1402,7 +1189,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.HTTPTriggerDelete(&o.Metadata)
 				if err != nil {
@@ -1417,7 +1204,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.WatchList(metav1.NamespaceAll)
 	if err != nil {
@@ -1427,7 +1214,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	// filter
 	objs := make([]crd.KubernetesWatchTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1435,7 +1222,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	// index
 	existent := make(map[string]crd.KubernetesWatchTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1447,18 +1234,18 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	// create or update desired state
 	for _, o := range fr.kubernetesWatchTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1468,7 +1255,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1477,7 +1264,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1485,7 +1272,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.WatchDelete(&o.Metadata)
 				if err != nil {
@@ -1500,7 +1287,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	return metadataMap, &ras, nil
 }
 
-func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.TimeTriggerList(metav1.NamespaceAll)
 	if err != nil {
@@ -1510,7 +1297,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// filter
 	objs := make([]crd.TimeTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1518,7 +1305,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// index
 	existent := make(map[string]crd.TimeTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1530,18 +1317,18 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	// create or update desired state
 	for _, o := range fr.timeTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1551,7 +1338,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1560,7 +1347,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1568,7 +1355,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.TimeTriggerDelete(&o.Metadata)
 				if err != nil {
@@ -1583,7 +1370,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
+func ApplyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *resourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.MessageQueueTriggerList("", metav1.NamespaceAll)
 	if err != nil {
@@ -1593,7 +1380,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 	// filter
 	objs := make([]crd.MessageQueueTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if HasDeploymentConfig(&o.Metadata, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1601,7 +1388,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 	// index
 	existent := make(map[string]crd.MessageQueueTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[MapKey(&obj.Metadata)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1613,18 +1400,18 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 	// create or update desired state
 	for _, o := range fr.messageQueueTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		ApplyDeploymentConfig(&o.Metadata, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[MapKey(&o.Metadata)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[MapKey(&o.Metadata)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[MapKey(&o.Metadata)] = existingObj.Metadata
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
@@ -1634,7 +1421,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 				}
 				ras.updated = append(ras.updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[MapKey(&o.Metadata)] = *newmeta
 			}
 		} else {
 			// create
@@ -1643,7 +1430,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 				return nil, nil, err
 			}
 			ras.created = append(ras.created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[MapKey(&o.Metadata)] = *newmeta
 		}
 	}
 
@@ -1651,7 +1438,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[MapKey(&o.Metadata)]
 			if !wanted {
 				err := fclient.MessageQueueTriggerDelete(&o.Metadata)
 				if err != nil {
@@ -1667,7 +1454,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 }
 
 // called from `fission * create --spec`
-func specSave(resource interface{}, specFile string) error {
+func SpecSave(resource interface{}, specFile string) error {
 	specDir := "specs"
 
 	// verify
