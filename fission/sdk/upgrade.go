@@ -1,4 +1,4 @@
-package client
+package sdk
 
 import (
 	"encoding/base64"
