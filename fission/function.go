@@ -28,14 +28,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/logdb"
 	"github.com/fission/fission/fission/portforward"
@@ -121,204 +118,69 @@ func getTargetCPU(c *cli.Context) int {
 
 // From this change onwards, we mandate that a function should reference a secret, config map and package in its own ns
 func fnCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
-
-	fnNamespace := c.String("fnNamespace")
-	envNamespace := c.String("envNamespace")
 
 	fnName := c.String("name")
-	if len(fnName) == 0 {
-		log.Fatal("Need --name argument.")
-	}
-
-	// user wants a spec, create a yaml file with package and function
 	spec := false
-	specFile := ""
 	if c.Bool("spec") {
 		spec = true
-		specFile = fmt.Sprintf("function-%v.yaml", fnName)
-	}
-
-	// check for unique function names within a namespace
-	fnList, err := client.FunctionList(fnNamespace)
-	sdk.CheckErr(err, "get function list")
-	// check function existence before creating package
-	for _, fn := range fnList {
-		if fn.Metadata.Name == fnName {
-			log.Fatal("A function with the same name already exists.")
-		}
 	}
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
-
-	var pkgMetadata *metav1.ObjectMeta
-	var envName string
-
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
-
-	if len(pkgName) > 0 {
-		// use existing package
-		pkg, err := client.PackageGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      pkgName,
-		})
-		sdk.CheckErr(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
-		pkgMetadata = &pkg.Metadata
-		envName = pkg.Spec.Environment.Name
-		envNamespace = pkg.Spec.Environment.Namespace
-	} else {
-		// need to specify environment for creating new package
-		envName = c.String("env")
-		if len(envName) == 0 {
-			log.Fatal("Need --env argument.")
-		}
-
-		// examine existence of given environment
-		_, err := client.EnvironmentGet(&metav1.ObjectMeta{
-			Namespace: envNamespace,
-			Name:      envName,
-		})
-		if err != nil {
-			if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
-				fmt.Printf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace)
-			} else {
-				sdk.CheckErr(err, "retrieve environment information")
-			}
-		}
-
-		srcArchiveName := c.String("src")
-		deployArchiveName := c.String("code")
-		if len(deployArchiveName) == 0 {
-			deployArchiveName = c.String("deploy")
-		}
-		// fatal when both src & deploy archive are empty
-		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-			log.Fatal("Need --deploy or --src argument.")
-		}
-
-		buildcmd := c.String("buildcmd")
-
-		// create new package in the same namespace as the function.
-		pkgMetadata, err = sdk.CreatePackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, specFile)
-		//ABTODO
+	envName := c.String("env")
+	srcArchiveName := c.String("src")
+	deployArchiveName := c.String("code")
+	if len(deployArchiveName) == 0 {
+		deployArchiveName = c.String("deploy")
 	}
-
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
-	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
-	if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
-		invokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr {
-		log.Warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
-	}
-
-	var secrets []fission.SecretReference
-	var cfgmaps []fission.ConfigMapReference
-
-	if len(secretName) > 0 {
-		// check the referenced secret is in the same ns as the function, if not give a warning.
-		_, err := client.SecretGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      secretName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
-		}
-
-		newSecret := fission.SecretReference{
-			Name:      secretName,
-			Namespace: fnNamespace,
-		}
-		secrets = []fission.SecretReference{newSecret}
-	}
-
-	if len(cfgMapName) > 0 {
-		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		_, err := client.ConfigMapGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      cfgMapName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
-		}
-
-		newCfgMap := fission.ConfigMapReference{
-			Name:      cfgMapName,
-			Namespace: fnNamespace,
-		}
-		cfgmaps = []fission.ConfigMapReference{newCfgMap}
-	}
-
-	function := &crd.Function{
-		Metadata: metav1.ObjectMeta{
-			Name:      fnName,
-			Namespace: fnNamespace,
-		},
-		Spec: fission.FunctionSpec{
-			Environment: fission.EnvironmentReference{
-				Name:      envName,
-				Namespace: envNamespace,
-			},
-			Package: fission.FunctionPackageRef{
-				FunctionName: entrypoint,
-				PackageRef: fission.PackageRef{
-					Namespace:       pkgMetadata.Namespace,
-					Name:            pkgMetadata.Name,
-					ResourceVersion: pkgMetadata.ResourceVersion,
-				},
-			},
-			Secrets:        secrets,
-			ConfigMaps:     cfgmaps,
-			Resources:      resourceReq,
-			InvokeStrategy: invokeStrategy,
-		},
-	}
-
-	// if we're writing a spec, don't create the function
-	if spec {
-		err = specSave(*function, specFile)
-		sdk.CheckErr(err, "create function spec")
-		return nil
-
-	}
-
-	_, err = client.FunctionCreate(function)
-	sdk.CheckErr(err, "create function")
-
-	fmt.Printf("function '%v' created\n", fnName)
-
-	// Allow the user to specify an HTTP trigger while creating a function.
-	triggerUrl := c.String("url")
-	if len(triggerUrl) == 0 {
-		return nil
-	}
-	if !strings.HasPrefix(triggerUrl, "/") {
-		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
-	}
-
+	buildcmd := c.String("buildcmd")
+	minscale := c.Int("minscale")
+	maxscale := c.Int("maxscale")
+	executortype := c.String("executortype")
+	mincpu := c.Int("mincpu")
+	maxcpu := c.Int("maxcpu")
+	minmemory := c.Int("minmemory")
+	maxmemory := c.Int("maxmemory")
+	targetCPU := c.Int("targetcpu")
+	triggerURL := c.String("url")
 	method := c.String("method")
-	if len(method) == 0 {
-		method = "GET"
-	}
-	triggerName := uuid.NewV4().String()
-	ht := &crd.HTTPTrigger{
-		Metadata: metav1.ObjectMeta{
-			Name:      triggerName,
-			Namespace: fnNamespace,
-		},
-		Spec: fission.HTTPTriggerSpec{
-			RelativeURL: triggerUrl,
-			Method:      getMethod(method),
-			FunctionReference: fission.FunctionReference{
-				Type: fission.FunctionReferenceTypeFunctionName,
-				Name: fnName,
-			},
-		},
-	}
-	_, err = client.HTTPTriggerCreate(ht)
-	sdk.CheckErr(err, "create HTTP trigger")
-	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, fnName)
+	client := sdk.GetClient(c.GlobalString("server"))
+	fnNamespace := c.String("fnNamespace")
+	envNamespace := c.String("envNamespace")
 
+	createFunctionArg := &sdk.CreateFunctionArg{
+		FnName:            fnName,
+		Spec:              spec,
+		EntryPoint:        entrypoint,
+		PkgName:           pkgName,
+		SecretName:        secretName,
+		CfgMapName:        cfgMapName,
+		EnvName:           envName,
+		SrcArchiveName:    srcArchiveName,
+		DeployArchiveName: deployArchiveName,
+		BuildCommand:      buildcmd,
+		TriggerURL:        triggerURL,
+		Method:            method,
+		MinScale:          minscale,
+		MaxScale:          maxscale,
+		ExecutorType:      executortype,
+		MinCPU:            mincpu,
+		MaxCPU:            maxcpu,
+		MinMemory:         minmemory,
+		MaxMemory:         maxmemory,
+		TargetCPU:         targetCPU,
+		Client:            client,
+		FnNamespace:       fnNamespace,
+		EnvNamespace:      envNamespace,
+	}
+
+	err := sdk.CreateFunction(createFunctionArg)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("%v", err))
+	}
 	return err
+
 }
 
 func fnGet(c *cli.Context) error {
