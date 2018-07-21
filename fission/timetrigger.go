@@ -18,45 +18,17 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
-	"time"
-
-	"github.com/robfig/cron"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"text/tabwriter"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
-
-func getAPITimeInfo(client *client.Client) time.Time {
-	serverInfo, err := client.ServerInfo()
-	if err != nil {
-		log.Fatal(fmt.Sprintf("Error syncing server time information: %v", err))
-	}
-	return serverInfo.ServerTime.CurrentTime
-}
-
-func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int) error {
-	sched, err := cron.Parse(cronSpec)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Current Server Time: \t%v\n", serverTime.Format(time.RFC3339))
-
-	for i := 0; i < round; i++ {
-		serverTime = sched.Next(serverTime)
-		fmt.Printf("Next %v invocation: \t%v\n", i+1, serverTime.Format(time.RFC3339))
-	}
-
-	return nil
-}
 
 func ttCreate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
@@ -104,7 +76,7 @@ func ttCreate(c *cli.Context) error {
 
 	fmt.Printf("trigger '%v' created\n", name)
 
-	err = getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), 1)
+	err = sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), 1)
 	sdk.CheckErr(err, "pass cron spec examination")
 
 	return err
@@ -153,7 +125,7 @@ func ttUpdate(c *cli.Context) error {
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
 
-	err = getCronNextNActivationTime(newCron, getAPITimeInfo(client), 1)
+	err = sdk.GetCronNextNActivationTime(newCron, sdk.GetAPITimeInfo(client), 1)
 	sdk.CheckErr(err, "pass cron spec examination")
 
 	return nil
@@ -205,7 +177,7 @@ func ttTest(c *cli.Context) error {
 		log.Fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	err := getCronNextNActivationTime(cronSpec, getAPITimeInfo(client), round)
+	err := sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), round)
 	sdk.CheckErr(err, "pass cron spec examination")
 
 	return nil
