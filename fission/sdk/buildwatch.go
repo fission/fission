@@ -30,7 +30,7 @@ import (
 
 type (
 	// packageBuildWatcher is used to watch a set of in-progress builds.
-	packageBuildWatcher struct {
+	PackageBuildWatcher struct {
 		// fission client
 		fclient *client.Client
 
@@ -42,21 +42,21 @@ type (
 	}
 )
 
-func makePackageBuildWatcher(fclient *client.Client) *packageBuildWatcher {
-	return &packageBuildWatcher{
+func makePackageBuildWatcher(fclient *client.Client) *PackageBuildWatcher {
+	return &PackageBuildWatcher{
 		fclient:  fclient,
 		finished: make(map[string]bool),
 		pkgMeta:  make(map[string]metav1.ObjectMeta),
 	}
 }
 
-func (w *packageBuildWatcher) addPackages(pkgMeta map[string]metav1.ObjectMeta) {
+func (w *PackageBuildWatcher) addPackages(pkgMeta map[string]metav1.ObjectMeta) {
 	for k, v := range pkgMeta {
 		w.pkgMeta[k] = v
 	}
 }
 
-func (w *packageBuildWatcher) watch(ctx context.Context) {
+func (w *PackageBuildWatcher) watch(ctx context.Context) {
 	for {
 		// non-blocking check if we're cancelled
 		select {

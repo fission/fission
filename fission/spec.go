@@ -40,6 +40,7 @@ import (
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
+	"github.com/fission/fission/fission/sdk"
 )
 
 const SPEC_API_VERSION = "fission.io/v1"
@@ -631,7 +632,7 @@ func specApply(c *cli.Context) error {
 	waitForBuild := c.Bool("wait")
 
 	var watcher *fsnotify.Watcher
-	var pbw *packageBuildWatcher
+	var pbw *sdk.PackageBuildWatcher
 
 	if watchResources || waitForBuild {
 		// init package build watcher

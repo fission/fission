@@ -631,7 +631,7 @@ func SpecApplyCli(c *cli.Context) error {
 	waitForBuild := c.Bool("wait")
 
 	var watcher *fsnotify.Watcher
-	var pbw *packageBuildWatcher
+	var pbw *PackageBuildWatcher
 
 	if watchResources || waitForBuild {
 		// init package build watcher
