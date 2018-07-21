@@ -67,55 +67,6 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) fission.InvokeStrategy {
-
-	if maxScale == 0 {
-		maxScale = 1
-	}
-
-	if minScale > maxScale {
-		log.Fatal("Maxscale must be higher than or equal to minscale")
-	}
-
-	var fnExecutor fission.ExecutorType
-	switch executorType {
-	case "":
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypePoolmgr:
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypeNewdeploy:
-		fnExecutor = fission.ExecutorTypeNewdeploy
-	default:
-		log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
-	}
-
-	// Right now a simple single case strategy implementation
-	// This will potentially get more sophisticated once we have more strategies in place
-	strategy := fission.InvokeStrategy{
-		StrategyType: fission.StrategyTypeExecution,
-		ExecutionStrategy: fission.ExecutionStrategy{
-			ExecutorType:     fnExecutor,
-			MinScale:         minScale,
-			MaxScale:         maxScale,
-			TargetCPUPercent: targetcpu,
-		},
-	}
-	return strategy
-}
-
-func getTargetCPU(c *cli.Context) int {
-	var targetCPU int
-	if c.IsSet("targetcpu") {
-		targetCPU = c.Int("targetcpu")
-		if targetCPU <= 0 || targetCPU > 100 {
-			log.Fatal("TargetCPU must be a value between 1 - 100")
-		}
-	} else {
-		targetCPU = 80
-	}
-	return targetCPU
-}
-
 // From this change onwards, we mandate that a function should reference a secret, config map and package in its own ns
 func fnCreate(c *cli.Context) error {
 
@@ -374,7 +325,8 @@ func fnUpdate(c *cli.Context) error {
 	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
 
 	if c.IsSet("targetcpu") {
-		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = getTargetCPU(c)
+
+		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = sdk.GetTargetCPU(c.Int("targetcpu"))
 	}
 
 	if c.IsSet("minscale") {
