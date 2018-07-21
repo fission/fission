@@ -1,0 +1,327 @@
+/*
+Copyright 2016 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package client
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"text/tabwriter"
+
+	"github.com/urfave/cli"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
+)
+
+func GetFunctionsByEnvironmentCli(client *client.Client, envName, envNamespace string) ([]crd.Function, error) {
+	fnList, err := client.FunctionList(metav1.NamespaceAll)
+	if err != nil {
+		return nil, err
+	}
+	fns := []crd.Function{}
+	for _, fn := range fnList {
+		if fn.Spec.Environment.Name == envName && fn.Spec.Environment.Namespace == envNamespace {
+			fns = append(fns, fn)
+		}
+	}
+	return fns, nil
+}
+
+func EnvCreateCli(c *cli.Context) error {
+	client := GetClient(c.GlobalString("server"))
+
+	envName := c.String("name")
+	if len(envName) == 0 {
+		log.Fatal("Need a name, use --name.")
+	}
+	envNamespace := c.String("envNamespace")
+
+	envList, err := client.EnvironmentList(envNamespace)
+	if err == nil && len(envList) > 0 {
+		log.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
+			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
+			len(envList), envNamespace)
+	}
+
+	var poolsize int
+	if c.IsSet("poolsize") {
+		poolsize = c.Int("poolsize")
+	} else {
+		poolsize = 3
+	}
+
+	envImg := c.String("image")
+	if len(envImg) == 0 {
+		log.Fatal("Need an image, use --image.")
+	}
+
+	envVersion := c.Int("version")
+	envBuilderImg := c.String("builder")
+	envBuildCmd := c.String("buildcmd")
+	envExternalNetwork := c.Bool("externalnetwork")
+	envGracePeriod := c.Int64("period")
+	if envGracePeriod <= 0 {
+		envGracePeriod = 360
+	}
+
+	if len(envBuilderImg) > 0 {
+		if !c.IsSet("version") {
+			envVersion = 2
+		}
+		if len(envBuildCmd) == 0 {
+			envBuildCmd = "build"
+		}
+	}
+
+	keepArchive := c.Bool("keeparchive")
+
+	// Environment API interface version is not specified and
+	// builder image is empty, set default interface version
+	if envVersion == 0 {
+		envVersion = 1
+	}
+
+	//resourceReq := getResourceReq(c, v1.ResourceRequirements{})
+	mincpu := c.Int("mincpu")
+	maxcpu := c.Int("maxcpu")
+	minmemory := c.Int("minmemory")
+	maxmemory := c.Int("maxmemory")
+	resourceReq := getResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
+
+	env := &crd.Environment{
+		Metadata: metav1.ObjectMeta{
+			Name:      envName,
+			Namespace: envNamespace,
+		},
+		Spec: fission.EnvironmentSpec{
+			Version: envVersion,
+			Runtime: fission.Runtime{
+				Image: envImg,
+			},
+			Builder: fission.Builder{
+				Image:   envBuilderImg,
+				Command: envBuildCmd,
+			},
+			Poolsize:                     poolsize,
+			Resources:                    resourceReq,
+			AllowAccessToExternalNetwork: envExternalNetwork,
+			TerminationGracePeriod:       envGracePeriod,
+			KeepArchive:                  keepArchive,
+		},
+	}
+
+	// if we're writing a spec, don't call the API
+	if c.Bool("spec") {
+		specFile := fmt.Sprintf("env-%v.yaml", envName)
+		err := specSave(*env, specFile)
+		checkErr(err, "create environment spec")
+		return nil
+	}
+
+	_, err = client.EnvironmentCreate(env)
+	checkErr(err, "create environment")
+
+	fmt.Printf("environment '%v' created\n", envName)
+	return err
+}
+
+func EnvGetCli(c *cli.Context) error {
+	client := GetClient(c.GlobalString("server"))
+
+	envName := c.String("name")
+	if len(envName) == 0 {
+		log.Fatal("Need a name, use --name.")
+	}
+	envNamespace := c.String("envNamespace")
+
+	m := &metav1.ObjectMeta{
+		Name:      envName,
+		Namespace: envNamespace,
+	}
+	env, err := client.EnvironmentGet(m)
+	checkErr(err, "get environment")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
+	fmt.Fprintf(w, "%v\t%v\t%v\n",
+		env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image)
+	w.Flush()
+	return nil
+}
+
+func EnvUpdateCli(c *cli.Context) error {
+	client := GetClient(c.GlobalString("server"))
+
+	envName := c.String("name")
+	if len(envName) == 0 {
+		log.Fatal("Need a name, use --name.")
+	}
+	envNamespace := c.String("envNamespace")
+
+	envImg := c.String("image")
+	envBuilderImg := c.String("builder")
+	envBuildCmd := c.String("buildcmd")
+	envExternalNetwork := c.Bool("externalnetwork")
+
+	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
+		log.Fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
+	}
+
+	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
+		Name:      envName,
+		Namespace: envNamespace,
+	})
+	checkErr(err, "find environment")
+
+	if len(envImg) > 0 {
+		env.Spec.Runtime.Image = envImg
+	}
+
+	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
+		log.Fatal("Version 1 Environments do not support builders. Must specify --version=2.")
+	}
+
+	if len(envBuilderImg) > 0 {
+		env.Spec.Builder.Image = envBuilderImg
+	}
+	if len(envBuildCmd) > 0 {
+		env.Spec.Builder.Command = envBuildCmd
+	}
+
+	if c.IsSet("poolsize") {
+		env.Spec.Poolsize = c.Int("poolsize")
+	}
+
+	if c.IsSet("period") {
+		env.Spec.TerminationGracePeriod = c.Int64("period")
+	}
+
+	if c.IsSet("keeparchive") {
+		env.Spec.KeepArchive = c.Bool("keeparchive")
+	}
+
+	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
+
+	_, err = client.EnvironmentUpdate(env)
+	checkErr(err, "update environment")
+
+	fmt.Printf("environment '%v' updated\n", envName)
+	return nil
+}
+
+func EnvDeleteCli(c *cli.Context) error {
+	client := GetClient(c.GlobalString("server"))
+
+	envName := c.String("name")
+	if len(envName) == 0 {
+		log.Fatal("Need a name , use --name.")
+	}
+	envNamespace := c.String("envNamespace")
+
+	m := &metav1.ObjectMeta{
+		Name:      envName,
+		Namespace: envNamespace,
+	}
+	err := client.EnvironmentDelete(m)
+	checkErr(err, "delete environment")
+
+	fmt.Printf("environment '%v' deleted\n", envName)
+	return nil
+}
+
+func EnvListCli(c *cli.Context) error {
+	client := GetClient(c.GlobalString("server"))
+	envNamespace := c.String("envNamespace")
+
+	envs, err := client.EnvironmentList(envNamespace)
+	checkErr(err, "list environments")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
+	for _, env := range envs {
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image, env.Spec.Poolsize,
+			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
+			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
+			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
+	}
+	w.Flush()
+
+	return nil
+}
+
+func getResourceReq(mincpu int, maxcpu int, minmemory int, maxmemory int, resources v1.ResourceRequirements) v1.ResourceRequirements {
+
+	var requestResources map[v1.ResourceName]resource.Quantity
+
+	if len(resources.Requests) == 0 {
+		requestResources = make(map[v1.ResourceName]resource.Quantity)
+	} else {
+		requestResources = resources.Requests
+	}
+
+	if mincpu != 0 {
+		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
+		if err != nil {
+			log.Fatal("Failed to parse mincpu")
+		}
+		requestResources[v1.ResourceCPU] = cpuRequest
+	}
+
+	if minmemory != 0 {
+		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmemory) + "Mi")
+		if err != nil {
+			log.Fatal("Failed to parse minmemory")
+		}
+		requestResources[v1.ResourceMemory] = memRequest
+	}
+
+	var limitResources map[v1.ResourceName]resource.Quantity
+	if len(resources.Limits) == 0 {
+		limitResources = make(map[v1.ResourceName]resource.Quantity)
+	} else {
+		limitResources = resources.Limits
+	}
+
+	if maxcpu != 0 {
+		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
+		if err != nil {
+			log.Fatal("Failed to parse maxcpu")
+		}
+		limitResources[v1.ResourceCPU] = cpuLimit
+	}
+
+	if maxmemory != 0 {
+		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmemory) + "Mi")
+		if err != nil {
+			log.Fatal("Failed to parse maxmemory")
+		}
+		limitResources[v1.ResourceMemory] = memLimit
+	}
+
+	resources = v1.ResourceRequirements{
+		Requests: requestResources,
+		Limits:   limitResources,
+	}
+	return resources
+}
