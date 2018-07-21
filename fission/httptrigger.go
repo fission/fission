@@ -18,7 +18,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -29,48 +28,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 )
-
-// returns one of http.Method*
-func getMethod(method string) string {
-	switch strings.ToUpper(method) {
-	case "GET":
-		return http.MethodGet
-	case "HEAD":
-		return http.MethodHead
-	case "POST":
-		return http.MethodPost
-	case "PUT":
-		return http.MethodPut
-	case "PATCH":
-		return http.MethodPatch
-	case "DELETE":
-		return http.MethodDelete
-	case "CONNECT":
-		return http.MethodConnect
-	case "OPTIONS":
-		return http.MethodOptions
-	case "TRACE":
-		return http.MethodTrace
-	}
-	log.Fatal(fmt.Sprintf("Invalid HTTP Method %v", method))
-	return ""
-}
-
-func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNamespace string) {
-	meta := &metav1.ObjectMeta{
-		Name:      fnName,
-		Namespace: fnNamespace,
-	}
-
-	_, err := fissionClient.FunctionGet(meta)
-	if err != nil {
-		fmt.Printf("function '%v' does not exist, use 'fission function create --name %v ...' to create the function\n", fnName, fnName)
-	}
-}
 
 func htCreate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
@@ -94,7 +54,7 @@ func htCreate(c *cli.Context) error {
 		method = "GET"
 	}
 
-	checkFunctionExistence(client, fnName, fnNamespace)
+	sdk.CheckFunctionExistence(client, fnName, fnNamespace)
 	createIngress := false
 	if c.IsSet("createingress") {
 		createIngress = c.Bool("createingress")
@@ -113,7 +73,7 @@ func htCreate(c *cli.Context) error {
 		Spec: fission.HTTPTriggerSpec{
 			Host:        host,
 			RelativeURL: triggerUrl,
-			Method:      getMethod(method),
+			Method:      sdk.GetMethod(method),
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
@@ -155,7 +115,7 @@ func htUpdate(c *cli.Context) error {
 		log.Fatal("Nothing to update. Use --function to specify a new function.")
 	}
 
-	checkFunctionExistence(client, newFn, triggerNamespace)
+	sdk.CheckFunctionExistence(client, newFn, triggerNamespace)
 
 	ht, err := client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      htName,

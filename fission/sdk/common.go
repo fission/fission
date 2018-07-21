@@ -429,3 +429,41 @@ func GetFissionAPIVersion(apiUrl string) (string, error) {
 	}
 	return strings.TrimRight(string(body), "\n"), nil
 }
+
+// returns one of http.Method*
+func GetMethod(method string) string {
+	switch strings.ToUpper(method) {
+	case "GET":
+		return http.MethodGet
+	case "HEAD":
+		return http.MethodHead
+	case "POST":
+		return http.MethodPost
+	case "PUT":
+		return http.MethodPut
+	case "PATCH":
+		return http.MethodPatch
+	case "DELETE":
+		return http.MethodDelete
+	case "CONNECT":
+		return http.MethodConnect
+	case "OPTIONS":
+		return http.MethodOptions
+	case "TRACE":
+		return http.MethodTrace
+	}
+	log.Fatal(fmt.Sprintf("Invalid HTTP Method %v", method))
+	return ""
+}
+
+func CheckFunctionExistence(fissionClient *client.Client, fnName string, fnNamespace string) {
+	meta := &metav1.ObjectMeta{
+		Name:      fnName,
+		Namespace: fnNamespace,
+	}
+
+	_, err := fissionClient.FunctionGet(meta)
+	if err != nil {
+		fmt.Printf("function '%v' does not exist, use 'fission function create --name %v ...' to create the function\n", fnName, fnName)
+	}
+}

@@ -311,7 +311,7 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: triggerURL,
-			Method:      getMethod(method),
+			Method:      GetMethod(method),
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
