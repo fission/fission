@@ -1,21 +1,16 @@
 package sdk
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/dchest/uniuri"
-	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/v1"
 )
@@ -36,7 +31,7 @@ type (
 	}
 )
 
-func getV1URL(serverUrl string) string {
+func GetV1URL(serverUrl string) string {
 	if len(serverUrl) == 0 {
 		log.Fatal("Need --server or FISSION_URL set to your fission server.")
 	}
@@ -49,7 +44,7 @@ func getV1URL(serverUrl string) string {
 	return v1url
 }
 
-func get(url string) []byte {
+func Get(url string) []byte {
 	resp, err := http.Get(url)
 	CheckErr(err, "get fission v0.1 state")
 	defer resp.Body.Close()
@@ -64,7 +59,7 @@ func get(url string) []byte {
 }
 
 // track a name in the remapper, creating a new name if needed
-func (nr *nameRemapper) trackName(old string) {
+func (nr *nameRemapper) TrackName(old string) {
 	// all kubernetes names must match this regex
 	kubeNameRegex := "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	maxLen := 63
@@ -119,36 +114,36 @@ func (nr *nameRemapper) trackName(old string) {
 	nr.newNames[newName] = true
 }
 
-func upgradeDumpV1State(v1url string, filename string) {
+func UpgradeDumpV1State(v1url string, filename string) {
 	var v1state V1FissionState
 
 	fmt.Println("Getting environments")
-	resp := get(v1url + "/environments")
+	resp := Get(v1url + "/environments")
 	err := json.Unmarshal(resp, &v1state.Environments)
 	CheckErr(err, "parse server response")
 
 	fmt.Println("Getting watches")
-	resp = get(v1url + "/watches")
+	resp = Get(v1url + "/watches")
 	err = json.Unmarshal(resp, &v1state.Watches)
 	CheckErr(err, "parse server response")
 
 	fmt.Println("Getting routes")
-	resp = get(v1url + "/triggers/http")
+	resp = Get(v1url + "/triggers/http")
 	err = json.Unmarshal(resp, &v1state.HTTPTriggers)
 	CheckErr(err, "parse server response")
 
 	fmt.Println("Getting message queue triggers")
-	resp = get(v1url + "/triggers/messagequeue")
+	resp = Get(v1url + "/triggers/messagequeue")
 	err = json.Unmarshal(resp, &v1state.Mqtriggers)
 	CheckErr(err, "parse server response")
 
 	fmt.Println("Getting time triggers")
-	resp = get(v1url + "/triggers/time")
+	resp = Get(v1url + "/triggers/time")
 	err = json.Unmarshal(resp, &v1state.TimeTriggers)
 	CheckErr(err, "parse server response")
 
 	fmt.Println("Getting function list")
-	resp = get(v1url + "/functions")
+	resp = Get(v1url + "/functions")
 	err = json.Unmarshal(resp, &v1state.Functions)
 	CheckErr(err, "parse server response")
 
@@ -162,27 +157,27 @@ func upgradeDumpV1State(v1url string, filename string) {
 	funcMetaSet := make(map[v1.Metadata]bool)
 	for _, f := range v1state.Functions {
 		funcMetaSet[f.Metadata] = true
-		nr.trackName(f.Metadata.Name)
+		nr.TrackName(f.Metadata.Name)
 	}
 	for _, t := range v1state.HTTPTriggers {
 		funcMetaSet[t.Function] = true
-		nr.trackName(t.Metadata.Name)
+		nr.TrackName(t.Metadata.Name)
 	}
 	for _, t := range v1state.Mqtriggers {
 		funcMetaSet[t.Function] = true
-		nr.trackName(t.Metadata.Name)
+		nr.TrackName(t.Metadata.Name)
 	}
 	for _, t := range v1state.Watches {
 		funcMetaSet[t.Function] = true
-		nr.trackName(t.Metadata.Name)
+		nr.TrackName(t.Metadata.Name)
 	}
 	for _, t := range v1state.TimeTriggers {
 		funcMetaSet[t.Function] = true
-		nr.trackName(t.Metadata.Name)
+		nr.TrackName(t.Metadata.Name)
 	}
 
 	for _, e := range v1state.Environments {
-		nr.trackName(e.Metadata.Name)
+		nr.TrackName(e.Metadata.Name)
 	}
 
 	fmt.Println("Getting functions")
@@ -190,9 +185,9 @@ func upgradeDumpV1State(v1url string, filename string) {
 	funcs := make(map[v1.Metadata]v1.Function)
 	for m := range funcMetaSet {
 		if len(m.Uid) != 0 {
-			resp = get(fmt.Sprintf("%v/functions/%v?uid=%v", v1url, m.Name, m.Uid))
+			resp = Get(fmt.Sprintf("%v/functions/%v?uid=%v", v1url, m.Name, m.Uid))
 		} else {
-			resp = get(fmt.Sprintf("%v/functions/%v", v1url, m.Name))
+			resp = Get(fmt.Sprintf("%v/functions/%v", v1url, m.Name))
 		}
 
 		var f v1.Function
@@ -229,170 +224,16 @@ func upgradeDumpV1State(v1url string, filename string) {
 		len(v1state.Functions), len(v1state.HTTPTriggers), len(v1state.Watches), len(v1state.Mqtriggers), len(v1state.TimeTriggers))
 }
 
-func functionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fission.FunctionReference {
+func FunctionRefFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *fission.FunctionReference {
 	return &fission.FunctionReference{
 		Type: fission.FunctionReferenceTypeFunctionName,
 		Name: nameRemap[m.Name],
 	}
 }
 
-func crdMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *metav1.ObjectMeta {
+func CrdMetadataFromV1Metadata(m *v1.Metadata, nameRemap map[string]string) *metav1.ObjectMeta {
 	return &metav1.ObjectMeta{
 		Name:      nameRemap[m.Name],
 		Namespace: metav1.NamespaceDefault,
 	}
-}
-
-func UpgradeDumpStateCli(c *cli.Context) error {
-	u := getV1URL(c.GlobalString("server"))
-	filename := c.String("file")
-
-	// check v1
-	resp, err := http.Get(u + "/environments")
-	CheckErr(err, "reach fission server")
-	if resp.StatusCode == http.StatusNotFound {
-		msg := fmt.Sprintf("Server %v isn't a v1 Fission server. Use --server to point at a pre-0.2.x Fission server.", u)
-		log.Fatal(msg)
-	}
-
-	upgradeDumpV1State(u, filename)
-	return nil
-}
-
-func UpgradeRestoreStateCli(c *cli.Context) error {
-	filename := c.String("file")
-	if len(filename) == 0 {
-		filename = "fission-v01-state.json"
-	}
-
-	contents, err := ioutil.ReadFile(filename)
-	CheckErr(err, fmt.Sprintf("open file %v", filename))
-
-	var v1state V1FissionState
-	err = json.Unmarshal(contents, &v1state)
-	CheckErr(err, "parse dumped v1 state")
-
-	// create a regular v2 client
-	client := GetClient(c.GlobalString("server"))
-
-	// create functions
-	for _, f := range v1state.Functions {
-
-		// get post-rename function name, derive pkg name from it
-		fnName := v1state.NameChanges[f.Metadata.Name]
-		pkgName := fmt.Sprintf("%v-%v", fnName, strings.ToLower(uniuri.NewLen(6)))
-
-		// write function to file
-		tmpfile, err := ioutil.TempFile("", pkgName)
-		CheckErr(err, "create temporary file")
-		code, err := base64.StdEncoding.DecodeString(f.Code)
-		CheckErr(err, "decode base64 function contents")
-		tmpfile.Write(code)
-		tmpfile.Sync()
-		tmpfile.Close()
-
-		// upload
-		archive, err := CreateArchive(client, tmpfile.Name(), "")
-		os.Remove(tmpfile.Name())
-
-		// create pkg
-		pkgSpec := fission.PackageSpec{
-			Environment: fission.EnvironmentReference{
-				Name:      v1state.NameChanges[f.Environment.Name],
-				Namespace: metav1.NamespaceDefault,
-			},
-			Deployment: *archive,
-		}
-		pkg, err := client.PackageCreate(&crd.Package{
-			Metadata: metav1.ObjectMeta{
-				Name:      pkgName,
-				Namespace: metav1.NamespaceDefault,
-			},
-			Spec: pkgSpec,
-		})
-		CheckErr(err, fmt.Sprintf("create package %v", pkgName))
-		_, err = client.FunctionCreate(&crd.Function{
-			Metadata: *crdMetadataFromV1Metadata(&f.Metadata, v1state.NameChanges),
-			Spec: fission.FunctionSpec{
-				Environment: pkgSpec.Environment,
-				Package: fission.FunctionPackageRef{
-					PackageRef: fission.PackageRef{
-						Name:            pkg.Name,
-						Namespace:       pkg.Namespace,
-						ResourceVersion: pkg.ResourceVersion,
-					},
-				},
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create function %v", v1state.NameChanges[f.Metadata.Name]))
-
-	}
-
-	// create envs
-	for _, e := range v1state.Environments {
-		_, err = client.EnvironmentCreate(&crd.Environment{
-			Metadata: *crdMetadataFromV1Metadata(&e.Metadata, v1state.NameChanges),
-			Spec: fission.EnvironmentSpec{
-				Version: 1,
-				Runtime: fission.Runtime{
-					Image: e.RunContainerImageUrl,
-				},
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
-	}
-
-	// create httptriggers
-	for _, t := range v1state.HTTPTriggers {
-		_, err = client.HTTPTriggerCreate(&crd.HTTPTrigger{
-			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
-			Spec: fission.HTTPTriggerSpec{
-				RelativeURL:       t.UrlPattern,
-				Method:            t.Method,
-				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
-	}
-
-	// create mqtriggers
-	for _, t := range v1state.Mqtriggers {
-		_, err = client.MessageQueueTriggerCreate(&crd.MessageQueueTrigger{
-			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
-			Spec: fission.MessageQueueTriggerSpec{
-				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
-				MessageQueueType:  fission.MessageQueueTypeNats, // only NATS is supported at that time (v1 types)
-				Topic:             t.Topic,
-				ResponseTopic:     t.ResponseTopic,
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
-	}
-
-	// create time triggers
-	for _, t := range v1state.TimeTriggers {
-		_, err = client.TimeTriggerCreate(&crd.TimeTrigger{
-			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
-			Spec: fission.TimeTriggerSpec{
-				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
-				Cron:              t.Cron,
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
-	}
-
-	// create watches
-	for _, t := range v1state.Watches {
-		_, err = client.WatchCreate(&crd.KubernetesWatchTrigger{
-			Metadata: *crdMetadataFromV1Metadata(&t.Metadata, v1state.NameChanges),
-			Spec: fission.KubernetesWatchTriggerSpec{
-				Namespace:         t.Namespace,
-				Type:              t.ObjType,
-				FunctionReference: *functionRefFromV1Metadata(&t.Function, v1state.NameChanges),
-			},
-		})
-		CheckErr(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
-	}
-
-	return nil
 }
