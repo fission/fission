@@ -20,49 +20,16 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/controller/client"
-	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
-
-func getFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]crd.Function, error) {
-	fnList, err := client.FunctionList(pkgNamespace)
-	if err != nil {
-		return nil, err
-	}
-	fns := []crd.Function{}
-	for _, fn := range fnList {
-		if fn.Spec.Package.PackageRef.Name == pkgName {
-			fns = append(fns, fn)
-		}
-	}
-	return fns, nil
-}
-
-// downloadStoragesvcURL downloads and return archive content with given storage service url
-func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser {
-	u, err := url.ParseRequestURI(fileUrl)
-	if err != nil {
-		return nil
-	}
-
-	// replace in-cluster storage service host with controller server url
-	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage/" + u.RequestURI()
-	reader, err := sdk.DownloadURL(fileDownloadUrl)
-
-	sdk.CheckErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
-	return reader
-}
 
 func pkgCreate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
@@ -119,15 +86,16 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	sdk.CheckErr(err, "get package")
 
-	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+	fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	sdk.CheckErr(err, "get function list")
 
 	if !force && len(fnList) > 1 {
 		log.Fatal("Package is used by multiple functions, use --force to force update")
 	}
 
-	newPkgMeta := updatePackage(client, pkg,
+	newPkgMeta, err := sdk.UpdatePackage(client, pkg,
 		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
+	sdk.CheckErr(err, "update package")
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
@@ -139,49 +107,6 @@ func pkgUpdate(c *cli.Context) error {
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
 
 	return nil
-}
-
-func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
-	srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
-
-	needToBuild := false
-
-	if len(envName) > 0 {
-		pkg.Spec.Environment.Name = envName
-		pkg.Spec.Environment.Namespace = envNamespace
-		needToBuild = true
-	}
-
-	if len(buildcmd) > 0 {
-		pkg.Spec.BuildCommand = buildcmd
-		needToBuild = true
-	}
-
-	if len(srcArchiveName) > 0 {
-		srcArchiveMetadata, err := sdk.CreateArchive(client, srcArchiveName, "")
-		sdk.CheckErr(err, "create archive")
-		pkg.Spec.Source = *srcArchiveMetadata
-		needToBuild = true
-	}
-
-	if len(deployArchiveName) > 0 {
-		deployArchiveMetadata, err := sdk.CreateArchive(client, deployArchiveName, "")
-		sdk.CheckErr(err, "create archive")
-		pkg.Spec.Deployment = *deployArchiveMetadata
-	}
-
-	// Set package as pending status when needToBuild is true
-	if needToBuild {
-		// change into pending state to trigger package build
-		pkg.Status = fission.PackageStatus{
-			BuildStatus: fission.BuildStatusPending,
-		}
-	}
-
-	newPkgMeta, err := client.PackageUpdate(pkg)
-	sdk.CheckErr(err, "update package")
-
-	return newPkgMeta
 }
 
 func pkgSourceGet(c *cli.Context) error {
@@ -208,7 +133,7 @@ func pkgSourceGet(c *cli.Context) error {
 	if pkg.Spec.Source.Type == fission.ArchiveTypeLiteral {
 		reader = bytes.NewReader(pkg.Spec.Source.Literal)
 	} else if pkg.Spec.Source.Type == fission.ArchiveTypeUrl {
-		readCloser := downloadStoragesvcURL(client, pkg.Spec.Source.URL)
+		readCloser := sdk.DownloadStoragesvcURL(client, pkg.Spec.Source.URL)
 		defer readCloser.Close()
 		reader = readCloser
 	}
@@ -245,7 +170,7 @@ func pkgDeployGet(c *cli.Context) error {
 	if pkg.Spec.Deployment.Type == fission.ArchiveTypeLiteral {
 		reader = bytes.NewReader(pkg.Spec.Deployment.Literal)
 	} else if pkg.Spec.Deployment.Type == fission.ArchiveTypeUrl {
-		readCloser := downloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
+		readCloser := sdk.DownloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
 		defer readCloser.Close()
 		reader = readCloser
 	}
@@ -300,7 +225,7 @@ func pkgList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
 	if listOrphans {
 		for _, pkg := range pkgList {
-			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+			fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			sdk.CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 			if len(fnList) == 0 {
 				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
@@ -316,33 +241,6 @@ func pkgList(c *cli.Context) error {
 	w.Flush()
 
 	return nil
-}
-
-func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
-	pkgList, err := client.PackageList(pkgNamespace)
-	if err != nil {
-		return err
-	}
-
-	// range through all packages and find out the ones not referenced by any function
-	for _, pkg := range pkgList {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkgNamespace)
-		sdk.CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
-		if len(fnList) == 0 {
-			err = deletePackage(client, pkg.Metadata.Name, pkgNamespace)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func deletePackage(client *client.Client, pkgName string, pkgNamespace string) error {
-	return client.PackageDelete(&metav1.ObjectMeta{
-		Namespace: pkgNamespace,
-		Name:      pkgName,
-	})
 }
 
 func pkgDelete(c *cli.Context) error {
@@ -370,20 +268,20 @@ func pkgDelete(c *cli.Context) error {
 		})
 		sdk.CheckErr(err, "find package")
 
-		fnList, err := getFunctionsByPackage(client, pkgName, pkgNamespace)
+		fnList, err := sdk.GetFunctionsByPackage(client, pkgName, pkgNamespace)
 
 		if !force && len(fnList) > 0 {
 			log.Fatal("Package is used by at least one function, use -f to force delete")
 		}
 
-		err = deletePackage(client, pkgName, pkgNamespace)
+		err = sdk.DeletePackage(client, pkgName, pkgNamespace)
 		if err != nil {
 			return err
 		}
 
 		fmt.Printf("Package '%v' deleted\n", pkgName)
 	} else {
-		err := deleteOrphanPkgs(client, pkgNamespace)
+		err := sdk.DeleteOrphanPkgs(client, pkgNamespace)
 		sdk.CheckErr(err, "error deleting orphan packages")
 		fmt.Println("Orphan packages deleted")
 	}

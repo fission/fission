@@ -289,14 +289,14 @@ func fnUpdate(c *cli.Context) error {
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+		fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		sdk.CheckErr(err, "get function list")
 
 		if !force && len(fnList) > 1 {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata = updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
+		pkgMetadata, err = sdk.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
 		sdk.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())

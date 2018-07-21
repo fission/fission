@@ -17,24 +17,19 @@ limitations under the License.
 package sdk
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"strings"
-	"text/tabwriter"
 
-	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 )
 
-func getFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]crd.Function, error) {
+func GetFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]crd.Function, error) {
 	fnList, err := client.FunctionList(pkgNamespace)
 	if err != nil {
 		return nil, err
@@ -49,7 +44,7 @@ func getFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) 
 }
 
 // downloadStoragesvcURL downloads and return archive content with given storage service url
-func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser {
+func DownloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser {
 	u, err := url.ParseRequestURI(fileUrl)
 	if err != nil {
 		return nil
@@ -63,85 +58,7 @@ func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 	return reader
 }
 
-func PkgCreateCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgNamespace := c.String("pkgNamespace")
-	envName := c.String("env")
-	if len(envName) == 0 {
-		log.Fatal("Need --env argument.")
-	}
-	envNamespace := c.String("envNamespace")
-	srcArchiveName := c.String("src")
-	deployArchiveName := c.String("deploy")
-	buildcmd := c.String("buildcmd")
-
-	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
-	}
-
-	meta, err := CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Package '%v' created\n", meta.GetName())
-
-	return nil
-}
-
-func PkgUpdateCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgName := c.String("name")
-	if len(pkgName) == 0 {
-		log.Fatal("Need --name argument.")
-	}
-	pkgNamespace := c.String("pkgNamespace")
-
-	force := c.Bool("f")
-	envName := c.String("env")
-	envNamespace := c.String("envNamespace")
-	srcArchiveName := c.String("src")
-	deployArchiveName := c.String("deploy")
-	buildcmd := c.String("buildcmd")
-
-	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		log.Fatal("Need either of --src or --deploy and not both arguments.")
-	}
-
-	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
-		len(envName) == 0 && len(buildcmd) == 0 {
-		log.Fatal("Need --env or --src or --deploy or --buildcmd argument.")
-	}
-
-	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: pkgNamespace,
-		Name:      pkgName,
-	})
-	CheckErr(err, "get package")
-
-	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-	CheckErr(err, "get function list")
-
-	if !force && len(fnList) > 1 {
-		log.Fatal("Package is used by multiple functions, use --force to force update")
-	}
-
-	newPkgMeta, err := updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
-
-	// update resource version of package reference of functions that shared the same package
-	for _, fn := range fnList {
-		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
-		_, err := client.FunctionUpdate(&fn)
-		CheckErr(err, "update function")
-	}
-
-	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
-
-	return nil
-}
-
-func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
+func UpdatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
 	srcArchiveName, deployArchiveName, buildcmd string) (*metav1.ObjectMeta, error) {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
@@ -191,141 +108,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	return newPkgMeta, nil
 }
 
-func PkgSourceGetCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgName := c.String("name")
-	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
-	}
-	pkgNamespace := c.String("pkgNamespace")
-
-	output := c.String("output")
-
-	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: pkgNamespace,
-		Name:      pkgName,
-	})
-	if err != nil {
-		return err
-	}
-
-	var reader io.Reader
-
-	if pkg.Spec.Source.Type == fission.ArchiveTypeLiteral {
-		reader = bytes.NewReader(pkg.Spec.Source.Literal)
-	} else if pkg.Spec.Source.Type == fission.ArchiveTypeUrl {
-		readCloser := downloadStoragesvcURL(client, pkg.Spec.Source.URL)
-		defer readCloser.Close()
-		reader = readCloser
-	}
-
-	if len(output) > 0 {
-		return WriteArchiveToFile(output, reader)
-	} else {
-		_, err := io.Copy(os.Stdout, reader)
-		return err
-	}
-}
-
-func PkgDeployGetCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgName := c.String("name")
-	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
-	}
-	pkgNamespace := c.String("pkgNamespace")
-
-	output := c.String("output")
-
-	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: pkgNamespace,
-		Name:      pkgName,
-	})
-	if err != nil {
-		return err
-	}
-
-	var reader io.Reader
-
-	if pkg.Spec.Deployment.Type == fission.ArchiveTypeLiteral {
-		reader = bytes.NewReader(pkg.Spec.Deployment.Literal)
-	} else if pkg.Spec.Deployment.Type == fission.ArchiveTypeUrl {
-		readCloser := downloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
-		defer readCloser.Close()
-		reader = readCloser
-	}
-
-	if len(output) > 0 {
-		return WriteArchiveToFile(output, reader)
-	} else {
-		_, err := io.Copy(os.Stdout, reader)
-		return err
-	}
-}
-
-func PkgInfoCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgName := c.String("name")
-	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
-	}
-	pkgNamespace := c.String("pkgNamespace")
-
-	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: pkgNamespace,
-		Name:      pkgName,
-	})
-	if err != nil {
-		return err
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Metadata.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
-	fmt.Fprintf(w, "%v\n%v", "Build Logs:", pkg.Status.BuildLog)
-	w.Flush()
-
-	return nil
-}
-
-func PkgListCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-	// option for the user to list all orphan packages (not referenced by any function)
-	listOrphans := c.Bool("orphan")
-	pkgNamespace := c.String("pkgNamespace")
-
-	pkgList, err := client.PackageList(pkgNamespace)
-	if err != nil {
-		return err
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
-	if listOrphans {
-		for _, pkg := range pkgList {
-			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-			CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
-			if len(fnList) == 0 {
-				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
-			}
-		}
-	} else {
-		for _, pkg := range pkgList {
-			fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
-				pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
-		}
-	}
-
-	w.Flush()
-
-	return nil
-}
-
-func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
+func DeleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
 	pkgList, err := client.PackageList(pkgNamespace)
 	if err != nil {
 		return err
@@ -333,10 +116,10 @@ func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
 
 	// range through all packages and find out the ones not referenced by any function
 	for _, pkg := range pkgList {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkgNamespace)
+		fnList, err := GetFunctionsByPackage(client, pkg.Metadata.Name, pkgNamespace)
 		CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 		if len(fnList) == 0 {
-			err = deletePackage(client, pkg.Metadata.Name, pkgNamespace)
+			err = DeletePackage(client, pkg.Metadata.Name, pkgNamespace)
 			if err != nil {
 				return err
 			}
@@ -345,55 +128,9 @@ func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
 	return nil
 }
 
-func deletePackage(client *client.Client, pkgName string, pkgNamespace string) error {
+func DeletePackage(client *client.Client, pkgName string, pkgNamespace string) error {
 	return client.PackageDelete(&metav1.ObjectMeta{
 		Namespace: pkgNamespace,
 		Name:      pkgName,
 	})
-}
-
-func PkgDeleteCli(c *cli.Context) error {
-	client := GetClient(c.GlobalString("server"))
-
-	pkgName := c.String("name")
-	pkgNamespace := c.String("pkgNamespace")
-	deleteOrphans := c.Bool("orphan")
-
-	if len(pkgName) == 0 && !deleteOrphans {
-		fmt.Println("Need --name argument or --orphan flag.")
-		return nil
-	}
-	if len(pkgName) != 0 && deleteOrphans {
-		fmt.Println("Need either --name argument or --orphan flag")
-		return nil
-	}
-
-	if len(pkgName) != 0 {
-		force := c.Bool("f")
-
-		_, err := client.PackageGet(&metav1.ObjectMeta{
-			Namespace: pkgNamespace,
-			Name:      pkgName,
-		})
-		CheckErr(err, "find package")
-
-		fnList, err := getFunctionsByPackage(client, pkgName, pkgNamespace)
-
-		if !force && len(fnList) > 0 {
-			log.Fatal("Package is used by at least one function, use -f to force delete")
-		}
-
-		err = deletePackage(client, pkgName, pkgNamespace)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Package '%v' deleted\n", pkgName)
-	} else {
-		err := deleteOrphanPkgs(client, pkgNamespace)
-		CheckErr(err, "error deleting orphan packages")
-		fmt.Println("Orphan packages deleted")
-	}
-
-	return nil
 }
