@@ -127,9 +127,7 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	err := sdk.CreateFunction(createFunctionArg)
-	if err != nil {
-		log.Fatal(fmt.Sprintf("%v", err))
-	}
+	sdk.CheckErr(err, "create function")
 	return err
 
 }
