@@ -32,42 +32,6 @@ import (
 	"github.com/fission/fission/fission/log"
 )
 
-func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) (fission.InvokeStrategy, error) {
-
-	if maxScale == 0 {
-		maxScale = 1
-	}
-
-	if minScale > maxScale {
-		log.Fatal("Maxscale must be higher than or equal to minscale")
-	}
-
-	var fnExecutor fission.ExecutorType
-	switch executorType {
-	case "":
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypePoolmgr:
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypeNewdeploy:
-		fnExecutor = fission.ExecutorTypeNewdeploy
-	default:
-		return fission.InvokeStrategy{}, errors.New("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
-	}
-
-	// Right now a simple single case strategy implementation
-	// This will potentially get more sophisticated once we have more strategies in place
-	strategy := fission.InvokeStrategy{
-		StrategyType: fission.StrategyTypeExecution,
-		ExecutionStrategy: fission.ExecutionStrategy{
-			ExecutorType:     fnExecutor,
-			MinScale:         minScale,
-			MaxScale:         maxScale,
-			TargetCPUPercent: targetcpu,
-		},
-	}
-	return strategy, nil
-}
-
 type CreateFunctionArg struct {
 	FnName            string
 	Spec              bool
@@ -140,6 +104,42 @@ func (arg CreateFunctionArg) validate() error {
 
 	return nil
 
+}
+
+func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) (fission.InvokeStrategy, error) {
+
+	if maxScale == 0 {
+		maxScale = 1
+	}
+
+	if minScale > maxScale {
+		log.Fatal("Maxscale must be higher than or equal to minscale")
+	}
+
+	var fnExecutor fission.ExecutorType
+	switch executorType {
+	case "":
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypePoolmgr:
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypeNewdeploy:
+		fnExecutor = fission.ExecutorTypeNewdeploy
+	default:
+		return fission.InvokeStrategy{}, errors.New("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+	}
+
+	// Right now a simple single case strategy implementation
+	// This will potentially get more sophisticated once we have more strategies in place
+	strategy := fission.InvokeStrategy{
+		StrategyType: fission.StrategyTypeExecution,
+		ExecutionStrategy: fission.ExecutionStrategy{
+			ExecutorType:     fnExecutor,
+			MinScale:         minScale,
+			MaxScale:         maxScale,
+			TargetCPUPercent: targetcpu,
+		},
+	}
+	return strategy, nil
 }
 
 func CreateFunction(functionArg *CreateFunctionArg) error {
