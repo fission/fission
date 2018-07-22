@@ -18,54 +18,13 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/log"
-	"github.com/fission/fission/fission/portforward"
 	"github.com/fission/fission/fission/sdk"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
 )
-
-func getFissionNamespace() string {
-	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-	return fissionNamespace
-}
-
-func getKubeConfigPath() string {
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) == 0 {
-		home := os.Getenv("HOME")
-		kubeConfig = filepath.Join(home, ".kube", "config")
-
-		if _, err := os.Stat(kubeConfig); os.IsNotExist(err) {
-			log.Fatal("Couldn't find kubeconfig file. " +
-				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
-		}
-	}
-	return kubeConfig
-}
-
-func getServerUrl() string {
-	return getApplicationUrl("application=fission-api")
-}
-
-func getApplicationUrl(selector string) string {
-	var serverUrl string
-	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
-	fissionUrl := os.Getenv("FISSION_URL")
-	if len(fissionUrl) == 0 {
-		fissionNamespace := getFissionNamespace()
-		kubeConfig := getKubeConfigPath()
-		localPort := portforward.Setup(kubeConfig, fissionNamespace, "application=fission-api")
-		serverUrl = "http://127.0.0.1:" + localPort
-	} else {
-		serverUrl = fissionUrl
-	}
-	return serverUrl
-}
 
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
@@ -82,7 +41,7 @@ func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
 		clientVer := fission.BuildInfo().String()
 		fmt.Printf("Client Version: %v\n", clientVer)
-		serverInfo, err := sdk.GetClient(getServerUrl()).ServerInfo()
+		serverInfo, err := sdk.GetClient(sdk.GetServerUrl()).ServerInfo()
 		if err != nil {
 			fmt.Printf("Error getting Fission API version: %v", err)
 		} else {

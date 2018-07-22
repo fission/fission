@@ -45,7 +45,7 @@ func printPodLogs(c *cli.Context) error {
 		log.Fatal("Need --name argument.")
 	}
 
-	queryURL, err := url.Parse(getServerUrl())
+	queryURL, err := url.Parse(sdk.GetServerUrl())
 	sdk.CheckErr(err, "parse the base URL")
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
@@ -456,7 +456,7 @@ func fnLogs(c *cli.Context) error {
 	sdk.CheckErr(err, "get function")
 
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, getServerUrl())
+	logDB, err := logdb.GetLogDB(dbType, sdk.GetServerUrl())
 	if err != nil {
 		log.Fatal("failed to connect log database")
 	}
@@ -518,8 +518,8 @@ func fnTest(c *cli.Context) error {
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
 		// Portforward to the fission router
-		localRouterPort := portforward.Setup(getKubeConfigPath(),
-			getFissionNamespace(), "application=fission-router")
+		localRouterPort := portforward.Setup(sdk.GetKubeConfigPath(),
+			sdk.GetFissionNamespace(), "application=fission-router")
 		routerURL = "127.0.0.1:" + localRouterPort
 	} else {
 		routerURL = strings.TrimPrefix(routerURL, "http://")

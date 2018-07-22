@@ -43,6 +43,44 @@ import (
 	storageSvcClient "github.com/fission/fission/storagesvc/client"
 )
 
+func GetFissionNamespace() string {
+	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+	return fissionNamespace
+}
+
+func GetKubeConfigPath() string {
+	kubeConfig := os.Getenv("KUBECONFIG")
+	if len(kubeConfig) == 0 {
+		home := os.Getenv("HOME")
+		kubeConfig = filepath.Join(home, ".kube", "config")
+
+		if _, err := os.Stat(kubeConfig); os.IsNotExist(err) {
+			log.Fatal("Couldn't find kubeconfig file. " +
+				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+		}
+	}
+	return kubeConfig
+}
+
+func GetServerUrl() string {
+	return GetApplicationUrl("application=fission-api")
+}
+
+func GetApplicationUrl(selector string) string {
+	var serverUrl string
+	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
+	fissionUrl := os.Getenv("FISSION_URL")
+	if len(fissionUrl) == 0 {
+		fissionNamespace := GetFissionNamespace()
+		kubeConfig := GetKubeConfigPath()
+		localPort := portforward.Setup(kubeConfig, fissionNamespace, selector)
+		serverUrl = "http://127.0.0.1:" + localPort
+	} else {
+		serverUrl = fissionUrl
+	}
+	return serverUrl
+}
+
 func GetClient(serverUrl string) *client.Client {
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
@@ -380,40 +418,6 @@ func KubifyName(old string) string {
 	}
 
 	return newName
-}
-
-func GetServerUrl() string {
-	var serverUrl string
-	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
-	fissionUrl := os.Getenv("FISSION_URL")
-	if len(fissionUrl) == 0 {
-		fissionNamespace := GetFissionNamespace()
-		kubeConfig := GetKubeConfigPath()
-		localPort := portforward.Setup(
-			kubeConfig, fissionNamespace, "application=fission-api")
-		serverUrl = "http://127.0.0.1:" + localPort
-	} else {
-		serverUrl = fissionUrl
-	}
-	return serverUrl
-}
-
-func GetFissionNamespace() string {
-	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
-	return fissionNamespace
-}
-
-func GetKubeConfigPath() string {
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) == 0 {
-		home := os.Getenv("HOME")
-		kubeConfig = filepath.Join(home, ".kube", "config")
-
-		if _, err := os.Stat(kubeConfig); os.IsNotExist(err) {
-			log.Fatal("Couldn't find kubeconfig file. Set the KUBECONFIG environment variable to your kubeconfig's path.")
-		}
-	}
-	return kubeConfig
 }
 
 func GetFissionAPIVersion(apiUrl string) (string, error) {
