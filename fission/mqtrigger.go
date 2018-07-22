@@ -29,7 +29,6 @@ import (
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
 func mqtCreate(c *cli.Context) error {
@@ -83,7 +82,7 @@ func mqtCreate(c *cli.Context) error {
 		contentType = "application/json"
 	}
 
-	checkMQTopicAvailability(mqType, topic, respTopic)
+	sdk.CheckMQTopicAvailability(mqType, topic, respTopic)
 
 	mqt := &crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -146,7 +145,7 @@ func mqtUpdate(c *cli.Context) error {
 
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
-	checkMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
+	sdk.CheckMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
 
 	updated := false
 	if len(topic) > 0 {
@@ -221,12 +220,4 @@ func mqtList(c *cli.Context) error {
 	w.Flush()
 
 	return nil
-}
-
-func checkMQTopicAvailability(mqType fission.MessageQueueType, topics ...string) {
-	for _, t := range topics {
-		if len(t) > 0 && !fv1.IsTopicValid(mqType, t) {
-			log.Fatal(fmt.Sprintf("Invalid topic for %s: %s", mqType, t))
-		}
-	}
 }
