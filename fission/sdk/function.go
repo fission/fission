@@ -293,7 +293,7 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	fmt.Printf("function '%v' created\n", fnName)
 
 	// Allow the user to specify an HTTP trigger while creating a function.
-	if len(`triggerURL`) == 0 {
+	if len(triggerURL) == 0 {
 		return nil
 	}
 	if !strings.HasPrefix(triggerURL, "/") {

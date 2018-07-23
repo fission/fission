@@ -69,7 +69,7 @@ func upgradeRestoreState(c *cli.Context) error {
 
 		// upload
 		archive, err := sdk.CreateArchive(client, tmpfile.Name(), "")
-		//ABTODO
+		sdk.CheckErr(err, fmt.Sprintf("create archive for function %s", fnName))
 		os.Remove(tmpfile.Name())
 
 		// create pkg
