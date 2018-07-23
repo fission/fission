@@ -431,7 +431,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		os.Rename(srcFilepath, dstFilepath)
+		err := os.Rename(srcFilepath, dstFilepath)
+		if err != nil {
+			e := fmt.Sprintf("Error renaming the archive: %v", err)
+			log.Println(e)
+			http.Error(w, e, http.StatusInternalServerError)
+			return
+		}
 	}
 
 	log.Println("Starting upload...")

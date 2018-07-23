@@ -96,7 +96,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 
 	archivePackage := true
 	if env.Spec.KeepArchive {
-		archivePackage = false
+		archivePackage = !env.Spec.KeepArchive
 	}
 
 	uploadReq := &fetcher.UploadRequest{
