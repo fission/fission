@@ -94,10 +94,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 
 	log.Printf("Build succeed, source package: %v, deployment package: %v", srcPkgFilename, buildResp.ArtifactFilename)
 
-	archivePackage := true
-	if env.Spec.KeepArchive {
-		archivePackage = !env.Spec.KeepArchive
-	}
+	archivePackage := !env.Spec.KeepArchive
 
 	uploadReq := &fetcher.UploadRequest{
 		Filename:       buildResp.ArtifactFilename,
