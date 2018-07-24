@@ -62,3 +62,7 @@ JVM environment uses Tomcat HTTP server by default as it is included in spring w
 	<artifactId>spring-boot-starter-jetty</artifactId>
 </dependency>
 ```
+
+## Java and JVM builder
+
+JVM environment builder is based on OpenJDK8 and Maven 3.5.4 version. The default build command runs `mvn clean package` and uses the target/*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to ${DEPLOY_PKG}.
