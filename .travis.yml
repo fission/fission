@@ -31,13 +31,18 @@ install:
 env:
   - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH}
 
-script:
+before_script:
   - cd ${TRAVIS_BUILD_DIR}
-  - glide install -v
-  - ./fission-bundle/build.sh
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
+  - helm lint charts/fission-all/ charts/fission-core/
+  - glide install -v
+  - go build -o fission/fission fission/*.go
+  - ./fission-bundle/build.sh
   - hack/runtests.sh
+
+script:
+  - cd ${TRAVIS_BUILD_DIR}
   - test/build_and_test.sh
   - test/upgrade/fission_upgrade_test.sh
 
