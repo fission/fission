@@ -107,9 +107,17 @@ func MissingArgError(argName string) error {
 	return errors.New(message)
 }
 
-func CheckErr(err error, msg string) {
+func CheckErr(err error, action string) {
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
+		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
+	}
+}
+
+func CheckErrElseLogSuccess(err error, action string, successMsgFormat string, successMsgArgs ...interface{}) {
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
+	} else {
+		log.Info(successMsgFormat, successMsgArgs)
 	}
 }
 
@@ -299,11 +307,11 @@ func CreatePackage(client *client.Client, pkgNamespace, envName, envNamespace, s
 	if len(specFile) > 0 {
 		err := SpecSave(*pkg, specFile)
 		CheckErr(err, "save package spec")
-		return &pkg.Metadata, nil
+		return &pkg.Metadata, err
 	} else {
 		pkgMetadata, err := client.PackageCreate(pkg)
 		CheckErr(err, "create package")
-		return pkgMetadata, nil
+		return pkgMetadata, err
 	}
 }
 

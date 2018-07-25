@@ -39,6 +39,10 @@ func Warn(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
 }
 
+func Info(format string, args ...interface{}) {
+	Verbose(1, format, args)
+}
+
 func Verbose(verbosityLevel int, format string, args ...interface{}) {
 	if Verbosity >= verbosityLevel {
 		fmt.Printf(format+"\n", args...)
