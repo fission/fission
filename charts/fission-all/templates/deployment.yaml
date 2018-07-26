@@ -90,6 +90,35 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 
 ---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-fetcher
+  namespace: {{ .Release.functionNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fission-fetcher
+    namespace: {{ .Values.functionNamespace }}
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: fission-fetcher
+subjects:
+- kind: ServiceAccount
+  name: fission-fetcher
+  namespace: {{ .Values.functionNamespace }}
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
