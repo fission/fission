@@ -27,7 +27,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
 
@@ -36,7 +35,7 @@ func wCreate(c *cli.Context) error {
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		log.Fatal("Need a function name to create a watch, use --function")
+		LogAndExit("Need a function name to create a watch, use --function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -84,26 +83,30 @@ func wCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", watchName)
 		err := sdk.SpecSave(*w, specFile)
-		sdk.CheckErr(err, "create kubernetes watch spec")
+		if err != nil {
+			return sdk.FailedToError(err, "create kubernetes watch spec")
+		}
 		return nil
 	}
 
 	_, err := client.WatchCreate(w)
-	sdk.CheckErr(err, "create watch")
+	if err != nil {
+		return sdk.FailedToError(err, "create watch")
+	}
 
 	fmt.Printf("watch '%v' created\n", w.Metadata.Name)
-	return err
+	return nil
 }
 
 func wGet(c *cli.Context) error {
 	// TODO
-	log.Fatal("Not implemented")
+	LogAndExit("Not implemented")
 	return nil
 }
 
 func wUpdate(c *cli.Context) error {
 	// TODO
-	log.Fatal("Not implemented")
+	LogAndExit("Not implemented")
 	return nil
 }
 
@@ -112,7 +115,7 @@ func wDelete(c *cli.Context) error {
 
 	wName := c.String("name")
 	if len(wName) == 0 {
-		log.Fatal("Need name of watch to delete, use --name")
+		LogAndExit("Need name of watch to delete, use --name")
 	}
 	wNs := c.String("triggerns")
 
@@ -120,7 +123,9 @@ func wDelete(c *cli.Context) error {
 		Name:      wName,
 		Namespace: wNs,
 	})
-	sdk.CheckErr(err, "delete watch")
+	if err != nil {
+		return sdk.FailedToError(err, "delete watch")
+	}
 
 	fmt.Printf("watch '%v' deleted\n", wName)
 	return nil
@@ -132,7 +137,9 @@ func wList(c *cli.Context) error {
 	wNs := c.String("triggerns")
 
 	ws, err := client.WatchList(wNs)
-	sdk.CheckErr(err, "list watches")
+	if err != nil {
+		return sdk.FailedToError(err, "list watches")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

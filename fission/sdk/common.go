@@ -97,6 +97,10 @@ func GetClient(serverUrl string) *client.Client {
 	return client.MakeClient(serverUrl)
 }
 
+func GeneralError(msg string) error {
+	return errors.New(msg)
+}
+
 func MissingArgError(argName string) error {
 	var message string
 	if log.IsCliRun {

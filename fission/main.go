@@ -29,6 +29,7 @@ import (
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
 	log.Verbose(2, "Verbosity = 2")
+	log.IsCliRun = true
 	return nil
 }
 
@@ -241,5 +242,10 @@ func main() {
 	}
 
 	app.Before = cliHook
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		os.Stderr.WriteString(fmt.Sprintf("%v\n", err))
+		os.Exit(1)
+	}
+
 }

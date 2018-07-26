@@ -28,6 +28,8 @@ var (
 	IsCliRun bool
 )
 
+//TODO switch to logrus
+
 func Fatal(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
 	if IsCliRun {

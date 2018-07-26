@@ -27,7 +27,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
 
@@ -37,7 +36,7 @@ func pkgCreate(c *cli.Context) error {
 	pkgNamespace := c.String("pkgNamespace")
 	envName := c.String("env")
 	if len(envName) == 0 {
-		log.Fatal("Need --env argument.")
+		LogAndExit("Need --env argument.")
 	}
 	envNamespace := c.String("envNamespace")
 	srcArchiveName := c.String("src")
@@ -45,11 +44,13 @@ func pkgCreate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
+		LogAndExit("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
 	meta, err := sdk.CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
-	sdk.CheckErr(err, "create package")
+	if err != nil {
+		return sdk.FailedToError(err, "create package")
+	}
 	fmt.Printf("Package '%v' created\n", meta.GetName())
 
 	return nil
@@ -60,7 +61,7 @@ func pkgUpdate(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		log.Fatal("Need --name argument.")
+		LogAndExit("Need --name argument.")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -72,36 +73,44 @@ func pkgUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		log.Fatal("Need either of --src or --deploy and not both arguments.")
+		LogAndExit("Need either of --src or --deploy and not both arguments.")
 	}
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
 		len(envName) == 0 && len(buildcmd) == 0 {
-		log.Fatal("Need --env or --src or --deploy or --buildcmd argument.")
+		LogAndExit("Need --env or --src or --deploy or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: pkgNamespace,
 		Name:      pkgName,
 	})
-	sdk.CheckErr(err, "get package")
+	if err != nil {
+		return sdk.FailedToError(err, "get package")
+	}
 
 	fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-	sdk.CheckErr(err, "get function list")
+	if err != nil {
+		return sdk.FailedToError(err, "get function list")
+	}
 
 	if !force && len(fnList) > 1 {
-		log.Fatal("Package is used by multiple functions, use --force to force update")
+		LogAndExit("Package is used by multiple functions, use --force to force update")
 	}
 
 	newPkgMeta, err := sdk.UpdatePackage(client, pkg,
 		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
-	sdk.CheckErr(err, "update package")
+	if err != nil {
+		return sdk.FailedToError(err, "update package")
+	}
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
 		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
 		_, err := client.FunctionUpdate(&fn)
-		sdk.CheckErr(err, "update function")
+		if err != nil {
+			return sdk.FailedToError(err, "update function")
+		}
 	}
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
@@ -114,7 +123,7 @@ func pkgSourceGet(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
+		LogAndExit("Need name of package, use --name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -151,7 +160,7 @@ func pkgDeployGet(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
+		LogAndExit("Need name of package, use --name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -188,7 +197,7 @@ func pkgInfo(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		log.Fatal("Need name of package, use --name")
+		LogAndExit("Need name of package, use --name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -226,7 +235,9 @@ func pkgList(c *cli.Context) error {
 	if listOrphans {
 		for _, pkg := range pkgList {
 			fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-			sdk.CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			if err != nil {
+				return sdk.FailedToError(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			}
 			if len(fnList) == 0 {
 				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
 			}
@@ -266,12 +277,14 @@ func pkgDelete(c *cli.Context) error {
 			Namespace: pkgNamespace,
 			Name:      pkgName,
 		})
-		sdk.CheckErr(err, "find package")
+		if err != nil {
+			return sdk.FailedToError(err, "find package")
+		}
 
 		fnList, err := sdk.GetFunctionsByPackage(client, pkgName, pkgNamespace)
 
 		if !force && len(fnList) > 0 {
-			log.Fatal("Package is used by at least one function, use -f to force delete")
+			LogAndExit("Package is used by at least one function, use -f to force delete")
 		}
 
 		err = sdk.DeletePackage(client, pkgName, pkgNamespace)
@@ -282,7 +295,9 @@ func pkgDelete(c *cli.Context) error {
 		fmt.Printf("Package '%v' deleted\n", pkgName)
 	} else {
 		err := sdk.DeleteOrphanPkgs(client, pkgNamespace)
-		sdk.CheckErr(err, "error deleting orphan packages")
+		if err != nil {
+			return sdk.FailedToError(err, "error deleting orphan packages")
+		}
 		fmt.Println("Orphan packages deleted")
 	}
 

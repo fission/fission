@@ -38,7 +38,7 @@ func envCreate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		log.Fatal("Need a name, use --name.")
+		return sdk.MissingArgError("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -58,7 +58,7 @@ func envCreate(c *cli.Context) error {
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
-		log.Fatal("Need an image, use --image.")
+		LogAndExit("Need an image, use --image.")
 	}
 
 	envVersion := c.Int("version")
@@ -115,8 +115,9 @@ func envCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("env-%v.yaml", envName)
 		err := sdk.SpecSave(*env, specFile)
-		sdk.CheckErr(err, "create environment spec")
-		return nil
+		if err != nil {
+			return sdk.FailedToError(err, "create environment spec")
+		}
 	}
 
 	_, err = client.EnvironmentCreate(env)
@@ -129,7 +130,7 @@ func envGet(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		log.Fatal("Need a name, use --name.")
+		LogAndExit("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -138,7 +139,9 @@ func envGet(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	env, err := client.EnvironmentGet(m)
-	sdk.CheckErr(err, "get environment")
+	if err != nil {
+		return sdk.FailedToError(err, "get environment")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
@@ -153,7 +156,7 @@ func envUpdate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		log.Fatal("Need a name, use --name.")
+		LogAndExit("Need a name, use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -163,21 +166,23 @@ func envUpdate(c *cli.Context) error {
 	envExternalNetwork := c.Bool("externalnetwork")
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
-		log.Fatal("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
+		LogAndExit("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      envName,
 		Namespace: envNamespace,
 	})
-	sdk.CheckErr(err, "find environment")
+	if err != nil {
+		return sdk.FailedToError(err, "find environment")
+	}
 
 	if len(envImg) > 0 {
 		env.Spec.Runtime.Image = envImg
 	}
 
 	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
-		log.Fatal("Version 1 Environments do not support builders. Must specify --version=2.")
+		LogAndExit("Version 1 Environments do not support builders. Must specify --version=2.")
 	}
 
 	if len(envBuilderImg) > 0 {
@@ -202,7 +207,9 @@ func envUpdate(c *cli.Context) error {
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	_, err = client.EnvironmentUpdate(env)
-	sdk.CheckErr(err, "update environment")
+	if err != nil {
+		return sdk.FailedToError(err, "update environment")
+	}
 
 	fmt.Printf("environment '%v' updated\n", envName)
 	return nil
@@ -213,7 +220,7 @@ func envDelete(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		log.Fatal("Need a name , use --name.")
+		LogAndExit("Need a name , use --name.")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -222,7 +229,9 @@ func envDelete(c *cli.Context) error {
 		Namespace: envNamespace,
 	}
 	err := client.EnvironmentDelete(m)
-	sdk.CheckErr(err, "delete environment")
+	if err != nil {
+		return sdk.FailedToError(err, "delete environment")
+	}
 
 	fmt.Printf("environment '%v' deleted\n", envName)
 	return nil
@@ -233,7 +242,9 @@ func envList(c *cli.Context) error {
 	envNamespace := c.String("envNamespace")
 
 	envs, err := client.EnvironmentList(envNamespace)
-	sdk.CheckErr(err, "list environments")
+	if err != nil {
+		return sdk.FailedToError(err, "list environments")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
@@ -263,7 +274,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		mincpu := c.Int("mincpu")
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			log.Fatal("Failed to parse mincpu")
+			LogAndExit("Failed to parse mincpu")
 		}
 		requestResources[v1.ResourceCPU] = cpuRequest
 	}
@@ -272,7 +283,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		minmem := c.Int("minmemory")
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			log.Fatal("Failed to parse minmemory")
+			LogAndExit("Failed to parse minmemory")
 		}
 		requestResources[v1.ResourceMemory] = memRequest
 	}
@@ -288,7 +299,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxcpu := c.Int("maxcpu")
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			log.Fatal("Failed to parse maxcpu")
+			LogAndExit("Failed to parse maxcpu")
 		}
 		limitResources[v1.ResourceCPU] = cpuLimit
 	}
@@ -297,7 +308,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxmem := c.Int("maxmemory")
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			log.Fatal("Failed to parse maxmemory")
+			LogAndExit("Failed to parse maxmemory")
 		}
 		limitResources[v1.ResourceMemory] = memLimit
 	}

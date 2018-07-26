@@ -47,7 +47,9 @@ func specInit(c *cli.Context) error {
 	if len(name) == 0 {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
-		sdk.CheckErr(err, "get current working directory")
+		if err != nil {
+			return sdk.FailedToError(err, "get current working directory")
+		}
 		basename := filepath.Base(dir)
 		name = sdk.KubifyName(basename)
 	}
@@ -55,7 +57,9 @@ func specInit(c *cli.Context) error {
 	// Create spec dir
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
-	sdk.CheckErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
+	if err != nil {
+		return sdk.FailedToError(err, fmt.Sprintf("create spec directory '%v'", specDir))
+	}
 
 	// Add a bit of documentation to the spec dir here
 	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(sdk.SPEC_README), 0644)
@@ -77,7 +81,9 @@ func specInit(c *cli.Context) error {
 		UID: uuid.NewV4().String(),
 	}
 	err = sdk.WriteDeploymentConfig(specDir, &dc)
-	sdk.CheckErr(err, "write deployment config")
+	if err != nil {
+		return sdk.FailedToError(err, "write deployment config")
+	}
 
 	// Other possible things to do here:
 	// - add example specs to the dir to make it easy to manually
@@ -92,7 +98,9 @@ func specValidate(c *cli.Context) error {
 	// this will error on parse errors and on duplicates
 	specDir := getSpecDir(c)
 	fr, err := sdk.ReadSpecs(specDir)
-	sdk.CheckErr(err, "read specs")
+	if err != nil {
+		return sdk.FailedToError(err, "read specs")
+	}
 
 	// this does the rest of the checks, like dangling refs
 	err = fr.Validate()
@@ -131,35 +139,49 @@ func specApply(c *cli.Context) error {
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
-		sdk.CheckErr(err, "create file watcher")
+		if err != nil {
+			return sdk.FailedToError(err, "create file watcher")
+		}
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-			sdk.CheckErr(err, "scan project files")
+			if err != nil {
+				return sdk.FailedToError(err, "scan project files")
+			}
 
 			if sdk.IgnoreFile(path) {
 				return nil
 			}
 			err = watcher.Add(path)
-			sdk.CheckErr(err, fmt.Sprintf("watch path %v", path))
+			if err != nil {
+				return sdk.FailedToError(err, fmt.Sprintf("watch path %v", path))
+			}
 			return nil
 		})
-		sdk.CheckErr(err, "scan files to watch")
+		if err != nil {
+			return sdk.FailedToError(err, "scan files to watch")
+		}
 	}
 
 	for {
 		// read all specs
 		fr, err := sdk.ReadSpecs(specDir)
-		sdk.CheckErr(err, "read specs")
+		if err != nil {
+			return sdk.FailedToError(err, "read specs")
+		}
 
 		// validate
 		err = fr.Validate()
-		sdk.CheckErr(err, "validate specs")
+		if err != nil {
+			return sdk.FailedToError(err, "validate specs")
+		}
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := sdk.ApplyResources(fclient, specDir, fr, deleteResources)
-		sdk.CheckErr(err, "apply specs")
+		if err != nil {
+			return sdk.FailedToError(err, "apply specs")
+		}
 		sdk.PrintApplyStatus(as)
 
 		if watchResources || waitForBuild {
@@ -200,11 +222,15 @@ func specApply(c *cli.Context) error {
 				pkgWatchCancel()
 
 				err = sdk.WaitForFileWatcherToSettleDown(watcher)
-				sdk.CheckErr(err, "watching files")
+				if err != nil {
+					return sdk.FailedToError(err, "watching files")
+				}
 
 				break waitloop
 			case err := <-watcher.Errors:
-				sdk.CheckErr(err, "watching files")
+				if err != nil {
+					return sdk.FailedToError(err, "watching files")
+				}
 			}
 		}
 	}
@@ -220,7 +246,9 @@ func specDestroy(c *cli.Context) error {
 
 	// read everything
 	fr, err := sdk.ReadSpecs(specDir)
-	sdk.CheckErr(err, "read specs")
+	if err != nil {
+		return sdk.FailedToError(err, "read specs")
+	}
 
 	// set desired state to nothing, but keep the UID so "apply" can find it
 	emptyFr := sdk.FissionResources{}
@@ -228,7 +256,9 @@ func specDestroy(c *cli.Context) error {
 
 	// "apply" the empty state
 	_, _, err = sdk.ApplyResources(fclient, specDir, &emptyFr, true)
-	sdk.CheckErr(err, "delete resources")
+	if err != nil {
+		return sdk.FailedToError(err, "delete resources")
+	}
 
 	return nil
 }

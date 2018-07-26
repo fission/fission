@@ -42,19 +42,25 @@ import (
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need --name argument.")
+		LogAndExit("Need --name argument.")
 	}
 
 	queryURL, err := url.Parse(sdk.GetServerUrl())
-	sdk.CheckErr(err, "parse the base URL")
+	if err != nil {
+		return sdk.FailedToError(err, "parse the base URL")
+	}
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	sdk.CheckErr(err, "create logs request")
+	if err != nil {
+		return sdk.FailedToError(err, "create logs request")
+	}
 
 	httpClient := http.Client{}
 	resp, err := httpClient.Do(req)
-	sdk.CheckErr(err, "execute get logs request")
+	if err != nil {
+		return sdk.FailedToError(err, "execute get logs request")
+	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -62,7 +68,9 @@ func printPodLogs(c *cli.Context) error {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	sdk.CheckErr(err, "read the response body")
+	if err != nil {
+		return sdk.FailedToError(err, "read the response body")
+	}
 	fmt.Println(string(body))
 	return nil
 }
@@ -127,7 +135,9 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	err := sdk.CreateFunction(createFunctionArg)
-	sdk.CheckErr(err, "create function")
+	if err != nil {
+		return sdk.FailedToError(err, "create function")
+	}
 	return err
 
 }
@@ -137,7 +147,7 @@ func fnGet(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need name of function, use --name")
+		LogAndExit("Need name of function, use --name")
 	}
 	fnNamespace := c.String("fnNamespace")
 	m := &metav1.ObjectMeta{
@@ -145,13 +155,17 @@ func fnGet(c *cli.Context) error {
 		Namespace: fnNamespace,
 	}
 	fn, err := client.FunctionGet(m)
-	sdk.CheckErr(err, "get function")
+	if err != nil {
+		return sdk.FailedToError(err, "get function")
+	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Name:      fn.Spec.Package.PackageRef.Name,
 		Namespace: fn.Spec.Package.PackageRef.Namespace,
 	})
-	sdk.CheckErr(err, "get package")
+	if err != nil {
+		return sdk.FailedToError(err, "get package")
+	}
 
 	os.Stdout.Write(pkg.Spec.Deployment.Literal)
 	return err
@@ -162,7 +176,7 @@ func fnGetMeta(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need name of function, use --name")
+		LogAndExit("Need name of function, use --name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -172,7 +186,9 @@ func fnGetMeta(c *cli.Context) error {
 	}
 
 	f, err := client.FunctionGet(m)
-	sdk.CheckErr(err, "get function")
+	if err != nil {
+		return sdk.FailedToError(err, "get function")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
@@ -186,16 +202,16 @@ func fnUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 
 	if len(c.String("package")) > 0 {
-		log.Fatal("--package is deprecated, please use --deploy instead.")
+		LogAndExit("--package is deprecated, please use --deploy instead.")
 	}
 
 	if len(c.String("srcpkg")) > 0 {
-		log.Fatal("--srcpkg is deprecated, please use --src instead.")
+		LogAndExit("--srcpkg is deprecated, please use --src instead.")
 	}
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need name of function, use --name")
+		LogAndExit("Need name of function, use --name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -203,7 +219,9 @@ func fnUpdate(c *cli.Context) error {
 		Name:      fnName,
 		Namespace: fnNamespace,
 	})
-	sdk.CheckErr(err, fmt.Sprintf("read function '%v'", fnName))
+	if err != nil {
+		return sdk.FailedToError(err, fmt.Sprintf("read function '%v'", fnName))
+	}
 
 	envName := c.String("env")
 	envNamespace := c.String("envNamespace")
@@ -221,12 +239,12 @@ func fnUpdate(c *cli.Context) error {
 	cfgMapName := c.String("configmap")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		log.Fatal("Need either of --src or --deploy and not both arguments.")
+		LogAndExit("Need either of --src or --deploy and not both arguments.")
 	}
 
 	if len(secretName) > 0 {
 		if len(function.Spec.Secrets) > 1 {
-			log.Fatal("Please use 'fission spec apply' to update list of secrets")
+			LogAndExit("Please use 'fission spec apply' to update list of secrets")
 		}
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
@@ -247,7 +265,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(cfgMapName) > 0 {
 		if len(function.Spec.ConfigMaps) > 1 {
-			log.Fatal("Please use 'fission spec apply' to update list of configmaps")
+			LogAndExit("Please use 'fission spec apply' to update list of configmaps")
 		}
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
@@ -282,20 +300,26 @@ func fnUpdate(c *cli.Context) error {
 		Namespace: fnNamespace,
 		Name:      pkgName,
 	})
-	sdk.CheckErr(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+	if err != nil {
+		return sdk.FailedToError(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+	}
 
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
 		fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-		sdk.CheckErr(err, "get function list")
+		if err != nil {
+			return sdk.FailedToError(err, "get function list")
+		}
 
 		if !force && len(fnList) > 1 {
-			log.Fatal("Package is used by multiple functions, use --force to force update")
+			LogAndExit("Package is used by multiple functions, use --force to force update")
 		}
 
 		pkgMetadata, err = sdk.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
-		sdk.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("update package '%v'", pkgName))
+		}
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
 
@@ -305,7 +329,9 @@ func fnUpdate(c *cli.Context) error {
 			if fn.Metadata.Name != fnName {
 				fn.Spec.Package.PackageRef.ResourceVersion = pkgMetadata.ResourceVersion
 				_, err := client.FunctionUpdate(&fn)
-				sdk.CheckErr(err, "update function")
+				if err != nil {
+					return sdk.FailedToError(err, "update function")
+				}
 			}
 		}
 	}
@@ -331,11 +357,11 @@ func fnUpdate(c *cli.Context) error {
 		minscale := c.Int("minscale")
 		maxscale := c.Int("maxscale")
 		if c.IsSet("maxscale") && minscale > c.Int("maxscale") {
-			log.Fatal(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
+			LogAndExit(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
 		}
 		if function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
 			minscale > function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			log.Fatal(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
+			LogAndExit(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
 				function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minscale
@@ -344,7 +370,7 @@ func fnUpdate(c *cli.Context) error {
 	if c.IsSet("maxscale") {
 		maxscale := c.Int("maxscale")
 		if maxscale < function.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			log.Fatal(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
+			LogAndExit(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
 				function.Spec.InvokeStrategy.ExecutionStrategy.MinScale, maxscale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
@@ -360,7 +386,7 @@ func fnUpdate(c *cli.Context) error {
 		case fission.ExecutorTypeNewdeploy:
 			fnExecutor = fission.ExecutorTypeNewdeploy
 		default:
-			log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+			LogAndExit("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 		}
 		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
 			fnExecutor == fission.ExecutorTypePoolmgr {
@@ -370,7 +396,9 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	_, err = client.FunctionUpdate(function)
-	sdk.CheckErr(err, "update function")
+	if err != nil {
+		return sdk.FailedToError(err, "update function")
+	}
 
 	fmt.Printf("function '%v' updated\n", fnName)
 	return err
@@ -381,7 +409,7 @@ func fnDelete(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need name of function, use --name")
+		LogAndExit("Need name of function, use --name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -391,7 +419,9 @@ func fnDelete(c *cli.Context) error {
 	}
 
 	err := client.FunctionDelete(m)
-	sdk.CheckErr(err, fmt.Sprintf("delete function '%v'", fnName))
+	if err != nil {
+		return sdk.FailedToError(err, fmt.Sprintf("delete function '%v'", fnName))
+	}
 
 	fmt.Printf("function '%v' deleted\n", fnName)
 	return err
@@ -402,7 +432,9 @@ func fnList(c *cli.Context) error {
 	ns := c.String("fnNamespace")
 
 	fns, err := client.FunctionList(ns)
-	sdk.CheckErr(err, "list functions")
+	if err != nil {
+		return sdk.FailedToError(err, "list functions")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
@@ -432,7 +464,7 @@ func fnLogs(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need name of function, use --name")
+		LogAndExit("Need name of function, use --name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -453,12 +485,14 @@ func fnLogs(c *cli.Context) error {
 	}
 
 	f, err := client.FunctionGet(m)
-	sdk.CheckErr(err, "get function")
+	if err != nil {
+		return sdk.FailedToError(err, "get function")
+	}
 
 	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, sdk.GetServerUrl())
 	if err != nil {
-		log.Fatal("failed to connect log database")
+		LogAndExit("failed to connect log database")
 	}
 
 	requestChan := make(chan struct{})
@@ -479,7 +513,7 @@ func fnLogs(c *cli.Context) error {
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
-					log.Fatal("failed to query logs")
+					LogAndExit("failed to query logs")
 				}
 				for _, logEntry := range logEntries {
 					if c.Bool("d") {
@@ -511,7 +545,7 @@ func fnLogs(c *cli.Context) error {
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		log.Fatal("Need function name to be specified with --name")
+		LogAndExit("Need function name to be specified with --name")
 	}
 	ns := c.String("fnNamespace")
 
@@ -535,14 +569,18 @@ func fnTest(c *cli.Context) error {
 	resp := sdk.HttpRequest(c.String("method"), url, c.String("body"), c.StringSlice("header"))
 	if resp.StatusCode < 400 {
 		body, err := ioutil.ReadAll(resp.Body)
-		sdk.CheckErr(err, "Function test")
+		if err != nil {
+			return sdk.FailedToError(err, "Function test")
+		}
 		fmt.Print(string(body))
 		defer resp.Body.Close()
 		return nil
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	sdk.CheckErr(err, "read log response from pod")
+	if err != nil {
+		return sdk.FailedToError(err, "read log response from pod")
+	}
 	fmt.Printf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
 	defer resp.Body.Close()
 	err = printPodLogs(c)

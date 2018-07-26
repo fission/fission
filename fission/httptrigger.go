@@ -29,7 +29,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 )
 
 func htCreate(c *cli.Context) error {
@@ -37,13 +36,13 @@ func htCreate(c *cli.Context) error {
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		log.Fatal("Need a function name to create a trigger, use --function")
+		LogAndExit("Need a function name to create a trigger, use --function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
-		log.Fatal("Need a trigger URL, use --url")
+		LogAndExit("Need a trigger URL, use --url")
 	}
 	if !strings.HasPrefix(triggerUrl, "/") {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
@@ -86,12 +85,16 @@ func htCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
 		err := sdk.SpecSave(*ht, specFile)
-		sdk.CheckErr(err, "create HTTP trigger spec")
+		if err != nil {
+			return sdk.FailedToError(err, "create HTTP trigger spec")
+		}
 		return nil
 	}
 
 	_, err := client.HTTPTriggerCreate(ht)
-	sdk.CheckErr(err, "create HTTP trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "create HTTP trigger")
+	}
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
 	return err
@@ -105,14 +108,14 @@ func htUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		log.Fatal("Need name of trigger, use --name")
+		LogAndExit("Need name of trigger, use --name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 
 	// update function ref
 	newFn := c.String("function")
 	if len(newFn) == 0 {
-		log.Fatal("Nothing to update. Use --function to specify a new function.")
+		LogAndExit("Nothing to update. Use --function to specify a new function.")
 	}
 
 	sdk.CheckFunctionExistence(client, newFn, triggerNamespace)
@@ -121,7 +124,9 @@ func htUpdate(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	sdk.CheckErr(err, "get HTTP trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "get HTTP trigger")
+	}
 
 	if len(newFn) > 0 {
 		ht.Spec.FunctionReference.Name = newFn
@@ -136,7 +141,9 @@ func htUpdate(c *cli.Context) error {
 	}
 
 	_, err = client.HTTPTriggerUpdate(ht)
-	sdk.CheckErr(err, "update HTTP trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "update HTTP trigger")
+	}
 
 	fmt.Printf("trigger '%v' updated\n", htName)
 	return nil
@@ -146,7 +153,7 @@ func htDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		log.Fatal("Need name of trigger to delete, use --name")
+		LogAndExit("Need name of trigger to delete, use --name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 
@@ -154,7 +161,9 @@ func htDelete(c *cli.Context) error {
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
-	sdk.CheckErr(err, "delete trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "delete trigger")
+	}
 
 	fmt.Printf("trigger '%v' deleted\n", htName)
 	return nil
@@ -165,7 +174,9 @@ func htList(c *cli.Context) error {
 	triggerNamespace := c.String("triggerNamespace")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
-	sdk.CheckErr(err, "list HTTP triggers")
+	if err != nil {
+		return sdk.FailedToError(err, "list HTTP triggers")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

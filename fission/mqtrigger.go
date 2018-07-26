@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
 
@@ -40,7 +40,7 @@ func mqtCreate(c *cli.Context) error {
 	}
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		log.Fatal("Need a function name to create a trigger, use --function")
+		LogAndExit("Need a function name to create a trigger, use --function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -53,20 +53,20 @@ func mqtCreate(c *cli.Context) error {
 	case fission.MessageQueueTypeASQ:
 		mqType = fission.MessageQueueTypeASQ
 	default:
-		log.Fatal("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue \" is supported")
+		LogAndExit("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue \" is supported")
 	}
 
 	// TODO: check topic availability
 	topic := c.String("topic")
 	if len(topic) == 0 {
-		log.Fatal("Listen topic cannot be empty")
+		LogAndExit("Listen topic cannot be empty")
 	}
 	respTopic := c.String("resptopic")
 
 	if topic == respTopic {
 		// TODO maybe this should just be a warning, perhaps
 		// allow it behind a --force flag
-		log.Fatal("Listen topic should not equal to response topic")
+		LogAndExit("Listen topic should not equal to response topic")
 	}
 
 	errorTopic := c.String("errortopic")
@@ -74,7 +74,7 @@ func mqtCreate(c *cli.Context) error {
 	maxRetries := c.Int("maxretries")
 
 	if maxRetries < 0 {
-		log.Fatal("Maximum number of retries must be a natural number, default is 0")
+		LogAndExit("Maximum number of retries must be a natural number, default is 0")
 	}
 
 	contentType := c.String("contenttype")
@@ -107,12 +107,16 @@ func mqtCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", mqtName)
 		err := sdk.SpecSave(*mqt, specFile)
-		sdk.CheckErr(err, "create message queue trigger spec")
+		if err != nil {
+			return sdk.FailedToError(err, "create message queue trigger spec")
+		}
 		return nil
 	}
 
 	_, err := client.MessageQueueTriggerCreate(mqt)
-	sdk.CheckErr(err, "create message queue trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "create message queue trigger")
+	}
 
 	fmt.Printf("trigger '%s' created\n", mqtName)
 	return err
@@ -126,7 +130,7 @@ func mqtUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	mqtName := c.String("name")
 	if len(mqtName) == 0 {
-		log.Fatal("Need name of trigger, use --name")
+		LogAndExit("Need name of trigger, use --name")
 	}
 	mqtNs := c.String("triggerns")
 
@@ -141,7 +145,9 @@ func mqtUpdate(c *cli.Context) error {
 		Name:      mqtName,
 		Namespace: mqtNs,
 	})
-	sdk.CheckErr(err, "get Time trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "get Time trigger")
+	}
 
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
@@ -174,11 +180,13 @@ func mqtUpdate(c *cli.Context) error {
 	}
 
 	if !updated {
-		log.Fatal("Nothing to update. Use --topic, --resptopic, --errortopic, --maxretries or --function.")
+		LogAndExit("Nothing to update. Use --topic, --resptopic, --errortopic, --maxretries or --function.")
 	}
 
 	_, err = client.MessageQueueTriggerUpdate(mqt)
-	sdk.CheckErr(err, "update Time trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "update Time trigger")
+	}
 
 	fmt.Printf("trigger '%v' updated\n", mqtName)
 	return nil
@@ -188,7 +196,7 @@ func mqtDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	mqtName := c.String("name")
 	if len(mqtName) == 0 {
-		log.Fatal("Need name of trigger to delete, use --name")
+		return errors.New("Need name of trigger to delete, use --name")
 	}
 	mqtNs := c.String("triggerns")
 
@@ -196,7 +204,9 @@ func mqtDelete(c *cli.Context) error {
 		Name:      mqtName,
 		Namespace: mqtNs,
 	})
-	sdk.CheckErr(err, "delete trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "delete trigger")
+	}
 
 	fmt.Printf("trigger '%v' deleted\n", mqtName)
 	return nil
@@ -207,7 +217,9 @@ func mqtList(c *cli.Context) error {
 	mqtNs := c.String("triggerns")
 
 	mqts, err := client.MessageQueueTriggerList(c.String("mqtype"), mqtNs)
-	sdk.CheckErr(err, "list message queue triggers")
+	if err != nil {
+		return sdk.FailedToError(err, "list message queue triggers")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

@@ -26,7 +26,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
 
@@ -39,14 +38,14 @@ func ttCreate(c *cli.Context) error {
 	}
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		log.Fatal("Need a function name to create a trigger, use --function")
+		LogAndExit("Need a function name to create a trigger, use --function")
 	}
 
 	fnNamespace := c.String("fnNamespace")
 
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		log.Fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		LogAndExit("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	tt := &crd.TimeTrigger{
@@ -67,17 +66,23 @@ func ttCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", name)
 		err := sdk.SpecSave(*tt, specFile)
-		sdk.CheckErr(err, "create time trigger spec")
+		if err != nil {
+			return sdk.FailedToError(err, "create time trigger spec")
+		}
 		return nil
 	}
 
 	_, err := client.TimeTriggerCreate(tt)
-	sdk.CheckErr(err, "create Time trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "create Time trigger")
+	}
 
 	fmt.Printf("trigger '%v' created\n", name)
 
 	err = sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), 1)
-	sdk.CheckErr(err, "pass cron spec examination")
+	if err != nil {
+		return sdk.FailedToError(err, "pass cron spec examination")
+	}
 
 	return err
 }
@@ -90,7 +95,7 @@ func ttUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		log.Fatal("Need name of trigger, use --name")
+		LogAndExit("Need name of trigger, use --name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -98,7 +103,9 @@ func ttUpdate(c *cli.Context) error {
 		Name:      ttName,
 		Namespace: ttNs,
 	})
-	sdk.CheckErr(err, "get time trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "get time trigger")
+	}
 
 	updated := false
 	newCron := c.String("cron")
@@ -117,16 +124,20 @@ func ttUpdate(c *cli.Context) error {
 	}
 
 	if !updated {
-		log.Fatal("Nothing to update. Use --cron or --function.")
+		LogAndExit("Nothing to update. Use --cron or --function.")
 	}
 
 	_, err = client.TimeTriggerUpdate(tt)
-	sdk.CheckErr(err, "update Time trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "update Time trigger")
+	}
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
 
 	err = sdk.GetCronNextNActivationTime(newCron, sdk.GetAPITimeInfo(client), 1)
-	sdk.CheckErr(err, "pass cron spec examination")
+	if err != nil {
+		return sdk.FailedToError(err, "pass cron spec examination")
+	}
 
 	return nil
 }
@@ -135,7 +146,7 @@ func ttDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		log.Fatal("Need name of trigger to delete, use --name")
+		LogAndExit("Need name of trigger to delete, use --name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -143,7 +154,9 @@ func ttDelete(c *cli.Context) error {
 		Name:      ttName,
 		Namespace: ttNs,
 	})
-	sdk.CheckErr(err, "delete trigger")
+	if err != nil {
+		return sdk.FailedToError(err, "delete trigger")
+	}
 
 	fmt.Printf("trigger '%v' deleted\n", ttName)
 	return nil
@@ -154,7 +167,9 @@ func ttList(c *cli.Context) error {
 	ttNs := c.String("triggerns")
 
 	tts, err := client.TimeTriggerList(ttNs)
-	sdk.CheckErr(err, "list Time triggers")
+	if err != nil {
+		return sdk.FailedToError(err, "list Time triggers")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
@@ -174,11 +189,13 @@ func ttTest(c *cli.Context) error {
 	round := c.Int("round")
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		log.Fatal("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		LogAndExit("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	err := sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), round)
-	sdk.CheckErr(err, "pass cron spec examination")
+	if err != nil {
+		return sdk.FailedToError(err, "pass cron spec examination")
+	}
 
 	return nil
 }

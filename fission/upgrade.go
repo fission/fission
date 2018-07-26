@@ -15,7 +15,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/sdk"
 )
 
@@ -25,10 +24,12 @@ func upgradeDumpState(c *cli.Context) error {
 
 	// check v1
 	resp, err := http.Get(u + "/environments")
-	sdk.CheckErr(err, "reach fission server")
+	if err != nil {
+		return sdk.FailedToError(err, "reach fission server")
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		msg := fmt.Sprintf("Server %v isn't a v1 Fission server. Use --server to point at a pre-0.2.x Fission server.", u)
-		log.Fatal(msg)
+		LogAndExit(msg)
 	}
 
 	sdk.UpgradeDumpV1State(u, filename)
@@ -42,11 +43,15 @@ func upgradeRestoreState(c *cli.Context) error {
 	}
 
 	contents, err := ioutil.ReadFile(filename)
-	sdk.CheckErr(err, fmt.Sprintf("open file %v", filename))
+	if err != nil {
+		return sdk.FailedToError(err, fmt.Sprintf("open file %v", filename))
+	}
 
 	var v1state sdk.V1FissionState
 	err = json.Unmarshal(contents, &v1state)
-	sdk.CheckErr(err, "parse dumped v1 state")
+	if err != nil {
+		return sdk.FailedToError(err, "parse dumped v1 state")
+	}
 
 	// create a regular v2 client
 	client := sdk.GetClient(c.GlobalString("server"))
@@ -60,16 +65,22 @@ func upgradeRestoreState(c *cli.Context) error {
 
 		// write function to file
 		tmpfile, err := ioutil.TempFile("", pkgName)
-		sdk.CheckErr(err, "create temporary file")
+		if err != nil {
+			return sdk.FailedToError(err, "create temporary file")
+		}
 		code, err := base64.StdEncoding.DecodeString(f.Code)
-		sdk.CheckErr(err, "decode base64 function contents")
+		if err != nil {
+			return sdk.FailedToError(err, "decode base64 function contents")
+		}
 		tmpfile.Write(code)
 		tmpfile.Sync()
 		tmpfile.Close()
 
 		// upload
 		archive, err := sdk.CreateArchive(client, tmpfile.Name(), "")
-		sdk.CheckErr(err, fmt.Sprintf("create archive for function %s", fnName))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create archive for function %s", fnName))
+		}
 		os.Remove(tmpfile.Name())
 
 		// create pkg
@@ -87,7 +98,9 @@ func upgradeRestoreState(c *cli.Context) error {
 			},
 			Spec: pkgSpec,
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create package %v", pkgName))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create package %v", pkgName))
+		}
 		_, err = client.FunctionCreate(&crd.Function{
 			Metadata: *sdk.CrdMetadataFromV1Metadata(&f.Metadata, v1state.NameChanges),
 			Spec: fission.FunctionSpec{
@@ -101,7 +114,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				},
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create function %v", v1state.NameChanges[f.Metadata.Name]))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create function %v", v1state.NameChanges[f.Metadata.Name]))
+		}
 
 	}
 
@@ -116,7 +131,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				},
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create environment %v", e.Metadata.Name))
+		}
 	}
 
 	// create httptriggers
@@ -129,7 +146,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				FunctionReference: *sdk.FunctionRefFromV1Metadata(&t.Function, v1state.NameChanges),
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		}
 	}
 
 	// create mqtriggers
@@ -143,7 +162,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				ResponseTopic:     t.ResponseTopic,
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create http trigger %v", t.Metadata.Name))
+		}
 	}
 
 	// create time triggers
@@ -155,7 +176,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				Cron:              t.Cron,
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create time trigger %v", t.Metadata.Name))
+		}
 	}
 
 	// create watches
@@ -168,7 +191,9 @@ func upgradeRestoreState(c *cli.Context) error {
 				FunctionReference: *sdk.FunctionRefFromV1Metadata(&t.Function, v1state.NameChanges),
 			},
 		})
-		sdk.CheckErr(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
+		if err != nil {
+			return sdk.FailedToError(err, fmt.Sprintf("create kubernetes watch trigger %v", t.Metadata.Name))
+		}
 	}
 
 	return nil
