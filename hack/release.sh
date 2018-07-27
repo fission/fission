@@ -88,6 +88,7 @@ push_all_envs() {
     push_env_image "$version" "python"   "python-env"   ""
     push_env_image "$version" "python"   "python-env"   "2.7"
     push_env_image "$version" "ruby"     "ruby-env"     ""
+    push_env_image "$version" "jvm"      "jvm-env"      ""
 }
 
 push_env_builder_image() {
@@ -118,6 +119,7 @@ push_all_env_builders() {
     push_env_builder_image "$version" "python"   "python-builder"   ""
     push_env_builder_image "$version" "binary"   "binary-builder"   ""
     push_env_builder_image "$version" "go"       "go-builder"       ""
+    push_env_builder_image "$version" "jvm"      "jvm-builder"      ""
 }
 
 # Push pre-upgrade-checks image
