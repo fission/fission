@@ -33,10 +33,14 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/executor/cleanup"
 	"github.com/fission/fission/executor/fscache"
 	"github.com/fission/fission/executor/newdeploy"
 	"github.com/fission/fission/executor/poolmgr"
+	"github.com/fission/fission/executor/reaper"
+)
+
+const (
+	idlePodReapTime = 2 * time.Minute
 )
 
 type (
@@ -250,10 +254,8 @@ func StartExecutor(fissionNamespace string, functionNamespace string, envBuilder
 	fsCache := fscache.MakeFunctionServiceCache()
 
 	poolID := strings.ToLower(uniuri.NewLen(8))
-	cleanup.CleanupObjects(kubernetesClient, functionNamespace, poolID)
-	go cleanup.CleanupRoleBindings(kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
-
-	idlePodReapTime := 2 * time.Minute
+	reaper.CleanupOldExecutorObjects(kubernetesClient, functionNamespace, poolID)
+	go reaper.CleanupRoleBindings(kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient,
