@@ -35,7 +35,7 @@ func wCreate(c *cli.Context) error {
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		LogAndExit("Need a function name to create a watch, use --function")
+		return sdk.MissingArgError("function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -100,13 +100,13 @@ func wCreate(c *cli.Context) error {
 
 func wGet(c *cli.Context) error {
 	// TODO
-	LogAndExit("Not implemented")
+	return sdk.GeneralError("Not implemented")
 	return nil
 }
 
 func wUpdate(c *cli.Context) error {
 	// TODO
-	LogAndExit("Not implemented")
+	return sdk.GeneralError("Not implemented")
 	return nil
 }
 
@@ -115,7 +115,7 @@ func wDelete(c *cli.Context) error {
 
 	wName := c.String("name")
 	if len(wName) == 0 {
-		LogAndExit("Need name of watch to delete, use --name")
+		return sdk.MissingArgError("name")
 	}
 	wNs := c.String("triggerns")
 

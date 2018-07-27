@@ -38,14 +38,14 @@ func ttCreate(c *cli.Context) error {
 	}
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		LogAndExit("Need a function name to create a trigger, use --function")
+		return sdk.MissingArgError("function")
 	}
 
 	fnNamespace := c.String("fnNamespace")
 
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		LogAndExit("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		return sdk.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
 	}
 
 	tt := &crd.TimeTrigger{
@@ -95,7 +95,7 @@ func ttUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		LogAndExit("Need name of trigger, use --name")
+		return sdk.MissingArgError("name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -124,7 +124,7 @@ func ttUpdate(c *cli.Context) error {
 	}
 
 	if !updated {
-		LogAndExit("Nothing to update. Use --cron or --function.")
+		return sdk.GeneralError("Nothing to update. Use --cron or --function.")
 	}
 
 	_, err = client.TimeTriggerUpdate(tt)
@@ -146,7 +146,7 @@ func ttDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		LogAndExit("Need name of trigger to delete, use --name")
+		return sdk.MissingArgError("name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -189,7 +189,7 @@ func ttTest(c *cli.Context) error {
 	round := c.Int("round")
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		LogAndExit("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		return sdk.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
 	}
 
 	err := sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), round)

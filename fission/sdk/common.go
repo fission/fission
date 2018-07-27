@@ -104,17 +104,27 @@ func GeneralError(msg string) error {
 func MissingArgError(argName string) error {
 	var message string
 	if log.IsCliRun {
-		message = fmt.Sprintf("Missing --%v argument", argName)
+		message = fmt.Sprintf("Missing argument --%v", argName)
 	} else {
 		message = fmt.Sprintf("Missing argument %v", argName)
 	}
 	return errors.New(message)
 }
 
+//CheckErr logs 'Failed to [action]: [err]' to stderr and exits in CLI mode, or logs to stdrr only in SDK mode
+//Calls should be refactored to use FailedToError instead
 func CheckErr(err error, action string) {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
 	}
+}
+
+//FailedtoError logs 'Failed to [action]: [err]' to stderr and exits in CLI mode, or logs to stdrr only in SDK mode
+func FailedToError(err error, action string) error {
+	if err != nil {
+		return fmt.Errorf("Failed to %v: %v", action, err)
+	}
+	return nil
 }
 
 func CheckErrElseLogSuccess(err error, action string, successMsgFormat string, successMsgArgs ...interface{}) {
@@ -123,13 +133,6 @@ func CheckErrElseLogSuccess(err error, action string, successMsgFormat string, s
 	} else {
 		log.Info(successMsgFormat, successMsgArgs)
 	}
-}
-
-func FailedToError(err error, msg string) error {
-	if err != nil {
-		return fmt.Errorf("Failed to %v: %v", msg, err)
-	}
-	return nil
 }
 
 func HttpRequest(method, url, body string, headers []string) *http.Response {

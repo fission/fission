@@ -244,8 +244,6 @@ func main() {
 	app.Before = cliHook
 	err := app.Run(os.Args)
 	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("%v\n", err))
-		os.Exit(1)
+		logErrorAndExit(err)
 	}
-
 }

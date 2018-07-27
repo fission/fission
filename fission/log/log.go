@@ -30,17 +30,26 @@ var (
 
 //TODO switch to logrus
 
+//Fatal logs a message to stderr and, if running as CLI, exits with error code 1
+//TODO remove this function and refactor all calling code to return errors instead
 func Fatal(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
+	str := fmt.Sprintf("%v\n", msg)
+	os.Stderr.WriteString(str)
 	if IsCliRun {
 		os.Exit(1)
 	}
+	//If we have got here we are running as SDK not CLI and the caller is not yet safe to use in SDK setting.
+	//Because it has not been refactored to return errors instead of calling log.Fatal or CheckErr, it will
+	//continue to run without exiting and cause unexpected results
+	Warn(fmt.Sprintf("Unsafe usage of sdk code outside CLI setting. Caller that generated following error needs error handling refactor: %v", str))
 }
 
+//Warn logs a message to stderr
 func Warn(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
 }
 
+//Info logs a message to stdout
 func Info(format string, args ...interface{}) {
 	Verbose(1, format, args)
 }

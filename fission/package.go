@@ -36,7 +36,7 @@ func pkgCreate(c *cli.Context) error {
 	pkgNamespace := c.String("pkgNamespace")
 	envName := c.String("env")
 	if len(envName) == 0 {
-		LogAndExit("Need --env argument.")
+		return sdk.MissingArgError("Need --env argument.")
 	}
 	envNamespace := c.String("envNamespace")
 	srcArchiveName := c.String("src")
@@ -44,7 +44,7 @@ func pkgCreate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		LogAndExit("Need --src to specify source archive, or use --deploy to specify deployment archive.")
+		return sdk.MissingArgError("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
 	meta, err := sdk.CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
@@ -61,7 +61,7 @@ func pkgUpdate(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		LogAndExit("Need --name argument.")
+		return sdk.MissingArgError("Need --name argument.")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -73,12 +73,12 @@ func pkgUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		LogAndExit("Need either of --src or --deploy and not both arguments.")
+		return sdk.MissingArgError("Need either of --src or --deploy and not both arguments.")
 	}
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
 		len(envName) == 0 && len(buildcmd) == 0 {
-		LogAndExit("Need --env or --src or --deploy or --buildcmd argument.")
+		return sdk.MissingArgError("Need --env or --src or --deploy or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -95,7 +95,7 @@ func pkgUpdate(c *cli.Context) error {
 	}
 
 	if !force && len(fnList) > 1 {
-		LogAndExit("Package is used by multiple functions, use --force to force update")
+		return sdk.GeneralError("Package is used by multiple functions, use --force to force update")
 	}
 
 	newPkgMeta, err := sdk.UpdatePackage(client, pkg,
@@ -123,7 +123,7 @@ func pkgSourceGet(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		LogAndExit("Need name of package, use --name")
+		return sdk.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -160,7 +160,7 @@ func pkgDeployGet(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		LogAndExit("Need name of package, use --name")
+		return sdk.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -197,7 +197,7 @@ func pkgInfo(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		LogAndExit("Need name of package, use --name")
+		return sdk.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -284,7 +284,7 @@ func pkgDelete(c *cli.Context) error {
 		fnList, err := sdk.GetFunctionsByPackage(client, pkgName, pkgNamespace)
 
 		if !force && len(fnList) > 0 {
-			LogAndExit("Package is used by at least one function, use -f to force delete")
+			return sdk.GeneralError("Package is used by at least one function, use -f to force delete")
 		}
 
 		err = sdk.DeletePackage(client, pkgName, pkgNamespace)

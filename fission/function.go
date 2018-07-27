@@ -42,7 +42,7 @@ import (
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need --name argument.")
+		return sdk.MissingArgError("name")
 	}
 
 	queryURL, err := url.Parse(sdk.GetServerUrl())
@@ -147,7 +147,7 @@ func fnGet(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need name of function, use --name")
+		return sdk.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 	m := &metav1.ObjectMeta{
@@ -176,7 +176,7 @@ func fnGetMeta(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need name of function, use --name")
+		return sdk.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -202,16 +202,16 @@ func fnUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 
 	if len(c.String("package")) > 0 {
-		LogAndExit("--package is deprecated, please use --deploy instead.")
+		return sdk.GeneralError("--package is deprecated, please use --deploy instead.")
 	}
 
 	if len(c.String("srcpkg")) > 0 {
-		LogAndExit("--srcpkg is deprecated, please use --src instead.")
+		return sdk.GeneralError("--srcpkg is deprecated, please use --src instead.")
 	}
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need name of function, use --name")
+		return sdk.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -239,12 +239,12 @@ func fnUpdate(c *cli.Context) error {
 	cfgMapName := c.String("configmap")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		LogAndExit("Need either of --src or --deploy and not both arguments.")
+		return sdk.MissingArgError("Need either of --src or --deploy and not both arguments.")
 	}
 
 	if len(secretName) > 0 {
 		if len(function.Spec.Secrets) > 1 {
-			LogAndExit("Please use 'fission spec apply' to update list of secrets")
+			return sdk.GeneralError("Please use 'fission spec apply' to update list of secrets")
 		}
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
@@ -265,7 +265,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(cfgMapName) > 0 {
 		if len(function.Spec.ConfigMaps) > 1 {
-			LogAndExit("Please use 'fission spec apply' to update list of configmaps")
+			return sdk.GeneralError("Please use 'fission spec apply' to update list of configmaps")
 		}
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
@@ -313,7 +313,7 @@ func fnUpdate(c *cli.Context) error {
 		}
 
 		if !force && len(fnList) > 1 {
-			LogAndExit("Package is used by multiple functions, use --force to force update")
+			return sdk.GeneralError("Package is used by multiple functions, use --force to force update")
 		}
 
 		pkgMetadata, err = sdk.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
@@ -346,22 +346,28 @@ func fnUpdate(c *cli.Context) error {
 		ResourceVersion: pkgMetadata.ResourceVersion,
 	}
 
-	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
+	function.Spec.Resources, err = getResourceReq(c, function.Spec.Resources)
+	if err != nil {
+		return sdk.FailedToError(err, "get resource requirements")
+	}
 
 	if c.IsSet("targetcpu") {
 
-		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = sdk.GetTargetCPU(c.Int("targetcpu"))
+		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent, err = sdk.GetTargetCPU(c.Int("targetcpu"))
+		if err != nil {
+			return err
+		}
 	}
 
 	if c.IsSet("minscale") {
 		minscale := c.Int("minscale")
 		maxscale := c.Int("maxscale")
 		if c.IsSet("maxscale") && minscale > c.Int("maxscale") {
-			LogAndExit(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
+			return sdk.GeneralError(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
 		}
 		if function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
 			minscale > function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			LogAndExit(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
+			return sdk.GeneralError(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
 				function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minscale
@@ -370,7 +376,7 @@ func fnUpdate(c *cli.Context) error {
 	if c.IsSet("maxscale") {
 		maxscale := c.Int("maxscale")
 		if maxscale < function.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			LogAndExit(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
+			return sdk.GeneralError(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
 				function.Spec.InvokeStrategy.ExecutionStrategy.MinScale, maxscale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
@@ -386,7 +392,7 @@ func fnUpdate(c *cli.Context) error {
 		case fission.ExecutorTypeNewdeploy:
 			fnExecutor = fission.ExecutorTypeNewdeploy
 		default:
-			LogAndExit("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+			return sdk.GeneralError("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 		}
 		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
 			fnExecutor == fission.ExecutorTypePoolmgr {
@@ -409,7 +415,7 @@ func fnDelete(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need name of function, use --name")
+		return sdk.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -464,7 +470,7 @@ func fnLogs(c *cli.Context) error {
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need name of function, use --name")
+		return sdk.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -492,7 +498,7 @@ func fnLogs(c *cli.Context) error {
 	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, sdk.GetServerUrl())
 	if err != nil {
-		LogAndExit("failed to connect log database")
+		return sdk.GeneralError("failed to connect log database")
 	}
 
 	requestChan := make(chan struct{})
@@ -513,7 +519,8 @@ func fnLogs(c *cli.Context) error {
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
-					LogAndExit("failed to query logs")
+					//TODO refactor to use error channel (at latest when moving to sdk package)
+					logErrorAndExit("failed to query logs")
 				}
 				for _, logEntry := range logEntries {
 					if c.Bool("d") {
@@ -545,7 +552,7 @@ func fnLogs(c *cli.Context) error {
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		LogAndExit("Need function name to be specified with --name")
+		return sdk.MissingArgError("name")
 	}
 	ns := c.String("fnNamespace")
 

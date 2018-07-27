@@ -40,7 +40,7 @@ func mqtCreate(c *cli.Context) error {
 	}
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		LogAndExit("Need a function name to create a trigger, use --function")
+		return sdk.MissingArgError("function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -53,20 +53,20 @@ func mqtCreate(c *cli.Context) error {
 	case fission.MessageQueueTypeASQ:
 		mqType = fission.MessageQueueTypeASQ
 	default:
-		LogAndExit("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue \" is supported")
+		return sdk.GeneralError("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue \" is supported")
 	}
 
 	// TODO: check topic availability
 	topic := c.String("topic")
 	if len(topic) == 0 {
-		LogAndExit("Listen topic cannot be empty")
+		return sdk.GeneralError("Listen topic cannot be empty")
 	}
 	respTopic := c.String("resptopic")
 
 	if topic == respTopic {
 		// TODO maybe this should just be a warning, perhaps
 		// allow it behind a --force flag
-		LogAndExit("Listen topic should not equal to response topic")
+		return sdk.GeneralError("Listen topic should not equal to response topic")
 	}
 
 	errorTopic := c.String("errortopic")
@@ -74,7 +74,7 @@ func mqtCreate(c *cli.Context) error {
 	maxRetries := c.Int("maxretries")
 
 	if maxRetries < 0 {
-		LogAndExit("Maximum number of retries must be a natural number, default is 0")
+		return sdk.GeneralError("Maximum number of retries must be a natural number, default is 0")
 	}
 
 	contentType := c.String("contenttype")
@@ -82,7 +82,9 @@ func mqtCreate(c *cli.Context) error {
 		contentType = "application/json"
 	}
 
-	sdk.CheckMQTopicAvailability(mqType, topic, respTopic)
+	if err := sdk.CheckMQTopicAvailability(mqType, topic, respTopic); err != nil {
+		return err
+	}
 
 	mqt := &crd.MessageQueueTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -113,13 +115,12 @@ func mqtCreate(c *cli.Context) error {
 		return nil
 	}
 
-	_, err := client.MessageQueueTriggerCreate(mqt)
-	if err != nil {
+	if _, err := client.MessageQueueTriggerCreate(mqt); err != nil {
 		return sdk.FailedToError(err, "create message queue trigger")
 	}
 
 	fmt.Printf("trigger '%s' created\n", mqtName)
-	return err
+	return nil
 }
 
 func mqtGet(c *cli.Context) error {
@@ -130,7 +131,7 @@ func mqtUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	mqtName := c.String("name")
 	if len(mqtName) == 0 {
-		LogAndExit("Need name of trigger, use --name")
+		return sdk.MissingArgError("name")
 	}
 	mqtNs := c.String("triggerns")
 
@@ -151,7 +152,9 @@ func mqtUpdate(c *cli.Context) error {
 
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
-	sdk.CheckMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
+	if err := sdk.CheckMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic); err != nil {
+		return err
+	}
 
 	updated := false
 	if len(topic) > 0 {
@@ -180,7 +183,7 @@ func mqtUpdate(c *cli.Context) error {
 	}
 
 	if !updated {
-		LogAndExit("Nothing to update. Use --topic, --resptopic, --errortopic, --maxretries or --function.")
+		return sdk.GeneralError("Nothing to update. Use --topic, --resptopic, --errortopic, --maxretries or --function.")
 	}
 
 	_, err = client.MessageQueueTriggerUpdate(mqt)

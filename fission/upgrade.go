@@ -29,7 +29,7 @@ func upgradeDumpState(c *cli.Context) error {
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		msg := fmt.Sprintf("Server %v isn't a v1 Fission server. Use --server to point at a pre-0.2.x Fission server.", u)
-		LogAndExit(msg)
+		return sdk.GeneralError(msg)
 	}
 
 	sdk.UpgradeDumpV1State(u, filename)

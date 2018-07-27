@@ -38,7 +38,7 @@ func envCreate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("Need a name, use --name.")
+		return sdk.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -58,7 +58,7 @@ func envCreate(c *cli.Context) error {
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
-		LogAndExit("Need an image, use --image.")
+		return sdk.MissingArgError("image")
 	}
 
 	envVersion := c.Int("version")
@@ -87,7 +87,10 @@ func envCreate(c *cli.Context) error {
 		envVersion = 1
 	}
 
-	resourceReq := getResourceReq(c, v1.ResourceRequirements{})
+	resourceReq, err := getResourceReq(c, v1.ResourceRequirements{})
+	if err != nil {
+		return sdk.FailedToError(err, "get resource requirements")
+	}
 
 	env := &crd.Environment{
 		Metadata: metav1.ObjectMeta{
@@ -130,7 +133,7 @@ func envGet(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		LogAndExit("Need a name, use --name.")
+		return sdk.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -156,7 +159,7 @@ func envUpdate(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		LogAndExit("Need a name, use --name.")
+		return sdk.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -166,7 +169,7 @@ func envUpdate(c *cli.Context) error {
 	envExternalNetwork := c.Bool("externalnetwork")
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
-		LogAndExit("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
+		return sdk.GeneralError("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
@@ -182,7 +185,7 @@ func envUpdate(c *cli.Context) error {
 	}
 
 	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
-		LogAndExit("Version 1 Environments do not support builders. Must specify --version=2.")
+		return sdk.GeneralError("Version 1 Environments do not support builders. Must specify --version=2.")
 	}
 
 	if len(envBuilderImg) > 0 {
@@ -220,7 +223,7 @@ func envDelete(c *cli.Context) error {
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		LogAndExit("Need a name , use --name.")
+		return sdk.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -260,7 +263,7 @@ func envList(c *cli.Context) error {
 	return nil
 }
 
-func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.ResourceRequirements {
+func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) (v1.ResourceRequirements, error) {
 
 	var requestResources map[v1.ResourceName]resource.Quantity
 
@@ -274,7 +277,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		mincpu := c.Int("mincpu")
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			LogAndExit("Failed to parse mincpu")
+			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse mincpu")
 		}
 		requestResources[v1.ResourceCPU] = cpuRequest
 	}
@@ -283,7 +286,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		minmem := c.Int("minmemory")
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			LogAndExit("Failed to parse minmemory")
+			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse minmemory")
 		}
 		requestResources[v1.ResourceMemory] = memRequest
 	}
@@ -299,7 +302,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxcpu := c.Int("maxcpu")
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			LogAndExit("Failed to parse maxcpu")
+			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse maxcpu")
 		}
 		limitResources[v1.ResourceCPU] = cpuLimit
 	}
@@ -308,7 +311,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		maxmem := c.Int("maxmemory")
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			LogAndExit("Failed to parse maxmemory")
+			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse maxmemory")
 		}
 		limitResources[v1.ResourceMemory] = memLimit
 	}
@@ -317,5 +320,5 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		Requests: requestResources,
 		Limits:   limitResources,
 	}
-	return resources
+	return resources, nil
 }

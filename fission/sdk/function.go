@@ -113,7 +113,7 @@ func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcp
 	}
 
 	if minScale > maxScale {
-		log.Fatal("Maxscale must be higher than or equal to minscale")
+		return fission.InvokeStrategy{}, GeneralError("Maxscale must be higher than or equal to minscale")
 	}
 
 	var fnExecutor fission.ExecutorType
@@ -174,7 +174,10 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	envNamespace := functionArg.EnvNamespace
 
 	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
-	targetCPU = GetTargetCPU(targetCPU)
+	targetCPU, err = GetTargetCPU(targetCPU)
+	if err != nil {
+		return err
+	}
 
 	// user wants a spec, create a yaml file with package and function
 	specFile := ""
@@ -327,13 +330,13 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	return err
 }
 
-func GetTargetCPU(targetCPU int) int {
+func GetTargetCPU(targetCPU int) (int, error) {
 	if targetCPU != 0 {
 		if targetCPU <= 0 || targetCPU > 100 {
-			log.Fatal("TargetCPU must be a value between 1 - 100")
+			return 0, GeneralError("TargetCPU must be a value between 1 - 100")
 		}
 	} else {
 		targetCPU = 80
 	}
-	return targetCPU
+	return targetCPU, nil
 }

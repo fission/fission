@@ -36,13 +36,13 @@ func htCreate(c *cli.Context) error {
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		LogAndExit("Need a function name to create a trigger, use --function")
+		return sdk.MissingArgError("function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
-		LogAndExit("Need a trigger URL, use --url")
+		return sdk.MissingArgError("url")
 	}
 	if !strings.HasPrefix(triggerUrl, "/") {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
@@ -108,14 +108,14 @@ func htUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		LogAndExit("Need name of trigger, use --name")
+		return sdk.MissingArgError("name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 
 	// update function ref
 	newFn := c.String("function")
 	if len(newFn) == 0 {
-		LogAndExit("Nothing to update. Use --function to specify a new function.")
+		return sdk.GeneralError("Nothing to update. Use --function to specify a new function.")
 	}
 
 	sdk.CheckFunctionExistence(client, newFn, triggerNamespace)
@@ -153,7 +153,7 @@ func htDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		LogAndExit("Need name of trigger to delete, use --name")
+		return sdk.MissingArgError("name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 

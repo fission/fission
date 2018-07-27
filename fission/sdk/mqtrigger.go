@@ -19,14 +19,14 @@ package sdk
 import (
 	"fmt"
 	"github.com/fission/fission"
-	"github.com/fission/fission/fission/log"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
-func CheckMQTopicAvailability(mqType fission.MessageQueueType, topics ...string) {
+func CheckMQTopicAvailability(mqType fission.MessageQueueType, topics ...string) error {
 	for _, t := range topics {
 		if len(t) > 0 && !fv1.IsTopicValid(mqType, t) {
-			log.Fatal(fmt.Sprintf("Invalid topic for %s: %s", mqType, t))
+			return GeneralError(fmt.Sprintf("Invalid topic for %s: %s", mqType, t))
 		}
 	}
+	return nil
 }
