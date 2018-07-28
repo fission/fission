@@ -239,7 +239,7 @@ func fnUpdate(c *cli.Context) error {
 	cfgMapName := c.String("configmap")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		return sdk.MissingArgError("Need either of --src or --deploy and not both arguments.")
+		return sdk.GeneralError("Must provide only one of arguments --srcarchive, --deployarchive or --code")
 	}
 
 	if len(secretName) > 0 {
