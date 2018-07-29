@@ -103,8 +103,9 @@ func UpdatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	newPkgMeta, err := client.PackageUpdate(pkg)
-	CheckErr(err, "update package")
-
+	if err != nil {
+		return nil, FailedToError(err, "update package")
+	}
 	return newPkgMeta, nil
 }
 
