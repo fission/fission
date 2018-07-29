@@ -91,7 +91,7 @@ func (arg CreateFunctionArg) validate() error {
 	if numCodeArgs >= 2 {
 		return GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs))
 	}
-	if looksLikeSourceCodeFile(arg.SrcArchiveName) {
+	if isSingleSourceCodeFile(arg.SrcArchiveName) {
 		return GeneralError(fmt.Sprintf("Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. For single source file use --code instead. Regexp used for validation: `%v`", arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN))
 	}
 
@@ -105,7 +105,7 @@ func (arg CreateFunctionArg) validate() error {
 	// From this change onwards, we mandate that a function should reference a secret, config map and package
 	for _, fn := range fnList {
 		if fn.Metadata.Name == arg.FnName {
-			return errors.New("A function with the same name already exists.")
+			return GeneralError("A function with the same name already exists.")
 		}
 	}
 
@@ -117,7 +117,7 @@ func (arg CreateFunctionArg) validate() error {
 
 	if err != nil {
 		if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
-			return fmt.Errorf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --image <image>`\n", arg.EnvName, arg.EnvName)
+			return GeneralError(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --image <image>`\n", arg.EnvName, arg.EnvName))
 		} else {
 			return FailedToError(err, "retrieve environment information")
 		}
@@ -369,7 +369,8 @@ func GetTargetCPU(targetCPU int) (int, error) {
 	return targetCPU, nil
 }
 
-func looksLikeSourceCodeFile(filename string) bool {
+func isSingleSourceCodeFile(filename string) bool {
+	//Ideally we'd probably check that this is an archive not plain text, but this is a start
 	matched, err := regexp.MatchString(SINGLE_SOURCE_CODE_FILENAME_PATTERN, filename)
 	if err != nil {
 		return false
