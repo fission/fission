@@ -102,11 +102,12 @@ func fnCreate(c *cli.Context) error {
 	targetCPU := c.Int("targetcpu")
 	triggerURL := c.String("url")
 	method := c.String("method")
-	client := sdk.GetClient(c.GlobalString("server"))
 	fnNamespace := c.String("fnNamespace")
 	envNamespace := c.String("envNamespace")
+	//Also create a client for this cli run
+	client := sdk.GetClient(c.GlobalString("server"))
 
-	createFunctionArg := &sdk.CreateFunctionArg{
+	CreateFunctionArgs := &sdk.CreateFunctionArgs{
 		FnName:            fnName,
 		Spec:              spec,
 		EntryPoint:        entrypoint,
@@ -128,12 +129,12 @@ func fnCreate(c *cli.Context) error {
 		MinMemory:         minmemory,
 		MaxMemory:         maxmemory,
 		TargetCPU:         targetCPU,
-		Client:            client,
 		FnNamespace:       fnNamespace,
 		EnvNamespace:      envNamespace,
+		Client:            client,
 	}
 
-	err := sdk.CreateFunction(createFunctionArg)
+	err := sdk.CreateFunction(CreateFunctionArgs)
 	if err != nil {
 		return sdk.FailedToError(err, "create function")
 	}

@@ -27,6 +27,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	multierror "github.com/hashicorp/go-multierror"
+
 	"github.com/fission/fission"
 	controllerClient "github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
@@ -38,7 +40,7 @@ const (
 	SINGLE_SOURCE_CODE_FILENAME_PATTERN = `\.(js|php|go|py|rb)$`
 )
 
-type CreateFunctionArg struct {
+type CreateFunctionArgs struct {
 	FnName            string
 	Spec              bool
 	EntryPoint        string
@@ -65,14 +67,16 @@ type CreateFunctionArg struct {
 	Client            *controllerClient.Client
 }
 
-func (arg CreateFunctionArg) validate() error {
-	//TODO use mult-error
+func (arg CreateFunctionArgs) validate() error {
+
+	var result *multierror.Error
+
 	if len(arg.FnName) == 0 {
-		return MissingArgError("name")
+		result = multierror.Append(result, MissingArgError("name"))
 	}
 
 	if len(arg.EnvName) == 0 && len(arg.PkgName) == 0 {
-		return MissingArgError("env")
+		result = multierror.Append(result, MissingArgError("env"))
 	}
 
 	numCodeArgs := 0
@@ -86,14 +90,21 @@ func (arg CreateFunctionArg) validate() error {
 		numCodeArgs++
 	}
 	if numCodeArgs == 0 {
-		return GeneralError("Missing argument. Need exactly one of --code, --deployarchive or --sourcearchive")
+		result = multierror.Append(result, GeneralError("Missing argument. Need exactly one of --code, --deployarchive or --sourcearchive"))
 	}
 	if numCodeArgs >= 2 {
-		return GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs))
+		result = multierror.Append(result, GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs)))
 	}
 	if isSingleSourceCodeFile(arg.SrcArchiveName) {
-		return GeneralError(fmt.Sprintf("Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. For single source file use --code instead. Regexp used for validation: `%v`", arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN))
+		result = multierror.Append(result, GeneralError(fmt.Sprintf(
+			"Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. "+
+				"For single source file use --code instead. Regexp used for validation: `%v`",
+			arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
 	}
+	if result.ErrorOrNil() != nil {
+		return result.ErrorOrNil()
+	}
+	//Don't use multierror for rest which make api calls to fail faster
 
 	// check for unique function names within a namespace
 	fnList, err := arg.Client.FunctionList(arg.FnNamespace)
@@ -163,7 +174,7 @@ func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcp
 	return strategy, nil
 }
 
-func CreateFunction(functionArg *CreateFunctionArg) error {
+func CreateFunction(functionArg *CreateFunctionArgs) error {
 
 	err := functionArg.validate()
 	if err != nil {
