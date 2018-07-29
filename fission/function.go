@@ -88,11 +88,9 @@ func fnCreate(c *cli.Context) error {
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 	envName := c.String("env")
-	srcArchiveName := c.String("src")
-	deployArchiveName := c.String("code")
-	if len(deployArchiveName) == 0 {
-		deployArchiveName = c.String("deploy")
-	}
+	codeName := c.String("code")
+	srcArchiveName := c.String("sourcearchive")
+	deployArchiveName := c.String("deployarchive")
 	buildcmd := c.String("buildcmd")
 	minscale := c.Int("minscale")
 	maxscale := c.Int("maxscale")
@@ -116,6 +114,7 @@ func fnCreate(c *cli.Context) error {
 		SecretName:        secretName,
 		CfgMapName:        cfgMapName,
 		EnvName:           envName,
+		CodeName:          codeName,
 		SrcArchiveName:    srcArchiveName,
 		DeployArchiveName: deployArchiveName,
 		BuildCommand:      buildcmd,
@@ -202,11 +201,11 @@ func fnUpdate(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 
 	if len(c.String("package")) > 0 {
-		return sdk.GeneralError("--package is deprecated, please use --deploy instead.")
+		return sdk.GeneralError("--package is deprecated, please use --deployarchive instead.")
 	}
 
 	if len(c.String("srcpkg")) > 0 {
-		return sdk.GeneralError("--srcpkg is deprecated, please use --src instead.")
+		return sdk.GeneralError("--srcpkg is deprecated, please use --sourcearchive instead.")
 	}
 
 	fnName := c.String("name")

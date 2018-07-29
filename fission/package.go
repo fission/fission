@@ -36,7 +36,7 @@ func pkgCreate(c *cli.Context) error {
 	pkgNamespace := c.String("pkgNamespace")
 	envName := c.String("env")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("Need --env argument.")
+		return sdk.MissingArgError("env")
 	}
 	envNamespace := c.String("envNamespace")
 	srcArchiveName := c.String("src")
@@ -44,7 +44,10 @@ func pkgCreate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		return sdk.MissingArgError("Need --src to specify source archive, or use --deploy to specify deployment archive.")
+		return sdk.GeneralError("Missing argument. Need --sourcearchive to specify source archive, or use --deployarchive to specify deployment archive.")
+	}
+	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
+		return sdk.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
 	}
 
 	meta, err := sdk.CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
@@ -61,7 +64,7 @@ func pkgUpdate(c *cli.Context) error {
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("Need --name argument.")
+		return sdk.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -73,12 +76,12 @@ func pkgUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		return sdk.MissingArgError("Need either of --src or --deploy and not both arguments.")
+		return sdk.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
 	}
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
 		len(envName) == 0 && len(buildcmd) == 0 {
-		return sdk.MissingArgError("Need --env or --src or --deploy or --buildcmd argument.")
+		return sdk.GeneralError("Need --env or --sourcearchive or --deployarchive or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{

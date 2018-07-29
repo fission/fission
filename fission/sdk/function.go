@@ -41,7 +41,7 @@ type CreateFunctionArg struct {
 	CfgMapName        string
 	EnvName           string
 	SrcArchiveName    string
-	Code              string
+	CodeName          string
 	DeployArchiveName string
 	BuildCommand      string
 	TriggerURL        string
@@ -67,6 +67,16 @@ func (arg CreateFunctionArg) validate() error {
 
 	if len(arg.EnvName) == 0 && len(arg.PkgName) == 0 {
 		return MissingArgError("env")
+	}
+	numCodeArgs := 0
+	if len(arg.CodeName) > 0 {
+		numCodeArgs++
+	}
+	if len(arg.SrcArchiveName) > 0 {
+		numCodeArgs++
+	}
+	if len(arg.DeployArchiveName) > 0 {
+		numCodeArgs++
 	}
 
 	// check for unique function names within a namespace
@@ -99,7 +109,7 @@ func (arg CreateFunctionArg) validate() error {
 
 	// fatal when both src & deploy archive are empty
 	if len(arg.SrcArchiveName) == 0 && len(arg.DeployArchiveName) == 0 {
-		return fmt.Errorf("Need --deploy or --src argument.")
+		return fmt.Errorf("Need --deployarchive or --sourcearchive argument.")
 	}
 
 	return nil
