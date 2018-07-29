@@ -19,6 +19,7 @@ package sdk
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/satori/go.uuid"
@@ -30,6 +31,11 @@ import (
 	controllerClient "github.com/fission/fission/controller/client"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/fission/log"
+)
+
+const (
+	//File names with common source code extensions
+	SINGLE_SOURCE_CODE_FILENAME_PATTERN = `\.(js|php|go|py|rb)$`
 )
 
 type CreateFunctionArg struct {
@@ -84,6 +90,9 @@ func (arg CreateFunctionArg) validate() error {
 	}
 	if numCodeArgs >= 2 {
 		return GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs))
+	}
+	if looksLikeSourceCodeFile(arg.SrcArchiveName) {
+		return GeneralError(fmt.Sprintf("Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. For single source file use --code instead. Regexp used for validation: `%v`", arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN))
 	}
 
 	// check for unique function names within a namespace
@@ -358,4 +367,12 @@ func GetTargetCPU(targetCPU int) (int, error) {
 		targetCPU = 80
 	}
 	return targetCPU, nil
+}
+
+func looksLikeSourceCodeFile(filename string) bool {
+	matched, err := regexp.MatchString(SINGLE_SOURCE_CODE_FILENAME_PATTERN, filename)
+	if err != nil {
+		return false
+	}
+	return matched
 }
