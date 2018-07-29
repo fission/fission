@@ -68,6 +68,7 @@ func (arg CreateFunctionArg) validate() error {
 	if len(arg.EnvName) == 0 && len(arg.PkgName) == 0 {
 		return MissingArgError("env")
 	}
+
 	numCodeArgs := 0
 	if len(arg.CodeName) > 0 {
 		numCodeArgs++
@@ -77,6 +78,12 @@ func (arg CreateFunctionArg) validate() error {
 	}
 	if len(arg.DeployArchiveName) > 0 {
 		numCodeArgs++
+	}
+	if numCodeArgs == 0 {
+		return GeneralError("Missing argument. Need exactly one of --code, --deployarchive or --sourcearchive")
+	}
+	if numCodeArgs >= 2 {
+		return GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs))
 	}
 
 	// check for unique function names within a namespace
@@ -105,11 +112,6 @@ func (arg CreateFunctionArg) validate() error {
 		} else {
 			return FailedToError(err, "retrieve environment information")
 		}
-	}
-
-	// fatal when both src & deploy archive are empty
-	if len(arg.SrcArchiveName) == 0 && len(arg.DeployArchiveName) == 0 {
-		return fmt.Errorf("Need --deployarchive or --sourcearchive argument.")
 	}
 
 	return nil
@@ -166,6 +168,7 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	secretName := functionArg.SecretName
 	cfgMapName := functionArg.CfgMapName
 	envName := functionArg.EnvName
+	codeName := functionArg.CodeName
 	srcArchiveName := functionArg.SrcArchiveName
 	deployArchiveName := functionArg.DeployArchiveName
 	buildCommand := functionArg.BuildCommand
@@ -182,6 +185,12 @@ func CreateFunction(functionArg *CreateFunctionArg) error {
 	maxmemory := functionArg.MaxMemory
 	fnNamespace := functionArg.FnNamespace
 	envNamespace := functionArg.EnvNamespace
+
+	//For user clarity we only allow one of --code/--deployarchive/--sourcearchive to be specified - see validate()
+	//But internally a single source code file is still treated as a deployArchive
+	if len(codeName) > 0 {
+		deployArchiveName = codeName
+	}
 
 	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
 	targetCPU, err = GetTargetCPU(targetCPU)
