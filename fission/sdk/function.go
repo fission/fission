@@ -174,42 +174,51 @@ func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcp
 	return strategy, nil
 }
 
-func CreateFunction(functionArg *CreateFunctionArgs) error {
+func CreateFunction(args *CreateFunctionArgs) error {
 
-	err := functionArg.validate()
+	//If not called from CLI these could be empty so default here too
+	if len(args.FnNamespace) == 0 {
+		args.FnNamespace = metav1.NamespaceDefault
+	}
+	if len(args.EnvNamespace) == 0 {
+		args.EnvNamespace = metav1.NamespaceDefault
+	}
+
+	log.Verbose(2, "CreateFunction with args %+v\n", args)
+
+	err := args.validate()
 	if err != nil {
 		return err
 	}
 
-	fnName := functionArg.FnName
-	spec := functionArg.Spec
-	entrypoint := functionArg.EntryPoint
-	pkgName := functionArg.PkgName
-	secretName := functionArg.SecretName
-	cfgMapName := functionArg.CfgMapName
-	envName := functionArg.EnvName
-	codeName := functionArg.CodeName
-	srcArchiveName := functionArg.SrcArchiveName
-	deployArchiveName := functionArg.DeployArchiveName
-	buildCommand := functionArg.BuildCommand
-	triggerURL := functionArg.TriggerURL
-	method := functionArg.Method
-	minscale := functionArg.MinScale
-	maxscale := functionArg.MaxScale
-	executortype := functionArg.ExecutorType
-	targetCPU := functionArg.TargetCPU
-	client := functionArg.Client
-	mincpu := functionArg.MinCPU
-	maxcpu := functionArg.MaxCPU
-	minmemory := functionArg.MinMemory
-	maxmemory := functionArg.MaxMemory
-	fnNamespace := functionArg.FnNamespace
-	envNamespace := functionArg.EnvNamespace
+	fnName := args.FnName
+	spec := args.Spec
+	entrypoint := args.EntryPoint
+	pkgName := args.PkgName
+	secretName := args.SecretName
+	cfgMapName := args.CfgMapName
+	envName := args.EnvName
+	srcArchiveName := args.SrcArchiveName
+	deployArchiveName := args.DeployArchiveName
+	buildCommand := args.BuildCommand
+	triggerURL := args.TriggerURL
+	method := args.Method
+	minscale := args.MinScale
+	maxscale := args.MaxScale
+	executortype := args.ExecutorType
+	targetCPU := args.TargetCPU
+	client := args.Client
+	mincpu := args.MinCPU
+	maxcpu := args.MaxCPU
+	minmemory := args.MinMemory
+	maxmemory := args.MaxMemory
+	fnNamespace := args.FnNamespace
+	envNamespace := args.EnvNamespace
 
 	//For user clarity we only allow one of --code/--deployarchive/--sourcearchive to be specified - see validate()
 	//But internally a single source code file is still treated as a deployArchive
-	if len(codeName) > 0 {
-		deployArchiveName = codeName
+	if len(args.CodeName) > 0 {
+		deployArchiveName = args.CodeName
 	}
 
 	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
