@@ -53,7 +53,7 @@ func mqtCreate(c *cli.Context) error {
 		mqType = fission.MessageQueueTypeNats
 	case fission.MessageQueueTypeASQ:
 		mqType = fission.MessageQueueTypeASQ
-	case fission.MessageQueueTypeKafka
+	case fission.MessageQueueTypeKafka:
 		mqType = fission.MessageQueueTypeKafka
 
 	default:
