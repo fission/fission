@@ -71,7 +71,7 @@ func printPodLogs(c *cli.Context) error {
 	if err != nil {
 		return sdk.FailedToError(err, "read the response body")
 	}
-	fmt.Println(string(body))
+	log.Info(string(body))
 	return nil
 }
 
@@ -321,7 +321,7 @@ func fnUpdate(c *cli.Context) error {
 			return sdk.FailedToError(err, fmt.Sprintf("update package '%v'", pkgName))
 		}
 
-		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
+		log.Infof("package '%v' updated\n", pkgMetadata.GetName())
 
 		// update resource version of package reference of functions that shared the same package
 		for _, fn := range fnList {
@@ -406,7 +406,7 @@ func fnUpdate(c *cli.Context) error {
 		return sdk.FailedToError(err, "update function")
 	}
 
-	fmt.Printf("function '%v' updated\n", fnName)
+	log.Infof("function '%v' updated\n", fnName)
 	return err
 }
 
@@ -429,7 +429,7 @@ func fnDelete(c *cli.Context) error {
 		return sdk.FailedToError(err, fmt.Sprintf("delete function '%v'", fnName))
 	}
 
-	fmt.Printf("function '%v' deleted\n", fnName)
+	log.Infof("function '%v' deleted\n", fnName)
 	return err
 }
 
@@ -524,10 +524,10 @@ func fnLogs(c *cli.Context) error {
 				}
 				for _, logEntry := range logEntries {
 					if c.Bool("d") {
-						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
+						log.Infof("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
 							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
 					} else {
-						fmt.Printf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
+						log.Infof("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
 					}
 					t = logEntry.Timestamp
 				}
@@ -601,7 +601,7 @@ func fnTest(c *cli.Context) error {
 		if err != nil {
 			return sdk.FailedToError(err, "Function test")
 		}
-		fmt.Print(string(body))
+		log.Info(string(body))
 		defer resp.Body.Close()
 		return nil
 	}
@@ -610,7 +610,7 @@ func fnTest(c *cli.Context) error {
 	if err != nil {
 		return sdk.FailedToError(err, "read log response from pod")
 	}
-	fmt.Printf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
+	log.Warnf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
 	defer resp.Body.Close()
 	err = printPodLogs(c)
 	if err != nil {

@@ -95,16 +95,22 @@ func (arg CreateFunctionArgs) validate() error {
 	if numCodeArgs >= 2 {
 		result = multierror.Append(result, GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs)))
 	}
-	if isSingleSourceCodeFile(arg.SrcArchiveName) {
+	if isIndividualSourceCodeFile(arg.SrcArchiveName) {
 		result = multierror.Append(result, GeneralError(fmt.Sprintf(
 			"Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. "+
 				"For single source file use --code instead. Regexp used for validation: `%v`",
 			arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
 	}
+	if isIndividualSourceCodeFile(arg.DeployArchiveName) {
+		result = multierror.Append(result, GeneralError(fmt.Sprintf(
+			"Invalid argument: --deployarchive '%v' refers to an individual source code file not an archive. "+
+				"For single source file use --code instead. Regexp used for validation: `%v`",
+			arg.DeployArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
+	}
 	if result.ErrorOrNil() != nil {
 		return result.ErrorOrNil()
 	}
-	//Don't use multierror for rest which make api calls to fail faster
+	//Don't use multierror for rest (which make api calls) in order to fail faster
 
 	// check for unique function names within a namespace
 	fnList, err := arg.Client.FunctionList(arg.FnNamespace)
@@ -129,9 +135,8 @@ func (arg CreateFunctionArgs) validate() error {
 	if err != nil {
 		if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
 			return GeneralError(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --image <image>`\n", arg.EnvName, arg.EnvName))
-		} else {
-			return FailedToError(err, "retrieve environment information")
 		}
+		return FailedToError(err, "retrieve environment information")
 	}
 
 	return nil
@@ -184,7 +189,7 @@ func CreateFunction(args *CreateFunctionArgs) error {
 		args.EnvNamespace = metav1.NamespaceDefault
 	}
 
-	log.Verbose(2, "CreateFunction with args %+v\n", args)
+	log.Verbosef(2, "CreateFunction with args %+v\n", args)
 
 	err := args.validate()
 	if err != nil {
@@ -389,7 +394,10 @@ func GetTargetCPU(targetCPU int) (int, error) {
 	return targetCPU, nil
 }
 
-func isSingleSourceCodeFile(filename string) bool {
+func isIndividualSourceCodeFile(filename string) bool {
+	if len(filename) == 0 {
+		return false
+	}
 	//Ideally we'd probably check that this is an archive not plain text, but this is a start
 	matched, err := regexp.MatchString(SINGLE_SOURCE_CODE_FILENAME_PATTERN, filename)
 	if err != nil {
