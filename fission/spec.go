@@ -965,9 +965,21 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 
 	// if it's just one file, use its path directly
 	var archiveFileName string
+	var isSingleFile bool
+
 	if len(files) == 1 {
-		archiveFileName = files[0]
-	} else {
+		// check whether a path destination is file or directory
+		f, err := os.Stat(files[0])
+		if err != nil {
+			return nil, err
+		}
+		if !f.IsDir() {
+			isSingleFile = true
+			archiveFileName = files[0]
+		}
+	}
+
+	if len(files) > 1 || !isSingleFile {
 		// zip up the file list
 		archiveFile, err := ioutil.TempFile("", fmt.Sprintf("fission-archive-%v", aus.Name))
 		if err != nil {
