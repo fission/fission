@@ -1,12 +1,33 @@
-# 0.9.1
-[Documentation](https://docs.fission.io/0.9.1/)
-## Downloads for 0.9.1
+# 0.9.2
+[Documentation](https://docs.fission.io/0.9.2/)
+## Downloads for 0.9.2
 
 
 filename | sha256 hash
 -------- | -----------
 
 # Change Log
+
+## [0.9.2](https://github.com/fission/fission/tree/0.9.2) (2018-07-25)
+[Full Changelog](https://github.com/fission/fission/compare/0.9.1...0.9.2)
+
+**Merged pull requests:**
+
+- Helm lint check in Travis CI [\#799](https://github.com/fission/fission/pull/799) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Spelling. [\#797](https://github.com/fission/fission/pull/797) ([WrathZA](https://github.com/WrathZA))
+- change image pull policy of builder manager [\#793](https://github.com/fission/fission/pull/793) ([xiekeyang](https://github.com/xiekeyang))
+- Delete namespace in background to reduce build time [\#791](https://github.com/fission/fission/pull/791) ([life1347](https://github.com/life1347))
+- Break & Stop the build immediately if a non-zero exit code was returned [\#790](https://github.com/fission/fission/pull/790) ([life1347](https://github.com/life1347))
+- Add changelog. [\#789](https://github.com/fission/fission/pull/789) ([smruthi2187](https://github.com/smruthi2187))
+- changes needed for 0.9.1 [\#788](https://github.com/fission/fission/pull/788) ([smruthi2187](https://github.com/smruthi2187))
+- Working version of Java builder with Maven [\#783](https://github.com/fission/fission/pull/783) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add query options to `fission function test` [\#782](https://github.com/fission/fission/pull/782) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Add go environment vendor directory support [\#781](https://github.com/fission/fission/pull/781) ([life1347](https://github.com/life1347))
+- Added readme for JVM environment [\#768](https://github.com/fission/fission/pull/768) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix spec command overrides existing archive's url of a package [\#764](https://github.com/fission/fission/pull/764) ([life1347](https://github.com/life1347))
+- Fixed typos from from goreportcard [\#760](https://github.com/fission/fission/pull/760) ([vishal-biyani](https://github.com/vishal-biyani))
+- Updating releasing notes with details and structure [\#738](https://github.com/fission/fission/pull/738) ([vishal-biyani](https://github.com/vishal-biyani))
+- Allow router round-trip to be configurable [\#713](https://github.com/fission/fission/pull/713) ([xiekeyang](https://github.com/xiekeyang))
 
 ## [0.9.1](https://github.com/fission/fission/tree/0.9.1) (2018-07-07)
 [Full Changelog](https://github.com/fission/fission/compare/0.9.0...0.9.1)
