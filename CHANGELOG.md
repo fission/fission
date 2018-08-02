@@ -1,17 +1,73 @@
-# 0.8.0
-[Documentation](https://docs.fission.io/0.8.0/)
-## Downloads for 0.8.0
+# 0.9.2
+[Documentation](https://docs.fission.io/0.9.2/)
+## Downloads for 0.9.2
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-0.8.0.tgz](https://github.com/fission/fission/releases/download/0.8.0/fission-all-0.8.0.tgz) | `bf643aab4642c1d9f73235ffe10c51b74e46474d765cefc29139a560c702e515`
-[fission-core-0.8.0.tgz](https://github.com/fission/fission/releases/download/0.8.0/fission-core-0.8.0.tgz) | `5473832a696b1e4e3316878f84dad813e3fbcc7b270563d11a0b02345f1b0370`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.8.0/fission-cli-linux) | `db6d66aae513fd1bc8f969c4e781e7f5bd9369dfcf5389edc3b6afb48522b387`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.8.0/fission-cli-osx) | `3b2cff596402d4a35a5347cb1d0cc8c90e09cdc88c6a0a33f99cc510c7ccbb8b`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.8.0/fission-cli-windows.exe) | `41fce28b3f5d34e63910882d8a7fbee6241a8644e1a65a133a30714bb666d7f9`
 
 # Change Log
+
+## [0.9.2](https://github.com/fission/fission/tree/0.9.2) (2018-07-25)
+[Full Changelog](https://github.com/fission/fission/compare/0.9.1...0.9.2)
+
+**Merged pull requests:**
+
+- Helm lint check in Travis CI [\#799](https://github.com/fission/fission/pull/799) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Spelling. [\#797](https://github.com/fission/fission/pull/797) ([WrathZA](https://github.com/WrathZA))
+- change image pull policy of builder manager [\#793](https://github.com/fission/fission/pull/793) ([xiekeyang](https://github.com/xiekeyang))
+- Delete namespace in background to reduce build time [\#791](https://github.com/fission/fission/pull/791) ([life1347](https://github.com/life1347))
+- Break & Stop the build immediately if a non-zero exit code was returned [\#790](https://github.com/fission/fission/pull/790) ([life1347](https://github.com/life1347))
+- Add changelog. [\#789](https://github.com/fission/fission/pull/789) ([smruthi2187](https://github.com/smruthi2187))
+- changes needed for 0.9.1 [\#788](https://github.com/fission/fission/pull/788) ([smruthi2187](https://github.com/smruthi2187))
+- Working version of Java builder with Maven [\#783](https://github.com/fission/fission/pull/783) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add query options to `fission function test` [\#782](https://github.com/fission/fission/pull/782) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Add go environment vendor directory support [\#781](https://github.com/fission/fission/pull/781) ([life1347](https://github.com/life1347))
+- Added readme for JVM environment [\#768](https://github.com/fission/fission/pull/768) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix spec command overrides existing archive's url of a package [\#764](https://github.com/fission/fission/pull/764) ([life1347](https://github.com/life1347))
+- Fixed typos from from goreportcard [\#760](https://github.com/fission/fission/pull/760) ([vishal-biyani](https://github.com/vishal-biyani))
+- Updating releasing notes with details and structure [\#738](https://github.com/fission/fission/pull/738) ([vishal-biyani](https://github.com/vishal-biyani))
+- Allow router round-trip to be configurable [\#713](https://github.com/fission/fission/pull/713) ([xiekeyang](https://github.com/xiekeyang))
+
+## [0.9.1](https://github.com/fission/fission/tree/0.9.1) (2018-07-07)
+[Full Changelog](https://github.com/fission/fission/compare/0.9.0...0.9.1)
+
+**Merged pull requests:**
+
+- Committing changelog. [\#780](https://github.com/fission/fission/pull/780) ([smruthi2187](https://github.com/smruthi2187))
+- Changes in charts for release 0.9.0 [\#778](https://github.com/fission/fission/pull/778) ([smruthi2187](https://github.com/smruthi2187))
+- Change flag name to KeepArchive for backward compatibility [\#787](https://github.com/fission/fission/pull/787) ([life1347](https://github.com/life1347))
+- Fix go env plugin [\#784](https://github.com/fission/fission/pull/784) ([life1347](https://github.com/life1347))
+- Fix “rm: missing operand” in release script [\#779](https://github.com/fission/fission/pull/779) ([life1347](https://github.com/life1347))
+
+## [0.9.0](https://github.com/fission/fission/tree/0.9.0) (2018-07-04)
+[Full Changelog](https://github.com/fission/fission/compare/0.8.0...0.9.0)
+
+**Merged pull requests:**
+
+- Fix executor wrongly passes loop variable reference to function [\#751](https://github.com/fission/fission/pull/751) ([life1347](https://github.com/life1347))
+- Python Environment: add gevent based WSGI server framework [\#750](https://github.com/fission/fission/pull/750) ([xiekeyang](https://github.com/xiekeyang))
+- Temporarily disabling the tests so that other PRs can be worked on [\#737](https://github.com/fission/fission/pull/737) ([vishal-biyani](https://github.com/vishal-biyani))
+- add build exe to gitignore [\#736](https://github.com/fission/fission/pull/736) ([xiekeyang](https://github.com/xiekeyang))
+- ArchiveLiteralSizeLimit: Use Constant Instead Hard Code [\#731](https://github.com/fission/fission/pull/731) ([xiekeyang](https://github.com/xiekeyang))
+- Environment warning message bugfix [\#725](https://github.com/fission/fission/pull/725) ([soamvasani](https://github.com/soamvasani))
+- V0.8.0 [\#722](https://github.com/fission/fission/pull/722) ([vishal-biyani](https://github.com/vishal-biyani))
+- Make fetcher resource requests and limits configurable [\#708](https://github.com/fission/fission/pull/708) ([xiekeyang](https://github.com/xiekeyang))
+- Add steps to render & upload fission installation YAML [\#745](https://github.com/fission/fission/pull/745) ([life1347](https://github.com/life1347))
+- Fix executor not reaps idle function pods for functions with executortype newdeploy [\#744](https://github.com/fission/fission/pull/744) ([life1347](https://github.com/life1347))
+- Testing with keep alive settings for connections [\#742](https://github.com/fission/fission/pull/742) ([vishal-biyani](https://github.com/vishal-biyani))
+- instead hard code by variable in error message [\#735](https://github.com/fission/fission/pull/735) ([xiekeyang](https://github.com/xiekeyang))
+- envns should be availabe in message line [\#734](https://github.com/fission/fission/pull/734) ([xiekeyang](https://github.com/xiekeyang))
+- Support annotations in environment specs [\#733](https://github.com/fission/fission/pull/733) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Extract portforward to separate package [\#728](https://github.com/fission/fission/pull/728) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Push NATS error messages to error queue [\#724](https://github.com/fission/fission/pull/724) ([Amusement](https://github.com/Amusement))
+- Fix for Windows CLI Port Forwarding [\#715](https://github.com/fission/fission/pull/715) ([thejosephstevens](https://github.com/thejosephstevens))
+- Router liveness [\#701](https://github.com/fission/fission/pull/701) ([smruthi2187](https://github.com/smruthi2187))
+- Archives bigger than 256K size need env variable for uploading [\#697](https://github.com/fission/fission/pull/697) ([vishal-biyani](https://github.com/vishal-biyani))
+- Convert go-env Dockerfile into a multi-stage build [\#683](https://github.com/fission/fission/pull/683) ([jgall](https://github.com/jgall))
+- Move build process from host to docker container during release process [\#682](https://github.com/fission/fission/pull/682) ([life1347](https://github.com/life1347))
+- Added a flag to control the extraction of archive based on user input [\#675](https://github.com/fission/fission/pull/675) ([vishal-biyani](https://github.com/vishal-biyani))
+- Java env alpha [\#656](https://github.com/fission/fission/pull/656) ([vishal-biyani](https://github.com/vishal-biyani))
 
 ## [0.8.0](https://github.com/fission/fission/tree/0.8.0) (2018-06-05)
 [Full Changelog](https://github.com/fission/fission/compare/0.7.2...0.8.0)
@@ -24,6 +80,7 @@ filename | sha256 hash
 - Formatted specifiers are not compatible with variables [\#706](https://github.com/fission/fission/pull/706) ([xiekeyang](https://github.com/xiekeyang))
 - Indicate HTTP status code by library const [\#703](https://github.com/fission/fission/pull/703) ([xiekeyang](https://github.com/xiekeyang))
 - docker-distribution version bump for windows compatibility [\#691](https://github.com/fission/fission/pull/691) ([thejosephstevens](https://github.com/thejosephstevens))
+- Version -\> 0.7.2 [\#670](https://github.com/fission/fission/pull/670) ([life1347](https://github.com/life1347))
 - Java environment Design & considerations [\#642](https://github.com/fission/fission/pull/642) ([vishal-biyani](https://github.com/vishal-biyani))
 - Working version of Ingress integration [\#688](https://github.com/fission/fission/pull/688) ([vishal-biyani](https://github.com/vishal-biyani))
 - Update k8s dependencies to 1.10 [\#687](https://github.com/fission/fission/pull/687) ([life1347](https://github.com/life1347))
@@ -99,7 +156,7 @@ filename | sha256 hash
 
 **Merged pull requests:**
 
-- This change fixes an error in a yaml file in the fission-core chart. [\#563](https://github.com/fission/fission/pull/563) ([associationrule](https://github.com/associationrule))
+- This change fixes an error in a yaml file in the fission-core chart. [\#563](https://github.com/fission/fission/pull/563) ([smartding](https://github.com/smartding))
 - \[ci skip\] update release number [\#561](https://github.com/fission/fission/pull/561) ([appleboy](https://github.com/appleboy))
 - Fixes \#537 - warning should not be given when updating to newdeploy [\#545](https://github.com/fission/fission/pull/545) ([vishal-biyani](https://github.com/vishal-biyani))
 - Docs update [\#542](https://github.com/fission/fission/pull/542) ([soamvasani](https://github.com/soamvasani))

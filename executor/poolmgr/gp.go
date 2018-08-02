@@ -19,7 +19,6 @@ package poolmgr
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -32,7 +31,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-
+	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -387,10 +386,10 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 			Namespace: fn.Spec.Package.PackageRef.Namespace,
 			Name:      fn.Spec.Package.PackageRef.Name,
 		},
-		Filename:       targetFilename,
-		Secrets:        fn.Spec.Secrets,
-		ConfigMaps:     fn.Spec.ConfigMaps,
-		ExtractArchive: gp.env.Spec.ExtractArchive,
+		Filename:    targetFilename,
+		Secrets:     fn.Spec.Secrets,
+		ConfigMaps:  fn.Spec.ConfigMaps,
+		KeepArchive: gp.env.Spec.KeepArchive,
 	})
 	if err != nil {
 		return err
@@ -485,10 +484,12 @@ func (gp *GenericPool) createPool() error {
 		gracePeriodSeconds = gp.env.Spec.TerminationGracePeriod
 	}
 
-	podAnnotation := make(map[string]string)
-
+	podAnnotations := gp.env.Metadata.Annotations
+	if podAnnotations == nil {
+		podAnnotations = make(map[string]string)
+	}
 	if gp.useIstio && gp.env.Spec.AllowAccessToExternalNetwork {
-		podAnnotation["sidecar.istio.io/inject"] = "false"
+		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
 	deployment := &v1beta1.Deployment{
@@ -504,7 +505,7 @@ func (gp *GenericPool) createPool() error {
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      gp.labelsForPool,
-					Annotations: podAnnotation,
+					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
 					Volumes: []apiv1.Volume{
@@ -660,16 +661,22 @@ func (gp *GenericPool) waitForReadyPod() error {
 		depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Get(
 			gp.deployment.ObjectMeta.Name, metav1.GetOptions{})
 		if err != nil {
-			log.Printf("err: %v", err)
+			err = errors.Wrap(err, fmt.Sprintf(
+				"Error waiting for ready pod of deployment %v in namespace %v",
+				gp.deployment.ObjectMeta.Name, gp.namespace))
+			log.Print(err)
 			return err
 		}
+
 		gp.deployment = depl
 		if gp.deployment.Status.AvailableReplicas > 0 {
 			return nil
 		}
 
 		if time.Since(startTime) > gp.podReadyTimeout {
-			return errors.New("timeout: waited too long for pod to be ready")
+			return errors.Errorf(
+				"Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
+				gp.deployment.ObjectMeta.Name, gp.namespace)
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
