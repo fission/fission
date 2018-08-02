@@ -20,6 +20,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -132,7 +133,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
-		ht.Methods(trigger.Spec.Method)
+		ht.Methods(strings.Split(trigger.Spec.Method, ",")...)
 		if trigger.Spec.Host != "" {
 			ht.Host(trigger.Spec.Host)
 		}
