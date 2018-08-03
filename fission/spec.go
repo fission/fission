@@ -286,6 +286,8 @@ func (fr *FissionResources) validate() error {
 				archives[aname] = true
 			}
 		}
+
+		result = multierror.Append(result, p.Validate())
 	}
 
 	// error on unreferenced archives
@@ -336,6 +338,8 @@ func (fr *FissionResources) validate() error {
 		} else {
 			packages[mapKey(pkgMeta)] = true
 		}
+
+		result = multierror.Append(result, f.Validate())
 	}
 
 	// error on unreferenced packages
@@ -356,24 +360,28 @@ func (fr *FissionResources) validate() error {
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.kubernetesWatchTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.timeTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.messageQueueTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 
 	// we do not error on unreferenced functions (you can call a function through workflows,
