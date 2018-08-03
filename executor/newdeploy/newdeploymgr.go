@@ -433,7 +433,8 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 	}
 
 	if oldFn.Spec.Environment != newFn.Spec.Environment ||
-		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef {
+		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
+		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName {
 		deployChanged = true
 	}
 
