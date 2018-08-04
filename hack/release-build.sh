@@ -174,6 +174,7 @@ build_all_envs() {
     build_env_image "$version" "python"   "python-env"   ""
     build_env_image "$version" "python"   "python-env"   "2.7"
     build_env_image "$version" "ruby"     "ruby-env"     ""
+    build_env_image "$version" "jvm"      "jvm-env"      ""
 }
 
 build_env_builder_image() {
@@ -208,6 +209,7 @@ build_all_env_builders() {
     build_env_builder_image "$version" "python"   "python-builder"   ""
     build_env_builder_image "$version" "binary"   "binary-builder"   ""
     build_env_builder_image "$version" "go"       "go-builder"       ""
+    build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
 }
 
 build_charts() {
