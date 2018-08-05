@@ -47,9 +47,10 @@ type CreateFunctionArgs struct {
 	SecretName        string
 	CfgMapName        string
 	EnvName           string
-	SrcArchiveName    string
-	CodeName          string
-	DeployArchiveName string
+	SrcArchivePath    string
+	CodePath          string
+	CodeLiteral       string
+	DeployArchivePath string
 	BuildCommand      string
 	TriggerURL        string
 	Method            string
@@ -79,66 +80,73 @@ func (arg CreateFunctionArgs) validate() error {
 	}
 
 	numCodeArgs := 0
-	if len(arg.CodeName) > 0 {
+	if len(arg.CodePath) > 0 {
 		numCodeArgs++
 	}
-	if len(arg.SrcArchiveName) > 0 {
+	if len(arg.SrcArchivePath) > 0 {
 		numCodeArgs++
 	}
-	if len(arg.DeployArchiveName) > 0 {
+	if len(arg.DeployArchivePath) > 0 {
 		numCodeArgs++
 	}
-	if numCodeArgs == 0 {
-		result = multierror.Append(result, GeneralError("Missing argument. Need exactly one of --code, --deployarchive or --sourcearchive"))
+	if len(arg.CodeLiteral) > 0 {
+		numCodeArgs++
 	}
-	if numCodeArgs >= 2 {
-		result = multierror.Append(result, GeneralError(fmt.Sprintf("Need exactly one of --code, --deployarchive or --sourcearchive, but got %v", numCodeArgs)))
+	if numCodeArgs != 1 {
+		if log.IsCliRun {
+			result = multierror.Append(result, GeneralError("Missing argument. Need exactly one of --code, --deployarchive or --sourcearchive"))
+		} else {
+			result = multierror.Append(result, GeneralError("Missing argument. Need exactly one of CodePath, CodeLiteral, DeployArchivePath or SrcArchivePath"))
+		}
+
 	}
-	if isIndividualSourceCodeFile(arg.SrcArchiveName) {
+	if isIndividualSourceCodeFile(arg.SrcArchivePath) {
 		result = multierror.Append(result, GeneralError(fmt.Sprintf(
 			"Invalid argument: --sourcearchive '%v' refers to an individual source code file not an archive. "+
 				"For single source file use --code instead. Regexp used for validation: `%v`",
-			arg.SrcArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
+			arg.SrcArchivePath, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
 	}
-	if isIndividualSourceCodeFile(arg.DeployArchiveName) {
+	if isIndividualSourceCodeFile(arg.DeployArchivePath) {
 		result = multierror.Append(result, GeneralError(fmt.Sprintf(
 			"Invalid argument: --deployarchive '%v' refers to an individual source code file not an archive. "+
 				"For single source file use --code instead. Regexp used for validation: `%v`",
-			arg.DeployArchiveName, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
+			arg.DeployArchivePath, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
 	}
-	if result.ErrorOrNil() != nil {
-		return result.ErrorOrNil()
-	}
-	//Don't use multierror for rest (which make api calls) in order to fail faster
 
 	// check for unique function names within a namespace
 	fnList, err := arg.Client.FunctionList(arg.FnNamespace)
 	if err != nil {
-		return FailedToError(err, "get function list")
+		result = multierror.Append(result, FailedToError(err, "get function list"))
 	}
 
 	// check function existence before creating package
 	// From this change onwards, we mandate that a function should reference a secret, config map and package
 	for _, fn := range fnList {
 		if fn.Metadata.Name == arg.FnName {
-			return GeneralError("A function with the same name already exists.")
+			result = multierror.Append(result, GeneralError("A function with the same name already exists."))
 		}
 	}
 
 	// examine existence of given environment
-	_, err = arg.Client.EnvironmentGet(&metav1.ObjectMeta{
-		Namespace: metav1.NamespaceDefault,
-		Name:      arg.EnvName,
-	})
+	if len(arg.EnvName) != 0 {
+		_, err = arg.Client.EnvironmentGet(&metav1.ObjectMeta{
+			Namespace: metav1.NamespaceDefault,
+			Name:      arg.EnvName,
+		})
 
-	if err != nil {
-		if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
-			return GeneralError(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --image <image>`\n", arg.EnvName, arg.EnvName))
+		if err != nil {
+			if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
+				result = multierror.Append(result, GeneralError(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --image <image>`\n", arg.EnvName, arg.EnvName)))
+			} else {
+				result = multierror.Append(result, FailedToError(err, "retrieve environment information"))
+			}
 		}
-		return FailedToError(err, "retrieve environment information")
+	}
+	if arg.Client == nil {
+		result = multierror.Append(result, GeneralError("Client must be specified on CreateFunctionArgs"))
 	}
 
-	return nil
+	return result.ErrorOrNil()
 
 }
 
@@ -202,8 +210,8 @@ func CreateFunction(args *CreateFunctionArgs) error {
 	secretName := args.SecretName
 	cfgMapName := args.CfgMapName
 	envName := args.EnvName
-	srcArchiveName := args.SrcArchiveName
-	deployArchiveName := args.DeployArchiveName
+	srcArchivePath := args.SrcArchivePath
+	deployArchivePath := args.DeployArchivePath
 	buildCommand := args.BuildCommand
 	triggerURL := args.TriggerURL
 	method := args.Method
@@ -221,8 +229,8 @@ func CreateFunction(args *CreateFunctionArgs) error {
 
 	//For user clarity we only allow one of --code/--deployarchive/--sourcearchive to be specified - see validate()
 	//But internally a single source code file is still treated as a deployArchive
-	if len(args.CodeName) > 0 {
-		deployArchiveName = args.CodeName
+	if len(args.CodePath) > 0 {
+		deployArchivePath = args.CodePath
 	}
 
 	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
@@ -254,7 +262,7 @@ func CreateFunction(args *CreateFunctionArgs) error {
 	} else {
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = CreatePackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildCommand, specFile)
+		pkgMetadata, err = CreatePackage(client, fnNamespace, envName, envNamespace, srcArchivePath, deployArchivePath, buildCommand, specFile)
 		if err != nil {
 			return FailedToError(err, "create new package")
 		}

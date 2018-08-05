@@ -119,20 +119,12 @@ func CheckErr(err error, action string) {
 	}
 }
 
-//FailedtoError logs 'Failed to [action]: [err]' to stderr and exits in CLI mode, or logs to stdrr only in SDK mode
+//FailedtoError creates a new error 'Failed to [action]: [err]'
 func FailedToError(err error, action string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to %v: %v", action, err)
 	}
 	return nil
-}
-
-func CheckErrElseLogSuccess(err error, action string, successMsgFormat string, successMsgArgs ...interface{}) {
-	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
-	} else {
-		log.Infof(successMsgFormat, successMsgArgs)
-	}
 }
 
 func HttpRequest(method, url, body string, headers []string) *http.Response {
@@ -193,13 +185,18 @@ func FileChecksum(fileName string) (*fission.Checksum, error) {
 	}, nil
 }
 
-// upload a file and return a fission.Archive
+// CraeteArchive uploads a file and return a fission.Archive
 func CreateArchive(client *client.Client, fileName string, specFile string) (*fission.Archive, error) {
 	var archive fission.Archive
 
 	// fetch archive from arbitrary url if fileName is a url
 	if strings.HasPrefix(fileName, "http://") || strings.HasPrefix(fileName, "https://") {
-		fileName = DownloadToTempFile(fileName)
+		url := fileName
+		var err error
+		fileName, err = DownloadToTempFile(url)
+		if err != nil {
+			return &fission.Archive{}, FailedToError(err, fmt.Sprintf("download url %v to temp file", url))
+		}
 	}
 
 	if len(specFile) > 0 {
@@ -331,20 +328,14 @@ func GetContents(filePath string) []byte {
 	return code
 }
 
-func GetTempDir() (string, error) {
-	tmpDir := uuid.NewV4().String()
-	tmpPath := filepath.Join(os.TempDir(), tmpDir)
-	err := os.Mkdir(tmpPath, 0744)
-	return tmpPath, err
-}
+func WriteToFileFromReader(fileName string, reader io.Reader) error {
 
-func WriteArchiveToFile(fileName string, reader io.Reader) error {
-	tmpDir, err := GetTempDir()
+	path, err := allocateTempFile()
 	if err != nil {
 		return err
 	}
+	path = path + ".tmp"
 
-	path := filepath.Join(tmpDir, fileName+".tmp")
 	w, err := os.Create(path)
 	if err != nil {
 		return err
@@ -357,7 +348,6 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	if err != nil {
 		return err
 	}
-
 	err = os.Rename(path, fileName)
 	if err != nil {
 		return err
@@ -366,28 +356,41 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	return nil
 }
 
-// downloadToTempFile fetches archive file from arbitrary url
-// and write it to temp file for further usage
-func DownloadToTempFile(fileUrl string) string {
-	reader, err := DownloadURL(fileUrl)
-	defer reader.Close()
-	CheckErr(err, fmt.Sprintf("download from url: %v", fileUrl))
-
-	tmpDir, err := GetTempDir()
-	CheckErr(err, "create temp directory")
-
+// allocateTempFile creates a temp directory and assigns a random name for a temp file within it (but does not create temp file)
+func allocateTempFile() (string, error) {
+	tmpDir := uuid.NewV4().String()
+	tmpPath := filepath.Join(os.TempDir(), tmpDir)
+	err := os.Mkdir(tmpPath, 0744)
+	if err != nil {
+		return "", FailedToError(err, "create temp directory")
+	}
 	tmpFilename := uuid.NewV4().String()
-	destination := filepath.Join(tmpDir, tmpFilename)
-	err = os.Mkdir(tmpDir, 0744)
-	CheckErr(err, "create temp directory")
-
-	err = WriteArchiveToFile(destination, reader)
-	CheckErr(err, "write archive to file")
-
-	return destination
+	return filepath.Join(tmpPath, tmpFilename), nil
 }
 
-// downloadURL downloads file from given url
+// DownloadToTempFile fetches a file from an arbitrary url
+// and writes it to a temp file for further usage, returning the temp file path
+func DownloadToTempFile(fileUrl string) (string, error) {
+	reader, err := DownloadURL(fileUrl)
+	defer reader.Close()
+	if err != nil {
+		return "", FailedToError(err, fmt.Sprintf("download from url: %v", fileUrl))
+	}
+
+	destination, err := allocateTempFile()
+	if err != nil {
+		return "", FailedToError(err, "allocate temp file")
+	}
+
+	err = WriteToFileFromReader(destination, reader)
+	if err != nil {
+		return "", FailedToError(err, "write to temp file")
+	}
+
+	return destination, nil
+}
+
+// DownloadURL downloads file from given url
 func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 	resp, err := http.Get(fileUrl)
 	if err != nil {
@@ -399,7 +402,28 @@ func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-// make a kubernetes compliant name out of an arbitrary string
+// SaveStringToTempFile writes a string to temp file for further usage,
+// returning the temp file path
+func SaveStringToTempFile(str string) (string, error) {
+
+	destination, err := allocateTempFile()
+	if err != nil {
+		return "", FailedToError(err, fmt.Sprintf("allocate temp file %v", destination))
+	}
+
+	f, err := os.Create(destination)
+	if err != nil {
+		return "", FailedToError(err, fmt.Sprintf("create temp file %v", destination))
+	}
+	_, err = f.WriteString(str)
+	if err != nil {
+		return "", FailedToError(err, fmt.Sprintf("write string to temp file %v", destination))
+	}
+
+	return destination, nil
+}
+
+// KubifyName makes a kubernetes-compliant name out of an arbitrary string
 func KubifyName(old string) string {
 	// Kubernetes maximum name length (for some names; others can be 253 chars)
 	maxLen := 63

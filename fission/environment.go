@@ -124,8 +124,11 @@ func envCreate(c *cli.Context) error {
 	}
 
 	_, err = client.EnvironmentCreate(env)
-	sdk.CheckErrElseLogSuccess(err, "create environment", "environment '%v' created\n", envName)
-	return err
+	if err != nil {
+		return sdk.FailedToError(err, "create environment")
+	}
+	log.Infof("environment '%v' created\n", envName)
+	return nil
 }
 
 func envGet(c *cli.Context) error {

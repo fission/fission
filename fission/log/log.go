@@ -51,7 +51,7 @@ func Warn(msg interface{}) {
 
 //Warnf logs a formatted message to stderr
 func Warnf(format string, args ...interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf(format, args))
+	os.Stderr.WriteString(fmt.Sprintf(format, args...))
 }
 
 //Info logs a formatted message to stdout
@@ -61,7 +61,7 @@ func Info(msg interface{}) {
 
 //Infof logs a formatted message with verbosity 1 to stdout
 func Infof(format string, args ...interface{}) {
-	Verbosef(1, format, args)
+	Verbosef(1, format, args...)
 }
 
 //Verbosef logs a formatted message with custom verbosity to stdout

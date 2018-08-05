@@ -151,11 +151,10 @@ func pkgSourceGet(c *cli.Context) error {
 	}
 
 	if len(output) > 0 {
-		return sdk.WriteArchiveToFile(output, reader)
-	} else {
-		_, err := io.Copy(os.Stdout, reader)
-		return err
+		return sdk.WriteToFileFromReader(output, reader)
 	}
+	_, err = io.Copy(os.Stdout, reader)
+	return err
 }
 
 func pkgDeployGet(c *cli.Context) error {
@@ -188,11 +187,10 @@ func pkgDeployGet(c *cli.Context) error {
 	}
 
 	if len(output) > 0 {
-		return sdk.WriteArchiveToFile(output, reader)
-	} else {
-		_, err := io.Copy(os.Stdout, reader)
-		return err
+		return sdk.WriteToFileFromReader(output, reader)
 	}
+	_, err = io.Copy(os.Stdout, reader)
+	return err
 }
 
 func pkgInfo(c *cli.Context) error {
