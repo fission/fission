@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -199,7 +198,7 @@ func mqtDelete(c *cli.Context) error {
 	client := sdk.GetClient(c.GlobalString("server"))
 	mqtName := c.String("name")
 	if len(mqtName) == 0 {
-		return errors.New("Need name of trigger to delete, use --name")
+		return sdk.MissingArgError("name")
 	}
 	mqtNs := c.String("triggerns")
 

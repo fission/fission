@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	// global Verbosity of our CLI
+	// Verbosity is the global Verbosity of our CLI
 	Verbosity int
 	// IsCliRun is only set to true when running from CLI
 	IsCliRun bool
@@ -49,12 +49,24 @@ func Warn(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
 }
 
-//Info logs a message to stdout
-func Info(format string, args ...interface{}) {
-	Verbose(1, format, args)
+//Warnf logs a formatted message to stderr
+func Warnf(format string, args ...interface{}) {
+	os.Stderr.WriteString(fmt.Sprintf(format, args))
 }
 
-func Verbose(verbosityLevel int, format string, args ...interface{}) {
+//Info logs a formatted message to stdout
+func Info(msg interface{}) {
+	Verbosef(1, fmt.Sprint(msg))
+}
+
+//Infof logs a formatted message with verbosity 1 to stdout
+func Infof(format string, args ...interface{}) {
+	Verbosef(1, format, args)
+}
+
+//Verbosef logs a formatted message with custom verbosity to stdout
+func Verbosef(verbosityLevel int, format string, args ...interface{}) {
+	//See main.go. CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)
 	if Verbosity >= verbosityLevel {
 		fmt.Printf(format+"\n", args...)
 	}

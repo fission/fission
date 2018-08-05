@@ -131,7 +131,7 @@ func CheckErrElseLogSuccess(err error, action string, successMsgFormat string, s
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
 	} else {
-		log.Info(successMsgFormat, successMsgArgs)
+		log.Infof(successMsgFormat, successMsgArgs)
 	}
 }
 

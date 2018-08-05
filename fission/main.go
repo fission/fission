@@ -28,7 +28,7 @@ import (
 
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
-	log.Verbose(2, "Verbosity = 2")
+	log.Verbosef(2, "Verbosity = 2")
 	log.IsCliRun = true
 	return nil
 }

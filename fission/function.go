@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -64,7 +63,7 @@ func printPodLogs(c *cli.Context) error {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("get logs from pod directly")
+		return sdk.GeneralError("Failed to get logs from pod directly")
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
