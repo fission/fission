@@ -35,10 +35,11 @@ import (
 )
 
 const (
-	//File names with common source code extensions
+	//SINGLE_SOURCE_CODE_FILENAME_PATTERN is a regex for file names with common source code extensions
 	SINGLE_SOURCE_CODE_FILENAME_PATTERN = `\.(js|php|go|py|rb)$`
 )
 
+//CreateFunctionArgs is a holder for arguments needed to create a new function
 type CreateFunctionArgs struct {
 	FnName            string
 	Spec              bool
@@ -65,6 +66,13 @@ type CreateFunctionArgs struct {
 	FnNamespace       string
 	EnvNamespace      string
 	Client            *controllerClient.Client
+}
+
+//DeleteFunctionArgs is a holder for arguments needed to delete a function
+type DeleteFunctionArgs struct {
+	FnName      string
+	FnNamespace string
+	Client      *controllerClient.Client
 }
 
 func (arg CreateFunctionArgs) validate() error {
@@ -150,42 +158,18 @@ func (arg CreateFunctionArgs) validate() error {
 
 }
 
-func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) (fission.InvokeStrategy, error) {
-
-	if maxScale == 0 {
-		maxScale = 1
+func (arg DeleteFunctionArgs) validate() error {
+	var result *multierror.Error
+	if len(arg.FnName) == 0 {
+		result = multierror.Append(result, MissingArgError("name"))
 	}
-
-	if minScale > maxScale {
-		return fission.InvokeStrategy{}, GeneralError("Maxscale must be higher than or equal to minscale")
+	if arg.Client == nil {
+		result = multierror.Append(result, GeneralError("Client must be specified on DeleteFunctionArgs"))
 	}
-
-	var fnExecutor fission.ExecutorType
-	switch executorType {
-	case "":
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypePoolmgr:
-		fnExecutor = fission.ExecutorTypePoolmgr
-	case fission.ExecutorTypeNewdeploy:
-		fnExecutor = fission.ExecutorTypeNewdeploy
-	default:
-		return fission.InvokeStrategy{}, GeneralError("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
-	}
-
-	// Right now a simple single case strategy implementation
-	// This will potentially get more sophisticated once we have more strategies in place
-	strategy := fission.InvokeStrategy{
-		StrategyType: fission.StrategyTypeExecution,
-		ExecutionStrategy: fission.ExecutionStrategy{
-			ExecutorType:     fnExecutor,
-			MinScale:         minScale,
-			MaxScale:         maxScale,
-			TargetCPUPercent: targetcpu,
-		},
-	}
-	return strategy, nil
+	return result.ErrorOrNil()
 }
 
+//CreateFunction creates a new function based on provided arguments
 func CreateFunction(args *CreateFunctionArgs) error {
 
 	//If not called from CLI these could be empty so default here too
@@ -395,7 +379,35 @@ func CreateFunction(args *CreateFunctionArgs) error {
 	}
 	fmt.Printf("route created: %v %v -> %v\n", method, triggerURL, fnName)
 
-	return err
+	return nil
+}
+
+//DeleteFunction deletes an existing function based on provided arguments
+func DeleteFunction(args *DeleteFunctionArgs) error {
+
+	//If not called from CLI these could be empty so default here too
+	if len(args.FnNamespace) == 0 {
+		args.FnNamespace = metav1.NamespaceDefault
+	}
+
+	err := args.validate()
+	if err != nil {
+		return err
+	}
+
+	m := &metav1.ObjectMeta{
+		Name:      args.FnName,
+		Namespace: args.FnNamespace,
+	}
+
+	err = args.Client.FunctionDelete(m)
+	if err != nil {
+		return FailedToError(err, fmt.Sprintf("delete function '%v'", args.FnName))
+	}
+
+	log.Infof("function '%v' deleted\n", args.FnName)
+	return nil
+
 }
 
 func GetTargetCPU(targetCPU int) (int, error) {
@@ -419,4 +431,40 @@ func isIndividualSourceCodeFile(filename string) bool {
 		return false
 	}
 	return matched
+}
+
+func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) (fission.InvokeStrategy, error) {
+
+	if maxScale == 0 {
+		maxScale = 1
+	}
+
+	if minScale > maxScale {
+		return fission.InvokeStrategy{}, GeneralError("Maxscale must be higher than or equal to minscale")
+	}
+
+	var fnExecutor fission.ExecutorType
+	switch executorType {
+	case "":
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypePoolmgr:
+		fnExecutor = fission.ExecutorTypePoolmgr
+	case fission.ExecutorTypeNewdeploy:
+		fnExecutor = fission.ExecutorTypeNewdeploy
+	default:
+		return fission.InvokeStrategy{}, GeneralError("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+	}
+
+	// Right now a simple single case strategy implementation
+	// This will potentially get more sophisticated once we have more strategies in place
+	strategy := fission.InvokeStrategy{
+		StrategyType: fission.StrategyTypeExecution,
+		ExecutionStrategy: fission.ExecutionStrategy{
+			ExecutorType:     fnExecutor,
+			MinScale:         minScale,
+			MaxScale:         maxScale,
+			TargetCPUPercent: targetcpu,
+		},
+	}
+	return strategy, nil
 }

@@ -77,67 +77,37 @@ func printPodLogs(c *cli.Context) error {
 // From this change onwards, we mandate that a function should reference a secret, config map and package in its own ns
 func fnCreate(c *cli.Context) error {
 
-	fnName := c.String("name")
 	spec := false
 	if c.Bool("spec") {
 		spec = true
 	}
-	entrypoint := c.String("entrypoint")
-	pkgName := c.String("pkg")
-	secretName := c.String("secret")
-	cfgMapName := c.String("configmap")
-	envName := c.String("env")
-	codeName := c.String("code")
-	srcArchiveName := c.String("sourcearchive")
-	deployArchiveName := c.String("deployarchive")
-	buildcmd := c.String("buildcmd")
-	minscale := c.Int("minscale")
-	maxscale := c.Int("maxscale")
-	executortype := c.String("executortype")
-	mincpu := c.Int("mincpu")
-	maxcpu := c.Int("maxcpu")
-	minmemory := c.Int("minmemory")
-	maxmemory := c.Int("maxmemory")
-	targetCPU := c.Int("targetcpu")
-	triggerURL := c.String("url")
-	method := c.String("method")
-	fnNamespace := c.String("fnNamespace")
-	envNamespace := c.String("envNamespace")
-	//Also create a client for this cli run
-	client := sdk.GetClient(c.GlobalString("server"))
-
 	CreateFunctionArgs := &sdk.CreateFunctionArgs{
-		FnName:            fnName,
+		FnName:            c.String("name"),
 		Spec:              spec,
-		EntryPoint:        entrypoint,
-		PkgName:           pkgName,
-		SecretName:        secretName,
-		CfgMapName:        cfgMapName,
-		EnvName:           envName,
-		CodePath:          codeName,
-		SrcArchivePath:    srcArchiveName,
-		DeployArchivePath: deployArchiveName,
-		BuildCommand:      buildcmd,
-		TriggerURL:        triggerURL,
-		Method:            method,
-		MinScale:          minscale,
-		MaxScale:          maxscale,
-		ExecutorType:      executortype,
-		MinCPU:            mincpu,
-		MaxCPU:            maxcpu,
-		MinMemory:         minmemory,
-		MaxMemory:         maxmemory,
-		TargetCPU:         targetCPU,
-		FnNamespace:       fnNamespace,
-		EnvNamespace:      envNamespace,
-		Client:            client,
+		EntryPoint:        c.String("entrypoint"),
+		PkgName:           c.String("pkg"),
+		SecretName:        c.String("secret"),
+		CfgMapName:        c.String("configmap"),
+		EnvName:           c.String("env"),
+		CodePath:          c.String("code"),
+		SrcArchivePath:    c.String("sourcearchive"),
+		DeployArchivePath: c.String("deployarchive"),
+		BuildCommand:      c.String("buildcmd"),
+		TriggerURL:        c.String("url"),
+		Method:            c.String("method"),
+		MinScale:          c.Int("minscale"),
+		MaxScale:          c.Int("maxscale"),
+		ExecutorType:      c.String("executortype"),
+		MinCPU:            c.Int("mincpu"),
+		MaxCPU:            c.Int("maxcpu"),
+		MinMemory:         c.Int("minmemory"),
+		MaxMemory:         c.Int("maxmemory"),
+		TargetCPU:         c.Int("targetcpu"),
+		FnNamespace:       c.String("fnNamespace"),
+		EnvNamespace:      c.String("envNamespace"),
+		Client:            sdk.GetClient(c.GlobalString("server")),
 	}
-
-	err := sdk.CreateFunction(CreateFunctionArgs)
-	if err != nil {
-		return sdk.FailedToError(err, "create function")
-	}
-	return err
+	return sdk.CreateFunction(CreateFunctionArgs)
 
 }
 
@@ -410,26 +380,12 @@ func fnUpdate(c *cli.Context) error {
 }
 
 func fnDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
-
-	fnName := c.String("name")
-	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+	deleteFunctionArgs := &sdk.DeleteFunctionArgs{
+		FnName:      c.String("name"),
+		FnNamespace: c.String("fnNamespace"),
+		Client:      sdk.GetClient(c.GlobalString("server")),
 	}
-	fnNamespace := c.String("fnNamespace")
-
-	m := &metav1.ObjectMeta{
-		Name:      fnName,
-		Namespace: fnNamespace,
-	}
-
-	err := client.FunctionDelete(m)
-	if err != nil {
-		return sdk.FailedToError(err, fmt.Sprintf("delete function '%v'", fnName))
-	}
-
-	log.Infof("function '%v' deleted\n", fnName)
-	return err
+	return sdk.DeleteFunction(deleteFunctionArgs)
 }
 
 func fnList(c *cli.Context) error {
