@@ -389,12 +389,13 @@ func fnDelete(c *cli.Context) error {
 }
 
 func fnList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
-	ns := c.String("fnNamespace")
-
-	fns, err := client.FunctionList(ns)
+	listFunctionsArgs := &sdk.ListFunctionsArgs{
+		FnNamespace: c.String("fnNamespace"),
+		Client:      sdk.GetClient(c.GlobalString("server")),
+	}
+	fns, err := sdk.ListFunctions(listFunctionsArgs)
 	if err != nil {
-		return sdk.FailedToError(err, "list functions")
+		return err
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -404,7 +405,9 @@ func fnList(c *cli.Context) error {
 		mincpu := f.Spec.Resources.Requests.Cpu
 		mincpu().Value()
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
+			f.Metadata.Name,
+			f.Metadata.UID,
+			f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,

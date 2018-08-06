@@ -75,6 +75,12 @@ type DeleteFunctionArgs struct {
 	Client      *controllerClient.Client
 }
 
+//ListFunctionsArgs is a holder for arguments needed to list functions
+type ListFunctionsArgs struct {
+	FnNamespace string
+	Client      *controllerClient.Client
+}
+
 func (arg CreateFunctionArgs) validate() error {
 
 	var result *multierror.Error
@@ -119,6 +125,11 @@ func (arg CreateFunctionArgs) validate() error {
 			"Invalid argument: --deployarchive '%v' refers to an individual source code file not an archive. "+
 				"For single source file use --code instead. Regexp used for validation: `%v`",
 			arg.DeployArchivePath, SINGLE_SOURCE_CODE_FILENAME_PATTERN)))
+	}
+	if arg.TargetCPU != 0 {
+		if arg.TargetCPU <= 0 || arg.TargetCPU > 100 {
+			result = multierror.Append(result, GeneralError("TargetCPU must be a value between 1 - 100 or not specified (defaults to 80)"))
+		}
 	}
 
 	// check for unique function names within a namespace
@@ -167,6 +178,11 @@ func (arg DeleteFunctionArgs) validate() error {
 		result = multierror.Append(result, GeneralError("Client must be specified on DeleteFunctionArgs"))
 	}
 	return result.ErrorOrNil()
+}
+
+func (arg ListFunctionsArgs) validate() error {
+	//no validation currently necessary for list functions
+	return nil
 }
 
 //CreateFunction creates a new function based on provided arguments
@@ -226,9 +242,8 @@ func CreateFunction(args *CreateFunctionArgs) error {
 	}
 
 	resourceReq := GetResourceReq(mincpu, maxcpu, minmemory, maxmemory, v1.ResourceRequirements{})
-	targetCPU, err = GetTargetCPU(targetCPU)
-	if err != nil {
-		return err
+	if targetCPU == 0 {
+		targetCPU = 80
 	}
 
 	// user wants a spec, create a yaml file with package and function
@@ -410,6 +425,28 @@ func DeleteFunction(args *DeleteFunctionArgs) error {
 
 }
 
+//ListFunctions list all existing functions (optionally in a given namespace)
+func ListFunctions(args *ListFunctionsArgs) ([]crd.Function, error) {
+
+	//If not called from CLI these could be empty so default here too
+	if len(args.FnNamespace) == 0 {
+		args.FnNamespace = metav1.NamespaceDefault
+	}
+
+	err := args.validate()
+	if err != nil {
+		return nil, err
+	}
+
+	fns, err := args.Client.FunctionList(args.FnNamespace)
+	if err != nil {
+		return nil, FailedToError(err, "list functions")
+	}
+
+	return fns, nil
+}
+
+//TODO remove once fnUpdate has been moved to sdk package (and validation added to validate() for those args)
 func GetTargetCPU(targetCPU int) (int, error) {
 	if targetCPU != 0 {
 		if targetCPU <= 0 || targetCPU > 100 {
