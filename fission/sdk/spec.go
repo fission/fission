@@ -137,7 +137,7 @@ func WriteDeploymentConfig(specDir string, dc *DeploymentConfig) error {
 	return nil
 }
 
-// validateFunctionReference checks a function reference
+// ValidateFunctionReference checks a function reference
 func (fr *FissionResources) ValidateFunctionReference(functions map[string]bool, kind string, meta *metav1.ObjectMeta, funcRef fission.FunctionReference) error {
 	if funcRef.Type == fission.FunctionReferenceTypeFunctionName {
 		// triggers only reference functions in their own namespace
@@ -160,15 +160,15 @@ func (fr *FissionResources) ValidateFunctionReference(functions map[string]bool,
 	return nil
 }
 
+//Validate checks a set of FissionResources
+// Check references: both dangling refs + garbage
+//   packages -> archives
+//   functions -> packages
+//   functions -> environments + shared environments between functions [TODO]
+//   functions -> secrets + configmaps (same ns) [TODO]
+//   triggers -> functions
 func (fr *FissionResources) Validate() error {
 	var result *multierror.Error
-
-	// check references: both dangling refs + garbage
-	//   packages -> archives
-	//   functions -> packages
-	//   functions -> environments + shared environments between functions [TODO]
-	//   functions -> secrets + configmaps (same ns) [TODO]
-	//   triggers -> functions
 
 	// index archives
 	archives := make(map[string]bool)
@@ -209,6 +209,8 @@ func (fr *FissionResources) Validate() error {
 				archives[aname] = true
 			}
 		}
+
+		result = multierror.Append(result, p.Validate())
 	}
 
 	// error on unreferenced archives
@@ -259,6 +261,8 @@ func (fr *FissionResources) Validate() error {
 		} else {
 			packages[MapKey(pkgMeta)] = true
 		}
+
+		result = multierror.Append(result, f.Validate())
 	}
 
 	// error on unreferenced packages
@@ -279,24 +283,28 @@ func (fr *FissionResources) Validate() error {
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.kubernetesWatchTriggers {
 		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.timeTriggers {
 		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.messageQueueTriggers {
 		err := fr.ValidateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+		result = multierror.Append(result, t.Validate())
 	}
 
 	// we do not error on unreferenced functions (you can call a function through workflows,
@@ -306,12 +314,12 @@ func (fr *FissionResources) Validate() error {
 	return result.ErrorOrNil()
 }
 
-func (loc location) LocString() string {
+func (loc location) String() string {
 	return fmt.Sprintf("%v:%v", loc.path, loc.line)
 }
 
 // Keep track of source location of resources, and track duplicates
-func (fr *FissionResources) TrackSourceMap(kind string, newobj *metav1.ObjectMeta, loc *location) error {
+func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMeta, loc *location) error {
 	if _, exists := fr.sourceMap.locations[kind]; !exists {
 		fr.sourceMap.locations[kind] = make(map[string](map[string]location))
 	}
@@ -333,7 +341,7 @@ func (fr *FissionResources) TrackSourceMap(kind string, newobj *metav1.ObjectMet
 
 // parseYaml takes one yaml document, figures out its type, parses it, and puts it in
 // the right list in the given fission resources set.
-func (fr *FissionResources) ParseYaml(b []byte, loc *location) error {
+func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 	var m *metav1.ObjectMeta
 
 	// Figure out the object type by unmarshaling into the TypeMeta struct; then
@@ -432,7 +440,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *location) error {
 
 	// add to source map, check for duplicates
 	if m != nil {
-		err = fr.TrackSourceMap(tm.Kind, m, loc)
+		err = fr.trackSourceMap(tm.Kind, m, loc)
 		if err != nil {
 			return err
 		}
@@ -488,7 +496,7 @@ func ReadSpecs(specDir string) (*FissionResources, error) {
 			d := []byte(strings.TrimSpace(string(doc)))
 			if len(d) != 0 {
 				// parse this document and add whatever is in it to fr
-				err = fr.ParseYaml(d, &location{
+				err = fr.parseYaml(d, &location{
 					path: path,
 					line: lines,
 				})
@@ -591,7 +599,7 @@ func ApplyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 
 	// create archives locally and calculate checksums
 	for _, aus := range fr.archiveUploadSpecs {
-		ar, err := LocalArchiveFromSpec(specDir, &aus)
+		ar, err := localArchiveFromSpec(specDir, &aus)
 		if err != nil {
 			return err
 		}
@@ -652,7 +660,7 @@ func ApplyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 	return nil
 }
 
-// applyResources applies the given set of fission resources.
+// ApplyResources applies the given set of fission resources.
 func ApplyResources(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]resourceApplyStatus, error) {
 
 	applyStatus := make(map[string]resourceApplyStatus)
@@ -730,7 +738,7 @@ func ApplyResources(fclient *client.Client, specDir string, fr *FissionResources
 
 // localArchiveFromSpec creates an archive on the local filesystem from the given spec,
 // and returns its path and checksum.
-func LocalArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Archive, error) {
+func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Archive, error) {
 	// get root dir
 	var rootDir string
 	if len(aus.RootDir) == 0 {
@@ -761,9 +769,21 @@ func LocalArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 
 	// if it's just one file, use its path directly
 	var archiveFileName string
+	var isSingleFile bool
+
 	if len(files) == 1 {
-		archiveFileName = files[0]
-	} else {
+		// check whether a path destination is file or directory
+		f, err := os.Stat(files[0])
+		if err != nil {
+			return nil, err
+		}
+		if !f.IsDir() {
+			isSingleFile = true
+			archiveFileName = files[0]
+		}
+	}
+
+	if len(files) > 1 || !isSingleFile {
 		// zip up the file list
 		archiveFile, err := ioutil.TempFile("", fmt.Sprintf("fission-archive-%v", aus.Name))
 		if err != nil {
