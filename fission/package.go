@@ -388,7 +388,7 @@ func pkgDelete(c *cli.Context) error {
 	return nil
 }
 
-func pkgRetry(c *cli.Context) error {
+func pkgRebuild(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
