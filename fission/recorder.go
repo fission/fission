@@ -23,9 +23,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -71,7 +71,7 @@ func recorderCreate(c *cli.Context) error {
 			Name:            recName,
 			Function:        fnName,
 			Triggers:        triggers,
-			RetentionPolicy: "Permanent",		// TODO: Implement customizable policies for expiration of records
+			RetentionPolicy: "Permanent", // TODO: Implement customizable policies for expiration of records
 			EvictionPolicy:  "None",
 			Enabled:         true,
 		},

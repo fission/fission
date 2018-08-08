@@ -29,13 +29,13 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"github.com/satori/go.uuid"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	executorClient "github.com/fission/fission/executor/client"
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	executorClient "github.com/fission/fission/executor/client"
 	"github.com/fission/fission/redis"
 )
 

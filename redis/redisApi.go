@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/redis/build/gen"

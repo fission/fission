@@ -22,8 +22,8 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/urfave/cli"
 	"github.com/fission/fission/redis/build/gen"
+	"github.com/urfave/cli"
 )
 
 func recordsView(c *cli.Context) error {
@@ -44,7 +44,7 @@ func recordsView(c *cli.Context) error {
 	to := c.String("to")
 
 	//Refuse multiple filters for now
-	if multipleFiltersSpecified(function,trigger,from+to) {
+	if multipleFiltersSpecified(function, trigger, from+to) {
 		log.Fatal("Maximum of one filter is currently supported, either --function, --trigger, or --from,--to")
 	}
 
@@ -139,5 +139,5 @@ func multipleFiltersSpecified(entries ...string) bool {
 			specified += 1
 		}
 	}
-	return specified>1
+	return specified > 1
 }

@@ -314,12 +314,12 @@ type (
 	// RecorderSpec defines a policy for recording requests and responses
 	// to a function, that can be later inspected or replayed.
 	RecorderSpec struct {
-		Name            string				`json:"name"`
-		Function        string				`json:"function"`
-		Triggers        []string			`json:"triggers"`
-		RetentionPolicy string				`json:"retentionPolicy"`
-		EvictionPolicy  string				`json:"evictionPolicy"`
-		Enabled         bool				`json:"enabled"`
+		Name            string   `json:"name"`
+		Function        string   `json:"function"`
+		Triggers        []string `json:"triggers"`
+		RetentionPolicy string   `json:"retentionPolicy"`
+		EvictionPolicy  string   `json:"evictionPolicy"`
+		Enabled         bool     `json:"enabled"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or
