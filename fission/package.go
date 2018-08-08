@@ -410,7 +410,7 @@ func pkgRebuild(c *cli.Context) error {
 
 	updatePackage(client, pkg, "", "", "", "", "", true)
 
-	fmt.Printf("Set package '%v' to %v state\n", pkg.Metadata.Name, fission.BuildStatusPending)
+	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)
 
 	return nil
 }
