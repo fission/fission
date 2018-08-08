@@ -19,7 +19,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -323,16 +322,8 @@ To install it for your local Fission CLI:
 
 	err = plugin.Exec(pmd, args)
 	if err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			// Log the error of the subcommand/exec.Run. Unfortunately the exit code is not part of the Golang exec package
-			// API (because there is no platform-independent notion of an 'exit code'. So we are just returning exit code 1
-			// instead here, regardless of the exit code of the subcommand.
-			log.Verbose(2, err.Error())
-			os.Exit(1)
-		} else {
-			// An error has occurred trying the execute the subcommand.
-			log.Fatal(err)
-		}
+		log.Verbose(2, err.Error())
+		os.Exit(1)
 	}
 }
 
