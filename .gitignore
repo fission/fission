@@ -13,5 +13,5 @@ environments/php7/vendor/
 *~
 
 .DS_Store
-vendor/
+/vendor/
 local/
