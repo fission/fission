@@ -55,7 +55,7 @@ func (rs *RecorderSet) newRecorder(r *crd.Recorder) {
 		}
 	}
 
-	rs.httpTriggerSet.forceNewRouter()
+	rs.httpTriggerSet.syncTriggers()
 }
 
 // TODO: Delete or disable?
@@ -92,7 +92,7 @@ func (rs *RecorderSet) disableRecorder(r *crd.Recorder) {
 		}
 	}
 
-	rs.httpTriggerSet.forceNewRouter()
+	rs.httpTriggerSet.syncTriggers()
 }
 
 func (rs *RecorderSet) updateRecorder(old *crd.Recorder, newer *crd.Recorder) {

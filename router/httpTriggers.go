@@ -314,10 +314,6 @@ func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Co
 	}()
 }
 
-func (ts *HTTPTriggerSet) forceNewRouter() {
-	ts.mutableRouter.updateRouter(ts.getRouter())
-}
-
 func (ts *HTTPTriggerSet) syncTriggers() {
 	ts.updateRouterRequestChannel <- struct{}{}
 }
