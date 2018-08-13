@@ -22,6 +22,7 @@ import (
 
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission"
 )
 
 type (
@@ -47,10 +48,9 @@ func (frmap *functionRecorderMap) lookup(function string) (*crd.Recorder, error)
 }
 
 func (frmap *functionRecorderMap) assign(function string, recorder *crd.Recorder) {
-	err, old := frmap.cache.Set(function, recorder)
+	err, _ := frmap.cache.Set(function, recorder)
 	if err != nil {
-		oldR := *(old.(*crd.Recorder))
-		if (*recorder).Metadata.Name == oldR.Metadata.Name {
+		if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNameExists {
 			return
 		}
 		log.Printf("error caching recorder for function name with a different value: %v", err)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission"
 )
 
 type (
@@ -46,10 +47,9 @@ func (trmap *triggerRecorderMap) lookup(trigger string) (*crd.Recorder, error) {
 }
 
 func (trmap *triggerRecorderMap) assign(trigger string, recorder *crd.Recorder) {
-	err, old := trmap.cache.Set(trigger, recorder)
+	err, _ := trmap.cache.Set(trigger, recorder)
 	if err != nil {
-		oldR := *(old.(*crd.Recorder))
-		if (*recorder).Metadata.Name == oldR.Metadata.Name {
+		if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNameExists {
 			return
 		}
 		log.Printf("error caching recorder for function name with a different value: %v", err)
