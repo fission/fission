@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -79,8 +78,7 @@ func MakeGenericPoolManager(
 	kubernetesClient *kubernetes.Clientset,
 	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
-	instanceId string,
-	idlePodReapTime time.Duration) *GenericPoolManager {
+	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{
 		pools:            make(map[string]*GenericPool),
@@ -90,11 +88,10 @@ func MakeGenericPoolManager(
 		fsCache:          fsCache,
 		instanceId:       instanceId,
 		requestChannel:   make(chan *request),
-		idlePodReapTime:  idlePodReapTime,
+		idlePodReapTime:  2 * time.Minute,
 	}
 	go gpm.service()
 	go gpm.eagerPoolCreator()
-	go gpm.idleObjectReaper(gpm.kubernetesClient, gpm.fissionClient, gpm.fsCache, gpm.idlePodReapTime)
 
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -115,6 +112,7 @@ func MakeGenericPoolManager(
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
+	go gpm.idleObjectReaper()
 }
 
 func (gpm *GenericPoolManager) service() {
@@ -236,12 +234,12 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *crd.Environment) int32 {
 
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
-func (gpm *GenericPoolManager) IsValid(kubeObjects []apiv1.ObjectReference, podAddress string) bool {
-	for _, obj := range kubeObjects {
+func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
+	for _, obj := range fsvc.KubernetesObjects {
 		if obj.Kind == "pod" {
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && strings.Contains(podAddress, pod.Status.PodIP) && fission.IsReadyPod(pod) {
-				log.Printf("Valid pod address : %s", podAddress)
+			if err == nil && strings.Contains(fsvc.Address, pod.Status.PodIP) && fission.IsReadyPod(pod) {
+				log.Printf("Valid pod address : %s", fsvc.Address)
 				return true
 			}
 		}
@@ -250,16 +248,13 @@ func (gpm *GenericPoolManager) IsValid(kubeObjects []apiv1.ObjectReference, podA
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (gpm *GenericPoolManager) idleObjectReaper(kubeClient *kubernetes.Clientset,
-	fissionClient *crd.FissionClient,
-	fsCache *fscache.FunctionServiceCache,
-	idlePodReapTime time.Duration) {
+func (gpm *GenericPoolManager) idleObjectReaper() {
 
 	pollSleep := time.Duration(gpm.idlePodReapTime)
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			log.Fatalf("Failed to get environment list: %v", err)
 		}
@@ -269,7 +264,7 @@ func (gpm *GenericPoolManager) idleObjectReaper(kubeClient *kubernetes.Clientset
 			envList[env.Metadata.UID] = struct{}{}
 		}
 
-		funcSvcs, err := fsCache.ListOld(idlePodReapTime)
+		funcSvcs, err := gpm.fsCache.ListOld(gpm.idlePodReapTime)
 		if err != nil {
 			log.Printf("Error reaping idle pods: %v", err)
 			continue
@@ -291,7 +286,7 @@ func (gpm *GenericPoolManager) idleObjectReaper(kubeClient *kubernetes.Clientset
 				continue
 			}
 
-			deleted, err := fsCache.DeleteOld(fsvc, idlePodReapTime)
+			deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
 			if err != nil {
 				log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
 			}
@@ -301,7 +296,7 @@ func (gpm *GenericPoolManager) idleObjectReaper(kubeClient *kubernetes.Clientset
 			}
 
 			for _, kubeobj := range fsvc.KubernetesObjects {
-				reaper.CleanupKubeObject(kubeClient, &kubeobj)
+				reaper.CleanupKubeObject(gpm.kubernetesClient, &kubeobj)
 			}
 		}
 	}

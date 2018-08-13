@@ -39,10 +39,6 @@ import (
 	"github.com/fission/fission/executor/reaper"
 )
 
-const (
-	idlePodReapTime = 2 * time.Minute
-)
-
 type (
 	Executor struct {
 		gpm           *poolmgr.GenericPoolManager
@@ -217,7 +213,7 @@ func (executor *Executor) isValidAddress(fsvc *fscache.FuncSvc) bool {
 	if fsvc.Executor == fscache.NEWDEPLOY {
 		return executor.ndm.IsValid(fsvc)
 	} else {
-		return executor.gpm.IsValid(fsvc.KubernetesObjects, fsvc.Address)
+		return executor.gpm.IsValid(fsvc)
 	}
 }
 
@@ -259,11 +255,11 @@ func StartExecutor(fissionNamespace string, functionNamespace string, envBuilder
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient,
-		functionNamespace, fsCache, poolID, idlePodReapTime)
+		functionNamespace, fsCache, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(
 		fissionClient, kubernetesClient, restClient,
-		functionNamespace, fsCache, poolID, idlePodReapTime)
+		functionNamespace, fsCache, poolID)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 

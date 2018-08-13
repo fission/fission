@@ -51,24 +51,22 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
 
-	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if replicas == 0 {
-		replicas = 1
+	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	if minScale == 0 {
+		minScale = 1
 	}
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		// If minScale is 0 then scale to 1, otherwise scale up to minScale
-		if *existingDepl.Spec.Replicas == 0 {
-			err = scaleDeployment(deploy.kubernetesClient,
-				existingDepl.Namespace, existingDepl.Name, replicas)
-			if err != nil {
-				log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
-				return nil, err
-			}
+		err = scaleDeployment(deploy.kubernetesClient,
+			existingDepl.Namespace, existingDepl.Name, minScale)
+		if err != nil {
+			log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
+			return nil, err
 		}
-		if existingDepl.Status.ReadyReplicas < replicas {
-			existingDepl, err = deploy.waitForDeploy(existingDepl, replicas)
+
+		if existingDepl.Status.AvailableReplicas < minScale {
+			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
 		}
 		return existingDepl, err
 	}
@@ -90,7 +88,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		return deploy.waitForDeploy(depl, replicas)
+		return deploy.waitForDeploy(depl, minScale)
 	}
 
 	return nil, err
@@ -506,7 +504,9 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 			return nil, err
 		}
 		//TODO check for imagePullerror
-		if latestDepl.Status.ReadyReplicas >= replicas {
+		// use AvailableReplicas here is better than ReadyReplicas
+		// since the pods may not be able to serve network traffic yet.
+		if latestDepl.Status.AvailableReplicas >= replicas {
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)

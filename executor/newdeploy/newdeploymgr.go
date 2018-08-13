@@ -93,7 +93,6 @@ func MakeNewDeploy(
 	namespace string,
 	fsCache *fscache.FunctionServiceCache,
 	instanceID string,
-	idlePodReapTime time.Duration,
 ) *NewDeploy {
 
 	log.Printf("Creating NewDeploy ExecutorType")
@@ -133,7 +132,7 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		requestChannel:  make(chan *fnRequest),
-		idlePodReapTime: idlePodReapTime,
+		idlePodReapTime: 2 * time.Minute,
 	}
 
 	if nd.crdClient != nil {
@@ -680,14 +679,14 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				continue
 			}
 
-			replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
 			// do nothing if the current replicas is already lower than minScale
-			if *currentDeploy.Spec.Replicas <= replicas {
+			if *currentDeploy.Spec.Replicas <= minScale {
 				continue
 			}
 
-			err = scaleDeployment(deploy.kubernetesClient, deployObj.Namespace, deployObj.Name, replicas)
+			err = scaleDeployment(deploy.kubernetesClient, deployObj.Namespace, deployObj.Name, minScale)
 			if err != nil {
 				log.Printf("Error scaling down deployment for function %v: %v", fsvc.Function.Name, err)
 			}
