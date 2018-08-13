@@ -122,6 +122,7 @@ func pkgUpdate(c *cli.Context) error {
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
 	if envName == pkg.Spec.Environment.Name && envNamespace == pkg.Spec.Environment.Namespace {
 		envName = ""
+		envNamespace = ""
 	}
 
 	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
@@ -154,6 +155,10 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 
 	if len(envName) > 0 {
 		pkg.Spec.Environment.Name = envName
+		needToBuild = true
+	}
+
+	if len(envNamespace) > 0 {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}

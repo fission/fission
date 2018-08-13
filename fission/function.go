@@ -399,6 +399,7 @@ func fnUpdate(c *cli.Context) error {
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
 	if envName == function.Spec.Environment.Name && envNamespace == function.Spec.Environment.Namespace {
 		envName = ""
+		envNamespace = ""
 	}
 
 	deployArchiveName := c.String("code")
@@ -462,6 +463,9 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
+	}
+
+	if len(envNamespace) > 0 {
 		function.Spec.Environment.Namespace = envNamespace
 	}
 
