@@ -47,8 +47,6 @@ import (
 	"github.com/fission/fission/executor/util"
 )
 
-const POD_PHASE_RUNNING string = "Running"
-
 type (
 	GenericPool struct {
 		env                    *crd.Environment
@@ -228,21 +226,14 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		for i := range podList.Items {
 			pod := podList.Items[i]
 
-			// If a pod has no IP it's not ready
-			if len(pod.Status.PodIP) == 0 || string(pod.Status.Phase) != POD_PHASE_RUNNING {
+			// If a pod has no IP or any of pod's containers
+			// is not in ready state, it's not ready.
+			if len(pod.Status.PodIP) == 0 || !fission.IsReadyPod(&pod) {
 				continue
 			}
 
-			// Wait for all containers in the pod to be ready
-			podReady := true
-			for _, cs := range pod.Status.ContainerStatuses {
-				podReady = podReady && cs.Ready
-			}
-
 			// add it to the list of ready pods
-			if podReady {
-				readyPods = append(readyPods, &pod)
-			}
+			readyPods = append(readyPods, &pod)
 		}
 		log.Printf("[%v] found %v ready pods of %v total", newLabels, len(readyPods), len(podList.Items))
 
