@@ -76,9 +76,9 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, tr
 		fnStore, fnController = httpTriggerSet.initFunctionController()
 		httpTriggerSet.funcStore = fnStore
 		httpTriggerSet.funcController = fnController
-		recorderSet = MakeRecorderSet(httpTriggerSet, crdClient, rStore, frmap, trmap)
-		httpTriggerSet.recorderSet = recorderSet
 	}
+	recorderSet = MakeRecorderSet(httpTriggerSet, crdClient, rStore, frmap, trmap)
+	httpTriggerSet.recorderSet = recorderSet
 	return httpTriggerSet, tStore, fnStore
 }
 
