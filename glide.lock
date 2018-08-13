@@ -1,5 +1,5 @@
-hash: 9bc33b9aab233bd603c06d0d53648e6b3f5cfb2f5e3256429def7ab766485276
-updated: 2018-08-13T11:11:42.173866-07:00
+hash: b26f975bf145378e939db833fa4b6a142fa04b884463d8173622b30f95191d42
+updated: 2018-08-13T13:12:57.58715-07:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -115,7 +115,7 @@ imports:
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
-  version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
+  version: 33882c6bfe701aca0ff1472aa8b4ebd6135a560d
 - name: github.com/influxdata/influxdb
   version: b7bb7e8359642b6e071735b50ae41f5eb343fd42
   subpackages:
