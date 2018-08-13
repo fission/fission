@@ -1,5 +1,5 @@
-hash: 1f595f5cdf8dc629d9046f82869cb77811dac21ce5f58e4f81e89d21181f6c34
-updated: 2018-05-24T22:39:34.860206+08:00
+hash: 9bc33b9aab233bd603c06d0d53648e6b3f5cfb2f5e3256429def7ab766485276
+updated: 2018-08-13T11:11:42.173866-07:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -22,7 +22,7 @@ imports:
   subpackages:
   - quantile
 - name: github.com/coreos/etcd
-  version: 6a265731e10a5137b991c1aa3a83ecefdd149d50
+  version: f87b566248bb0713a56dc55bc545aa5aad17ace0
   subpackages:
   - client
 - name: github.com/davecgh/go-spew
@@ -47,8 +47,10 @@ imports:
   - internal
   - internal/errors
   - internal/prefix
+- name: github.com/dustin/go-humanize
+  version: 9f541cc9db5d55bce703bd99987c9d5cb8eea45e
 - name: github.com/fsnotify/fsnotify
-  version: 4da3e2cfbabc9f751898f250b49f2439785783a1
+  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gogo/protobuf
@@ -58,15 +60,10 @@ imports:
   - proto
   - protoc-gen-gogo/descriptor
   - sortkeys
-- name: github.com/golang/freetype
-  version: e2365dfdc4a05e4b8299a783240d4a7d5a65d4e4
-  subpackages:
-  - raster
-  - truetype
 - name: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/golang/protobuf
-  version: 1643683e1b54a9e88ad26d98f81400c8c9d9f4f9
+  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - proto
   - ptypes
@@ -74,7 +71,12 @@ imports:
   - ptypes/duration
   - ptypes/timestamp
 - name: github.com/golang/snappy
-  version: 553a641470496b2327abcac10b36396bd98e45c9
+  version: 2e65f85255dbc3072edf28d6b5b8efc472979f5a
+- name: github.com/gomodule/redigo
+  version: 2cd21d9966bf7ff9ae091419744f0b3fb0fecace
+  subpackages:
+  - internal
+  - redis
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
 - name: github.com/googleapis/gnostic
@@ -95,17 +97,17 @@ imports:
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/handlers
-  version: 90663712d74cb411cbef281bc1e08c19d1a76145
+  version: 7e0847f9db758cdebd26c149d0ae9d5d0b9c98ce
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/graymeta/stow
-  version: abb68c488872b06c5453865fa59f4818b4ea13a4
+  version: 7b5498c561bbfeb17e413eb96c9edaf88af3855f
   subpackages:
   - local
 - name: github.com/hashicorp/errwrap
-  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
+  version: d6c0cd88035724dd42e0f335ae30161c20575ecc
 - name: github.com/hashicorp/go-multierror
-  version: b7773ae218740a7be65057fc60b366a49b538a44
+  version: 3d5d8f294aa03d8e98859feac328afbdf1ae0703
 - name: github.com/hashicorp/golang-lru
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
@@ -113,7 +115,7 @@ imports:
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
-  version: 9d5f1277e9a8ed20c3684bda8fde67c05628518c
+  version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
 - name: github.com/influxdata/influxdb
   version: b7bb7e8359642b6e071735b50ae41f5eb343fd42
   subpackages:
@@ -121,7 +123,7 @@ imports:
   - models
   - pkg/escape
 - name: github.com/json-iterator/go
-  version: 13f86432b882000a51c6e610c620974462691a97
+  version: f2b4162afba35581b6d4a50d3b8f34e33c144682
 - name: github.com/marstr/guid
   version: 8bdf7d1a087ccc975cf37dd6507da50698fd19ca
 - name: github.com/matttproud/golang_protobuf_extensions
@@ -129,33 +131,35 @@ imports:
   subpackages:
   - pbutil
 - name: github.com/mholt/archiver
-  version: 26cf5bb32d07aa4e8d0de15f56ce516f4641d7df
+  version: e4ef56d48eb029648b0e895bb0b6a393ef0829c3
+- name: github.com/modern-go/concurrent
+  version: bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94
+- name: github.com/modern-go/reflect2
+  version: 05fbef0ca5da472bbf96c9322b84a53edc03c9fd
 - name: github.com/nats-io/go-nats
   version: 2485387d6ede89c1c8c3445cd1935fd41a2e9ee9
   subpackages:
   - encoders/builtin
   - util
 - name: github.com/nats-io/go-nats-streaming
-  version: 6e620057a207bd61e992c1c5b6a2de7b6a4cb010
+  version: e15a53f85e4932540600a16b56f6c4f65f58176f
   subpackages:
   - pb
 - name: github.com/nats-io/nats-streaming-server
-  version: 6026da1b7c444bf9f1d1b1d3ed14e435aabf02bc
+  version: 63e2c334b66dba3edade0047625a25c0d8f18f80
   subpackages:
   - spb
   - util
 - name: github.com/nats-io/nuid
-  version: 289cccf02c178dc782430d534e3c1f5b72af807f
+  version: 3024a71c3cbe30667286099921591e6fcc328230
 - name: github.com/nwaples/rardecode
   version: e06696f847aeda6f39a8f0b7cdff193b7690aef6
 - name: github.com/pierrec/lz4
-  version: ed8d4cc3b461464e69798080a0092bd028910298
-- name: github.com/pierrec/xxHash
-  version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
+  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
   subpackages:
-  - xxHash32
+  - internal/xxh32
 - name: github.com/pkg/errors
-  version: f15c970de5b76fac0b59abb32d62c17cc7bed265
+  version: 816c9085562cd7ee03e7f8188a1cfd942858cded
 - name: github.com/prometheus/client_golang
   version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
@@ -176,46 +180,31 @@ imports:
   subpackages:
   - xfs
 - name: github.com/robfig/cron
-  version: 2315d5715e36303a941d907f038da7f7c44c773b
+  version: b41be1df696709bb6395fe435af20370037c0b4c
 - name: github.com/satori/go.uuid
   version: f58768cc1a7a7e77a3bd49e98cdd21419399b6a3
 - name: github.com/sirupsen/logrus
   version: 68cec9f21fbf3ea8d8f98c044bc6ce05f17b267a
 - name: github.com/spf13/pflag
-  version: 4c012f6dcd9546820e378d0bdda4d8fc772cdfea
+  version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/stretchr/testify
-  version: 12b6f73e6084dad08a7c6e575284b177ecafbc71
+  version: f35b8ab0b5a2cef36673838d662e249dd9c94686
   subpackages:
   - assert
   - mock
   - require
 - name: github.com/ulikunitz/xz
-  version: 0c6b41e72360850ca4f98dc341fd999726ea007f
+  version: 636d36a76670e6c700f22fd5f4588679ff2896c4
   subpackages:
   - internal/hash
   - internal/xlog
   - lzma
 - name: github.com/urfave/cli
   version: cfb38830724cc34fedffe9a2a29fb54fa9169cd1
-- name: github.com/wcharczuk/go-chart
-  version: 9e3a080aa3e7573281cf8d65a55305e1148d857d
-  subpackages:
-  - drawing
-  - matrix
-  - roboto
-  - seq
-  - util
 - name: golang.org/x/crypto
   version: 81e90905daefcd6fd217b62423c0908922eadb30
   subpackages:
   - ssh/terminal
-- name: golang.org/x/image
-  version: f315e440302883054d0c2bd85486878cb4f8572c
-  subpackages:
-  - draw
-  - font
-  - math/f64
-  - math/fixed
 - name: golang.org/x/net
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
@@ -249,7 +238,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 1937f90a1bb43667aff4059b1bab13eb15121e8e
+  version: 87c7dcbd5db6be1a938380ce9944ed2299806701
   subpackages:
   - imports
 - name: google.golang.org/appengine
@@ -271,7 +260,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 670d4cfef0544295bc27a114dbac37980d83185a
 - name: k8s.io/api
-  version: 590a9173e3b65d74e907fcfd94b78465cf314760
+  version: 0f11257a8a25954878633ebdc9841c67d8f83bdb
   subpackages:
   - admissionregistration/v1alpha1
   - admissionregistration/v1beta1
@@ -302,7 +291,7 @@ imports:
   - storage/v1alpha1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: 7fbced0db3c3378efac13578ef9d75512c582b03
+  version: f584b16eb23bd2a3fd292a027d698d95db427c5d
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -310,7 +299,7 @@ imports:
   - pkg/client/clientset/clientset/scheme
   - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-  version: 31dade610c053669d8054bfd847da657251e8c1a
+  version: e386b2658ed20923da8cc9250e552f082899a1ee
   subpackages:
   - pkg/api/errors
   - pkg/api/meta
@@ -420,15 +409,13 @@ imports:
   - util/jsonpath
   - util/retry
 - name: k8s.io/code-generator
-  version: d9b16e114e8c31761e26efcdee0a42cf066fbf58
+  version: caff7734d7c07b6211025f0898aa6168e5bc874d
 - name: k8s.io/gengo
-  version: 01a732e01d00cb9a81bb0ca050d3e6d2b947927b
+  version: c42f3cdacc394f43077ff17e327d1b351c0304e4
 testImports:
 - name: github.com/pmezard/go-difflib
   version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
   subpackages:
   - difflib
 - name: github.com/stretchr/objx
-  version: 8a3f7159479fbc75b30357fbc48f380b7320f08e
-- name: github.com/dustin/go-humanize
-  version: 02af3965c54e8cacf948b97fef38925c4120652c
+  version: b8b73a35e9830ae509858c10dec5866b4d5c8bff
