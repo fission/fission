@@ -20,9 +20,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/fission/fission"
 	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission"
 )
 
 type (
