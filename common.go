@@ -108,10 +108,17 @@ func IsNetworkDialError(err error) bool {
 	return false
 }
 
-// IsReadyPod checks that all containers in a pod are ready and returns true if so
+// IsReadyPod checks both all containers in a pod are ready and the .metadata.DeletionTimestamp
+// is nil. Return true if so
 func IsReadyPod(pod *apiv1.Pod) bool {
 	// since its a utility function, just ensuring there is no nil pointer exception
 	if pod == nil {
+		return false
+	}
+
+	// pod is in "Terminating" status if deletionTimestamp is not nil
+	// https://github.com/kubernetes/kubernetes/issues/61376
+	if pod.ObjectMeta.DeletionTimestamp != nil {
 		return false
 	}
 
