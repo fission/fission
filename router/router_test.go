@@ -58,8 +58,12 @@ func TestRouter(t *testing.T) {
 	}
 	frr.refCache.Set(nfr, rr)
 
+	frmap := makeFunctionRecorderMap(time.Minute)
+
+	trmap := makeTriggerRecorderMap(time.Minute)
+
 	// HTTP trigger set with a trigger for this function
-	triggers, _, _ := makeHTTPTriggerSet(fmap, nil, nil, nil, nil, nil, nil,
+	triggers, _, _ := makeHTTPTriggerSet(fmap, frmap, trmap, nil, nil, nil, nil,
 		&tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
 			timeoutExponent: 2,
