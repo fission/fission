@@ -84,12 +84,14 @@ func (c *Client) service() {
 			c.tappedByUrl = make(map[string]bool)
 			if len(urls) > 0 {
 				go func() {
-					for u := range c.tappedByUrl {
-						c._tapService(u)
+					for u := range urls {
+						err := c._tapService(u)
+						if err != nil {
+							log.Printf("Error tapping function service address %v: %v", u, err)
+						}
 					}
 					log.Printf("Tapped %v services in batch", len(urls))
 				}()
-				log.Printf("Tapped %v services in batch", len(urls))
 			}
 		}
 	}
