@@ -50,6 +50,7 @@ type (
 		kubernetesClient  *kubernetes.Clientset
 		storageServiceUrl string
 		builderManagerUrl string
+		podNamespace      string
 		workflowApiUrl    string
 		functionNamespace string
 		useIstio          bool
@@ -77,6 +78,13 @@ func MakeAPI() (*API, error) {
 		api.builderManagerUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.builderManagerUrl = "http://buildermgr"
+	}
+
+	u = os.Getenv("POD_NAMESPACE")
+	if len(u) > 0 {
+		api.podNamespace = u
+	} else {
+		api.podNamespace = "default"
 	}
 
 	wfEnv := os.Getenv("WORKFLOW_API_URL")
@@ -247,6 +255,8 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/v2/records/function/{function}", api.RecordsApiFilterByFunction).Methods("GET")
 	r.HandleFunc("/v2/records/trigger/{trigger}", api.RecordsApiFilterByTrigger).Methods("GET")
 	r.HandleFunc("/v2/records/time", api.RecordsApiFilterByTime).Methods("GET")
+
+	r.HandleFunc("/v2/replay/{reqUID}", api.ReplayByReqUID).Methods("GET")
 
 	r.HandleFunc("/v2/secrets/{secret}", api.SecretGet).Methods("GET")
 	r.HandleFunc("/v2/configmaps/{configmap}", api.ConfigMapGet).Methods("GET")

@@ -227,6 +227,9 @@ func main() {
 		{Name: "view", Usage: "View existing records", Flags: []cli.Flag{filterTimeTo, filterTimeFrom, filterFunction, filterTrigger, verbosityFlag, vvFlag}, Action: recordsView},
 	}
 
+	// Replay records
+	reqIDFlag := cli.StringFlag{Name: "reqUID", Usage: "Replay a particular request by providing the reqUID (to view reqUIDs, do `fission records view`)"}
+
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
 	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Value: 3, Usage: "Size of the pool"}
@@ -307,6 +310,7 @@ func main() {
 		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
 		{Name: "recorder", Usage: "Manage recorders for functions", Subcommands: recSubcommands, Hidden: true},
 		{Name: "records", Usage: "View records with optional filters", Subcommands: recViewSubcommands, Hidden: true},
+		{Name: "replay", Usage: "Replay records", Flags: []cli.Flag{reqIDFlag}, Action: replay},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
