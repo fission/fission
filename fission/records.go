@@ -22,8 +22,9 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/fission/fission/redis/build/gen"
 	"github.com/urfave/cli"
+
+	"github.com/fission/fission/redis/build/gen"
 )
 
 func recordsView(c *cli.Context) error {
