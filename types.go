@@ -51,6 +51,7 @@ type (
 	MessageQueueType             = fv1.MessageQueueType
 	MessageQueueTriggerSpec      = fv1.MessageQueueTriggerSpec
 	TimeTriggerSpec              = fv1.TimeTriggerSpec
+	RecorderSpec                 = fv1.RecorderSpec
 )
 
 type (

@@ -1,0 +1,51 @@
+/*
+Copyright 2018 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = 'proto3';
+
+package redisCache;
+
+message Request {
+    string Method = 1;
+    map<string, string> URL = 2;
+    map<string, string> Header = 3;
+    string Host = 4;
+    map<string, string> Form = 5;
+    map<string, string> PostForm = 6;
+}
+
+message Response {
+    string Status = 7;
+    int32 StatusCode = 8;
+}
+
+message UniqueRequest {
+    Request Req = 10;
+    Response Resp = 11;
+    string Trigger = 12;
+}
+
+// We need this because we don't store the ReqUID in the above Message (UniqueRequest)
+// and we don't store the UID there because the key in Redis is the ReqUID -- including it in the value would be
+// unnecessary duplication
+// but we need it here because we want to display to the user the ReqResponses for a given ReqUID
+message RecordedEntry {
+    string ReqUID = 13;
+    Request Req = 14;
+    Response Resp = 15;
+    string Trigger = 16;
+}
+
