@@ -12,23 +12,39 @@ fn_name=hellopython-$(date +%N)
 old_secret=old-secret-$(date +%N)
 new_secret=new-secret-$(date +%N)
 
+cleanup() {
+    log "Cleaning up..."
+    fission env delete --name $env || true
+    kubectl delete secret ${old_secret} -n default || true
+    kubectl delete secret ${new_secret} -n default || true
+    fission spec destroy || true
+    rm -rf specs || true
+}
+
+cleanup
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
 cp ../test_secret_cfgmap/secret.py.template secret.py
 sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
 
 log "Creating env $env"
 fission env create --name $env --image fission/python-env
-trap "fission env delete --name $env" EXIT
+#trap "fission env delete --name $env" EXIT
 
 log "Creating secret $old_secret"
 kubectl create secret generic ${old_secret} --from-literal=TEST_KEY="TESTVALUE" -n default
-trap "kubectl delete secret ${old_secret} -n default" EXIT
+#trap "kubectl delete secret ${old_secret} -n default" EXIT
 
 log "Creating NewDeploy function spec: $fn_name"
 fission spec init
-trap "rm -rf specs" EXIT
+#trap "rm -rf specs" EXIT
 fission fn create --spec --name $fn_name --env $env --code secret.py --secret $old_secret --minscale 1 --maxscale 4 --executortype newdeploy
 fission spec apply ./specs/
-trap "fission spec destroy" EXIT
+#trap "fission spec destroy" EXIT
 
 log "Creating route"
 fission route create --function ${fn_name} --url /${fn_name} --method GET
@@ -41,7 +57,7 @@ timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"
 
 log "Creating a new secret"
 kubectl create secret generic ${new_secret} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default
-trap "kubectl delete secret ${new_secret} -n default" EXIT
+#trap "kubectl delete secret ${new_secret} -n default" EXIT
 
 log "Updating secret and code for the function"
 sed -i "s/${old_secret}/${new_secret}/g" secret.py
@@ -49,7 +65,7 @@ sed -i "s/${old_secret}/${new_secret}/g" specs/function-$fn_name.yaml
 
 log "Applying function changes"
 fission spec apply ./specs/
-trap "fission spec destroy" EXIT
+#trap "fission spec destroy" EXIT
 
 log "Waiting for changes to take effect"
 sleep 5

@@ -5,9 +5,9 @@ set -euo pipefail
 ROOT=$(dirname $0)/../../..
 
 cleanup() {
-    fission fn delete --name pbuilderhello
-    fission fn delete --name nbuilderhello
-    fission env delete --name java
+    fission fn delete --name pbuilderhello || true
+    fission fn delete --name nbuilderhello || true
+    fission env delete --name java || true
 }
 
 test_fn() {

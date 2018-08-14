@@ -9,16 +9,22 @@ env=nodejs-$(date +%N)
 valid_fn_name=hello-$(date +%N)
 invalid_fn_name=errhello-$(date +%N)
 
-function cleanup {
-    log "Cleaning up"
-    fission env delete --name $env
-    fission fn delete --name $valid_fn_name
-    fission fn delete --name $invalid_fn_name
+cleanup() {
+    log "Cleaning up..."
+    fission env delete --name $env || true
+    fission fn delete --name $valid_fn_name || true
+    fission fn delete --name $invalid_fn_name || true
 }
+
+cleanup
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 log "Creating env $env"
 fission env create --name $env --image fission/node-env
-trap cleanup EXIT
 
 log "Creating valid function $valid_fn_name"
 fission fn create --name $valid_fn_name --env $env --code hello.js

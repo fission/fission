@@ -1,6 +1,21 @@
 #!/bin/bash
 
 set -euo pipefail
+
+cleanup() {
+    log "Cleaning up..."
+    fission env delete --name python || true
+    fission fn delete --name $fn || true
+    rm -rf testDir-$fn || true
+}
+
+cleanup
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
 # 1. This test first creates a python function with a route
 # 2. Makes a curl request to the route and verifies http.StatusOK is received.
 #    This step ensures the pod address is cached in router.
@@ -18,16 +33,16 @@ fission env delete --name python || true
 
 log "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE
-trap "fission env delete --name python" EXIT
+#trap "fission env delete --name python" EXIT
 
 log "Creating hello.py"
 mkdir testDir-$fn
 printf 'def main():\n    return "Hello, world!"' > testDir-$fn/hello.py
-trap "rm -rf testDir-$fn" EXIT
+#trap "rm -rf testDir-$fn" EXIT
 
 log "Creating function " $fn
 fission fn create --name $fn --env python --code testDir-$fn/hello.py
-trap "fission fn delete --name $fn" EXIT
+#trap "fission fn delete --name $fn" EXIT
 
 log "rm testDir-$fn"
 rm -rf testDir-$fn

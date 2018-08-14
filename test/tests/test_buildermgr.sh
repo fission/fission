@@ -51,13 +51,26 @@ waitEnvBuilder() {
 }
 export -f waitEnvBuilder
 
+cleanup() {
+    log "Cleaning up..."
+    fission env delete --name python || true
+    fission fn delete --name $fn || true
+}
+
+cleanup
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
 log "Pre-test cleanup"
 fission env delete --name python || true
 kubectl --namespace default get packages|grep -v NAME|awk '{print $1}'|xargs -I@ bash -c 'kubectl --namespace default delete packages @' || true
 
 log "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
-trap "fission env delete --name python" EXIT
+#trap "fission env delete --name python" EXIT
 
 timeout 180s bash -c "waitEnvBuilder python"
 
@@ -66,7 +79,7 @@ zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 
 log "Creating function " $fn
 fission fn create --name $fn --env python --src demo-src-pkg.zip --entrypoint "user.main" --buildcmd "./build.sh"
-trap "fission fn delete --name $fn" EXIT
+#trap "fission fn delete --name $fn" EXIT
 
 log "Creating route"
 fission route create --function $fn --url /$fn --method GET
@@ -83,7 +96,7 @@ checkFunctionResponse $fn
 
 log "Updating function " $fn
 fission fn update --name $fn --src demo-src-pkg.zip
-trap "fission fn delete --name $fn" EXIT
+#trap "fission fn delete --name $fn" EXIT
 
 pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.packageref.name}')
 

@@ -10,19 +10,29 @@ url=""
 source $(dirname $0)/fnupdate_utils.sh
 
 cleanup() {
+    log "Cleaning up..."
+
     if [ -e "test-deploy-pkg.zip" ]; then
-        rm -rf test-deploy-pkg.zip test_dir
+        rm -rf test-deploy-pkg.zip test_dir || true
     fi
     if [ -e "/tmp/file" ]; then
-        rm -rf /tmp/file
+        rm -rf /tmp/file || true
     fi
+
+    fission env delete --name $env || true
+    fission fn delete --name $fn_name || true
 }
+
+cleanup
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 # This test tests updating package and checking results of function, it does:
 # Creates a archive, env. with builder and a function and tests for response
 # Then updates archive with a different word and udpates functions to check for new string in response
-
-trap cleanup EXIT
 
 env=python-$(date +%N)
 fn_name=hellopython-$(date +%N)
