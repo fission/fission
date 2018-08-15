@@ -32,16 +32,13 @@ fission env delete --name python || true
 
 log "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE
-#trap "fission env delete --name python" EXIT
 
 log "Creating hello.py"
 mkdir testDir-$fn
 printf 'def main():\n    return "Hello, world!"' > testDir-$fn/hello.py
-#trap "rm -rf testDir-$fn" EXIT
 
 log "Creating function " $fn
 fission fn create --name $fn --env python --code testDir-$fn/hello.py
-#trap "fission fn delete --name $fn" EXIT
 
 log "rm testDir-$fn"
 rm -rf testDir-$fn

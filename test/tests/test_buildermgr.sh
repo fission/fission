@@ -70,7 +70,6 @@ kubectl --namespace default get packages|grep -v NAME|awk '{print $1}'|xargs -I@
 
 log "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
-#trap "fission env delete --name python" EXIT
 
 timeout 180s bash -c "waitEnvBuilder python"
 
@@ -79,7 +78,6 @@ zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 
 log "Creating function " $fn
 fission fn create --name $fn --env python --src demo-src-pkg.zip --entrypoint "user.main" --buildcmd "./build.sh"
-#trap "fission fn delete --name $fn" EXIT
 
 log "Creating route"
 fission route create --function $fn --url /$fn --method GET
@@ -96,7 +94,6 @@ checkFunctionResponse $fn
 
 log "Updating function " $fn
 fission fn update --name $fn --src demo-src-pkg.zip
-#trap "fission fn delete --name $fn" EXIT
 
 pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.packageref.name}')
 

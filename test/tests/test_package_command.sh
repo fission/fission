@@ -68,7 +68,6 @@ fission env delete --name python || true
 
 log "Creating python env"
 fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
-#trap "fission env delete --name python" EXIT
 
 timeout 180s bash -c "waitEnvBuilder python"
 
@@ -81,7 +80,6 @@ timeout 60s bash -c "waitBuild $pkgName"
 
 log "Creating function " $fn
 fission fn create --name $fn --pkg $pkgName --entrypoint "user.main"
-#trap "fission fn delete --name $fn" EXIT
 
 log "Creating route"
 fission route create --function $fn --url /$fn --method GET
@@ -100,7 +98,6 @@ pkgName=$(fission package create --deploy demo-deploy-pkg.zip --env python| cut 
 
 log "Updating function " $fn
 fission fn update --name $fn --pkg $pkgName --entrypoint "hello.main"
-#trap "fission fn delete --name $fn" EXIT
 
 log "Waiting for router to update cache"
 sleep 3

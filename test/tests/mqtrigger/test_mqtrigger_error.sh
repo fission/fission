@@ -36,19 +36,16 @@ fission env delete --name nodejs || true
 
 log "Creating nodejs env"
 fission env create --name nodejs --image fission/node-env
-#trap "fission env delete --name nodejs" EXIT
 
 log "Creating function"
 fn=hello-$(date +%s)
 fission fn create --name $fn --env nodejs --code $DIR/main_error.js --method GET
-#trap "fission fn delete --name $fn" EXIT
 
 log "Creating message queue trigger"
 mqt=mqt-$(date +%s)
 fission mqtrigger create --name $mqt --function $fn --mqtype "nats-streaming" --topic $topic --resptopic $resptopic --errortopic $errortopic --maxretries $maxretries
 log "Updated mqtrigger list"
 fission mqtrigger list
-#trap "fission mqtrigger delete --name $mqt" EXIT
 
 # wait until nats trigger is created
 sleep 5

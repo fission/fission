@@ -27,12 +27,10 @@ fission env delete --name nodejs || true
 
 log "Creating nodejs env"
 fission env create --name nodejs --image fission/node-env
-#trap "fission env delete --name nodejs" EXIT
 
 log "Creating function"
 echo 'module.exports = function(context, callback) { callback(200, "foo!\n"); }' > foo.js
 fission fn create --name $fn --env nodejs --code foo.js
-#trap "fission fn delete --name $fn" EXIT
 
 log "Creating route"
 fission route create --function $fn --url /$fn --method GET
@@ -55,7 +53,6 @@ pid=$!
 log "Updating function"
 echo 'module.exports = function(context, callback) { callback(200, "bar!\n"); }' > bar.js
 fission fn update --name $fn --code bar.js
-#trap "fission fn delete --name $fn" EXIT
 
 log "Waiting for router to update cache"
 sleep 10
