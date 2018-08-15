@@ -397,8 +397,11 @@ func fnUpdate(c *cli.Context) error {
 	// if the new env specified is the same as the old one, no need to update package
 	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
-	if envName == function.Spec.Environment.Name && envNamespace == function.Spec.Environment.Namespace {
+	if len(envName) > 0 && envName == function.Spec.Environment.Name {
 		envName = ""
+	}
+
+	if envNamespace == function.Spec.Environment.Namespace {
 		envNamespace = ""
 	}
 

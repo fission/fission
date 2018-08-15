@@ -120,8 +120,11 @@ func pkgUpdate(c *cli.Context) error {
 	// if the new env specified is the same as the old one, no need to update package
 	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
-	if envName == pkg.Spec.Environment.Name && envNamespace == pkg.Spec.Environment.Namespace {
+	if len(envName) > 0 && envName == pkg.Spec.Environment.Name && envNamespace == pkg.Spec.Environment.Namespace {
 		envName = ""
+	}
+
+	if envNamespace == pkg.Spec.Environment.Namespace {
 		envNamespace = ""
 	}
 
@@ -153,12 +156,12 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
 
-	if len(envName) > 0 {
+	if len(envName) > 0 && len(srcArchiveName) > 0 {
 		pkg.Spec.Environment.Name = envName
 		needToBuild = true
 	}
 
-	if len(envNamespace) > 0 {
+	if len(envNamespace) > 0 && len(srcArchiveName) > 0 {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
