@@ -29,6 +29,7 @@ import (
 
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/redis/build/gen"
+	"github.com/fission/fission/replayer"
 )
 
 func RecordsListAll() ([]byte, error) {
@@ -335,4 +336,42 @@ func includesTrigger(triggers []string, query string) bool {
 		}
 	}
 	return false
+}
+
+func ReplayByReqUID(routerUrl string, queriedID string) ([]byte, error) {
+	client := NewClient()
+	if client == nil {
+		return []byte{}, errors.New("failed to create redis client")
+	}
+
+	exists, err := redis.Int(client.Do("EXISTS", queriedID))
+	if exists != 1 || err != nil {
+		log.Error("couldn't find request to replay")
+		return []byte{}, err
+	}
+
+	val, err := redis.Bytes(client.Do("HGET", queriedID, "ReqResponse"))
+	if err != nil {
+		log.Error("couldn't obtain ReqResponse for this ID")
+		return []byte{}, err
+	}
+	entry, err := deserializeReqResponse(val, queriedID)
+	if err != nil {
+		log.Error("couldn't deserialize ReqResponse")
+		return []byte{}, err
+	}
+
+	replayed, err := replayer.ReplayRequest(routerUrl, entry.Req)
+	if err != nil {
+		log.Error("couldn't replay request")
+		return []byte{}, err
+	}
+
+	resp, err := json.Marshal(replayed)
+	if err != nil {
+		log.Error("couldn't marshall replayed request response")
+		return []byte{}, err
+	}
+
+	return resp, nil
 }
