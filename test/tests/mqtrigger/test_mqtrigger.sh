@@ -22,7 +22,6 @@ cleanup() {
     fission mqtrigger delete --name $mqt || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else

@@ -9,7 +9,6 @@ cleanup() {
     rm -rf testDir-$fn || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else

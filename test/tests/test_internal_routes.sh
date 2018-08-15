@@ -16,7 +16,6 @@ cleanup() {
     fission fn delete --name $f2 || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else

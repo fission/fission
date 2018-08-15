@@ -16,7 +16,6 @@ cleanup() {
     rm "/tmp/logfile" || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else

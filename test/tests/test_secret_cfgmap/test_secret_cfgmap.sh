@@ -25,7 +25,6 @@ cleanup() {
     done
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
