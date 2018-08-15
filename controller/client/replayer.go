@@ -13,16 +13,18 @@ func (c *Client) ReplayByReqUID(reqUID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 
 	fmt.Println("Received: ", resp.Status)
 
-	body, err := c.handleResponse(resp) // Might be some problems here
+	body, err := c.handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
 
 	replayed := make([]string, 0)
+
 	err = json.Unmarshal(body, &replayed)
 	if err != nil {
 		return nil, err

@@ -7,21 +7,14 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/fission/fission/redis/build/gen"
 )
 
-// Make return value a proper Response object
 func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, error) {
-	path := request.URL["Path"] // Slash included
+	path := request.URL["Path"] // Includes slash prefix
 	payload := request.URL["Payload"]
 
 	targetUrl := fmt.Sprintf("%v%v", routerUrl, path)
-
-	log.Info("Payload > ", payload)
-
-	// TODO: Make this a header
 
 	var resp *http.Response
 	var err error
