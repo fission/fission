@@ -425,9 +425,9 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 }
 
-func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) getHpa(ns string, fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
 	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(fn.Metadata.Namespace).Get(hpaName, metav1.GetOptions{})
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(hpaName, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
