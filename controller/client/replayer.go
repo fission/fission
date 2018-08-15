@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-// TODO: Move to separate file?
 func (c *Client) ReplayByReqUID(reqUID string) ([]string, error) {
 	relativeUrl := fmt.Sprintf("replay/%v", reqUID)
 
