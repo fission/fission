@@ -16,24 +16,24 @@ func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, err
 
 	targetUrl := fmt.Sprintf("%v%v", routerUrl, path)
 
-	var resp *http.Response
+	var req *http.Request
 	var err error
 	client := http.DefaultClient
+
 	if request.Method == http.MethodGet {
-		req, err := http.NewRequest("GET", targetUrl, nil)
+		req, err = http.NewRequest("GET", targetUrl, nil)
 		if err != nil {
 			return []string{}, err
 		}
-		req.Header.Add("X-Fission-Replayed", "true")
-		resp, err = client.Do(req)
 	} else {
-		req, err := http.NewRequest(request.Method, targetUrl, bytes.NewReader([]byte(payload)))
+		req, err = http.NewRequest(request.Method, targetUrl, bytes.NewReader([]byte(payload)))
 		if err != nil {
 			return []string{}, err
 		}
-		req.Header.Add("X-Fission-Replayed", "true")
-		resp, err = client.Do(req)
 	}
+	
+	req.Header.Add("X-Fission-Replayed", "true")
+	resp, err := client.Do(req)
 
 	if err != nil {
 		return []string{}, errors.New(fmt.Sprintf("failed to make request: %v", err))
