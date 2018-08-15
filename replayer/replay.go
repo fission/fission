@@ -14,7 +14,7 @@ import (
 
 // Make return value a proper Response object
 func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, error) {
-	path := request.URL["Path"]	// Slash included
+	path := request.URL["Path"] // Slash included
 	payload := request.URL["Payload"]
 
 	targetUrl := fmt.Sprintf("%v%v", routerUrl, path)

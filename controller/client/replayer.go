@@ -17,7 +17,7 @@ func (c *Client) ReplayByReqUID(reqUID string) ([]string, error) {
 
 	fmt.Println("Received: ", resp.Status)
 
-	body, err := c.handleResponse(resp)		// Might be some problems here
+	body, err := c.handleResponse(resp) // Might be some problems here
 	if err != nil {
 		return nil, err
 	}
