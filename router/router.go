@@ -86,6 +86,10 @@ func Start(port int, executorUrl string) {
 
 	fmap := makeFunctionServiceMap(time.Minute)
 
+	frmap := makeFunctionRecorderMap(time.Minute)
+
+	trmap := makeTriggerRecorderMap(time.Minute)
+
 	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Error connecting to kubernetes API: %v", err)
@@ -120,13 +124,14 @@ func Start(port int, executorUrl string) {
 		log.Fatalf("Failed to parse max retry times: %v", err)
 	}
 
-	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, kubeClient, executor, restClient,
+	triggers, _, fnStore := makeHTTPTriggerSet(fmap, frmap, trmap, fissionClient, kubeClient, executor, restClient,
 		&tsRoundTripperParams{
 			timeout:         timeout,
 			timeoutExponent: timeoutExponent,
 			keepAlive:       keepAlive,
 			maxRetries:      maxRetries,
 		})
+
 	resolver := makeFunctionReferenceResolver(fnStore)
 
 	go serveMetric()
