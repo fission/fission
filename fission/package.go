@@ -157,7 +157,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 		needToBuild = true
 	}
 
-	if len(envNamespace) > 0 && envName != pkg.Spec.Environment.Namespace {
+	if len(envNamespace) > 0 && envNamespace != pkg.Spec.Environment.Namespace {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
