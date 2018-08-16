@@ -13,7 +13,7 @@ func (a *API) ReplayByReqUID(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	queriedID := vars["reqUID"]
 
-	routerUrl := fmt.Sprintf("http://router.%v", a.podNamespace)
+	routerUrl := fmt.Sprintf("http://router.%v", podNamespace)
 
 	resp, err := redis.ReplayByReqUID(routerUrl, queriedID)
 	if err != nil {

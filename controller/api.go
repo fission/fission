@@ -50,7 +50,6 @@ type (
 		kubernetesClient  *kubernetes.Clientset
 		storageServiceUrl string
 		builderManagerUrl string
-		podNamespace      string
 		workflowApiUrl    string
 		functionNamespace string
 		useIstio          bool
@@ -78,13 +77,6 @@ func MakeAPI() (*API, error) {
 		api.builderManagerUrl = strings.TrimSuffix(u, "/")
 	} else {
 		api.builderManagerUrl = "http://buildermgr"
-	}
-
-	u = os.Getenv("POD_NAMESPACE")
-	if len(u) > 0 {
-		api.podNamespace = u
-	} else {
-		api.podNamespace = "default"
 	}
 
 	wfEnv := os.Getenv("WORKFLOW_API_URL")

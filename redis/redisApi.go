@@ -17,8 +17,12 @@ limitations under the License.
 package redis
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +33,6 @@ import (
 
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/redis/build/gen"
-	"github.com/fission/fission/replayer"
 )
 
 func RecordsListAll() ([]byte, error) {
@@ -341,37 +344,78 @@ func includesTrigger(triggers []string, query string) bool {
 func ReplayByReqUID(routerUrl string, queriedID string) ([]byte, error) {
 	client := NewClient()
 	if client == nil {
-		return []byte{}, errors.New("failed to create redis client")
+		return nil, errors.New("failed to create redis client")
 	}
 
 	exists, err := redis.Int(client.Do("EXISTS", queriedID))
 	if exists != 1 || err != nil {
 		log.Error("couldn't find request to replay")
-		return []byte{}, err
+		return nil, err
 	}
 
 	val, err := redis.Bytes(client.Do("HGET", queriedID, "ReqResponse"))
 	if err != nil {
 		log.Error("couldn't obtain ReqResponse for this ID")
-		return []byte{}, err
+		return nil, err
 	}
 	entry, err := deserializeReqResponse(val, queriedID)
 	if err != nil {
 		log.Error("couldn't deserialize ReqResponse")
-		return []byte{}, err
+		return nil, err
 	}
 
-	replayed, err := replayer.ReplayRequest(routerUrl, entry.Req)
+	replayed, err := ReplayRequest(routerUrl, entry.Req)
 	if err != nil {
 		log.Error("couldn't replay request")
-		return []byte{}, err
+		return nil, err
 	}
 
 	resp, err := json.Marshal(replayed)
 	if err != nil {
 		log.Error("couldn't marshall replayed request response")
-		return []byte{}, err
+		return nil, err
 	}
 
 	return resp, nil
 }
+
+func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, error) {
+	path := request.URL["Path"] // Includes slash prefix
+	payload := request.URL["Payload"]
+
+	targetUrl := fmt.Sprintf("%v%v", routerUrl, path)
+
+	var req *http.Request
+	var err error
+	client := http.DefaultClient
+
+	if request.Method == http.MethodGet {
+		req, err = http.NewRequest("GET", targetUrl, nil)
+		if err != nil {
+			return []string{}, err
+		}
+	} else {
+		req, err = http.NewRequest(request.Method, targetUrl, bytes.NewReader([]byte(payload)))
+		if err != nil {
+			return []string{}, err
+		}
+	}
+
+	req.Header.Add("X-Fission-Replayed", "true")
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return []string{}, errors.New(fmt.Sprintf("failed to make request: %v", err))
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []string{}, errors.New(fmt.Sprintf("failed to read response: %v", err))
+	}
+
+	bodyStr := string(body)
+
+	return []string{bodyStr}, nil
+}
+

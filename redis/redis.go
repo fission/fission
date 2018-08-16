@@ -79,7 +79,7 @@ func Record(triggerName string, recorderName string, reqUID string, request *htt
 	}
 
 	postForm := make(map[string]string)
-	for key, value := range request.PostForm {
+	for key, value := range request.PostForm  {
 		postForm[key] = strings.Join(value, ",")
 	}
 
@@ -91,6 +91,8 @@ func Record(triggerName string, recorderName string, reqUID string, request *htt
 		Form:     form,
 		PostForm: postForm,
 	}
+
+	log.Info("Storing request > ", req)
 
 	resp := &redisCache.Response{
 		Status:     response.Status,
