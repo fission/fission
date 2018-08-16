@@ -79,7 +79,7 @@ func Record(triggerName string, recorderName string, reqUID string, request *htt
 	}
 
 	postForm := make(map[string]string)
-	for key, value := range request.PostForm  {
+	for key, value := range request.PostForm {
 		postForm[key] = strings.Join(value, ",")
 	}
 

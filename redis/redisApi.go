@@ -418,4 +418,3 @@ func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, err
 
 	return []string{bodyStr}, nil
 }
-
