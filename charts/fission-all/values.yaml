@@ -34,7 +34,7 @@ routerPort: 31314
 natsStreamingPort: 31316
 
 ## Set to false if you create the namespaces manually
-createNamespace: false
+createNamespace: true
 
 ## Namespace in which to run fission functions (this is different from
 ## the release namespace)
