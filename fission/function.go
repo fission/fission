@@ -394,13 +394,6 @@ func fnUpdate(c *cli.Context) error {
 
 	envName := c.String("env")
 	envNamespace := c.String("envNamespace")
-	// if the new env specified is the same as the old one, no need to update package
-	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
-	// re-write the object with same old values, we just end up getting a new resource version for the object.
-	if envName == function.Spec.Environment.Name && envNamespace == function.Spec.Environment.Namespace {
-		envName = ""
-		envNamespace = ""
-	}
 
 	deployArchiveName := c.String("code")
 	if len(deployArchiveName) == 0 {
@@ -484,7 +477,7 @@ func fnUpdate(c *cli.Context) error {
 
 	pkgMetadata := &pkg.Metadata
 
-	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
+	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
 		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		checkErr(err, "get function list")
 
@@ -492,7 +485,7 @@ func fnUpdate(c *cli.Context) error {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata = updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
+		pkgMetadata, err = updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
 		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
