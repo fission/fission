@@ -103,6 +103,7 @@ func main() {
 	envNamespaceFlag := cli.StringFlag{Name: "envNamespace, envns", Value: metav1.NamespaceDefault, Usage: "Namespace for environment object"}
 	pkgNamespaceFlag := cli.StringFlag{Name: "pkgNamespace, pkgns", Value: metav1.NamespaceDefault, Usage: "Namespace for package object"}
 	triggerNamespaceFlag := cli.StringFlag{Name: "triggerNamespace, triggerns", Value: metav1.NamespaceDefault, Usage: "Namespace for trigger object"}
+	recorderNamespaceFlag := cli.StringFlag{Name: "recorderNamespace, recorderns", Value: metav1.NamespaceDefault, Usage: "Namespace for recorder object"}
 
 	// trigger method and url flags (used in function and route CLIs)
 	htMethodFlag := cli.StringFlag{Name: "method", Value: "GET", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD"}
@@ -197,6 +198,33 @@ func main() {
 		{Name: "list", Usage: "List message queue triggers", Flags: []cli.Flag{mqtMQTypeFlag, triggerNamespaceFlag}, Action: mqtList},
 	}
 
+	// Recorders
+	recNameFlag := cli.StringFlag{Name: "name", Usage: "Recorder name"}
+	recFnFlag := cli.StringFlag{Name: "function", Usage: "Record Function name(s): --function=fnA"}
+	recTriggersFlag := cli.StringSliceFlag{Name: "trigger", Usage: "Record Trigger name(s): --trigger=trigger1,trigger2,trigger3"}
+	//recRetentionPolFlag := cli.StringFlag{Name: "retention", Usage: "Retention policy (number of days)"}
+	//recEvictionPolFlag := cli.StringFlag{Name: "eviction", Usage: "Eviction policy (default LRU)"}
+	recEnabled := cli.BoolFlag{Name: "enable", Usage: "Enable recorder"}
+	recDisabled := cli.BoolFlag{Name: "disable", Usage: "Disable recorder"}
+	recSubcommands := []cli.Command{
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, specSaveFlag}, Action: recorderCreate},
+		{Name: "get", Usage: "Get recorder", Flags: []cli.Flag{recNameFlag}, Action: recorderGet},
+		{Name: "update", Usage: "Update recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, recEnabled, recDisabled}, Action: recorderUpdate},
+		{Name: "delete", Usage: "Delete recorder", Flags: []cli.Flag{recNameFlag, recorderNamespaceFlag}, Action: recorderDelete},
+		{Name: "list", Usage: "List recorders", Flags: []cli.Flag{}, Action: recorderList},
+	}
+
+	// View records
+	filterTimeFrom := cli.StringFlag{Name: "from", Usage: "Filter records by time interval; specify start of interval"}
+	filterTimeTo := cli.StringFlag{Name: "to", Usage: "Filter records by time interval; specify end of interval"}
+	filterFunction := cli.StringFlag{Name: "function", Usage: "Filter records by function"}
+	filterTrigger := cli.StringFlag{Name: "trigger", Usage: "Filter records by trigger"}
+	verbosityFlag := cli.BoolFlag{Name: "v", Usage: "Toggle verbosity -- view more detailed requests/responses"}
+	vvFlag := cli.BoolFlag{Name: "vv", Usage: "Toggle verbosity -- view raw requests/responses"}
+	recViewSubcommands := []cli.Command{
+		{Name: "view", Usage: "View existing records", Flags: []cli.Flag{filterTimeTo, filterTimeFrom, filterFunction, filterTrigger, verbosityFlag, vvFlag}, Action: recordsView},
+	}
+
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
 	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Value: 3, Usage: "Size of the pool"}
@@ -241,6 +269,7 @@ func main() {
 	pkgSubCommands := []cli.Command{
 		{Name: "create", Usage: "Create new package", Flags: []cli.Flag{pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgBuildCmdFlag}, Action: pkgCreate},
 		{Name: "update", Usage: "Update package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgBuildCmdFlag, pkgForceFlag}, Action: pkgUpdate},
+		{Name: "rebuild", Usage: "Rebuild a failed package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgRebuild},
 		{Name: "getsrc", Usage: "Get source archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgSourceGet},
 		{Name: "getdeploy", Usage: "Get deployment archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgDeployGet},
 		{Name: "info", Usage: "Show package information", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgInfo},
@@ -274,6 +303,8 @@ func main() {
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
 		{Name: "timetrigger", Aliases: []string{"tt", "timer"}, Usage: "Manage Time triggers (timers) for functions", Subcommands: ttSubcommands},
 		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
+		{Name: "recorder", Usage: "Manage recorders for functions", Subcommands: recSubcommands, Hidden: true},
+		{Name: "records", Usage: "View records with optional filters", Subcommands: recViewSubcommands, Hidden: true},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
