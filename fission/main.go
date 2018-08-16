@@ -322,7 +322,6 @@ To install it for your local Fission CLI:
 
 	err = plugin.Exec(pmd, args)
 	if err != nil {
-		log.Verbose(2, err.Error())
 		os.Exit(1)
 	}
 }
