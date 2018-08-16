@@ -25,6 +25,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -124,8 +125,9 @@ func pkgUpdate(c *cli.Context) error {
 		log.Fatal("Package is used by multiple functions, use --force to force update")
 	}
 
-	newPkgMeta := updatePackage(client, pkg,
+	newPkgMeta, err := updatePackage(client, pkg,
 		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
+	checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
@@ -140,13 +142,22 @@ func pkgUpdate(c *cli.Context) error {
 }
 
 func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
-	srcArchiveName, deployArchiveName, buildcmd string, forceRebuild bool) *metav1.ObjectMeta {
+	srcArchiveName, deployArchiveName, buildcmd string, forceRebuild bool) (*metav1.ObjectMeta, error) {
+
+	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
+		return nil, errors.New("Cannot assign source & package archives at the same time")
+	}
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
 
-	if len(envName) > 0 {
+	// if the new env specified is the same as the old one, no need to update package
+	if len(envName) > 0 && envName != pkg.Spec.Environment.Name {
 		pkg.Spec.Environment.Name = envName
+		needToBuild = true
+	}
+
+	if len(envNamespace) > 0 && envNamespace != pkg.Spec.Environment.Namespace {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
@@ -165,6 +176,10 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	if len(deployArchiveName) > 0 {
 		deployArchiveMetadata = createArchive(client, deployArchiveName, "")
 		pkg.Spec.Deployment = *deployArchiveMetadata
+		// Users may update the env, envNS and deploy archive at the same time,
+		// but without the source archive. In this case, we should set needToBuild to false
+		// since there is no source archive to build with.
+		needToBuild = false
 	}
 
 	// Set package as pending status when needToBuild is true
@@ -176,9 +191,8 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	newPkgMeta, err := client.PackageUpdate(pkg)
-	checkErr(err, "update package")
 
-	return newPkgMeta
+	return newPkgMeta, err
 }
 
 func pkgSourceGet(c *cli.Context) error {
