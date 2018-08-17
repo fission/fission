@@ -397,7 +397,14 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 			return
 		}
 
-		hpa, err := deploy.getHpa(newFn)
+		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+		// deployment of the function in fission-function ns, so cleaning up resources there
+		ns := deploy.namespace
+		if newFn.Metadata.Namespace != metav1.NamespaceDefault {
+			ns = newFn.Metadata.Namespace
+		}
+
+		hpa, err := deploy.getHpa(ns, newFn)
 		if err != nil {
 			updateStatus(oldFn, err, "error getting HPA while updating function")
 			return
@@ -433,7 +440,8 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 	}
 
 	if oldFn.Spec.Environment != newFn.Spec.Environment ||
-		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef {
+		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
+		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName {
 		deployChanged = true
 	}
 
@@ -468,7 +476,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		}
 		deployName := deploy.getObjName(oldFn)
 		deployLabels := deploy.getDeployLabels(oldFn, env)
-		log.Printf("updating deployment due to function update")
+		log.Printf("updating %v deployment due to function %v update", deployName, newFn.Metadata.Name)
 		newDeployment, err := deploy.getDeploymentSpec(newFn, env, deployName, deployLabels)
 		if err != nil {
 			updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
@@ -579,7 +587,7 @@ func (deploy *NewDeploy) updateKubeObjRefRV(fsvc *fscache.FuncSvc, objKind strin
 // updateStatus is a function which updates status of update.
 // Current implementation only logs messages, in future it will update function status
 func updateStatus(fn *crd.Function, err error, message string) {
-	log.Printf(message, err)
+	log.Println(message, fn, err)
 }
 
 // IsValidService does a get on the service address to ensure it's a valid service. returns true if it is, else false.

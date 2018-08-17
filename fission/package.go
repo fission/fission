@@ -117,6 +117,17 @@ func pkgUpdate(c *cli.Context) error {
 	})
 	checkErr(err, "get package")
 
+	// if the new env specified is the same as the old one, no need to update package
+	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
+	// re-write the object with same old values, we just end up getting a new resource version for the object.
+	if len(envName) > 0 && envName == pkg.Spec.Environment.Name {
+		envName = ""
+	}
+
+	if envNamespace == pkg.Spec.Environment.Namespace {
+		envNamespace = ""
+	}
+
 	fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	checkErr(err, "get function list")
 
@@ -124,8 +135,11 @@ func pkgUpdate(c *cli.Context) error {
 		log.Fatal("Package is used by multiple functions, use --force to force update")
 	}
 
-	newPkgMeta := updatePackage(client, pkg,
-		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
+	newPkgMeta, err := updatePackage(client, pkg,
+		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
+	if err != nil {
+		checkErr(err, "update package")
+	}
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
@@ -140,13 +154,17 @@ func pkgUpdate(c *cli.Context) error {
 }
 
 func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
-	srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
+	srcArchiveName, deployArchiveName, buildcmd string, forceRebuild bool) (*metav1.ObjectMeta, error) {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
 
 	if len(envName) > 0 {
 		pkg.Spec.Environment.Name = envName
+		needToBuild = true
+	}
+
+	if len(envNamespace) > 0 {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
@@ -165,10 +183,13 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	if len(deployArchiveName) > 0 {
 		deployArchiveMetadata = createArchive(client, deployArchiveName, "")
 		pkg.Spec.Deployment = *deployArchiveMetadata
+		// Users may update the env, envNS and deploy archive at the same time,
+		// but without the source archive. In this case, we should set needToBuild to false
+		needToBuild = false
 	}
 
 	// Set package as pending status when needToBuild is true
-	if needToBuild {
+	if needToBuild || forceRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fission.PackageStatus{
 			BuildStatus: fission.BuildStatusPending,
@@ -178,7 +199,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	newPkgMeta, err := client.PackageUpdate(pkg)
 	checkErr(err, "update package")
 
-	return newPkgMeta
+	return newPkgMeta, err
 }
 
 func pkgSourceGet(c *cli.Context) error {
@@ -384,6 +405,34 @@ func pkgDelete(c *cli.Context) error {
 		checkErr(err, "error deleting orphan packages")
 		fmt.Println("Orphan packages deleted")
 	}
+
+	return nil
+}
+
+func pkgRebuild(c *cli.Context) error {
+	client := getClient(c.GlobalString("server"))
+
+	pkgName := c.String("name")
+	if len(pkgName) == 0 {
+		log.Fatal("Need name of package, use --name")
+	}
+	pkgNamespace := c.String("pkgNamespace")
+
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Name:      pkgName,
+		Namespace: pkgNamespace,
+	})
+	checkErr(err, "find package")
+
+	if pkg.Status.BuildStatus != fission.BuildStatusFailed {
+		log.Fatal(fmt.Sprintf("Package %v is not in %v state.",
+			pkg.Metadata.Name, fission.BuildStatusFailed))
+	}
+
+	_, err = updatePackage(client, pkg, "", "", "", "", "", true)
+	checkErr(err, "update package")
+
+	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)
 
 	return nil
 }

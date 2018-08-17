@@ -38,34 +38,37 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
-	fissionClient     *crd.FissionClient
-	kubeClient        *kubernetes.Clientset
-	executor          *executorClient.Client
-	resolver          *functionReferenceResolver
-	crdClient         *rest.RESTClient
-	triggers          []crd.HTTPTrigger
-	triggerStore      k8sCache.Store
-	triggerController k8sCache.Controller
-	functions         []crd.Function
-	funcStore         k8sCache.Store
-	funcController    k8sCache.Controller
-
-	tsRoundTripperParams *tsRoundTripperParams
+	fissionClient              *crd.FissionClient
+	kubeClient                 *kubernetes.Clientset
+	executor                   *executorClient.Client
+	resolver                   *functionReferenceResolver
+	crdClient                  *rest.RESTClient
+	triggers                   []crd.HTTPTrigger
+	triggerStore               k8sCache.Store
+	triggerController          k8sCache.Controller
+	functions                  []crd.Function
+	funcStore                  k8sCache.Store
+	funcController             k8sCache.Controller
+	recorderSet                *RecorderSet
+	updateRouterRequestChannel chan struct{}
+	tsRoundTripperParams       *tsRoundTripperParams
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
+func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, fissionClient *crd.FissionClient,
 	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
-		functionServiceMap:   fmap,
-		triggers:             []crd.HTTPTrigger{},
-		fissionClient:        fissionClient,
-		kubeClient:           kubeClient,
-		executor:             executor,
-		crdClient:            crdClient,
-		tsRoundTripperParams: params,
+		functionServiceMap:         fmap,
+		triggers:                   []crd.HTTPTrigger{},
+		fissionClient:              fissionClient,
+		kubeClient:                 kubeClient,
+		executor:                   executor,
+		crdClient:                  crdClient,
+		updateRouterRequestChannel: make(chan struct{}),
+		tsRoundTripperParams:       params,
 	}
-	var tStore, fnStore k8sCache.Store
+	var tStore, fnStore, rStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
+	var recorderSet *RecorderSet
 	if httpTriggerSet.crdClient != nil {
 		tStore, tController = httpTriggerSet.initTriggerController()
 		httpTriggerSet.triggerStore = tStore
@@ -74,6 +77,8 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		httpTriggerSet.funcStore = fnStore
 		httpTriggerSet.funcController = fnController
 	}
+	recorderSet = MakeRecorderSet(httpTriggerSet, crdClient, rStore, frmap, trmap)
+	httpTriggerSet.recorderSet = recorderSet
 	return httpTriggerSet, tStore, fnStore
 }
 
@@ -87,8 +92,14 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 		log.Printf("Skipping continuous trigger updates")
 		return
 	}
+	go ts.updateRouter()
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
+	if ts.recorderSet.recController != nil {
+		go ts.runWatcher(ctx, ts.recorderSet.recController)
+	} else {
+		log.Fatal("Failed to run recorder Controller")
+	}
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +129,14 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			continue
 		}
 
+		var recorderName string
+		recorder, err := ts.recorderSet.triggerRecorderMap.lookup(trigger.Metadata.Name)
+		if err == nil && recorder != nil {
+			recorderName = recorder.Spec.Name
+		}
+
+		//log.Printf("The trigger %v should be recorded: %v", trigger.Metadata.Name, doRecord)
+
 		if rr.resolveResultType != resolveResultSingleFunction {
 			// not implemented yet
 			log.Panicf("resolve result type not implemented (%v)", rr.resolveResultType)
@@ -125,10 +144,13 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 
 		fh := &functionHandler{
 			fmap:                 ts.functionServiceMap,
+			frmap:                ts.recorderSet.functionRecorderMap,
+			trmap:                ts.recorderSet.triggerRecorderMap,
 			function:             rr.functionMetadata,
 			executor:             ts.executor,
 			httpTrigger:          &trigger,
 			tsRoundTripperParams: ts.tsRoundTripperParams,
+			recorderName:         recorderName,
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
@@ -155,11 +177,21 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	// triggers route into these.
 	for _, function := range ts.functions {
 		m := function.Metadata
+
+		var recorderName string
+		recorder, err := ts.recorderSet.functionRecorderMap.lookup(m.Name)
+		if err == nil && recorder != nil {
+			recorderName = recorder.Spec.Name
+		}
+
 		fh := &functionHandler{
 			fmap:                 ts.functionServiceMap,
+			frmap:                ts.recorderSet.functionRecorderMap,
+			trmap:                ts.recorderSet.triggerRecorderMap,
 			function:             &m,
 			executor:             ts.executor,
 			tsRoundTripperParams: ts.tsRoundTripperParams,
+			recorderName:         recorderName,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
 	}
@@ -183,15 +215,31 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 				trigger := obj.(*crd.HTTPTrigger)
 				go createIngress(trigger, ts.kubeClient)
 				ts.syncTriggers()
+				// Check if this trigger's function needs to be recorded
+				fnRef := trigger.Spec.FunctionReference.Name
+				recorder, err := ts.recorderSet.functionRecorderMap.lookup(fnRef)
+				if err == nil && recorder != nil {
+					if len(recorder.Spec.Triggers) == 0 {
+						ts.recorderSet.triggerRecorderMap.assign(trigger.Metadata.Name, recorder)
+					}
+				} else {
+					log.Print("Unable to lookup function in functionRecorderMap")
+				}
 			},
 			DeleteFunc: func(obj interface{}) {
 				ts.syncTriggers()
 				trigger := obj.(*crd.HTTPTrigger)
 				go deleteIngress(trigger, ts.kubeClient)
+				go ts.recorderSet.DeleteTriggerFromRecorderMap(trigger)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				oldTrigger := oldObj.(*crd.HTTPTrigger)
 				newTrigger := newObj.(*crd.HTTPTrigger)
+
+				if oldTrigger.Metadata.ResourceVersion == newTrigger.Metadata.ResourceVersion {
+					return
+				}
+
 				go updateIngress(oldTrigger, newTrigger, ts.kubeClient)
 				ts.syncTriggers()
 			},
@@ -208,10 +256,18 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				ts.syncTriggers()
 			},
 			DeleteFunc: func(obj interface{}) {
+				function := obj.(*crd.Function)
 				ts.syncTriggers()
+				go ts.recorderSet.DeleteFunctionFromRecorderMap(function)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldFn := oldObj.(*crd.Function)
 				fn := newObj.(*crd.Function)
+
+				if oldFn.Metadata.ResourceVersion == fn.Metadata.ResourceVersion {
+					return
+				}
+
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					if key.functionReference.Name == fn.Metadata.Name &&
@@ -229,6 +285,29 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 	return store, controller
 }
 
+func (ts *HTTPTriggerSet) initRecorderController() (k8sCache.Store, k8sCache.Controller) {
+	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "recorders", metav1.NamespaceAll, fields.Everything())
+	store, controller := k8sCache.NewInformer(listWatch, &crd.Recorder{}, resyncPeriod,
+		k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				recorder := obj.(*crd.Recorder)
+				ts.recorderSet.newRecorder(recorder)
+			},
+			DeleteFunc: func(obj interface{}) {
+				recorder := obj.(*crd.Recorder)
+				ts.recorderSet.disableRecorder(recorder)
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				oldRecorder := oldObj.(*crd.Recorder)
+				newRecorder := newObj.(*crd.Recorder)
+				ts.recorderSet.updateRecorder(oldRecorder, newRecorder)
+			},
+		},
+	)
+	return store, controller
+}
+
 func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Controller) {
 	go func() {
 		controller.Run(ctx.Done())
@@ -236,22 +315,28 @@ func (ts *HTTPTriggerSet) runWatcher(ctx context.Context, controller k8sCache.Co
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {
-	// get triggers
-	latestTriggers := ts.triggerStore.List()
-	triggers := make([]crd.HTTPTrigger, len(latestTriggers))
-	for _, t := range latestTriggers {
-		triggers = append(triggers, *t.(*crd.HTTPTrigger))
-	}
-	ts.triggers = triggers
+	ts.updateRouterRequestChannel <- struct{}{}
+}
 
-	// get functions
-	latestFunctions := ts.funcStore.List()
-	functions := make([]crd.Function, len(latestFunctions))
-	for _, f := range latestFunctions {
-		functions = append(functions, *f.(*crd.Function))
-	}
-	ts.functions = functions
+func (ts *HTTPTriggerSet) updateRouter() {
+	for range ts.updateRouterRequestChannel {
+		// get triggers
+		latestTriggers := ts.triggerStore.List()
+		triggers := make([]crd.HTTPTrigger, len(latestTriggers))
+		for _, t := range latestTriggers {
+			triggers = append(triggers, *t.(*crd.HTTPTrigger))
+		}
+		ts.triggers = triggers
 
-	// make a new router and use it
-	ts.mutableRouter.updateRouter(ts.getRouter())
+		// get functions
+		latestFunctions := ts.funcStore.List()
+		functions := make([]crd.Function, len(latestFunctions))
+		for _, f := range latestFunctions {
+			functions = append(functions, *f.(*crd.Function))
+		}
+		ts.functions = functions
+
+		// make a new router and use it
+		ts.mutableRouter.updateRouter(ts.getRouter())
+	}
 }
