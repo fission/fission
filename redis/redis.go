@@ -92,6 +92,8 @@ func Record(triggerName string, recorderName string, reqUID string, request *htt
 		PostForm: postForm,
 	}
 
+	log.Info("Storing request > ", req)
+
 	resp := &redisCache.Response{
 		Status:     response.Status,
 		StatusCode: int32(response.StatusCode),
