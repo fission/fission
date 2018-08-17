@@ -31,8 +31,6 @@ func (c *Client) ReplayByReqUID(reqUID string) ([]string, error) {
 
 	defer resp.Body.Close()
 
-	fmt.Println("Received: ", resp.Status)
-
 	body, err := c.handleResponse(resp)
 	if err != nil {
 		return nil, err

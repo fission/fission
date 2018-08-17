@@ -392,12 +392,12 @@ func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, err
 	if request.Method == http.MethodGet {
 		req, err = http.NewRequest("GET", targetUrl, nil)
 		if err != nil {
-			return []string{}, err
+			return nil, err
 		}
 	} else {
 		req, err = http.NewRequest(request.Method, targetUrl, bytes.NewReader([]byte(payload)))
 		if err != nil {
-			return []string{}, err
+			return nil, err
 		}
 	}
 
@@ -405,13 +405,13 @@ func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, err
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return []string{}, errors.New(fmt.Sprintf("failed to make request: %v", err))
+		return nil, errors.New(fmt.Sprintf("failed to make request: %v", err))
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return []string{}, errors.New(fmt.Sprintf("failed to read response: %v", err))
+		return nil, errors.New(fmt.Sprintf("failed to read response: %v", err))
 	}
 
 	bodyStr := string(body)
