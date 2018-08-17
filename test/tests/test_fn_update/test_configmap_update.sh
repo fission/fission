@@ -21,7 +21,6 @@ cleanup() {
     rm -rf specs || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else

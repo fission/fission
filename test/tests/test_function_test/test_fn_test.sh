@@ -16,7 +16,6 @@ cleanup() {
     fission fn delete --name $invalid_fn_name || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
