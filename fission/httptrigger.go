@@ -22,7 +22,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,17 +32,17 @@ import (
 )
 
 func htCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("function")
+		return lib.MissingArgError("function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
-		return sdk.MissingArgError("url")
+		return lib.MissingArgError("url")
 	}
 	if !strings.HasPrefix(triggerUrl, "/") {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
@@ -53,7 +53,7 @@ func htCreate(c *cli.Context) error {
 		method = "GET"
 	}
 
-	sdk.CheckFunctionExistence(client, fnName, fnNamespace)
+	lib.CheckFunctionExistence(client, fnName, fnNamespace)
 	createIngress := false
 	if c.IsSet("createingress") {
 		createIngress = c.Bool("createingress")
@@ -72,7 +72,7 @@ func htCreate(c *cli.Context) error {
 		Spec: fission.HTTPTriggerSpec{
 			Host:        host,
 			RelativeURL: triggerUrl,
-			Method:      sdk.GetMethod(method),
+			Method:      lib.GetMethod(method),
 			FunctionReference: fission.FunctionReference{
 				Type: fission.FunctionReferenceTypeFunctionName,
 				Name: fnName,
@@ -84,16 +84,16 @@ func htCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
-		err := sdk.SpecSave(*ht, specFile)
+		err := lib.SpecSave(*ht, specFile)
 		if err != nil {
-			return sdk.FailedToError(err, "create HTTP trigger spec")
+			return lib.FailedToError(err, "create HTTP trigger spec")
 		}
 		return nil
 	}
 
 	_, err := client.HTTPTriggerCreate(ht)
 	if err != nil {
-		return sdk.FailedToError(err, "create HTTP trigger")
+		return lib.FailedToError(err, "create HTTP trigger")
 	}
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
@@ -105,10 +105,10 @@ func htGet(c *cli.Context) error {
 }
 
 func htUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 
@@ -117,13 +117,13 @@ func htUpdate(c *cli.Context) error {
 		Namespace: triggerNamespace,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "get HTTP trigger")
+		return lib.FailedToError(err, "get HTTP trigger")
 	}
 
 	if c.IsSet("function") {
 		ht.Spec.FunctionReference.Name = c.String("function")
 	}
-	sdk.CheckFunctionExistence(client, ht.Spec.FunctionReference.Name, triggerNamespace)
+	lib.CheckFunctionExistence(client, ht.Spec.FunctionReference.Name, triggerNamespace)
 
 	if c.IsSet("createingress") {
 		ht.Spec.CreateIngress = c.Bool("createingress")
@@ -135,7 +135,7 @@ func htUpdate(c *cli.Context) error {
 
 	_, err = client.HTTPTriggerUpdate(ht)
 	if err != nil {
-		return sdk.FailedToError(err, "update HTTP trigger")
+		return lib.FailedToError(err, "update HTTP trigger")
 	}
 
 	fmt.Printf("trigger '%v' updated\n", htName)
@@ -143,10 +143,10 @@ func htUpdate(c *cli.Context) error {
 }
 
 func htDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	htName := c.String("name")
 	if len(htName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	triggerNamespace := c.String("triggerNamespace")
 
@@ -155,7 +155,7 @@ func htDelete(c *cli.Context) error {
 		Namespace: triggerNamespace,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "delete trigger")
+		return lib.FailedToError(err, "delete trigger")
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", htName)
@@ -163,12 +163,12 @@ func htDelete(c *cli.Context) error {
 }
 
 func htList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	triggerNamespace := c.String("triggerNamespace")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
 	if err != nil {
-		return sdk.FailedToError(err, "list HTTP triggers")
+		return lib.FailedToError(err, "list HTTP triggers")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

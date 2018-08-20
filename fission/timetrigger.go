@@ -26,11 +26,11 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 )
 
 func ttCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	name := c.String("name")
 	if len(name) == 0 {
@@ -38,14 +38,14 @@ func ttCreate(c *cli.Context) error {
 	}
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("function")
+		return lib.MissingArgError("function")
 	}
 
 	fnNamespace := c.String("fnNamespace")
 
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		return sdk.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
+		return lib.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
 	}
 
 	tt := &crd.TimeTrigger{
@@ -65,23 +65,23 @@ func ttCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", name)
-		err := sdk.SpecSave(*tt, specFile)
+		err := lib.SpecSave(*tt, specFile)
 		if err != nil {
-			return sdk.FailedToError(err, "create time trigger spec")
+			return lib.FailedToError(err, "create time trigger spec")
 		}
 		return nil
 	}
 
 	_, err := client.TimeTriggerCreate(tt)
 	if err != nil {
-		return sdk.FailedToError(err, "create Time trigger")
+		return lib.FailedToError(err, "create Time trigger")
 	}
 
 	fmt.Printf("trigger '%v' created\n", name)
 
-	err = sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), 1)
+	err = lib.GetCronNextNActivationTime(cronSpec, lib.GetAPITimeInfo(client), 1)
 	if err != nil {
-		return sdk.FailedToError(err, "pass cron spec examination")
+		return lib.FailedToError(err, "pass cron spec examination")
 	}
 
 	return err
@@ -92,10 +92,10 @@ func ttGet(c *cli.Context) error {
 }
 
 func ttUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -104,7 +104,7 @@ func ttUpdate(c *cli.Context) error {
 		Namespace: ttNs,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "get time trigger")
+		return lib.FailedToError(err, "get time trigger")
 	}
 
 	updated := false
@@ -124,29 +124,29 @@ func ttUpdate(c *cli.Context) error {
 	}
 
 	if !updated {
-		return sdk.GeneralError("Nothing to update. Use --cron or --function.")
+		return lib.GeneralError("Nothing to update. Use --cron or --function.")
 	}
 
 	_, err = client.TimeTriggerUpdate(tt)
 	if err != nil {
-		return sdk.FailedToError(err, "update Time trigger")
+		return lib.FailedToError(err, "update Time trigger")
 	}
 
 	fmt.Printf("trigger '%v' updated\n", ttName)
 
-	err = sdk.GetCronNextNActivationTime(newCron, sdk.GetAPITimeInfo(client), 1)
+	err = lib.GetCronNextNActivationTime(newCron, lib.GetAPITimeInfo(client), 1)
 	if err != nil {
-		return sdk.FailedToError(err, "pass cron spec examination")
+		return lib.FailedToError(err, "pass cron spec examination")
 	}
 
 	return nil
 }
 
 func ttDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	ttName := c.String("name")
 	if len(ttName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	ttNs := c.String("triggerns")
 
@@ -155,7 +155,7 @@ func ttDelete(c *cli.Context) error {
 		Namespace: ttNs,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "delete trigger")
+		return lib.FailedToError(err, "delete trigger")
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", ttName)
@@ -163,12 +163,12 @@ func ttDelete(c *cli.Context) error {
 }
 
 func ttList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	ttNs := c.String("triggerns")
 
 	tts, err := client.TimeTriggerList(ttNs)
 	if err != nil {
-		return sdk.FailedToError(err, "list Time triggers")
+		return lib.FailedToError(err, "list Time triggers")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -184,17 +184,17 @@ func ttList(c *cli.Context) error {
 }
 
 func ttTest(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	round := c.Int("round")
 	cronSpec := c.String("cron")
 	if len(cronSpec) == 0 {
-		return sdk.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
+		return lib.MissingArgError("cron. Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'")
 	}
 
-	err := sdk.GetCronNextNActivationTime(cronSpec, sdk.GetAPITimeInfo(client), round)
+	err := lib.GetCronNextNActivationTime(cronSpec, lib.GetAPITimeInfo(client), round)
 	if err != nil {
-		return sdk.FailedToError(err, "pass cron spec examination")
+		return lib.FailedToError(err, "pass cron spec examination")
 	}
 
 	return nil

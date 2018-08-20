@@ -24,7 +24,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 	"github.com/fission/fission/redis/build/gen"
 )
 
@@ -61,17 +61,17 @@ func recordsView(c *cli.Context) error {
 	}
 	err := recordsAll(verbosity, c)
 	if err != nil {
-		return sdk.FailedToError(err, "view records")
+		return lib.FailedToError(err, "view records")
 	}
 	return nil
 }
 
 func recordsAll(verbosity int, c *cli.Context) error {
-	fc := sdk.GetClient(c.GlobalString("server"))
+	fc := lib.GetClient(c.GlobalString("server"))
 
 	records, err := fc.RecordsAll()
 	if err != nil {
-		return sdk.FailedToError(err, "view records")
+		return lib.FailedToError(err, "view records")
 	}
 
 	showRecords(records, verbosity)
@@ -80,11 +80,11 @@ func recordsAll(verbosity int, c *cli.Context) error {
 }
 
 func recordsByTrigger(trigger string, verbosity int, c *cli.Context) error {
-	fc := sdk.GetClient(c.GlobalString("server"))
+	fc := lib.GetClient(c.GlobalString("server"))
 
 	records, err := fc.RecordsByTrigger(trigger)
 	if err != nil {
-		return sdk.FailedToError(err, "view records")
+		return lib.FailedToError(err, "view records")
 	}
 
 	showRecords(records, verbosity)
@@ -94,11 +94,11 @@ func recordsByTrigger(trigger string, verbosity int, c *cli.Context) error {
 
 // TODO: More accurate function name (function filter)
 func recordsByFunction(function string, verbosity int, c *cli.Context) error {
-	fc := sdk.GetClient(c.GlobalString("server"))
+	fc := lib.GetClient(c.GlobalString("server"))
 
 	records, err := fc.RecordsByFunction(function)
 	if err != nil {
-		return sdk.FailedToError(err, "view records")
+		return lib.FailedToError(err, "view records")
 	}
 
 	showRecords(records, verbosity)
@@ -107,11 +107,11 @@ func recordsByFunction(function string, verbosity int, c *cli.Context) error {
 }
 
 func recordsByTime(from string, to string, verbosity int, c *cli.Context) error {
-	fc := sdk.GetClient(c.GlobalString("server"))
+	fc := lib.GetClient(c.GlobalString("server"))
 
 	records, err := fc.RecordsByTime(from, to)
 	if err != nil {
-		return sdk.FailedToError(err, "view records")
+		return lib.FailedToError(err, "view records")
 	}
 
 	showRecords(records, verbosity)

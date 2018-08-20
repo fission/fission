@@ -22,12 +22,12 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 	"github.com/urfave/cli"
 )
 
 func replay(c *cli.Context) error {
-	fc := sdk.GetClient(c.GlobalString("server"))
+	fc := lib.GetClient(c.GlobalString("server"))
 
 	reqUID := c.String("reqUID")
 	if len(reqUID) == 0 {
@@ -36,7 +36,7 @@ func replay(c *cli.Context) error {
 
 	responses, err := fc.ReplayByReqUID(reqUID)
 	if err != nil {
-		return sdk.FailedToError(err, "replay records")
+		return lib.FailedToError(err, "replay records")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

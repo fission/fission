@@ -23,7 +23,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 	"github.com/fsnotify/fsnotify"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
@@ -48,29 +48,29 @@ func specInit(c *cli.Context) error {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
 		if err != nil {
-			return sdk.FailedToError(err, "get current working directory")
+			return lib.FailedToError(err, "get current working directory")
 		}
 		basename := filepath.Base(dir)
-		name = sdk.KubifyName(basename)
+		name = lib.KubifyName(basename)
 	}
 
 	// Create spec dir
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
 	if err != nil {
-		return sdk.FailedToError(err, fmt.Sprintf("create spec directory '%v'", specDir))
+		return lib.FailedToError(err, fmt.Sprintf("create spec directory '%v'", specDir))
 	}
 
 	// Add a bit of documentation to the spec dir here
-	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(sdk.SPEC_README), 0644)
+	err = ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(lib.SPEC_README), 0644)
 	if err != nil {
 		return err
 	}
 
 	// Write the deployment config
-	dc := sdk.DeploymentConfig{
-		TypeMeta: sdk.TypeMeta{
-			APIVersion: sdk.SPEC_API_VERSION,
+	dc := lib.DeploymentConfig{
+		TypeMeta: lib.TypeMeta{
+			APIVersion: lib.SPEC_API_VERSION,
 			Kind:       "DeploymentConfig",
 		},
 		Name: name,
@@ -80,9 +80,9 @@ func specInit(c *cli.Context) error {
 		// removed.
 		UID: uuid.NewV4().String(),
 	}
-	err = sdk.WriteDeploymentConfig(specDir, &dc)
+	err = lib.WriteDeploymentConfig(specDir, &dc)
 	if err != nil {
-		return sdk.FailedToError(err, "write deployment config")
+		return lib.FailedToError(err, "write deployment config")
 	}
 
 	// Other possible things to do here:
@@ -97,9 +97,9 @@ func specInit(c *cli.Context) error {
 func specValidate(c *cli.Context) error {
 	// this will error on parse errors and on duplicates
 	specDir := getSpecDir(c)
-	fr, err := sdk.ReadSpecs(specDir)
+	fr, err := lib.ReadSpecs(specDir)
 	if err != nil {
-		return sdk.FailedToError(err, "read specs")
+		return lib.FailedToError(err, "read specs")
 	}
 
 	// this does the rest of the checks, like dangling refs
@@ -121,7 +121,7 @@ func specValidate(c *cli.Context) error {
 // etc, while doing an apply, they will get a partially applied deployment.  However,
 // they can retry their apply command once they're back online.
 func specApply(c *cli.Context) error {
-	fclient := sdk.GetClient(c.GlobalString("server"))
+	fclient := lib.GetClient(c.GlobalString("server"))
 	specDir := getSpecDir(c)
 
 	deleteResources := c.Bool("delete")
@@ -129,60 +129,60 @@ func specApply(c *cli.Context) error {
 	waitForBuild := c.Bool("wait")
 
 	var watcher *fsnotify.Watcher
-	var pbw *sdk.PackageBuildWatcher
+	var pbw *lib.PackageBuildWatcher
 
 	if watchResources || waitForBuild {
 		// init package build watcher
-		pbw = sdk.MakePackageBuildWatcher(fclient)
+		pbw = lib.MakePackageBuildWatcher(fclient)
 	}
 
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
 		if err != nil {
-			return sdk.FailedToError(err, "create file watcher")
+			return lib.FailedToError(err, "create file watcher")
 		}
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return sdk.FailedToError(err, "scan project files")
+				return lib.FailedToError(err, "scan project files")
 			}
 
-			if sdk.IgnoreFile(path) {
+			if lib.IgnoreFile(path) {
 				return nil
 			}
 			err = watcher.Add(path)
 			if err != nil {
-				return sdk.FailedToError(err, fmt.Sprintf("watch path %v", path))
+				return lib.FailedToError(err, fmt.Sprintf("watch path %v", path))
 			}
 			return nil
 		})
 		if err != nil {
-			return sdk.FailedToError(err, "scan files to watch")
+			return lib.FailedToError(err, "scan files to watch")
 		}
 	}
 
 	for {
 		// read all specs
-		fr, err := sdk.ReadSpecs(specDir)
+		fr, err := lib.ReadSpecs(specDir)
 		if err != nil {
-			return sdk.FailedToError(err, "read specs")
+			return lib.FailedToError(err, "read specs")
 		}
 
 		// validate
 		err = fr.Validate()
 		if err != nil {
-			return sdk.FailedToError(err, "validate specs")
+			return lib.FailedToError(err, "validate specs")
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := sdk.ApplyResources(fclient, specDir, fr, deleteResources)
+		pkgMetas, as, err := lib.ApplyResources(fclient, specDir, fr, deleteResources)
 		if err != nil {
-			return sdk.FailedToError(err, "apply specs")
+			return lib.FailedToError(err, "apply specs")
 		}
-		sdk.PrintApplyStatus(as)
+		lib.PrintApplyStatus(as)
 
 		if watchResources || waitForBuild {
 			// watch package builds
@@ -211,7 +211,7 @@ func specApply(c *cli.Context) error {
 		for {
 			select {
 			case e := <-watcher.Events:
-				if sdk.IgnoreFile(e.Name) {
+				if lib.IgnoreFile(e.Name) {
 					continue waitloop
 				}
 
@@ -221,15 +221,15 @@ func specApply(c *cli.Context) error {
 				// printed in the next watchPackageBuildStatus call.
 				pkgWatchCancel()
 
-				err = sdk.WaitForFileWatcherToSettleDown(watcher)
+				err = lib.WaitForFileWatcherToSettleDown(watcher)
 				if err != nil {
-					return sdk.FailedToError(err, "watching files")
+					return lib.FailedToError(err, "watching files")
 				}
 
 				break waitloop
 			case err := <-watcher.Errors:
 				if err != nil {
-					return sdk.FailedToError(err, "watching files")
+					return lib.FailedToError(err, "watching files")
 				}
 			}
 		}
@@ -239,25 +239,25 @@ func specApply(c *cli.Context) error {
 
 // specDestroy destroys everything in the spec.
 func specDestroy(c *cli.Context) error {
-	fclient := sdk.GetClient(c.GlobalString("server"))
+	fclient := lib.GetClient(c.GlobalString("server"))
 
 	// get specdir
 	specDir := getSpecDir(c)
 
 	// read everything
-	fr, err := sdk.ReadSpecs(specDir)
+	fr, err := lib.ReadSpecs(specDir)
 	if err != nil {
-		return sdk.FailedToError(err, "read specs")
+		return lib.FailedToError(err, "read specs")
 	}
 
 	// set desired state to nothing, but keep the UID so "apply" can find it
-	emptyFr := sdk.FissionResources{}
+	emptyFr := lib.FissionResources{}
 	emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 	// "apply" the empty state
-	_, _, err = sdk.ApplyResources(fclient, specDir, &emptyFr, true)
+	_, _, err = lib.ApplyResources(fclient, specDir, &emptyFr, true)
 	if err != nil {
-		return sdk.FailedToError(err, "delete resources")
+		return lib.FailedToError(err, "delete resources")
 	}
 
 	return nil

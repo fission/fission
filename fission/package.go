@@ -27,16 +27,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 )
 
 func pkgCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgNamespace := c.String("pkgNamespace")
 	envName := c.String("env")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("env")
+		return lib.MissingArgError("env")
 	}
 	envNamespace := c.String("envNamespace")
 	srcArchiveName := c.String("src")
@@ -44,15 +44,15 @@ func pkgCreate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
-		return sdk.GeneralError("Missing argument. Need --sourcearchive to specify source archive, or use --deployarchive to specify deployment archive.")
+		return lib.GeneralError("Missing argument. Need --sourcearchive to specify source archive, or use --deployarchive to specify deployment archive.")
 	}
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		return sdk.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
+		return lib.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
 	}
 
-	meta, err := sdk.CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
+	meta, err := lib.CreatePackage(client, pkgNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, "")
 	if err != nil {
-		return sdk.FailedToError(err, "create package")
+		return lib.FailedToError(err, "create package")
 	}
 	fmt.Printf("Package '%v' created\n", meta.GetName())
 
@@ -60,11 +60,11 @@ func pkgCreate(c *cli.Context) error {
 }
 
 func pkgUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -76,12 +76,12 @@ func pkgUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		return sdk.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
+		return lib.GeneralError("Need either of --sourcearchive or --deployarchive and not both arguments.")
 	}
 
 	if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 &&
 		len(envName) == 0 && len(buildcmd) == 0 {
-		return sdk.GeneralError("Need --env or --sourcearchive or --deployarchive or --buildcmd argument.")
+		return lib.GeneralError("Need --env or --sourcearchive or --deployarchive or --buildcmd argument.")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -89,7 +89,7 @@ func pkgUpdate(c *cli.Context) error {
 		Name:      pkgName,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "get package")
+		return lib.FailedToError(err, "get package")
 	}
 
 	// if the new env specified is the same as the old one, no need to update package
@@ -103,19 +103,19 @@ func pkgUpdate(c *cli.Context) error {
 		envNamespace = ""
 	}
 
-	fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+	fnList, err := lib.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	if err != nil {
-		return sdk.FailedToError(err, "get function list")
+		return lib.FailedToError(err, "get function list")
 	}
 
 	if !force && len(fnList) > 1 {
-		return sdk.GeneralError("Package is used by multiple functions, use --force to force update")
+		return lib.GeneralError("Package is used by multiple functions, use --force to force update")
 	}
 
-	newPkgMeta, err := sdk.UpdatePackage(client, pkg,
+	newPkgMeta, err := lib.UpdatePackage(client, pkg,
 		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
 	if err != nil {
-		return sdk.FailedToError(err, "update package")
+		return lib.FailedToError(err, "update package")
 	}
 
 	// update resource version of package reference of functions that shared the same package
@@ -123,7 +123,7 @@ func pkgUpdate(c *cli.Context) error {
 		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
 		_, err := client.FunctionUpdate(&fn)
 		if err != nil {
-			return sdk.FailedToError(err, "update function")
+			return lib.FailedToError(err, "update function")
 		}
 	}
 
@@ -133,11 +133,11 @@ func pkgUpdate(c *cli.Context) error {
 }
 
 func pkgSourceGet(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -156,24 +156,24 @@ func pkgSourceGet(c *cli.Context) error {
 	if pkg.Spec.Source.Type == fission.ArchiveTypeLiteral {
 		reader = bytes.NewReader(pkg.Spec.Source.Literal)
 	} else if pkg.Spec.Source.Type == fission.ArchiveTypeUrl {
-		readCloser := sdk.DownloadStoragesvcURL(client, pkg.Spec.Source.URL)
+		readCloser := lib.DownloadStoragesvcURL(client, pkg.Spec.Source.URL)
 		defer readCloser.Close()
 		reader = readCloser
 	}
 
 	if len(output) > 0 {
-		return sdk.WriteToFileFromReader(output, reader)
+		return lib.WriteToFileFromReader(output, reader)
 	}
 	_, err = io.Copy(os.Stdout, reader)
 	return err
 }
 
 func pkgDeployGet(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -192,24 +192,24 @@ func pkgDeployGet(c *cli.Context) error {
 	if pkg.Spec.Deployment.Type == fission.ArchiveTypeLiteral {
 		reader = bytes.NewReader(pkg.Spec.Deployment.Literal)
 	} else if pkg.Spec.Deployment.Type == fission.ArchiveTypeUrl {
-		readCloser := sdk.DownloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
+		readCloser := lib.DownloadStoragesvcURL(client, pkg.Spec.Deployment.URL)
 		defer readCloser.Close()
 		reader = readCloser
 	}
 
 	if len(output) > 0 {
-		return sdk.WriteToFileFromReader(output, reader)
+		return lib.WriteToFileFromReader(output, reader)
 	}
 	_, err = io.Copy(os.Stdout, reader)
 	return err
 }
 
 func pkgInfo(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -232,7 +232,7 @@ func pkgInfo(c *cli.Context) error {
 }
 
 func pkgList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	// option for the user to list all orphan packages (not referenced by any function)
 	listOrphans := c.Bool("orphan")
 	pkgNamespace := c.String("pkgNamespace")
@@ -246,9 +246,9 @@ func pkgList(c *cli.Context) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
 	if listOrphans {
 		for _, pkg := range pkgList {
-			fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+			fnList, err := lib.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			if err != nil {
-				return sdk.FailedToError(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+				return lib.FailedToError(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 			}
 			if len(fnList) == 0 {
 				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
@@ -267,7 +267,7 @@ func pkgList(c *cli.Context) error {
 }
 
 func pkgDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	pkgNamespace := c.String("pkgNamespace")
@@ -290,25 +290,25 @@ func pkgDelete(c *cli.Context) error {
 			Name:      pkgName,
 		})
 		if err != nil {
-			return sdk.FailedToError(err, "find package")
+			return lib.FailedToError(err, "find package")
 		}
 
-		fnList, err := sdk.GetFunctionsByPackage(client, pkgName, pkgNamespace)
+		fnList, err := lib.GetFunctionsByPackage(client, pkgName, pkgNamespace)
 
 		if !force && len(fnList) > 0 {
-			return sdk.GeneralError("Package is used by at least one function, use -f to force delete")
+			return lib.GeneralError("Package is used by at least one function, use -f to force delete")
 		}
 
-		err = sdk.DeletePackage(client, pkgName, pkgNamespace)
+		err = lib.DeletePackage(client, pkgName, pkgNamespace)
 		if err != nil {
 			return err
 		}
 
 		fmt.Printf("Package '%v' deleted\n", pkgName)
 	} else {
-		err := sdk.DeleteOrphanPkgs(client, pkgNamespace)
+		err := lib.DeleteOrphanPkgs(client, pkgNamespace)
 		if err != nil {
-			return sdk.FailedToError(err, "error deleting orphan packages")
+			return lib.FailedToError(err, "error deleting orphan packages")
 		}
 		fmt.Println("Orphan packages deleted")
 	}
@@ -317,11 +317,11 @@ func pkgDelete(c *cli.Context) error {
 }
 
 func pkgRebuild(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	pkgNamespace := c.String("pkgNamespace")
 
@@ -329,16 +329,16 @@ func pkgRebuild(c *cli.Context) error {
 		Name:      pkgName,
 		Namespace: pkgNamespace,
 	})
-	return sdk.FailedToError(err, "find package")
+	return lib.FailedToError(err, "find package")
 
 	if pkg.Status.BuildStatus != fission.BuildStatusFailed {
-		return sdk.GeneralError(fmt.Sprintf("Package %v is not in %v state.",
+		return lib.GeneralError(fmt.Sprintf("Package %v is not in %v state.",
 			pkg.Metadata.Name, fission.BuildStatusFailed))
 	}
 
-	_, err = sdk.UpdatePackage(client, pkg, "", "", "", "", "", true)
+	_, err = lib.UpdatePackage(client, pkg, "", "", "", "", "", true)
 	if err != nil {
-		return sdk.FailedToError(err, "update package")
+		return lib.FailedToError(err, "update package")
 	}
 
 	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)

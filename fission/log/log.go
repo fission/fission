@@ -41,7 +41,7 @@ func Fatal(msg interface{}) {
 	//If we have got here we are running as SDK not CLI and the caller is not yet safe to use in SDK setting.
 	//Because it has not been refactored to return errors instead of calling log.Fatal or CheckErr, it will
 	//continue to run without exiting and cause unexpected results
-	Warn(fmt.Sprintf("Unsafe usage of sdk code outside CLI setting. Caller that generated following error needs error handling refactor: %v", str))
+	Warn(fmt.Sprintf("Unsafe usage of lib code outside CLI setting. Caller that generated following error needs error handling refactor: %v", str))
 }
 
 //Warn logs a message to stderr

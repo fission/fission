@@ -29,16 +29,16 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/lib"
 	"github.com/fission/fission/fission/log"
-	"github.com/fission/fission/fission/sdk"
 )
 
 func envCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -58,7 +58,7 @@ func envCreate(c *cli.Context) error {
 
 	envImg := c.String("image")
 	if len(envImg) == 0 {
-		return sdk.MissingArgError("image")
+		return lib.MissingArgError("image")
 	}
 
 	envVersion := c.Int("version")
@@ -89,7 +89,7 @@ func envCreate(c *cli.Context) error {
 
 	resourceReq, err := getResourceReq(c, v1.ResourceRequirements{})
 	if err != nil {
-		return sdk.FailedToError(err, "get resource requirements")
+		return lib.FailedToError(err, "get resource requirements")
 	}
 
 	env := &crd.Environment{
@@ -117,26 +117,26 @@ func envCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("env-%v.yaml", envName)
-		err := sdk.SpecSave(*env, specFile)
+		err := lib.SpecSave(*env, specFile)
 		if err != nil {
-			return sdk.FailedToError(err, "create environment spec")
+			return lib.FailedToError(err, "create environment spec")
 		}
 	}
 
 	_, err = client.EnvironmentCreate(env)
 	if err != nil {
-		return sdk.FailedToError(err, "create environment")
+		return lib.FailedToError(err, "create environment")
 	}
 	log.Infof("environment '%v' created\n", envName)
 	return nil
 }
 
 func envGet(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -146,7 +146,7 @@ func envGet(c *cli.Context) error {
 	}
 	env, err := client.EnvironmentGet(m)
 	if err != nil {
-		return sdk.FailedToError(err, "get environment")
+		return lib.FailedToError(err, "get environment")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -158,11 +158,11 @@ func envGet(c *cli.Context) error {
 }
 
 func envUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -172,7 +172,7 @@ func envUpdate(c *cli.Context) error {
 	envExternalNetwork := c.Bool("externalnetwork")
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
-		return sdk.GeneralError("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
+		return lib.GeneralError("Need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command.")
 	}
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
@@ -180,7 +180,7 @@ func envUpdate(c *cli.Context) error {
 		Namespace: envNamespace,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "find environment")
+		return lib.FailedToError(err, "find environment")
 	}
 
 	if len(envImg) > 0 {
@@ -188,7 +188,7 @@ func envUpdate(c *cli.Context) error {
 	}
 
 	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
-		return sdk.GeneralError("Version 1 Environments do not support builders. Must specify --version=2.")
+		return lib.GeneralError("Version 1 Environments do not support builders. Must specify --version=2.")
 	}
 
 	if len(envBuilderImg) > 0 {
@@ -214,7 +214,7 @@ func envUpdate(c *cli.Context) error {
 
 	_, err = client.EnvironmentUpdate(env)
 	if err != nil {
-		return sdk.FailedToError(err, "update environment")
+		return lib.FailedToError(err, "update environment")
 	}
 
 	fmt.Printf("environment '%v' updated\n", envName)
@@ -222,11 +222,11 @@ func envUpdate(c *cli.Context) error {
 }
 
 func envDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	envName := c.String("name")
 	if len(envName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	envNamespace := c.String("envNamespace")
 
@@ -236,7 +236,7 @@ func envDelete(c *cli.Context) error {
 	}
 	err := client.EnvironmentDelete(m)
 	if err != nil {
-		return sdk.FailedToError(err, "delete environment")
+		return lib.FailedToError(err, "delete environment")
 	}
 
 	fmt.Printf("environment '%v' deleted\n", envName)
@@ -244,12 +244,12 @@ func envDelete(c *cli.Context) error {
 }
 
 func envList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 	envNamespace := c.String("envNamespace")
 
 	envs, err := client.EnvironmentList(envNamespace)
 	if err != nil {
-		return sdk.FailedToError(err, "list environments")
+		return lib.FailedToError(err, "list environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -280,7 +280,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) (v1.Resou
 		mincpu := c.Int("mincpu")
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse mincpu")
+			return v1.ResourceRequirements{}, lib.GeneralError("Failed to parse mincpu")
 		}
 		requestResources[v1.ResourceCPU] = cpuRequest
 	}
@@ -289,7 +289,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) (v1.Resou
 		minmem := c.Int("minmemory")
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse minmemory")
+			return v1.ResourceRequirements{}, lib.GeneralError("Failed to parse minmemory")
 		}
 		requestResources[v1.ResourceMemory] = memRequest
 	}
@@ -305,7 +305,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) (v1.Resou
 		maxcpu := c.Int("maxcpu")
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse maxcpu")
+			return v1.ResourceRequirements{}, lib.GeneralError("Failed to parse maxcpu")
 		}
 		limitResources[v1.ResourceCPU] = cpuLimit
 	}
@@ -314,7 +314,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) (v1.Resou
 		maxmem := c.Int("maxmemory")
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			return v1.ResourceRequirements{}, sdk.GeneralError("Failed to parse maxmemory")
+			return v1.ResourceRequirements{}, lib.GeneralError("Failed to parse maxmemory")
 		}
 		limitResources[v1.ResourceMemory] = memLimit
 	}

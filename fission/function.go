@@ -32,43 +32,43 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/fission/lib"
 	"github.com/fission/fission/fission/log"
 	"github.com/fission/fission/fission/logdb"
 	"github.com/fission/fission/fission/portforward"
-	"github.com/fission/fission/fission/sdk"
 )
 
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 
-	queryURL, err := url.Parse(sdk.GetServerUrl())
+	queryURL, err := url.Parse(lib.GetServerUrl())
 	if err != nil {
-		return sdk.FailedToError(err, "parse the base URL")
+		return lib.FailedToError(err, "parse the base URL")
 	}
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
-		return sdk.FailedToError(err, "create logs request")
+		return lib.FailedToError(err, "create logs request")
 	}
 
 	httpClient := http.Client{}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return sdk.FailedToError(err, "execute get logs request")
+		return lib.FailedToError(err, "execute get logs request")
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return sdk.GeneralError("Failed to get logs from pod directly")
+		return lib.GeneralError("Failed to get logs from pod directly")
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return sdk.FailedToError(err, "read the response body")
+		return lib.FailedToError(err, "read the response body")
 	}
 	log.Info(string(body))
 	return nil
@@ -81,7 +81,7 @@ func fnCreate(c *cli.Context) error {
 	if c.Bool("spec") {
 		spec = true
 	}
-	CreateFunctionArgs := &sdk.CreateFunctionArgs{
+	CreateFunctionArgs := &lib.CreateFunctionArgs{
 		FnName:            c.String("name"),
 		Spec:              spec,
 		EntryPoint:        c.String("entrypoint"),
@@ -105,18 +105,18 @@ func fnCreate(c *cli.Context) error {
 		TargetCPU:         c.Int("targetcpu"),
 		FnNamespace:       c.String("fnNamespace"),
 		EnvNamespace:      c.String("envNamespace"),
-		Client:            sdk.GetClient(c.GlobalString("server")),
+		Client:            lib.GetClient(c.GlobalString("server")),
 	}
-	return sdk.CreateFunction(CreateFunctionArgs)
+	return lib.CreateFunction(CreateFunctionArgs)
 
 }
 
 func fnGet(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 	m := &metav1.ObjectMeta{
@@ -125,7 +125,7 @@ func fnGet(c *cli.Context) error {
 	}
 	fn, err := client.FunctionGet(m)
 	if err != nil {
-		return sdk.FailedToError(err, "get function")
+		return lib.FailedToError(err, "get function")
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -133,7 +133,7 @@ func fnGet(c *cli.Context) error {
 		Namespace: fn.Spec.Package.PackageRef.Namespace,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "get package")
+		return lib.FailedToError(err, "get package")
 	}
 
 	os.Stdout.Write(pkg.Spec.Deployment.Literal)
@@ -141,11 +141,11 @@ func fnGet(c *cli.Context) error {
 }
 
 func fnGetMeta(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -156,7 +156,7 @@ func fnGetMeta(c *cli.Context) error {
 
 	f, err := client.FunctionGet(m)
 	if err != nil {
-		return sdk.FailedToError(err, "get function")
+		return lib.FailedToError(err, "get function")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -168,19 +168,19 @@ func fnGetMeta(c *cli.Context) error {
 }
 
 func fnUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	if len(c.String("package")) > 0 {
-		return sdk.GeneralError("--package is deprecated, please use --deployarchive instead.")
+		return lib.GeneralError("--package is deprecated, please use --deployarchive instead.")
 	}
 
 	if len(c.String("srcpkg")) > 0 {
-		return sdk.GeneralError("--srcpkg is deprecated, please use --sourcearchive instead.")
+		return lib.GeneralError("--srcpkg is deprecated, please use --sourcearchive instead.")
 	}
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -189,7 +189,7 @@ func fnUpdate(c *cli.Context) error {
 		Namespace: fnNamespace,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, fmt.Sprintf("read function '%v'", fnName))
+		return lib.FailedToError(err, fmt.Sprintf("read function '%v'", fnName))
 	}
 
 	envName := c.String("env")
@@ -219,12 +219,12 @@ func fnUpdate(c *cli.Context) error {
 	cfgMapName := c.String("configmap")
 
 	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
-		return sdk.GeneralError("Must provide only one of arguments --srcarchive, --deployarchive or --code")
+		return lib.GeneralError("Must provide only one of arguments --srcarchive, --deployarchive or --code")
 	}
 
 	if len(secretName) > 0 {
 		if len(function.Spec.Secrets) > 1 {
-			return sdk.GeneralError("Please use 'fission spec apply' to update list of secrets")
+			return lib.GeneralError("Please use 'fission spec apply' to update list of secrets")
 		}
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
@@ -245,7 +245,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(cfgMapName) > 0 {
 		if len(function.Spec.ConfigMaps) > 1 {
-			return sdk.GeneralError("Please use 'fission spec apply' to update list of configmaps")
+			return lib.GeneralError("Please use 'fission spec apply' to update list of configmaps")
 		}
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
@@ -284,24 +284,24 @@ func fnUpdate(c *cli.Context) error {
 		Name:      pkgName,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+		return lib.FailedToError(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
 	}
 
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
-		fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+		fnList, err := lib.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		if err != nil {
-			return sdk.FailedToError(err, "get function list")
+			return lib.FailedToError(err, "get function list")
 		}
 
 		if !force && len(fnList) > 1 {
-			return sdk.GeneralError("Package is used by multiple functions, use --force to force update")
+			return lib.GeneralError("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata, err = sdk.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
+		pkgMetadata, err = lib.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
 		if err != nil {
-			return sdk.FailedToError(err, fmt.Sprintf("update package '%v'", pkgName))
+			return lib.FailedToError(err, fmt.Sprintf("update package '%v'", pkgName))
 		}
 
 		log.Infof("package '%v' updated\n", pkgMetadata.GetName())
@@ -313,7 +313,7 @@ func fnUpdate(c *cli.Context) error {
 				fn.Spec.Package.PackageRef.ResourceVersion = pkgMetadata.ResourceVersion
 				_, err := client.FunctionUpdate(&fn)
 				if err != nil {
-					return sdk.FailedToError(err, "update function")
+					return lib.FailedToError(err, "update function")
 				}
 			}
 		}
@@ -331,12 +331,12 @@ func fnUpdate(c *cli.Context) error {
 
 	function.Spec.Resources, err = getResourceReq(c, function.Spec.Resources)
 	if err != nil {
-		return sdk.FailedToError(err, "get resource requirements")
+		return lib.FailedToError(err, "get resource requirements")
 	}
 
 	if c.IsSet("targetcpu") {
 
-		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent, err = sdk.GetTargetCPU(c.Int("targetcpu"))
+		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent, err = lib.GetTargetCPU(c.Int("targetcpu"))
 		if err != nil {
 			return err
 		}
@@ -346,11 +346,11 @@ func fnUpdate(c *cli.Context) error {
 		minscale := c.Int("minscale")
 		maxscale := c.Int("maxscale")
 		if c.IsSet("maxscale") && minscale > c.Int("maxscale") {
-			return sdk.GeneralError(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
+			return lib.GeneralError(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
 		}
 		if function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
 			minscale > function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			return sdk.GeneralError(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
+			return lib.GeneralError(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
 				function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minscale
@@ -359,7 +359,7 @@ func fnUpdate(c *cli.Context) error {
 	if c.IsSet("maxscale") {
 		maxscale := c.Int("maxscale")
 		if maxscale < function.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			return sdk.GeneralError(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
+			return lib.GeneralError(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
 				function.Spec.InvokeStrategy.ExecutionStrategy.MinScale, maxscale))
 		}
 		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
@@ -375,7 +375,7 @@ func fnUpdate(c *cli.Context) error {
 		case fission.ExecutorTypeNewdeploy:
 			fnExecutor = fission.ExecutorTypeNewdeploy
 		default:
-			return sdk.GeneralError("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+			return lib.GeneralError("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 		}
 		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
 			fnExecutor == fission.ExecutorTypePoolmgr {
@@ -386,7 +386,7 @@ func fnUpdate(c *cli.Context) error {
 
 	_, err = client.FunctionUpdate(function)
 	if err != nil {
-		return sdk.FailedToError(err, "update function")
+		return lib.FailedToError(err, "update function")
 	}
 
 	log.Infof("function '%v' updated\n", fnName)
@@ -394,20 +394,20 @@ func fnUpdate(c *cli.Context) error {
 }
 
 func fnDelete(c *cli.Context) error {
-	deleteFunctionArgs := &sdk.DeleteFunctionArgs{
+	deleteFunctionArgs := &lib.DeleteFunctionArgs{
 		FnName:      c.String("name"),
 		FnNamespace: c.String("fnNamespace"),
-		Client:      sdk.GetClient(c.GlobalString("server")),
+		Client:      lib.GetClient(c.GlobalString("server")),
 	}
-	return sdk.DeleteFunction(deleteFunctionArgs)
+	return lib.DeleteFunction(deleteFunctionArgs)
 }
 
 func fnList(c *cli.Context) error {
-	listFunctionsArgs := &sdk.ListFunctionsArgs{
+	listFunctionsArgs := &lib.ListFunctionsArgs{
 		FnNamespace: c.String("fnNamespace"),
-		Client:      sdk.GetClient(c.GlobalString("server")),
+		Client:      lib.GetClient(c.GlobalString("server")),
 	}
-	fns, err := sdk.ListFunctions(listFunctionsArgs)
+	fns, err := lib.ListFunctions(listFunctionsArgs)
 	if err != nil {
 		return err
 	}
@@ -438,11 +438,11 @@ func fnList(c *cli.Context) error {
 
 func fnLogs(c *cli.Context) error {
 
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -464,13 +464,13 @@ func fnLogs(c *cli.Context) error {
 
 	f, err := client.FunctionGet(m)
 	if err != nil {
-		return sdk.FailedToError(err, "get function")
+		return lib.FailedToError(err, "get function")
 	}
 
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, sdk.GetServerUrl())
+	logDB, err := logdb.GetLogDB(dbType, lib.GetServerUrl())
 	if err != nil {
-		return sdk.GeneralError("failed to connect log database")
+		return lib.GeneralError("failed to connect log database")
 	}
 
 	requestChan := make(chan struct{})
@@ -491,7 +491,7 @@ func fnLogs(c *cli.Context) error {
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
-					//TODO refactor to use error channel (at latest when moving to sdk package)
+					//TODO refactor to use error channel (at latest when moving to lib package)
 					logErrorAndExit("failed to query logs")
 				}
 				for _, logEntry := range logEntries {
@@ -524,15 +524,15 @@ func fnLogs(c *cli.Context) error {
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	ns := c.String("fnNamespace")
 
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
 		// Portforward to the fission router
-		localRouterPort := portforward.Setup(sdk.GetKubeConfigPath(),
-			sdk.GetFissionNamespace(), "application=fission-router")
+		localRouterPort := portforward.Setup(lib.GetKubeConfigPath(),
+			lib.GetFissionNamespace(), "application=fission-router")
 		routerURL = "127.0.0.1:" + localRouterPort
 	} else {
 		routerURL = strings.TrimPrefix(routerURL, "http://")
@@ -567,11 +567,11 @@ func fnTest(c *cli.Context) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
-	resp := sdk.HttpRequest(c.String("method"), functionUrl.String(), c.String("body"), c.StringSlice("header"))
+	resp := lib.HttpRequest(c.String("method"), functionUrl.String(), c.String("body"), c.StringSlice("header"))
 	if resp.StatusCode < 400 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return sdk.FailedToError(err, "Function test")
+			return lib.FailedToError(err, "Function test")
 		}
 		log.Info(string(body))
 		defer resp.Body.Close()
@@ -580,7 +580,7 @@ func fnTest(c *cli.Context) error {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return sdk.FailedToError(err, "read log response from pod")
+		return lib.FailedToError(err, "read log response from pod")
 	}
 	log.Warnf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
 	defer resp.Body.Close()

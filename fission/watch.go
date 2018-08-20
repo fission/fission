@@ -27,15 +27,15 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 )
 
 func wCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	fnName := c.String("function")
 	if len(fnName) == 0 {
-		return sdk.MissingArgError("function")
+		return lib.MissingArgError("function")
 	}
 	fnNamespace := c.String("fnNamespace")
 
@@ -82,16 +82,16 @@ func wCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", watchName)
-		err := sdk.SpecSave(*w, specFile)
+		err := lib.SpecSave(*w, specFile)
 		if err != nil {
-			return sdk.FailedToError(err, "create kubernetes watch spec")
+			return lib.FailedToError(err, "create kubernetes watch spec")
 		}
 		return nil
 	}
 
 	_, err := client.WatchCreate(w)
 	if err != nil {
-		return sdk.FailedToError(err, "create watch")
+		return lib.FailedToError(err, "create watch")
 	}
 
 	fmt.Printf("watch '%v' created\n", w.Metadata.Name)
@@ -100,22 +100,22 @@ func wCreate(c *cli.Context) error {
 
 func wGet(c *cli.Context) error {
 	// TODO
-	return sdk.GeneralError("Not implemented")
+	return lib.GeneralError("Not implemented")
 	return nil
 }
 
 func wUpdate(c *cli.Context) error {
 	// TODO
-	return sdk.GeneralError("Not implemented")
+	return lib.GeneralError("Not implemented")
 	return nil
 }
 
 func wDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	wName := c.String("name")
 	if len(wName) == 0 {
-		return sdk.MissingArgError("name")
+		return lib.MissingArgError("name")
 	}
 	wNs := c.String("triggerns")
 
@@ -124,7 +124,7 @@ func wDelete(c *cli.Context) error {
 		Namespace: wNs,
 	})
 	if err != nil {
-		return sdk.FailedToError(err, "delete watch")
+		return lib.FailedToError(err, "delete watch")
 	}
 
 	fmt.Printf("watch '%v' deleted\n", wName)
@@ -132,13 +132,13 @@ func wDelete(c *cli.Context) error {
 }
 
 func wList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	wNs := c.String("triggerns")
 
 	ws, err := client.WatchList(wNs)
 	if err != nil {
-		return sdk.FailedToError(err, "list watches")
+		return lib.FailedToError(err, "list watches")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

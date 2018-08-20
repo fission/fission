@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sdk
+package lib
 
 import (
 	"fmt"
@@ -446,7 +446,7 @@ func ListFunctions(args *ListFunctionsArgs) ([]crd.Function, error) {
 	return fns, nil
 }
 
-//TODO remove once fnUpdate has been moved to sdk package (and validation added to validate() for those args)
+//TODO remove once fnUpdate has been moved to lib package (and validation added to validate() for those args)
 func GetTargetCPU(targetCPU int) (int, error) {
 	if targetCPU != 0 {
 		if targetCPU <= 0 || targetCPU > 100 {

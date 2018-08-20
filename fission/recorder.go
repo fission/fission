@@ -29,11 +29,11 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/fission/sdk"
+	"github.com/fission/fission/fission/lib"
 )
 
 func recorderCreate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	recName := c.String("name")
 	if len(recName) == 0 {
@@ -81,16 +81,16 @@ func recorderCreate(c *cli.Context) error {
 	// If we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("recorder-%v.yaml", recName)
-		err := sdk.SpecSave(*recorder, specFile)
+		err := lib.SpecSave(*recorder, specFile)
 		if err != nil {
-			return sdk.FailedToError(err, "create recorder spec")
+			return lib.FailedToError(err, "create recorder spec")
 		}
 		return nil
 	}
 
 	_, err := client.RecorderCreate(recorder)
 	if err != nil {
-		return sdk.FailedToError(err, "create recorder")
+		return lib.FailedToError(err, "create recorder")
 	}
 
 	fmt.Printf("recorder '%s' created\n", recName)
@@ -98,7 +98,7 @@ func recorderCreate(c *cli.Context) error {
 }
 
 func recorderGet(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	recName := c.String("name")
 
@@ -108,7 +108,7 @@ func recorderGet(c *cli.Context) error {
 	})
 
 	if err != nil {
-		return sdk.FailedToError(err, "get recorder")
+		return lib.FailedToError(err, "get recorder")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -123,7 +123,7 @@ func recorderGet(c *cli.Context) error {
 }
 
 func recorderUpdate(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	recName := c.String("name")
 	enable := c.Bool("enable")
@@ -198,7 +198,7 @@ func recorderUpdate(c *cli.Context) error {
 
 	_, err = client.RecorderUpdate(recorder)
 	if err != nil {
-		return sdk.FailedToError(err, "update recorder")
+		return lib.FailedToError(err, "update recorder")
 	}
 
 	fmt.Printf("recorder '%v' updated\n", recName)
@@ -206,7 +206,7 @@ func recorderUpdate(c *cli.Context) error {
 }
 
 func recorderDelete(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	recName := c.String("name")
 
@@ -222,7 +222,7 @@ func recorderDelete(c *cli.Context) error {
 	})
 
 	if err != nil {
-		return sdk.FailedToError(err, "delete recorder")
+		return lib.FailedToError(err, "delete recorder")
 	}
 
 	fmt.Printf("recorder '%v' deleted\n", recName)
@@ -230,11 +230,11 @@ func recorderDelete(c *cli.Context) error {
 }
 
 func recorderList(c *cli.Context) error {
-	client := sdk.GetClient(c.GlobalString("server"))
+	client := lib.GetClient(c.GlobalString("server"))
 
 	recorders, err := client.RecorderList("default")
 	if err != nil {
-		return sdk.FailedToError(err, "list recorders")
+		return lib.FailedToError(err, "list recorders")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
