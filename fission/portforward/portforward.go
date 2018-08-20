@@ -132,7 +132,7 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, n
 	namespaces := make(map[string][]*v1.Pod)
 
 	// make a useful error message if there is more than one install
-	if len(podList.Items) > 1 {
+	if len(podList.Items) > 0 {
 		for _, p := range podList.Items {
 			if _, ok := namespaces[p.Namespace]; !ok {
 				namespaces[p.Namespace] = []*v1.Pod{}
@@ -146,6 +146,9 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, n
 		}
 	}
 
+	// there is at most one namespace in nsList,
+	// use index 0 to get from it directly.
+	ns = nsList[0]
 	pods, ok := namespaces[ns]
 	if !ok {
 		log.Fatal(fmt.Sprintf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns))

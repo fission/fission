@@ -59,13 +59,17 @@ func DownloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 }
 
 func UpdatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
-	srcArchiveName, deployArchiveName, buildcmd string) (*metav1.ObjectMeta, error) {
+	srcArchiveName, deployArchiveName, buildcmd string, forceRebuild bool) (*metav1.ObjectMeta, error) {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
 
 	if len(envName) > 0 {
 		pkg.Spec.Environment.Name = envName
+		needToBuild = true
+	}
+
+	if len(envNamespace) > 0 {
 		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
@@ -92,10 +96,13 @@ func UpdatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 			return nil, err
 		}
 		pkg.Spec.Deployment = *deployArchiveMetadata
+		// Users may update the env, envNS and deploy archive at the same time,
+		// but without the source archive. In this case, we should set needToBuild to false
+		needToBuild = false
 	}
 
 	// Set package as pending status when needToBuild is true
-	if needToBuild {
+	if needToBuild || forceRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fission.PackageStatus{
 			BuildStatus: fission.BuildStatusPending,
@@ -103,6 +110,7 @@ func UpdatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	newPkgMeta, err := client.PackageUpdate(pkg)
+
 	if err != nil {
 		return nil, FailedToError(err, "update package")
 	}

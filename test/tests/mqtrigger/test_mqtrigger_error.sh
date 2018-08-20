@@ -18,24 +18,34 @@ maxretries=1
 # FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
 expectedRespOutput="[foo.error]: 'Hello, World!'"
 
+cleanup() {
+    log "Cleaning up..."
+    fission env delete --name nodejs || true
+    fission fn delete --name $fn || true
+    fission mqtrigger delete --name $mqt || true
+}
+
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
 log "Pre-test cleanup"
 fission env delete --name nodejs || true
 
 log "Creating nodejs env"
 fission env create --name nodejs --image fission/node-env
-#trap "fission env delete --name nodejs" EXIT
 
 log "Creating function"
 fn=hello-$(date +%s)
 fission fn create --name $fn --env nodejs --code $DIR/main_error.js --method GET
-##trap "fission fn delete --name $fn" EXIT
 
 log "Creating message queue trigger"
 mqt=mqt-$(date +%s)
 fission mqtrigger create --name $mqt --function $fn --mqtype "nats-streaming" --topic $topic --resptopic $resptopic --errortopic $errortopic --maxretries $maxretries
 log "Updated mqtrigger list"
 fission mqtrigger list
-#trap "fission mqtrigger delete --name $mqt" EXIT
 
 # wait until nats trigger is created
 sleep 5

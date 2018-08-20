@@ -51,15 +51,22 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
 
-	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if replicas == 0 {
-		replicas = 1
+	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	if minScale == 0 {
+		minScale = 1
 	}
 
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		if existingDepl.Status.ReadyReplicas < replicas {
-			existingDepl, err = deploy.waitForDeploy(existingDepl, replicas)
+		err = scaleDeployment(deploy.kubernetesClient,
+			existingDepl.Namespace, existingDepl.Name, minScale)
+		if err != nil {
+			log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
+			return nil, err
+		}
+
+		if existingDepl.Status.AvailableReplicas < minScale {
+			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
 		}
 		return existingDepl, err
 	}
@@ -81,7 +88,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		return deploy.waitForDeploy(depl, replicas)
+		return deploy.waitForDeploy(depl, minScale)
 	}
 
 	return nil, err
@@ -425,9 +432,9 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 }
 
-func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) getHpa(ns string, fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
 	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(fn.Metadata.Namespace).Get(hpaName, metav1.GetOptions{})
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(hpaName, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
@@ -497,7 +504,9 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 			return nil, err
 		}
 		//TODO check for imagePullerror
-		if latestDepl.Status.ReadyReplicas >= replicas {
+		// use AvailableReplicas here is better than ReadyReplicas
+		// since the pods may not be able to serve network traffic yet.
+		if latestDepl.Status.AvailableReplicas >= replicas {
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)

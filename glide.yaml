@@ -62,9 +62,11 @@ import:
 - package: github.com/davecgh/go-spew
   version: ~1.1.0
 - package: github.com/imdario/mergo
-  version: ~0.3.2
+  version: v0.3.3
 - package: github.com/hashicorp/go-multierror
 - package: github.com/hashicorp/errwrap
 - package: github.com/prometheus/client_golang
   version: v0.8.0
 - package: github.com/dustin/go-humanize
+- package: github.com/golang/protobuf/proto
+  version: v1.1.0

@@ -92,6 +92,17 @@ func pkgUpdate(c *cli.Context) error {
 		return sdk.FailedToError(err, "get package")
 	}
 
+	// if the new env specified is the same as the old one, no need to update package
+	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
+	// re-write the object with same old values, we just end up getting a new resource version for the object.
+	if len(envName) > 0 && envName == pkg.Spec.Environment.Name {
+		envName = ""
+	}
+
+	if envNamespace == pkg.Spec.Environment.Namespace {
+		envNamespace = ""
+	}
+
 	fnList, err := sdk.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	if err != nil {
 		return sdk.FailedToError(err, "get function list")
@@ -102,7 +113,7 @@ func pkgUpdate(c *cli.Context) error {
 	}
 
 	newPkgMeta, err := sdk.UpdatePackage(client, pkg,
-		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
+		envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
 	if err != nil {
 		return sdk.FailedToError(err, "update package")
 	}
@@ -301,6 +312,36 @@ func pkgDelete(c *cli.Context) error {
 		}
 		fmt.Println("Orphan packages deleted")
 	}
+
+	return nil
+}
+
+func pkgRebuild(c *cli.Context) error {
+	client := sdk.GetClient(c.GlobalString("server"))
+
+	pkgName := c.String("name")
+	if len(pkgName) == 0 {
+		return sdk.MissingArgError("name")
+	}
+	pkgNamespace := c.String("pkgNamespace")
+
+	pkg, err := client.PackageGet(&metav1.ObjectMeta{
+		Name:      pkgName,
+		Namespace: pkgNamespace,
+	})
+	return sdk.FailedToError(err, "find package")
+
+	if pkg.Status.BuildStatus != fission.BuildStatusFailed {
+		return sdk.GeneralError(fmt.Sprintf("Package %v is not in %v state.",
+			pkg.Metadata.Name, fission.BuildStatusFailed))
+	}
+
+	_, err = sdk.UpdatePackage(client, pkg, "", "", "", "", "", true)
+	if err != nil {
+		return sdk.FailedToError(err, "update package")
+	}
+
+	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)
 
 	return nil
 }
