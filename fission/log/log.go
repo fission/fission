@@ -24,7 +24,7 @@ import (
 var (
 	// Verbosity is the global Verbosity of our CLI
 	Verbosity int
-	// IsCliRun is only set to true when running from CLI
+	// IsCliRun is only set to true when running from CLI (vs lib)
 	IsCliRun bool
 )
 
@@ -38,7 +38,7 @@ func Fatal(msg interface{}) {
 	if IsCliRun {
 		os.Exit(1)
 	}
-	//If we have got here we are running as SDK not CLI and the caller is not yet safe to use in SDK setting.
+	//If we have got here we are running as lib not CLI and the caller is not yet safe to use in lib setting.
 	//Because it has not been refactored to return errors instead of calling log.Fatal or CheckErr, it will
 	//continue to run without exiting and cause unexpected results
 	Warn(fmt.Sprintf("Unsafe usage of lib code outside CLI setting. Caller that generated following error needs error handling refactor: %v", str))

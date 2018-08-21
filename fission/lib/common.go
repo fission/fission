@@ -97,10 +97,12 @@ func GetClient(serverUrl string) *client.Client {
 	return client.MakeClient(serverUrl)
 }
 
+//GeneralError returns an error from a string message
 func GeneralError(msg string) error {
 	return errors.New(msg)
 }
 
+//MissingArgError returns an error 'Missing argument [argName]'
 func MissingArgError(argName string) error {
 	var message string
 	if log.IsCliRun {
@@ -111,15 +113,15 @@ func MissingArgError(argName string) error {
 	return errors.New(message)
 }
 
-//CheckErr logs 'Failed to [action]: [err]' to stderr and exits in CLI mode, or logs to stdrr only in SDK mode
-//Calls should be refactored to use FailedToError instead
+//CheckErr logs 'Failed to [action]: [err]' to stderr and exits in CLI mode, or logs to stdrr only in lib mode
+//DEPRECATED Calls should be refactored to check for err and return FailedToError instead
 func CheckErr(err error, action string) {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Failed to %v: %v", action, err))
 	}
 }
 
-//FailedtoError creates a new error 'Failed to [action]: [err]'
+//FailedToError creates a new error 'Failed to [action]: [err]'
 func FailedToError(err error, action string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to %v: %v", action, err)

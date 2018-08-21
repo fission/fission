@@ -232,7 +232,7 @@ func CreateFunction(args *CreateFunctionArgs) error {
 	if len(args.CodePath) > 0 {
 		deployArchivePath = args.CodePath
 	}
-	//For SDK also allow code as a literal string
+	//For lib also allow code as a literal string
 	if len(args.CodeLiteral) > 0 {
 		codeTempPath, err := SaveStringToTempFile(args.CodeLiteral)
 		if err != nil {
