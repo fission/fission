@@ -329,7 +329,9 @@ func pkgRebuild(c *cli.Context) error {
 		Name:      pkgName,
 		Namespace: pkgNamespace,
 	})
-	return lib.FailedToError(err, "find package")
+	if err != nil {
+		return lib.FailedToError(err, "find package")
+	}
 
 	if pkg.Status.BuildStatus != fission.BuildStatusFailed {
 		return lib.GeneralError(fmt.Sprintf("Package %v is not in %v state.",

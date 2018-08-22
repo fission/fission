@@ -101,13 +101,11 @@ func wCreate(c *cli.Context) error {
 func wGet(c *cli.Context) error {
 	// TODO
 	return lib.GeneralError("Not implemented")
-	return nil
 }
 
 func wUpdate(c *cli.Context) error {
 	// TODO
 	return lib.GeneralError("Not implemented")
-	return nil
 }
 
 func wDelete(c *cli.Context) error {

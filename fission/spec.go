@@ -223,13 +223,15 @@ func specApply(c *cli.Context) error {
 
 				err = lib.WaitForFileWatcherToSettleDown(watcher)
 				if err != nil {
-					return lib.FailedToError(err, "watching files")
+					pkgWatchCancel()
+					return lib.FailedToError(err, "watch files")
 				}
 
 				break waitloop
 			case err := <-watcher.Errors:
 				if err != nil {
-					return lib.FailedToError(err, "watching files")
+					pkgWatchCancel()
+					return lib.FailedToError(err, "watch files")
 				}
 			}
 		}

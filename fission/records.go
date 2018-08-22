@@ -148,7 +148,7 @@ func multipleFiltersSpecified(entries ...string) bool {
 	var specified int
 	for _, entry := range entries {
 		if len(entry) > 0 {
-			specified += 1
+			specified++
 		}
 	}
 	return specified > 1
