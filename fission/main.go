@@ -20,12 +20,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/ghodss/yaml"
+	"github.com/urfave/cli"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/fission/log"
+	"github.com/fission/fission/fission/plugin"
 	"github.com/fission/fission/fission/portforward"
-	"github.com/urfave/cli"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func getFissionNamespace() string {
@@ -77,17 +81,15 @@ func main() {
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
 	app.Version = fission.Version
-
-	cli.VersionPrinter = func(c *cli.Context) {
-		clientVer := fission.BuildInfo().String()
-		fmt.Printf("Client Version: %v\n", clientVer)
-		serverInfo, err := getClient(getServerUrl()).ServerInfo()
-		if err != nil {
-			fmt.Printf("Error getting Fission API version: %v", err)
-		} else {
-			serverVer := serverInfo.Build.String()
-			fmt.Printf("Server Version: %v\n", serverVer)
+	cli.VersionPrinter = versionPrinter
+	app.CustomAppHelpTemplate = helpTemplate
+	app.ExtraInfo = func() map[string]string {
+		info := map[string]string{}
+		for _, pmd := range plugin.FindAll() {
+			names := strings.Join(append([]string{pmd.Name}, pmd.Aliases...), ", ")
+			info[names] = pmd.Usage
 		}
+		return info
 	}
 
 	app.Flags = []cli.Flag{
@@ -225,6 +227,9 @@ func main() {
 		{Name: "view", Usage: "View existing records", Flags: []cli.Flag{filterTimeTo, filterTimeFrom, filterFunction, filterTrigger, verbosityFlag, vvFlag}, Action: recordsView},
 	}
 
+	// Replay records
+	reqIDFlag := cli.StringFlag{Name: "reqUID", Usage: "Replay a particular request by providing the reqUID (to view reqUIDs, do 'fission records view')"}
+
 	// environments
 	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
 	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Value: 3, Usage: "Size of the pool"}
@@ -305,13 +310,113 @@ func main() {
 		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
 		{Name: "recorder", Usage: "Manage recorders for functions", Subcommands: recSubcommands, Hidden: true},
 		{Name: "records", Usage: "View records with optional filters", Subcommands: recViewSubcommands, Hidden: true},
+		{Name: "replay", Usage: "Replay records", Flags: []cli.Flag{reqIDFlag}, Action: replay},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
+		cmdPlugin,
 	}
-
 	app.Before = cliHook
+	app.CommandNotFound = handleCommandNotFound
 	app.Run(os.Args)
 }
+
+func handleCommandNotFound(ctx *cli.Context, subCommand string) {
+	pmd, err := plugin.Find(subCommand)
+	if err != nil {
+		switch err {
+		case plugin.ErrPluginNotFound:
+			url, ok := plugin.SearchRegistries(subCommand)
+			if !ok {
+				log.Fatal("No help topic for '" + subCommand + "'")
+			}
+			log.Fatal(fmt.Sprintf(`Command '%v' is not installed.
+It is available to download at '%v'.
+
+To install it for your local Fission CLI:
+1. Download the plugin binary for your OS from the URL
+2. Ensure that the plugin binary is executable: chmod +x <binary>
+2. Add the plugin binary to your $PATH: mv <binary> /usr/local/bin/fission-%v`, subCommand, url, subCommand))
+		default:
+			log.Fatal("Error occurred when invoking " + subCommand + ": " + err.Error())
+		}
+		os.Exit(1)
+	}
+
+	// Rebuild global arguments string (urfave/cli does not have an option to get the raw input of the global flags)
+	var globalArgs []string
+	for _, globalFlagName := range ctx.GlobalFlagNames() {
+		val := fmt.Sprintf("%v", ctx.GlobalGeneric(globalFlagName))
+		if len(val) > 0 {
+			globalArgs = append(globalArgs, fmt.Sprintf("--%v", globalFlagName), val)
+		}
+	}
+	args := append(globalArgs, ctx.Args().Tail()...)
+
+	err = plugin.Exec(pmd, args)
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+// Versions is a container of versions of the client (and its plugins) and server (and its plugins).
+type Versions struct {
+	Client map[string]fission.BuildMeta `json:"client"`
+	Server map[string]fission.BuildMeta `json:"server"`
+}
+
+func versionPrinter(_ *cli.Context) {
+	serverInfo, err := getClient(getServerUrl()).ServerInfo()
+	if err != nil {
+		log.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+	}
+
+	// Fetch client versions
+	versions := Versions{
+		Client: map[string]fission.BuildMeta{
+			"fission/core": fission.BuildInfo(),
+		},
+	}
+	for _, pmd := range plugin.FindAll() {
+		versions.Client[pmd.Name] = fission.BuildMeta{
+			Version: pmd.Version,
+		}
+	}
+
+	// Fetch server versions
+	versions.Server = map[string]fission.BuildMeta{
+		"fission/core": serverInfo.Build,
+	}
+	// FUTURE: fetch versions of plugins server-side
+	bs, err := yaml.Marshal(versions)
+	if err != nil {
+		log.Fatal("Failed to format versions: " + err.Error())
+	}
+	fmt.Print(string(bs))
+}
+
+var helpTemplate = `NAME:
+   {{.Name}}{{if .Usage}} - {{.Usage}}{{end}}
+
+USAGE:
+   {{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}} {{if .VisibleFlags}}[global options]{{end}}{{if .Commands}} command [command options]{{end}} {{if .ArgsUsage}}{{.ArgsUsage}}{{else}}[arguments...]{{end}}{{end}}{{if .Version}}{{if not .HideVersion}}
+
+VERSION:
+   {{.Version}}{{end}}{{end}}{{if .Description}}
+
+DESCRIPTION:
+   {{.Description}}{{end}}{{if .VisibleCommands}}
+
+COMMANDS:{{range .VisibleCategories}}{{if .Name}}
+   {{.Name}}:{{end}}{{range .VisibleCommands}}
+     {{join .Names ", "}}{{"\t"}}{{.Usage}}{{end}}{{end}}{{end}}{{if .VisibleFlags}}
+
+PLUGIN COMMANDS:{{ range $name, $usage := ExtraInfo }}
+     {{$name}}{{"\t"}}{{$usage}}{{end}}
+
+GLOBAL OPTIONS:
+   {{range $index, $option := .VisibleFlags}}{{if $index}}
+   {{end}}{{$option}}{{end}}{{end}}
+`

@@ -24,14 +24,15 @@ import (
 	"strings"
 	"time"
 
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
+	"github.com/fission/fission/executor/reaper"
 )
 
 type requestType int
@@ -57,6 +58,8 @@ type (
 		funcController k8sCache.Controller
 		pkgStore       k8sCache.Store
 		pkgController  k8sCache.Controller
+
+		idlePodReapTime time.Duration
 	}
 	request struct {
 		requestType
@@ -85,6 +88,7 @@ func MakeGenericPoolManager(
 		fsCache:          fsCache,
 		instanceId:       instanceId,
 		requestChannel:   make(chan *request),
+		idlePodReapTime:  2 * time.Minute,
 	}
 	go gpm.service()
 	go gpm.eagerPoolCreator()
@@ -108,6 +112,7 @@ func MakeGenericPoolManager(
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
+	go gpm.idleObjectReaper()
 }
 
 func (gpm *GenericPoolManager) service() {
@@ -227,17 +232,72 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *crd.Environment) int32 {
 	return poolsize
 }
 
-// IsValidPod checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
+// IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
-func (gpm *GenericPoolManager) IsValidPod(kubeObjects []apiv1.ObjectReference, podAddress string) bool {
-	for _, obj := range kubeObjects {
+func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
+	for _, obj := range fsvc.KubernetesObjects {
 		if obj.Kind == "pod" {
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && strings.Contains(podAddress, pod.Status.PodIP) && fission.IsReadyPod(pod) {
-				log.Printf("Valid pod address : %s", podAddress)
+			if err == nil && strings.Contains(fsvc.Address, pod.Status.PodIP) && fission.IsReadyPod(pod) {
+				log.Printf("Valid pod address : %s", fsvc.Address)
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// idleObjectReaper reaps objects after certain idle time
+func (gpm *GenericPoolManager) idleObjectReaper() {
+
+	pollSleep := time.Duration(gpm.idlePodReapTime)
+	for {
+		time.Sleep(pollSleep)
+
+		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		if err != nil {
+			log.Fatalf("Failed to get environment list: %v", err)
+		}
+
+		envList := make(map[types.UID]struct{})
+		for _, env := range envs.Items {
+			envList[env.Metadata.UID] = struct{}{}
+		}
+
+		funcSvcs, err := gpm.fsCache.ListOld(gpm.idlePodReapTime)
+		if err != nil {
+			log.Printf("Error reaping idle pods: %v", err)
+			continue
+		}
+
+		for _, fsvc := range funcSvcs {
+			if fsvc.Executor != fscache.POOLMGR {
+				continue
+			}
+
+			// For function with the environment that no longer exists, executor
+			// cleanups the idle pod as usual and prints log to notify user.
+			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
+				log.Printf("Environment %v for function %v no longer exists",
+					fsvc.Environment.Metadata.Name, fsvc.Name)
+			}
+
+			if fsvc.Environment.Spec.AllowedFunctionsPerContainer == fission.AllowedFunctionsPerContainerInfinite {
+				continue
+			}
+
+			deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
+			if err != nil {
+				log.Printf("Error deleting Kubernetes objects for fsvc '%v': %v", fsvc, err)
+			}
+
+			if !deleted {
+				continue
+			}
+
+			for _, kubeobj := range fsvc.KubernetesObjects {
+				reaper.CleanupKubeObject(gpm.kubernetesClient, &kubeobj)
+			}
+		}
+	}
 }

@@ -27,8 +27,11 @@ import (
 
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
+	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -61,6 +64,8 @@ type (
 		functions      []crd.Function
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
+
+		idlePodReapTime time.Duration
 	}
 
 	fnRequest struct {
@@ -126,7 +131,8 @@ func MakeNewDeploy(
 		sharedCfgMapPath:       "/configs",
 		useIstio:               enableIstio,
 
-		requestChannel: make(chan *fnRequest),
+		requestChannel:  make(chan *fnRequest),
+		idlePodReapTime: 2 * time.Minute,
 	}
 
 	if nd.crdClient != nil {
@@ -134,12 +140,14 @@ func MakeNewDeploy(
 		nd.funcStore = fnStore
 		nd.funcController = fnController
 	}
-	go nd.service()
+
 	return nd
 }
 
 func (deploy *NewDeploy) Run(ctx context.Context) {
+	go deploy.service()
 	go deploy.funcController.Run(ctx.Done())
+	go deploy.idleObjectReaper()
 }
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
@@ -190,20 +198,6 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 	c := make(chan *fnResponse)
 	fn, err := deploy.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
 	if err != nil {
-		return nil, err
-	}
-
-	fsvc, err := deploy.fsCache.GetByFunctionUID(metadata.UID)
-
-	// If the function service cache exists, means
-	// the kubeObjects of function are created before.
-	// In this case, return cached fsvc.
-	if err == nil {
-		return fsvc, nil
-	}
-
-	if !fscache.IsNotFoundError(err) {
-		log.Printf("error getting function service by uid: %v", err)
 		return nil, err
 	}
 
@@ -590,17 +584,136 @@ func updateStatus(fn *crd.Function, err error, message string) {
 	log.Println(message, fn, err)
 }
 
-// IsValidService does a get on the service address to ensure it's a valid service. returns true if it is, else false.
-func (deploy *NewDeploy) IsValidService(svc string) bool {
-	service := strings.Split(svc, ".")
+// IsValid does a get on the service address to ensure it's a valid service, then
+// scale deployment to 1 replica if there are no available replicas for function.
+// Return true if no error occurs, return false otherwise.
+func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
+	service := strings.Split(fsvc.Address, ".")
 	if len(service) == 0 {
 		return false
 	}
-	svcObj, err := deploy.kubernetesClient.CoreV1().Services(service[1]).Get(service[0], metav1.GetOptions{})
-	if err == nil {
-		log.Printf("Valid service address : %s", svcObj.Spec.ClusterIP)
+
+	_, err := deploy.kubernetesClient.CoreV1().Services(service[1]).Get(service[0], metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error validating service address for function %v: %v", fsvc.Function.Name, err)
+		return false
+	}
+
+	deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+	if deployObj == nil {
+		log.Printf("Deployment obj for function %v does not exist", fsvc.Function.Name)
+		return false
+	}
+
+	currentDeploy, err := deploy.kubernetesClient.ExtensionsV1beta1().
+		Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error validating deployment for function %v: %v", fsvc.Function.Name, err)
+		return false
+	}
+
+	// return directly when available replicas > 0
+	if currentDeploy.Status.AvailableReplicas > 0 {
 		return true
 	}
 
 	return false
+}
+
+// idleObjectReaper reaps objects after certain idle time
+func (deploy *NewDeploy) idleObjectReaper() {
+
+	pollSleep := time.Duration(deploy.idlePodReapTime)
+	for {
+		time.Sleep(pollSleep)
+
+		envs, err := deploy.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		if err != nil {
+			log.Fatalf("Failed to get environment list: %v", err)
+		}
+
+		envList := make(map[types.UID]struct{})
+		for _, env := range envs.Items {
+			envList[env.Metadata.UID] = struct{}{}
+		}
+
+		funcSvcs, err := deploy.fsCache.ListOld(deploy.idlePodReapTime)
+		if err != nil {
+			log.Printf("Error reaping idle pods: %v", err)
+			continue
+		}
+
+		for _, fsvc := range funcSvcs {
+			if fsvc.Executor != fscache.NEWDEPLOY {
+				continue
+			}
+
+			// For function with the environment that no longer exists, executor
+			// scales down the deployment as usual and prints log to notify user.
+			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
+				log.Printf("Environment %v for function %v no longer exists",
+					fsvc.Environment.Metadata.Name, fsvc.Name)
+			}
+
+			fn, err := deploy.fissionClient.Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name)
+			if err != nil {
+				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
+				// so we ignore the not found error for functions with newdeploy executor type here.
+				if k8sErrs.IsNotFound(err) && fsvc.Executor == fscache.NEWDEPLOY {
+					continue
+				}
+				log.Printf("Error getting function: %v", fsvc.Function.Name)
+				continue
+			}
+
+			deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+			if deployObj == nil {
+				log.Printf("Error finding deployment for function %v: %v", fsvc.Function.Name, err)
+				continue
+			}
+
+			currentDeploy, err := deploy.kubernetesClient.ExtensionsV1beta1().
+				Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+			if err != nil {
+				log.Printf("Error validating deployment for function %v: %v", fsvc.Function.Name, err)
+				continue
+			}
+
+			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+
+			// do nothing if the current replicas is already lower than minScale
+			if *currentDeploy.Spec.Replicas <= minScale {
+				continue
+			}
+
+			err = scaleDeployment(deploy.kubernetesClient, deployObj.Namespace, deployObj.Name, minScale)
+			if err != nil {
+				log.Printf("Error scaling down deployment for function %v: %v", fsvc.Function.Name, err)
+			}
+		}
+	}
+}
+
+func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
+	for _, kubeobj := range kubeobjs {
+		switch strings.ToLower(kubeobj.Kind) {
+		case "deployment":
+			return &kubeobj
+		}
+	}
+	return nil
+}
+
+func scaleDeployment(client *kubernetes.Clientset, deplNS string, deplName string, replicas int32) error {
+	log.Printf("Scale deployment %v in namespace %v to replicas %v", deplName, deplNS, replicas)
+	_, err := client.ExtensionsV1beta1().Deployments(deplNS).UpdateScale(deplName, &v1beta1.Scale{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deplName,
+			Namespace: deplNS,
+		},
+		Spec: v1beta1.ScaleSpec{
+			Replicas: replicas,
+		},
+	})
+	return err
 }

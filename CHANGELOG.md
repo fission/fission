@@ -1,12 +1,58 @@
-# 0.9.2
-[Documentation](https://docs.fission.io/0.9.2/)
-## Downloads for 0.9.2
+# 0.10.0
+[Documentation](https://docs.fission.io/0.10.0/)
+## Downloads for 0.10.0
 
 
 filename | sha256 hash
 -------- | -----------
+[fission-all-0.10.0.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0.yaml) | `fa903d4476dce2f3e6ee91a8606044159276f826f461a035da1b953144c2ac83`
+[fission-core-0.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0-minikube.yaml) | `14a5695343387c9834247202f6908d051c9c040532a7bc10c5b33900b9f83f63`
+[fission-all-0.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0-minikube.yaml) | `9ab0949413c0c3aa4d2026a098019eecfa9d17c7f3e39f0f879aae992f5c6cf4`
+[fission-core-0.10.0.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0.yaml) | `bf62028f4fd12de3eef656182c0aa9615cdae4ef2cc9d48d4af3e2ea09367f5c`
+[fission-all-0.9.2.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.9.2.tgz) | `8f6fafab819d5c3c63d688abcc7b2faef0ad73ad30437a86f68ebcc02b514b6b`
+[fission-core-0.10.0.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0.tgz) | `d8ac31b77525075570e44cc948029fc687890007b3e0abd0f4ce92c49b429668`
+[fission-core-0.9.2.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.9.2.tgz) | `4893ec8069cf4f01b28fdfd8a7a2b73a65f01ddd3c18b410902f578a1ef19c9d`
+[fission-all-0.10.0.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0.tgz) | `f0315ada0a022ba01fe45b5eb213a7c54f61f7d0294626fc65bc87ed438631cb`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-osx) | `e3fe4f278b8a652eaa6afa6c49f1a27d7db62d8743aaada16cff0ffbc39355ac`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-linux) | `b8009fdd07fd0c0cf4721e15b264a2ff9a9e5947a8a449bde09a619950ca1e56`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-windows.exe) | `45d91ab2a1b8b74013a7c1ee8f9ac2aaba38bb9a73a73819190bffa26052b9be`
 
 # Change Log
+
+## [0.10.0](https://github.com/fission/fission/tree/0.10.0) (2018-08-17)
+[Full Changelog](https://github.com/fission/fission/compare/0.9.2...0.10.0)
+
+**Merged pull requests:**
+
+- Fix CLI failed to setup port-forward caused by \#712 [\#867](https://github.com/fission/fission/pull/867) ([life1347](https://github.com/life1347))
+- Replay recorded requests by ReqUID [\#864](https://github.com/fission/fission/pull/864) ([Amusement](https://github.com/Amusement))
+- Add cleanup function to test scripts [\#863](https://github.com/fission/fission/pull/863) ([life1347](https://github.com/life1347))
+- Fix newdeploy fail to update HPA, deployment of a function after function update [\#862](https://github.com/fission/fission/pull/862) ([life1347](https://github.com/life1347))
+- Fix router not taps function services [\#860](https://github.com/fission/fission/pull/860) ([life1347](https://github.com/life1347))
+- Do resources validation when validate spec files [\#840](https://github.com/fission/fission/pull/840) ([life1347](https://github.com/life1347))
+- Fixed the name of JVM builder image name [\#824](https://github.com/fission/fission/pull/824) ([vishal-biyani](https://github.com/vishal-biyani))
+- V0.9.2 [\#817](https://github.com/fission/fission/pull/817) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add retry subcommand to pkg command [\#808](https://github.com/fission/fission/pull/808) ([life1347](https://github.com/life1347))
+- add gevent based Python server to benchmark test cases [\#794](https://github.com/fission/fission/pull/794) ([xiekeyang](https://github.com/xiekeyang))
+- Add more meaningful error messages to executor when getServiceForFunction [\#752](https://github.com/fission/fission/pull/752) ([life1347](https://github.com/life1347))
+- Fix for \#662: avoid unnecessary builds [\#866](https://github.com/fission/fission/pull/866) ([smruthi2187](https://github.com/smruthi2187))
+- Fix newdeploy not updates deployment after function's entrypoint changed [\#838](https://github.com/fission/fission/pull/838) ([life1347](https://github.com/life1347))
+- Fix spec failed to archive single directory [\#837](https://github.com/fission/fission/pull/837) ([life1347](https://github.com/life1347))
+- Uses a real go project to showcase vendor example so glide works [\#828](https://github.com/fission/fission/pull/828) ([vishal-biyani](https://github.com/vishal-biyani))
+- Recorder CRD, Records API, Redis deployment [\#818](https://github.com/fission/fission/pull/818) ([Amusement](https://github.com/Amusement))
+- Fix router panic when trying to update route [\#811](https://github.com/fission/fission/pull/811) ([life1347](https://github.com/life1347))
+- Add query options to `fission function test` [\#782](https://github.com/fission/fission/pull/782) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Add go environment vendor directory support [\#781](https://github.com/fission/fission/pull/781) ([life1347](https://github.com/life1347))
+- Scale deployment to zero when function is in idle state [\#775](https://github.com/fission/fission/pull/775) ([life1347](https://github.com/life1347))
+- Update binary environment readme [\#773](https://github.com/fission/fission/pull/773) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Added readme for JVM environment [\#768](https://github.com/fission/fission/pull/768) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix spec command overrides existing archive's url of a package [\#764](https://github.com/fission/fission/pull/764) ([life1347](https://github.com/life1347))
+- Fixed typos from from goreportcard [\#760](https://github.com/fission/fission/pull/760) ([vishal-biyani](https://github.com/vishal-biyani))
+- Extensible Fission CLI [\#743](https://github.com/fission/fission/pull/743) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Updating releasing notes with details and structure [\#738](https://github.com/fission/fission/pull/738) ([vishal-biyani](https://github.com/vishal-biyani))
+- Update route without providing function reference [\#718](https://github.com/fission/fission/pull/718) ([vishal-biyani](https://github.com/vishal-biyani))
+- Allow router round-trip to be configurable [\#713](https://github.com/fission/fission/pull/713) ([xiekeyang](https://github.com/xiekeyang))
+- Fix CLI failed to set up port-forwarding when multiple controller pods exist in the same namespace [\#712](https://github.com/fission/fission/pull/712) ([life1347](https://github.com/life1347))
 
 ## [0.9.2](https://github.com/fission/fission/tree/0.9.2) (2018-07-25)
 [Full Changelog](https://github.com/fission/fission/compare/0.9.1...0.9.2)
@@ -21,13 +67,6 @@ filename | sha256 hash
 - Add changelog. [\#789](https://github.com/fission/fission/pull/789) ([smruthi2187](https://github.com/smruthi2187))
 - changes needed for 0.9.1 [\#788](https://github.com/fission/fission/pull/788) ([smruthi2187](https://github.com/smruthi2187))
 - Working version of Java builder with Maven [\#783](https://github.com/fission/fission/pull/783) ([vishal-biyani](https://github.com/vishal-biyani))
-- Add query options to `fission function test` [\#782](https://github.com/fission/fission/pull/782) ([erwinvaneyk](https://github.com/erwinvaneyk))
-- Add go environment vendor directory support [\#781](https://github.com/fission/fission/pull/781) ([life1347](https://github.com/life1347))
-- Added readme for JVM environment [\#768](https://github.com/fission/fission/pull/768) ([vishal-biyani](https://github.com/vishal-biyani))
-- Fix spec command overrides existing archive's url of a package [\#764](https://github.com/fission/fission/pull/764) ([life1347](https://github.com/life1347))
-- Fixed typos from from goreportcard [\#760](https://github.com/fission/fission/pull/760) ([vishal-biyani](https://github.com/vishal-biyani))
-- Updating releasing notes with details and structure [\#738](https://github.com/fission/fission/pull/738) ([vishal-biyani](https://github.com/vishal-biyani))
-- Allow router round-trip to be configurable [\#713](https://github.com/fission/fission/pull/713) ([xiekeyang](https://github.com/xiekeyang))
 
 ## [0.9.1](https://github.com/fission/fission/tree/0.9.1) (2018-07-07)
 [Full Changelog](https://github.com/fission/fission/compare/0.9.0...0.9.1)
@@ -152,7 +191,7 @@ filename | sha256 hash
 - Show fission deployment version with cli [\#538](https://github.com/fission/fission/pull/538) ([life1347](https://github.com/life1347))
 
 ## [0.6.1](https://github.com/fission/fission/tree/0.6.1) (2018-03-22)
-[Full Changelog](https://github.com/fission/fission/compare/0.6.0...0.6.1)
+[Full Changelog](https://github.com/fission/fission/compare/latest...0.6.1)
 
 **Merged pull requests:**
 
@@ -168,27 +207,11 @@ filename | sha256 hash
 - Fix executor tries to create a new deployment when a function is updated [\#524](https://github.com/fission/fission/pull/524) ([life1347](https://github.com/life1347))
 - Add container spec config options  to \(build\) environments [\#413](https://github.com/fission/fission/pull/413) ([erwinvaneyk](https://github.com/erwinvaneyk))
 
-## [0.6.0](https://github.com/fission/fission/tree/0.6.0) (2018-03-01)
-[Full Changelog](https://github.com/fission/fission/compare/latest...0.6.0)
-
-**Merged pull requests:**
-
-- Detect fission namespace in cli [\#519](https://github.com/fission/fission/pull/519) ([soamvasani](https://github.com/soamvasani))
-- Default values for FISSION\_\* env vars [\#518](https://github.com/fission/fission/pull/518) ([soamvasani](https://github.com/soamvasani))
-- Add chart version to job name [\#516](https://github.com/fission/fission/pull/516) ([soamvasani](https://github.com/soamvasani))
-- Fix CLI not update function's secret/configmap correctly [\#512](https://github.com/fission/fission/pull/512) ([life1347](https://github.com/life1347))
-- Adds latest tags and pushes to dockerhub for fetcher and fission-bundle [\#509](https://github.com/fission/fission/pull/509) ([vishal-biyani](https://github.com/vishal-biyani))
-- Fixes the backward compatibility with older environment versions [\#508](https://github.com/fission/fission/pull/508) ([vishal-biyani](https://github.com/vishal-biyani))
-- Update Fn: Executor New Deployment [\#504](https://github.com/fission/fission/pull/504) ([vishal-biyani](https://github.com/vishal-biyani))
-- Adds default resources for fetcher pod [\#500](https://github.com/fission/fission/pull/500) ([vishal-biyani](https://github.com/vishal-biyani))
-- Documentation Revamp [\#496](https://github.com/fission/fission/pull/496) ([vishal-biyani](https://github.com/vishal-biyani))
-- Delete and list orphan pkgs [\#468](https://github.com/fission/fission/pull/468) ([smruthi2187](https://github.com/smruthi2187))
-- Service type ClusterIP - Controller port forward through CLI [\#431](https://github.com/fission/fission/pull/431) ([prithviramesh](https://github.com/prithviramesh))
-- Istio integration [\#421](https://github.com/fission/fission/pull/421) ([life1347](https://github.com/life1347))
-- Implement support for Azure storage message queue triggers [\#371](https://github.com/fission/fission/pull/371) ([peterhuene](https://github.com/peterhuene))
-
 ## [latest](https://github.com/fission/fission/tree/latest) (2018-03-01)
-[Full Changelog](https://github.com/fission/fission/compare/0.5.0...latest)
+[Full Changelog](https://github.com/fission/fission/compare/0.6.0...latest)
+
+## [0.6.0](https://github.com/fission/fission/tree/0.6.0) (2018-03-01)
+[Full Changelog](https://github.com/fission/fission/compare/0.5.0...0.6.0)
 
 **Merged pull requests:**
 
@@ -203,6 +226,19 @@ filename | sha256 hash
 - CI modifications [\#491](https://github.com/fission/fission/pull/491) ([smruthi2187](https://github.com/smruthi2187))
 - Add upgrade guide from 0.4.x to 0.5.0 [\#490](https://github.com/fission/fission/pull/490) ([life1347](https://github.com/life1347))
 - Version -\> 0.5.0 [\#489](https://github.com/fission/fission/pull/489) ([life1347](https://github.com/life1347))
+- Detect fission namespace in cli [\#519](https://github.com/fission/fission/pull/519) ([soamvasani](https://github.com/soamvasani))
+- Default values for FISSION\_\* env vars [\#518](https://github.com/fission/fission/pull/518) ([soamvasani](https://github.com/soamvasani))
+- Add chart version to job name [\#516](https://github.com/fission/fission/pull/516) ([soamvasani](https://github.com/soamvasani))
+- Fix CLI not update function's secret/configmap correctly [\#512](https://github.com/fission/fission/pull/512) ([life1347](https://github.com/life1347))
+- Adds latest tags and pushes to dockerhub for fetcher and fission-bundle [\#509](https://github.com/fission/fission/pull/509) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fixes the backward compatibility with older environment versions [\#508](https://github.com/fission/fission/pull/508) ([vishal-biyani](https://github.com/vishal-biyani))
+- Update Fn: Executor New Deployment [\#504](https://github.com/fission/fission/pull/504) ([vishal-biyani](https://github.com/vishal-biyani))
+- Adds default resources for fetcher pod [\#500](https://github.com/fission/fission/pull/500) ([vishal-biyani](https://github.com/vishal-biyani))
+- Documentation Revamp [\#496](https://github.com/fission/fission/pull/496) ([vishal-biyani](https://github.com/vishal-biyani))
+- Delete and list orphan pkgs [\#468](https://github.com/fission/fission/pull/468) ([smruthi2187](https://github.com/smruthi2187))
+- Service type ClusterIP - Controller port forward through CLI [\#431](https://github.com/fission/fission/pull/431) ([prithviramesh](https://github.com/prithviramesh))
+- Istio integration [\#421](https://github.com/fission/fission/pull/421) ([life1347](https://github.com/life1347))
+- Implement support for Azure storage message queue triggers [\#371](https://github.com/fission/fission/pull/371) ([peterhuene](https://github.com/peterhuene))
 
 ## [0.5.0](https://github.com/fission/fission/tree/0.5.0) (2018-02-07)
 [Full Changelog](https://github.com/fission/fission/compare/0.4.1...0.5.0)
