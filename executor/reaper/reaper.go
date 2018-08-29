@@ -36,11 +36,9 @@ var (
 )
 
 // CleanupOldExecutorObjects cleans up resources created by old executor instances
-func CleanupOldExecutorObjects(kubernetesClient *kubernetes.Clientset,
-	namespace string,
-	instanceId string) {
+func CleanupOldExecutorObjects(kubernetesClient *kubernetes.Clientset, instanceId string) {
 	go func() {
-		err := cleanup(kubernetesClient, namespace, instanceId)
+		err := cleanup(kubernetesClient, instanceId)
 		if err != nil {
 			// TODO retry reaper; logged and ignored for now
 			log.Printf("Failed to reaper: %v", err)
@@ -48,14 +46,14 @@ func CleanupOldExecutorObjects(kubernetesClient *kubernetes.Clientset,
 	}()
 }
 
-func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) error {
+func cleanup(client *kubernetes.Clientset, instanceId string) error {
 
-	err := cleanupServices(client, namespace, instanceId)
+	err := cleanupServices(client, instanceId)
 	if err != nil {
 		return err
 	}
 
-	err = cleanupHpa(client, namespace, instanceId)
+	err = cleanupHpa(client, instanceId)
 	if err != nil {
 		return err
 	}
@@ -63,7 +61,7 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	// Deployments are used for idle pools and can be cleaned up
 	// immediately.  (We should "adopt" these instead of creating
 	// a new pool.)
-	err = cleanupDeployments(client, namespace, instanceId)
+	err = cleanupDeployments(client, instanceId)
 	if err != nil {
 		return err
 	}
@@ -75,7 +73,7 @@ func cleanup(client *kubernetes.Clientset, namespace string, instanceId string) 
 	// time.
 	time.Sleep(6 * time.Minute)
 
-	err = cleanupPods(client, namespace, instanceId)
+	err = cleanupPods(client, instanceId)
 	if err != nil {
 		return err
 	}
@@ -108,8 +106,8 @@ func CleanupKubeObject(kubeClient *kubernetes.Clientset, kubeobj *apiv1.ObjectRe
 	}
 }
 
-func cleanupDeployments(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	deploymentList, err := client.ExtensionsV1beta1().Deployments(namespace).List(meta_v1.ListOptions{})
+func cleanupDeployments(client *kubernetes.Clientset, instanceId string) error {
+	deploymentList, err := client.ExtensionsV1beta1().Deployments(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -117,7 +115,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		id, ok := dep.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, &delOpt)
+			err := client.ExtensionsV1beta1().Deployments(dep.ObjectMeta.Namespace).Delete(dep.ObjectMeta.Name, &delOpt)
 			logErr("cleaning up deployment", err)
 			// ignore err
 		}
@@ -125,7 +123,7 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 		pid, pok := dep.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
 		if pok && pid != instanceId {
 			log.Printf("Cleaning up deployment %v", dep.ObjectMeta.Name)
-			err := client.ExtensionsV1beta1().Deployments(namespace).Delete(dep.ObjectMeta.Name, &delOpt)
+			err := client.ExtensionsV1beta1().Deployments(dep.ObjectMeta.Namespace).Delete(dep.ObjectMeta.Name, &delOpt)
 			logErr("cleaning up deployment", err)
 			// ignore err
 		}
@@ -133,8 +131,8 @@ func cleanupDeployments(client *kubernetes.Clientset, namespace string, instance
 	return nil
 }
 
-func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	podList, err := client.CoreV1().Pods(namespace).List(meta_v1.ListOptions{})
+func cleanupPods(client *kubernetes.Clientset, instanceId string) error {
+	podList, err := client.CoreV1().Pods(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -143,7 +141,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 		id, ok := pod.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
-			err := client.CoreV1().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
+			err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(pod.ObjectMeta.Name, nil)
 			logErr("cleaning up pod", err)
 			// ignore err
 		}
@@ -151,7 +149,7 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 		pid, pok := pod.ObjectMeta.Labels[fission.POOLMGR_INSTANCEID_LABEL]
 		if pok && pid != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)
-			err := client.CoreV1().Pods(namespace).Delete(pod.ObjectMeta.Name, nil)
+			err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(pod.ObjectMeta.Name, nil)
 			logErr("cleaning up pod", err)
 			// ignore err
 		}
@@ -160,8 +158,8 @@ func cleanupPods(client *kubernetes.Clientset, namespace string, instanceId stri
 	return nil
 }
 
-func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	svcList, err := client.CoreV1().Services(namespace).List(meta_v1.ListOptions{})
+func cleanupServices(client *kubernetes.Clientset, instanceId string) error {
+	svcList, err := client.CoreV1().Services(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -169,7 +167,7 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 		id, ok := svc.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up svc %v", svc.ObjectMeta.Name)
-			err := client.CoreV1().Services(namespace).Delete(svc.ObjectMeta.Name, nil)
+			err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(svc.ObjectMeta.Name, nil)
 			logErr("cleaning up service", err)
 			// ignore err
 		}
@@ -177,8 +175,8 @@ func cleanupServices(client *kubernetes.Clientset, namespace string, instanceId 
 	return nil
 }
 
-func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId string) error {
-	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(namespace).List(meta_v1.ListOptions{})
+func cleanupHpa(client *kubernetes.Clientset, instanceId string) error {
+	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -187,7 +185,7 @@ func cleanupHpa(client *kubernetes.Clientset, namespace string, instanceId strin
 		id, ok := hpa.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up HPA %v", hpa.ObjectMeta.Name)
-			err := client.AutoscalingV1().HorizontalPodAutoscalers(namespace).Delete(hpa.ObjectMeta.Name, nil)
+			err := client.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(hpa.ObjectMeta.Name, nil)
 			logErr("cleaning up HPA", err)
 		}
 
