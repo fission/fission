@@ -250,7 +250,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, envBuilder
 	fsCache := fscache.MakeFunctionServiceCache()
 
 	poolID := strings.ToLower(uniuri.NewLen(8))
-	reaper.CleanupOldExecutorObjects(kubernetesClient, functionNamespace, poolID)
+	reaper.CleanupOldExecutorObjects(kubernetesClient, poolID)
 	go reaper.CleanupRoleBindings(kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 
 	gpm := poolmgr.MakeGenericPoolManager(
