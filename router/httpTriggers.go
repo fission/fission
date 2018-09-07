@@ -52,6 +52,8 @@ type HTTPTriggerSet struct {
 	recorderSet                *RecorderSet
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
+
+	// add jaeger handle or whatever here?
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, fissionClient *crd.FissionClient,
@@ -151,6 +153,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			httpTrigger:          &trigger,
 			tsRoundTripperParams: ts.tsRoundTripperParams,
 			recorderName:         recorderName,
+			// pass jaeger handle in through this struct?
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)

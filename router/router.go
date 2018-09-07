@@ -84,6 +84,10 @@ func Start(port int, executorUrl string) {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
 
+	//
+	// Jaeger init stuff
+	//
+
 	fmap := makeFunctionServiceMap(time.Minute)
 
 	frmap := makeFunctionRecorderMap(time.Minute)

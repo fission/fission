@@ -147,6 +147,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			// send a request to executor to specialize a new pod
 			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
+				// pass some context param into this
 				roundTripper.funcHandler.function)
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
@@ -272,6 +273,15 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+	// The request enters the router here, so this is the
+	// outermost opentracing span for a function.  In any case use
+	// request.Context() as the parent context, in case this was
+	// called with tracing headers
+	//
+	// get parent span if any
+	// create new child span
+	// defer span.close or something like that
+
 	// retrieve url params and add them to request header
 	vars := mux.Vars(request)
 	for k, v := range vars {
