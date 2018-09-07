@@ -32,6 +32,9 @@ import (
 )
 
 func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
+
+	// main executor entry point, start/stop opentracing span here
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)

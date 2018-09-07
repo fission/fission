@@ -35,6 +35,8 @@ import (
 type (
 	Client struct {
 		url string
+
+		// add opentracing handle
 	}
 )
 
@@ -42,6 +44,8 @@ type (
 func MakeClient(url string) *Client {
 	return &Client{
 		url: strings.TrimSuffix(url, "/") + "/v1",
+
+		// save opentracing handle
 	}
 }
 
@@ -49,6 +53,9 @@ func MakeClient(url string) *Client {
 // service, along with the metadata.  It returns a file ID that can be
 // used to retrieve the file.
 func (c *Client) Upload(filePath string, metadata *map[string]string) (string, error) {
+
+	// add context param to this function. start/stop opentracing span
+
 	fi, err := os.Stat(filePath)
 	if err != nil {
 		return "", err
@@ -75,6 +82,7 @@ func (c *Client) Upload(filePath string, metadata *map[string]string) (string, e
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
+	// need to pass opentracing headers
 	req, err := http.NewRequest(http.MethodPost, c.url+"/archive", buf)
 	if err != nil {
 		return "", err
@@ -115,6 +123,9 @@ func (c *Client) GetUrl(id string) string {
 // Download fetches the file identified by ID to the local file path.
 // filePath must not exist.
 func (c *Client) Download(id string, filePath string) error {
+
+	// add context param, start/stop opentracing span
+
 	// url for id
 	url := c.GetUrl(id)
 
@@ -131,7 +142,7 @@ func (c *Client) Download(id string, filePath string) error {
 	}
 	defer f.Close()
 
-	// make request
+	// pass opentracing header
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
@@ -155,8 +166,12 @@ func (c *Client) Download(id string, filePath string) error {
 }
 
 func (c *Client) Delete(id string) error {
+
+	// add context, start/stop span
+
 	url := c.GetUrl(id)
 
+	// pass opentracing header
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return err

@@ -350,6 +350,9 @@ func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
 func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta) error {
+
+	// start/stop poolmgr opentracing span
+
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {

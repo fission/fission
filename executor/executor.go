@@ -62,6 +62,9 @@ type (
 )
 
 func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
+
+	// jaeger init stuff
+
 	executor := &Executor{
 		gpm:           gpm,
 		ndm:           ndm,
@@ -71,6 +74,8 @@ func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fis
 
 		requestChan: make(chan *createFuncServiceRequest),
 		fsCreateWg:  make(map[string]*sync.WaitGroup),
+
+		// store some jaeger handle here
 	}
 	go executor.serveCreateFuncServices()
 
@@ -100,6 +105,11 @@ func (executor *Executor) serveCreateFuncServices() {
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
 			go func() {
+
+				// start/stop inner opentracing span
+				// here, work starts here after
+				// waiting is done
+
 				fsvc, err := executor.createServiceForFunction(m)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
@@ -111,6 +121,10 @@ func (executor *Executor) serveCreateFuncServices() {
 		} else {
 			// There's an existing request for this function, wait for it to finish
 			go func() {
+				// start/stop opentracing span for
+				// this bit, to know how much executor
+				// waited
+
 				log.Printf("Waiting for concurrent request for the same function: %v", m)
 				wg.Wait()
 

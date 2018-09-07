@@ -15,16 +15,26 @@ import (
 type (
 	Client struct {
 		url string
+
+		// add opentracing handle
+
 	}
 )
 
 func MakeClient(fetcherUrl string) *Client {
+
+	// add opentacing handle as param and store it in the client
+
 	return &Client{
 		url: fetcherUrl,
 	}
 }
 
 func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
+
+	// start/stop opentracing span.  we'll need to add a context
+	// parameter to this function (to plumb the request id through)
+
 	body, err := json.Marshal(fr)
 	if err != nil {
 		return err
@@ -58,6 +68,9 @@ func (c *Client) Fetch(fr *fetcher.FetchRequest) error {
 }
 
 func (c *Client) Upload(fr *fetcher.UploadRequest) (*fetcher.UploadResponse, error) {
+
+	// start/stop opentracing span.  add context parameter to function.
+
 	body, err := json.Marshal(fr)
 	if err != nil {
 		return nil, err

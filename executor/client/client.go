@@ -47,7 +47,10 @@ func MakeClient(executorUrl string) *Client {
 	return c
 }
 
-func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, error) {
+func (c *Client) GetServiceForFunction(
+	// add context for opentracing span
+	metadata *metav1.ObjectMeta) (string, error) {
+
 	executorUrl := c.executorUrl + "/v2/getServiceForFunction"
 
 	body, err := json.Marshal(metadata)
@@ -55,6 +58,7 @@ func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, err
 		return "", err
 	}
 
+	// make this request with context (use http.Client)
 	resp, err := http.Post(executorUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
