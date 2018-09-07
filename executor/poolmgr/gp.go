@@ -226,9 +226,8 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		for i := range podList.Items {
 			pod := podList.Items[i]
 
-			// If a pod has no IP or any of pod's containers
-			// is not in ready state, it's not ready.
-			if len(pod.Status.PodIP) == 0 || !fission.IsReadyPod(&pod) {
+			// Ignore not ready pod here
+			if !fission.IsReadyPod(&pod) {
 				continue
 			}
 
