@@ -111,6 +111,13 @@ func downloadUrl(url string, localPath string) error {
 	if err != nil {
 		return err
 	}
+
+	// flushing write buffer to file
+	err = w.Sync()
+	if err != nil {
+		return err
+	}
+
 	err = os.Chmod(localPath, 0600)
 	if err != nil {
 		return err
