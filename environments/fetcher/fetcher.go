@@ -105,6 +105,8 @@ func downloadUrl(url string, localPath string) error {
 	if err != nil {
 		return err
 	}
+	defer w.Close()
+
 	_, err = io.Copy(w, resp.Body)
 	if err != nil {
 		return err
