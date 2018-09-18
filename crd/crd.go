@@ -40,12 +40,12 @@ func ensureCRD(clientset *apiextensionsclient.Clientset, crd *apiextensionsv1bet
 	for i := 0; i < maxRetries; i++ {
 		_, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 		if err == nil {
-			return
+			return nil
 		}
 
 		// return if the resource already exists
 		if errors.IsAlreadyExists(err) {
-			return
+			return nil
 		} else {
 			// The requests fail to connect to k8s api server before
 			// istio-prxoy is ready to serve traffic. Retry again.
