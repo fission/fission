@@ -1,0 +1,16 @@
+apiVersion: fission.io/v1
+kind: MessageQueueTrigger
+metadata:
+  creationTimestamp: null
+  name: kc
+  namespace: default
+spec:
+  contentType: application/json
+  errorTopic: "testerr"
+  respTopic: "testresp"
+  functionref:
+    name: kafkaconsumer
+    type: name
+  maxRetries: 0
+  messageQueueType: kafka
+  topic: testtopic

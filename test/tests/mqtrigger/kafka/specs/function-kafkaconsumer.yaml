@@ -1,0 +1,50 @@
+include:
+- kafkaconsumer.py
+kind: ArchiveUploadSpec
+name: kafkaconsumer-py
+
+---
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  creationTimestamp: null
+  name: kafkaconsumer-py-nueg
+  namespace: default
+spec:
+  deployment:
+    checksum: {}
+    type: url
+    url: archive://kafkaconsumer-py
+  environment:
+    name: python
+    namespace: default
+  source:
+    checksum: {}
+status:
+  buildstatus: none
+
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  creationTimestamp: null
+  name: kafkaconsumer
+  namespace: default
+spec:
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 1
+      MinScale: 0
+      TargetCPUPercent: 80
+    StrategyType: execution
+  configmaps: null
+  environment:
+    name: python
+    namespace: default
+  package:
+    packageref:
+      name: kafkaconsumer-py-nueg
+      namespace: default
+  resources: {}
+  secrets: null
