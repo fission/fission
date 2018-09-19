@@ -18,18 +18,24 @@ package fission
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"syscall"
 
 	"github.com/gorilla/handlers"
 	"github.com/imdario/mergo"
+	"github.com/mholt/archiver"
+	uuid "github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/fission/log"
 )
 
 func UrlForFunction(name, namespace string) string {
@@ -129,4 +135,46 @@ func IsReadyPod(pod *apiv1.Pod) bool {
 	}
 
 	return true
+}
+
+// GetTempDir creates and return a temporary directory
+func GetTempDir() (string, error) {
+	tmpDir := uuid.NewV4().String()
+	dir, err := ioutil.TempDir("", tmpDir)
+	return dir, err
+}
+
+func MakeArchive(targetName string, globs ...string) (string, error) {
+	files := make([]string, 0)
+	for _, glob := range globs {
+		f, err := filepath.Glob(glob)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Invalid glob %v: %v", glob, err))
+			return "", err
+		}
+		files = append(files, f...)
+	}
+
+	// zip up the file list
+	err := archiver.Zip.Make(targetName, files)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Abs(targetName)
+}
+
+// RemoveZeroBytes remove empty byte(\x00) from input byte slice and return a new byte slice
+// This function is trying to fix the problem that empty byte will fail os.Openfile
+// For more information, please visit:
+// 1. https://github.com/golang/go/issues/24195
+// 2. https://play.golang.org/p/5F9ykC2tlbc
+func RemoveZeroBytes(src []byte) []byte {
+	var bs []byte
+	for _, v := range src {
+		if v != 0 {
+			bs = append(bs, v)
+		}
+	}
+	return bs
 }
