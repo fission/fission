@@ -80,6 +80,7 @@ func htCreate(c *cli.Context) error {
 		log.Fatal("Need a function name to create a trigger, use --function")
 	}
 	fnNamespace := c.String("fnNamespace")
+	spec := c.Bool("spec")
 
 	triggerUrl := c.String("url")
 	if len(triggerUrl) == 0 {
@@ -94,7 +95,11 @@ func htCreate(c *cli.Context) error {
 		method = "GET"
 	}
 
-	checkFunctionExistence(client, fnName, fnNamespace)
+	// For Specs, the spec validate checks for function reference
+	if !spec {
+		checkFunctionExistence(client, fnName, fnNamespace)
+	}
+
 	createIngress := false
 	if c.IsSet("createingress") {
 		createIngress = c.Bool("createingress")
@@ -123,7 +128,7 @@ func htCreate(c *cli.Context) error {
 	}
 
 	// if we're writing a spec, don't call the API
-	if c.Bool("spec") {
+	if spec {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
 		err := specSave(*ht, specFile)
 		util.CheckErr(err, "create HTTP trigger spec")
