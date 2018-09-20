@@ -73,7 +73,7 @@ upgrade_tests
 ## Build images for Upgrade
 
 REPO=gcr.io/fission-ci
-IMAGE=$REPO/fission-bundle
+IMAGE=fission-bundle
 FETCHER_IMAGE=$REPO/fetcher
 FLUENTD_IMAGE=gcr.io/fission-ci/fluentd
 BUILDER_IMAGE=$REPO/builder
@@ -93,7 +93,7 @@ sudo mv $ROOT/fission/fission /usr/local/bin/
 
 ## Upgrade 
 
-helmVars=image=$IMAGE,imageTag=$TAG,fetcherImage=$FETCHER_IMAGE,fetcherImageTag=$TAG,logger.fluentdImage=$FLUENTD_IMAGE,logger.fluentdImageTag=$TAG,functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
+helmVars=repository=$repo,image=$IMAGE,imageTag=$TAG,fetcherImage=$FETCHER_IMAGE,fetcherImageTag=$TAG,logger.fluentdImage=$FLUENTD_IMAGE,logger.fluentdImageTag=$TAG,functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
 
 echo "Upgrading fission"
 helm upgrade	\
