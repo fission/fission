@@ -176,23 +176,24 @@ generate_test_id() {
 
 helm_install_fission() {
     id=$1
-    image=$2
-    imageTag=$3
-    fetcherImage=$4
-    fetcherImageTag=$5
-    controllerNodeport=$6
-    routerNodeport=$7
-    fluentdImage=$8
-    fluentdImageTag=${9}
-    pruneInterval="${10}"
-    routerServiceType=${11}
-    serviceType=${12}
-    preUpgradeCheckImage=${13}
+    repo=$2
+    image=$3
+    imageTag=$4
+    fetcherImage=$5
+    fetcherImageTag=$6
+    controllerNodeport=$7
+    routerNodeport=$8
+    fluentdImage=$9
+    fluentdImageTag=${10}
+    pruneInterval="${11}"
+    routerServiceType=${12}
+    serviceType=${13}
+    preUpgradeCheckImage=${14}
 
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage
+    helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,logger.fluentdImage=$fluentdImage,logger.fluentdImageTag=$fluentdImageTag,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage
 
     timeout 30 bash -c "helm_setup"
 
@@ -486,16 +487,17 @@ run_test() {
 }
 
 install_and_test() {
-    image=$1
-    imageTag=$2
-    fetcherImage=$3
-    fetcherImageTag=$4
-    fluentdImage=$5
-    fluentdImageTag=$6
-    pruneInterval=$7
+    repo=$1
+    image=$2
+    imageTag=$3
+    fetcherImage=$4
+    fetcherImageTag=$5
+    fluentdImage=$6
+    fluentdImageTag=$7
+    pruneInterval=$8
     routerServiceType=$8
-    serviceType=$9
-    preUpgradeCheckImage=${10}
+    serviceType=$10
+    preUpgradeCheckImage=${11}
 
 
     controllerPort=31234
@@ -505,7 +507,7 @@ install_and_test() {
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-    helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
+    helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
