@@ -196,7 +196,7 @@ helm_install_fission() {
 
     timeout 30 bash -c "helm_setup"
 
-    echo "Deleting old releases"
+    log "Deleting old releases"
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     # deleting ns does take a while after command is issued
@@ -205,7 +205,7 @@ helm_install_fission() {
         sleep 5
     done
 
-    echo "Installing fission"
+    log "Installing fission"
     helm install		\
 	 --wait			\
 	 --timeout 540	        \
@@ -221,21 +221,21 @@ dump_kubernetes_events() {
     id=$1
     ns=f-$id
     fns=f-func-$id
-    echo "--- kubectl events $fns ---"
+    log "--- kubectl events $fns ---"
     kubectl get events -n $fns
-    echo "--- end kubectl events $fns ---"
+    log "--- end kubectl events $fns ---"
 
-    echo "--- kubectl events $ns ---"
+    log "--- kubectl events $ns ---"
     kubectl get events -n $ns
-    echo "--- end kubectl events $ns ---"
+    log "--- end kubectl events $ns ---"
 }
 export -f dump_kubernetes_events
 
 dump_tiller_logs() {
-    echo "--- tiller logs ---"
+    log "--- tiller logs ---"
     tiller_pod=`kubectl get pods -n kube-system | grep tiller| tr -s " "| cut -d" " -f1`
     kubectl logs $tiller_pod --since=30m -n kube-system
-    echo "--- end tiller logs ---"
+    log "--- end tiller logs ---"
 }
 export -f dump_tiller_logs
 
@@ -271,11 +271,11 @@ helm_uninstall_fission() {(set +e
 
     if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
     then
-	echo "Fission uninstallation skipped"
+	log "Fission uninstallation skipped"
 	return
     fi
 
-    echo "Uninstalling fission"
+    log "Uninstalling fission"
     helm delete --purge $id
     kubectl delete ns f-$id || true
 )}
@@ -315,15 +315,15 @@ dump_builder_pod_logs() {
 
     for p in $builderPods
     do
-    echo "--- builder pod logs $p ---"
+    log "--- builder pod logs $p ---"
     containers=$(kubectl -n $bns get $p -o jsonpath={.spec.containers[*].name} --ignore-not-found)
     for c in $containers
     do
-        echo "--- builder pod logs $p: container $c ---"
+        log "--- builder pod logs $p: container $c ---"
         kubectl -n $bns logs $p $c || true
-        echo "--- end builder pod logs $p: container $c ---"
+        log "--- end builder pod logs $p: container $c ---"
     done
-    echo "--- end builder pod logs $p ---"
+    log "--- end builder pod logs $p ---"
     done
 }
 
@@ -334,15 +334,15 @@ dump_function_pod_logs() {
     functionPods=$(kubectl -n $fns get pod -o name -l functionName)
     for p in $functionPods
     do
-	echo "--- function pod logs $p ---"
+	log "--- function pod logs $p ---"
 	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name} --ignore-not-found)
 	for c in $containers
 	do
-	    echo "--- function pod logs $p: container $c ---"
+	    log "--- function pod logs $p: container $c ---"
 	    kubectl -n $fns logs $p $c || true
-	    echo "--- end function pod logs $p: container $c ---"
+	    log "--- end function pod logs $p: container $c ---"
 	done
-	echo "--- end function pod logs $p ---"
+	log "--- end function pod logs $p ---"
     done
 }
 
@@ -382,9 +382,9 @@ dump_env_pods() {
 }
 
 describe_pods_ns() {
-    echo "--- describe pods $1---"
+    log "--- describe pods $1---"
     kubectl describe pods -n $1
-    echo "--- End describe pods $1 ---"
+    log "--- End describe pods $1 ---"
 }
 
 describe_all_pods() {
@@ -401,20 +401,20 @@ describe_all_pods() {
 dump_all_fission_resources() {
     ns=$1
 
-    echo "--- All objects in the fission namespace $ns ---"
+    log "--- All objects in the fission namespace $ns ---"
     kubectl -n $ns get pods -o wide
     echo ""
     kubectl -n $ns get svc
-    echo "--- End objects in the fission namespace $ns ---"
+    log "--- End objects in the fission namespace $ns ---"
 }
 
 dump_system_info() {
-    echo "--- System Info ---"
+    log "--- System Info ---"
     go version
     docker version
     kubectl version
     helm version
-    echo "--- End System Info ---"
+    log "--- End System Info ---"
 }
 
 dump_logs() {
@@ -455,7 +455,7 @@ run_all_tests() {
 
     for file in $test_files
     do
-    run_test ${file}
+	run_test ${file}
     done
 }
 
@@ -468,16 +468,16 @@ run_test() {
 	if grep "^#test:disabled" ${file}
 	then
 	    report_test_skipped ${test_name}
-	    echo ------- Skipped ${test_name} -------
+	    log "------- Skipped ${test_name} -------"
 	else
-	    echo ------- Running ${test_name} -------
+	    log "------- Running ${test_name} -------"
 	    pushd $(dirname ${test_path})
 	    if ${test_path}
 	    then
-		echo [SUCCESS]: ${test_name}
+		log "[SUCCESS]: ${test_name}"
 		report_test_passed ${test_name}
 	    else
-		echo [FAILED]: ${test_name}
+		log "[FAILED]: ${test_name}"
 		export FAILURES=$(($FAILURES+1))
 		report_test_failed ${test_name}
 	    fi
@@ -501,7 +501,9 @@ install_and_test() {
     controllerPort=31234
     routerPort=31235
 
+    log "~#~ clean crds"
     clean_crd_resources
+    log "~#~ finished cleaning crds"
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
@@ -511,10 +513,13 @@ install_and_test() {
         describe_all_pods $id
         dump_kubernetes_events $id
         dump_tiller_logs
-	    exit 1
+        exit 1
     fi
+    log "~#~ finished helm install"
 
     wait_for_services $id
+    log "~#~ finished wait_for_services"
+    
     set_environment $id
     run_all_tests $id
 
@@ -526,7 +531,7 @@ install_and_test() {
     then
         # describe each pod in fission ns and function namespace
         describe_all_pods $id
-	    exit 1
+	exit 1
     fi
 }
 
