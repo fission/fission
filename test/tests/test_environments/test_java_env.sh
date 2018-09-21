@@ -29,7 +29,7 @@ cd $ROOT/examples/jvm/java
 
 log "Creating the jar from application"
 #Using Docker to build Jar so that maven & other Java dependencies are not needed on CI server
-docker run -it --rm  -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.5-jdk-8 mvn clean package
+docker run -it --rm  -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.5-jdk-8 mvn clean package -q
 
 log "Creating environment for Java"
 fission env create --name jvm --image gcr.io/fission-ci/jvm-env:test --version 2 --keeparchive=true
