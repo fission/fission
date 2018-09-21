@@ -173,16 +173,18 @@ func fnCreate(c *cli.Context) error {
 			log.Fatal("Need --env argument.")
 		}
 
-		// examine existence of given environment
-		_, err := client.EnvironmentGet(&metav1.ObjectMeta{
-			Namespace: envNamespace,
-			Name:      envName,
-		})
-		if err != nil {
-			if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
-				fmt.Printf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace)
-			} else {
-				util.CheckErr(err, "retrieve environment information")
+		// examine existence of given environment. If specs - then spec validate will do it, don't check here.
+		if !spec {
+			_, err := client.EnvironmentGet(&metav1.ObjectMeta{
+				Namespace: envNamespace,
+				Name:      envName,
+			})
+			if err != nil {
+				if e, ok := err.(fission.Error); ok && e.Code == fission.ErrorNotFound {
+					log.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
+				} else {
+					util.CheckErr(err, "retrieve environment information")
+				}
 			}
 		}
 

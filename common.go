@@ -149,7 +149,7 @@ func MakeArchive(targetName string, globs ...string) (string, error) {
 	for _, glob := range globs {
 		f, err := filepath.Glob(glob)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Invalid glob %v: %v", glob, err))
+			log.Info(fmt.Sprintf("Invalid glob %v: %v", glob, err))
 			return "", err
 		}
 		files = append(files, f...)

@@ -388,6 +388,18 @@ func (fr *FissionResources) validate() error {
 	// we do not error on unreferenced functions (you can call a function through workflows,
 	// `fission function test`, etc.)
 
+	// Index envs, warn on functions referencing an environment for which spes does not exist
+	environments := make(map[string]struct{})
+	for _, e := range fr.environments {
+		environments[fmt.Sprintf("%s:%s", e.Metadata.Name, e.Metadata.Namespace)] = struct{}{}
+	}
+
+	for _, f := range fr.functions {
+		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
+			log.Warn(fmt.Sprintf("Environment %s is referred in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
+		}
+	}
+
 	// (ErrorOrNil returns nil if there were no errors appended.)
 	return result.ErrorOrNil()
 }
@@ -961,7 +973,7 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 		absGlob := rootDir + "/" + relativeGlob
 		f, err := filepath.Glob(absGlob)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
+			log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
 			return nil, err
 		}
 		files = append(files, f...)
