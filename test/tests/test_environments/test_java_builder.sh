@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Temporarily disabled to control longer build time
+#test:disabled
+
 set -euo pipefail
 
 ROOT=$(dirname $0)/../../..

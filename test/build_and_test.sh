@@ -39,11 +39,11 @@ build_and_push_fetcher $FETCHER_IMAGE:$TAG
 build_and_push_builder $BUILDER_IMAGE:$TAG
 
 build_and_push_env_runtime python $REPO/python-env:$TAG
-build_and_push_env_runtime jvm $REPO/jvm-env:$TAG
+#build_and_push_env_runtime jvm $REPO/jvm-env:$TAG
 build_and_push_env_runtime go $REPO/go-env:$TAG
 
 build_and_push_env_builder python $REPO/python-env-builder:$TAG $BUILDER_IMAGE:$TAG
-build_and_push_env_builder jvm $REPO/jvm-env-builder:$TAG $BUILDER_IMAGE:$TAG
+#build_and_push_env_builder jvm $REPO/jvm-env-builder:$TAG $BUILDER_IMAGE:$TAG
 build_and_push_env_builder go $REPO/go-env-builder:$TAG $BUILDER_IMAGE:$TAG
 
 build_and_push_fluentd $FLUENTD_IMAGE:$TAG
