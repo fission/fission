@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2018 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,33 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package log
+package resources
 
 import (
 	"fmt"
-	"os"
+	"path/filepath"
+
+	"github.com/fission/fission/controller/client"
+	"github.com/fission/fission/fission/util"
 )
 
-var (
-	// global Verbosity of our CLI
-	Verbosity int
-)
-
-func Fatal(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
-	os.Exit(1)
+type FissionVersion struct {
+	client    *client.Client
+	namespace string
 }
 
-func Warn(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("[WARNING] %v\n", msg))
+func NewFissionVersion(client *client.Client) Resource {
+	return FissionVersion{client: client}
 }
 
-func Info(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
-}
-
-func Verbose(verbosityLevel int, format string, args ...interface{}) {
-	if Verbosity >= verbosityLevel {
-		fmt.Printf(format+"\n", args...)
-	}
+func (res FissionVersion) Dump(dumpDir string) {
+	ver := util.GetVersion(res.client)
+	file := filepath.Clean(fmt.Sprintf("%v/%v", dumpDir, "fission-version.txt"))
+	writeToFile(file, ver)
 }

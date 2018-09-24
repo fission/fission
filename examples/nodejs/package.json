@@ -1,5 +1,5 @@
 {
-  "name": "fission-nodejs-runtime",
+  "name": "fission-nodejs-example",
   "version": "0.1.0",
   "author": "Soam Vasani",
   "contributors": [
@@ -12,7 +12,7 @@
       "email": "contact@garyyeap.com"
     }
   ],
-  "description": "NodeJS run container for the fission framework",
+  "description": "Nodejs example for Fission framework",
   "engines": {
     "node": ">=7.6.0"
   },
@@ -24,7 +24,7 @@
     "morgan": "*",
     "mz": "~2.7.0",
     "request": "^2.81.0",
-    "underscore": ">=1.8.3",
-    "request-promise-native": "^1.0.3"
+    "request-promise-native": "^1.0.3",
+    "underscore": ">=1.8.3"
   }
 }

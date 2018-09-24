@@ -38,17 +38,14 @@ func ensureCRD(clientset *apiextensionsclient.Clientset, crd *apiextensionsv1bet
 	maxRetries := 5
 
 	for i := 0; i < maxRetries; i++ {
-		_, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crd.ObjectMeta.Name, metav1.GetOptions{})
+		_, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 		if err == nil {
 			return nil
 		}
 
-		if errors.IsNotFound(err) {
-			// crd resource not found error
-			_, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
-			if err != nil {
-				return err
-			}
+		// return if the resource already exists
+		if errors.IsAlreadyExists(err) {
+			return nil
 		} else {
 			// The requests fail to connect to k8s api server before
 			// istio-prxoy is ready to serve traffic. Retry again.
