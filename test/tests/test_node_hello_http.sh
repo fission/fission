@@ -2,6 +2,21 @@
 
 set -euo pipefail
 
+test_fn() {
+    echo "Doing an HTTP GET on the function's route"
+    echo "Checking for valid response"
+
+    while true; do
+      response0=$(curl http://$FISSION_ROUTER/$1)
+      echo $response0 | grep -i $2
+      if [[ $? -eq 0 ]]; then
+        break
+      fi
+      sleep 1
+    done
+}
+export -f test_fn
+
 ROOT=$(dirname $0)/../..
 
 fn=nodejs-hello-$(date +%N)
@@ -34,11 +49,7 @@ fission route create --function $fn --url /$fn --method GET
 log "Waiting for router to catch up"
 sleep 3
 
-log "Doing an HTTP GET on the function's route"
-response=$(curl http://$FISSION_ROUTER/$fn)
-
-log "Checking for valid response"
-echo $response | grep -i hello
+timeout 60 bash -c "test_fn $fn 'hello'"
 
 routeid=$(fission route list|grep "$fn"|awk '{print $1}')
 fission route delete --name $routeid || true
