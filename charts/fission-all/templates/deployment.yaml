@@ -104,6 +104,7 @@ metadata:
   namespace: {{ .Values.builderNamespace }}
 
 ---
+# TODO : Configure controller with prometheus endpoint
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -123,7 +124,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888"]
+        args: ["--controllerPort", "8888", "--prometheusSvc", "http://{{ .Release.Name }}-prometheus-server.{{ .Release.Namespace }}"]
         env:
           - name: FISSION_FUNCTION_NAMESPACE
             value: "{{ .Values.functionNamespace }}"

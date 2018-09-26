@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -55,6 +57,19 @@ func TestFunctionProxying(t *testing.T) {
 	fmap := makeFunctionServiceMap(0)
 	fmap.assign(fn, backendURL)
 
+	httpTrigger := &crd.HTTPTrigger{
+		Metadata: metav1.ObjectMeta{
+			Name:            "xxx",
+			Namespace:       metav1.NamespaceDefault,
+			ResourceVersion: "1234",
+		},
+		Spec: fission.HTTPTriggerSpec{
+			FunctionReference: fission.FunctionReference{
+				Type: fission.FunctionReferenceTypeFunctionName,
+			},
+		},
+	}
+
 	fh := &functionHandler{fmap: fmap,
 		function: fn,
 		tsRoundTripperParams: &tsRoundTripperParams{
@@ -63,6 +78,7 @@ func TestFunctionProxying(t *testing.T) {
 			keepAlive:       30 * time.Second,
 			maxRetries:      10,
 		},
+		httpTrigger: httpTrigger,
 	}
 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
 	fhURL := functionHandlerServer.URL
