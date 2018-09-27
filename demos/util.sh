@@ -54,5 +54,23 @@ function run() {
     echo -e "\b "
 }
 
+function run_bg() {
+    maybe_first_prompt
+    rate=25
+    if [ -n "$DEMO_RUN_FAST" ]; then
+      rate=1000
+    fi
+    echo "$green$1$reset" | pv -qL $rate
+    if [ -n "$DEMO_RUN_FAST" ]; then
+      sleep 0.5
+    fi
+    $1 &
+    echo
+    echo -n ">"
+    read -s
+    echo -e "\b "
+}
+
+
 SSH_NODE=$(kubectl get nodes | tail -1 | cut -f1 -d' ')
 
