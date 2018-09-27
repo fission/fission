@@ -396,7 +396,7 @@ func (fr *FissionResources) validate() error {
 
 	for _, f := range fr.functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-			log.Warn(fmt.Sprintf("Environment %s is referred in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
+			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
 	}
 
