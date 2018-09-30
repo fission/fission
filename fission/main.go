@@ -37,6 +37,19 @@ func cliHook(c *cli.Context) error {
 	return nil
 }
 
+func getRouterURL(c *cli.Context) string {
+	routerURL := os.Getenv("FISSION_ROUTER")
+	if len(routerURL) == 0 {
+		// Portforward to the fission router
+		localRouterPort := util.SetupPortForward(util.GetKubeConfigPath(),
+			util.GetFissionNamespace(), "application=fission-router")
+		routerURL = "127.0.0.1:" + localRouterPort
+	} else {
+		routerURL = strings.TrimPrefix(routerURL, "http://")
+	}
+	return routerURL
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "fission"
@@ -290,6 +303,13 @@ func main() {
 		{Name: "list", Usage: "List all canary configs in a namespace", Flags: []cli.Flag{canaryNamespaceFlag}, Action: canaryConfigList},
 	}
 
+	// admin
+	waitFlag := cli.BoolFlag{Name: "wait", Usage: "Wait for latest update to catch up to last CLI action from this shell"}
+	adminSubCommands := []cli.Command{
+		{Name: "router-latest-update", Usage: "Return latest update that the router has seen (Do not use this).",
+			Flags: []cli.Flag{waitFlag}, Hidden: true, Action: adminRouterLatestUpdate},
+	}
+
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
@@ -304,6 +324,7 @@ func main() {
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
 		{Name: "support", Usage: "Collect an archive of diagnostic information for support", Subcommands: supportSubCommands},
+		{Name: "admin", Usage: "", Subcommands: adminSubCommands, Hidden: true},
 		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
 	}

@@ -281,8 +281,10 @@ func fnCreate(c *cli.Context) error {
 
 	}
 
-	_, err = client.FunctionCreate(function)
+	funcMeta, err := client.FunctionCreate(function)
 	util.CheckErr(err, "create function")
+
+	updateSessionRV(funcMeta.ResourceVersion) // ignore error
 
 	fmt.Printf("function '%v' created\n", fnName)
 
@@ -314,8 +316,9 @@ func fnCreate(c *cli.Context) error {
 			},
 		},
 	}
-	_, err = client.HTTPTriggerCreate(ht)
+	triggerMeta, err := client.HTTPTriggerCreate(ht)
 	util.CheckErr(err, "create HTTP trigger")
+	updateSessionRV(triggerMeta.ResourceVersion) // ignore error
 	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, fnName)
 
 	return err
@@ -571,8 +574,9 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fnExecutor
 	}
 
-	_, err = client.FunctionUpdate(function)
+	funcMeta, err := client.FunctionUpdate(function)
 	util.CheckErr(err, "update function")
+	updateSessionRV(funcMeta.ResourceVersion) // ignore error
 
 	fmt.Printf("function '%v' updated\n", fnName)
 	return err
@@ -717,15 +721,7 @@ func fnTest(c *cli.Context) error {
 	}
 	ns := c.String("fnNamespace")
 
-	routerURL := os.Getenv("FISSION_ROUTER")
-	if len(routerURL) == 0 {
-		// Portforward to the fission router
-		localRouterPort := util.SetupPortForward(util.GetKubeConfigPath(),
-			util.GetFissionNamespace(), "application=fission-router")
-		routerURL = "127.0.0.1:" + localRouterPort
-	} else {
-		routerURL = strings.TrimPrefix(routerURL, "http://")
-	}
+	routerURL := getRouterURL(c)
 
 	fnUri := fnName
 	if ns != metav1.NamespaceDefault {

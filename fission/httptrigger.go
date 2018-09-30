@@ -173,8 +173,10 @@ func htCreate(c *cli.Context) error {
 		return nil
 	}
 
-	_, err = client.HTTPTriggerCreate(ht)
+	triggerMeta, err := client.HTTPTriggerCreate(ht)
 	util.CheckErr(err, "create HTTP trigger")
+
+	updateSessionRV(triggerMeta.ResourceVersion) // ignore error
 
 	fmt.Printf("trigger '%v' created\n", triggerName)
 	return err
@@ -262,8 +264,10 @@ func htUpdate(c *cli.Context) error {
 		ht.Spec.Host = c.String("host")
 	}
 
-	_, err = client.HTTPTriggerUpdate(ht)
+	triggerMeta, err := client.HTTPTriggerUpdate(ht)
 	util.CheckErr(err, "update HTTP trigger")
+
+	updateSessionRV(triggerMeta.ResourceVersion) // ignore error
 
 	fmt.Printf("trigger '%v' updated\n", htName)
 	return nil

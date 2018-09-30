@@ -52,9 +52,10 @@ type HTTPTriggerSet struct {
 	recorderSet                *RecorderSet
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
+	resourceVersionMonitor     *ResourceVersionMonitor
 }
 
-func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, fissionClient *crd.FissionClient,
+func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, rvm *ResourceVersionMonitor, fissionClient *crd.FissionClient,
 	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 	httpTriggerSet := &HTTPTriggerSet{
 		functionServiceMap:         fmap,
@@ -65,6 +66,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, tr
 		crdClient:                  crdClient,
 		updateRouterRequestChannel: make(chan struct{}),
 		tsRoundTripperParams:       params,
+		resourceVersionMonitor:     rvm,
 	}
 	var tStore, fnStore, rStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -108,6 +110,12 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func getResourceVersionHandler(rv string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(rv))
+	}
 }
 
 func (ts *HTTPTriggerSet) getRouter() *mux.Router {
@@ -204,6 +212,9 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	// Healthz endpoint for the router.
 	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
 
+	// ResourceVersion endpoint
+	muxRouter.HandleFunc("/_lastResourceVersion", getResourceVersionHandler(ts.resourceVersionMonitor.Get())).Methods("GET")
+
 	return muxRouter
 }
 
@@ -236,6 +247,7 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 				trigger := obj.(*crd.HTTPTrigger)
 				go deleteIngress(trigger, ts.kubeClient)
 				go ts.recorderSet.DeleteTriggerFromRecorderMap(trigger)
+				ts.resourceVersionMonitor.Update(trigger.Metadata.ResourceVersion)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				oldTrigger := oldObj.(*crd.HTTPTrigger)
@@ -259,11 +271,14 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
+				function := obj.(*crd.Function)
+				ts.resourceVersionMonitor.Update(function.Metadata.ResourceVersion)
 			},
 			DeleteFunc: func(obj interface{}) {
 				function := obj.(*crd.Function)
 				ts.syncTriggers()
 				go ts.recorderSet.DeleteFunctionFromRecorderMap(function)
+				ts.resourceVersionMonitor.Update(function.Metadata.ResourceVersion)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				oldFn := oldObj.(*crd.Function)
@@ -289,6 +304,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 					}
 				}
 				ts.syncTriggers()
+				ts.resourceVersionMonitor.Update(fn.Metadata.ResourceVersion)
 			},
 		})
 	return store, controller
@@ -333,7 +349,9 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		latestTriggers := ts.triggerStore.List()
 		triggers := make([]crd.HTTPTrigger, len(latestTriggers))
 		for _, t := range latestTriggers {
-			triggers = append(triggers, *t.(*crd.HTTPTrigger))
+			tr := *t.(*crd.HTTPTrigger)
+			triggers = append(triggers, tr)
+			ts.resourceVersionMonitor.Update(tr.Metadata.ResourceVersion)
 		}
 		ts.triggers = triggers
 
@@ -341,7 +359,9 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		latestFunctions := ts.funcStore.List()
 		functions := make([]crd.Function, len(latestFunctions))
 		for _, f := range latestFunctions {
-			functions = append(functions, *f.(*crd.Function))
+			fn := *f.(*crd.Function)
+			functions = append(functions, fn)
+			ts.resourceVersionMonitor.Update(fn.Metadata.ResourceVersion)
 		}
 		ts.functions = functions
 
