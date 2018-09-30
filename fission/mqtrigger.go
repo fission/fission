@@ -64,7 +64,7 @@ func mqtCreate(c *cli.Context) error {
 	// TODO: check topic availability
 	topic := c.String("topic")
 	if len(topic) == 0 {
-		log.Fatal("Listen topic cannot be empty")
+		log.Fatal("Topic cannot be empty")
 	}
 	respTopic := c.String("resptopic")
 

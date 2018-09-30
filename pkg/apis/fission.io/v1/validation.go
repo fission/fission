@@ -36,7 +36,7 @@ const (
 
 var (
 	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
-	validKafkaTopicName = regexp.MustCompile(`\w+\d+.?_?-?`)
+	validKafkaTopicName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-._]*[a-z0-9]$")
 )
 
 type (
@@ -173,7 +173,6 @@ func IsTopicValid(mqType MessageQueueType, topic string) bool {
 
 // The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java
 func IsValidKafkaTopic(topic string) bool {
-
 	if len(topic) == 0 {
 		return false
 	}
