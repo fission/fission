@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
 const (
@@ -86,6 +87,8 @@ func MakeMessageQueueTriggerManager(fissionClient *crd.FissionClient, routerUrl 
 		messageQueue, err = makeNatsMessageQueue(routerUrl, mqConfig)
 	case fission.MessageQueueTypeASQ:
 		messageQueue, err = newAzureStorageConnection(routerUrl, mqConfig)
+	case fission.MessageQueueTypeKafka:
+		messageQueue, err = makeKafkaMessageQueue(routerUrl, mqConfig)
 	default:
 		err = errors.New("No matched message queue type found")
 	}
@@ -220,4 +223,14 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		// TODO replace with a watch
 		time.Sleep(3 * time.Second)
 	}
+}
+
+func IsTopicValid(mqType string, topic string) bool {
+	switch mqType {
+	case fv1.MessageQueueTypeNats:
+		return isTopicValidForNats(topic)
+	case fv1.MessageQueueTypeKafka:
+		return isTopicValidForKafka(topic)
+	}
+	return false
 }

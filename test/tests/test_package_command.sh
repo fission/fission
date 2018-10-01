@@ -21,6 +21,8 @@ waitBuild() {
       if [[ $? -eq 0 ]]; then
           break
       fi
+      log "Waiting for build to finish"
+      sleep 1
     done
 }
 export -f waitBuild
