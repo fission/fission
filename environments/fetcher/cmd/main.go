@@ -114,7 +114,7 @@ func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string
 	var specializeURL string
 	var reader *bytes.Reader
 
-	if envVersion == 2 {
+	if envVersion >= 2 {
 		contentType = "application/json"
 		specializeURL = "http://localhost:8888/v2/specialize"
 		reader = bytes.NewReader([]byte(*loadPayload))
