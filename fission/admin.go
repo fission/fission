@@ -47,21 +47,15 @@ func updateSessionRV(newRVstr string) error {
 		// nothing to update, "new" isn't new enough
 		return nil
 	}
-	fmt.Printf("setting rv to %v", newRVstr) //xxx
 
 	// write to temp and rename file (file renames are usually atomic)
 	fnTemp := fn + ".tmp"
 	err = ioutil.WriteFile(fnTemp, []byte(newRVstr), 0600)
 	if err != nil {
-		fmt.Println("xxx 1 err = %v", err)
 		return err
 	}
 
-	err = os.Rename(fnTemp, fn)
-	if err != nil {
-		fmt.Println("xxx 2 err = %v", err)
-	}
-	return err
+	return os.Rename(fnTemp, fn)
 }
 
 // Get current router rv.  If wantRVstr specified, wait for router to
