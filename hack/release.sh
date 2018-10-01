@@ -155,7 +155,7 @@ tag_and_release() {
     git tag $gittag
     
     # push tag
-    git push $gittag
+    git push origin $gittag
 
     # create gh release
     gothub release \
