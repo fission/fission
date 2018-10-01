@@ -72,7 +72,7 @@ log "Creating route"
 fission route create --function ${fn_secret} --url /${fn_secret} --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
 
@@ -84,7 +84,7 @@ log "Creating route"
 fission route create --function ${fn_secret}-1 --url /${fn_secret}-1 --method GET
 
 log "Waiting for router catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'
 
@@ -98,7 +98,7 @@ log "Creating route"
 fission route create --function ${fn_cfgmap} --url /${fn_cfgmap} --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'
 
@@ -110,7 +110,7 @@ log "Creating route"
 fission route create --function ${fn_cfgmap}-1 --url /${fn_cfgmap}-1 --method GET
 
 log "Waiting for router catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 checkFunctionResponse ${fn_cfgmap}-1 'NEWVAL' 'configmap'
 
@@ -121,7 +121,7 @@ log "Creating route"
 fission route create --function ${fn} --url /${fn} --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "HTTP GET on the function's route"
 resnormal=$(curl http://${FISSION_ROUTER}/${fn})

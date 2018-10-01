@@ -17,6 +17,7 @@ trap "cleanup $route_name" EXIT
 
 log "Route $route_name created"
 
+# wait for fission to create ingress resource
 sleep 5
 
 log "Ingresses matching this trigger:"
@@ -34,6 +35,7 @@ fi
 log "Modifying the route by adding host"
 fission route update --name $route_name --host $hostName --function $functionName
 
+# wait for fission to update k8s ingress resource
 sleep 2
 
 actual_host=$(kubectl get ing -l 'functionName='$functionName',triggerName='$route_name --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].host}')

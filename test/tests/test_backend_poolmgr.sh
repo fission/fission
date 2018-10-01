@@ -32,7 +32,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Doing an HTTP GET on the function's route"
 response=$(curl http://$FISSION_ROUTER/$fn)

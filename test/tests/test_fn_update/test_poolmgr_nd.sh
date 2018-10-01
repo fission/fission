@@ -31,7 +31,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn 'world'"
 
@@ -39,7 +39,7 @@ log "Updating function $fn executor type to new deployment"
 fission fn update --name $fn --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn 'world'"
 
@@ -47,6 +47,6 @@ log "Updating function $fn executor type back to pool manager"
 fission fn update --name $fn --code $ROOT/examples/python/hello.py --executortype poolmgr
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn 'world'"

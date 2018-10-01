@@ -27,7 +27,7 @@ echo "Creating http trigger"
 generated=$(fission route create --function $fn --method POST --url greetings | awk '{print $2}'| tr -d "'")
 
 # Wait until trigger is created
-sleep 5
+fission admin router-latest-update --wait
 
 echo "Creating recorder"
 recName="gacrux"

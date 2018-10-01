@@ -34,7 +34,7 @@ log "Creating route for function $fn"
 fission route create --function ${fn} --url /${fn} --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn 'world'"
 

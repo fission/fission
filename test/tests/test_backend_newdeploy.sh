@@ -35,7 +35,8 @@ log "Creating route"
 fission route create --function $fn0 --url /$fn0 --method GET
 
 log "Waiting for router & newdeploy deployment creation"
-sleep 5
+fission admin router-latest-update --wait
+kubectl wait deployment --namespace fission-function --for condition=available --timeout 180s -l functionName=$fn0
 
 log "Doing an HTTP GET on the function's route"
 response0=$(curl http://$FISSION_ROUTER/$fn0)
@@ -53,10 +54,11 @@ log "Creating route"
 fission route create --function $fn1 --url /$fn1 --method GET
 
 log "Waiting for router & newdeploy deployment creation"
-sleep 5
+fission admin router-latest-update --wait
+kubectl wait deployment --namespace fission-function --for condition=available --timeout 180s -l functionName=$fn1
 
 log "Doing an HTTP GET on the function's route"
-response1=$(curl http://$FISSION_ROUTER/$fn0)
+response1=$(curl http://$FISSION_ROUTER/$fn1)
 
 log "Checking for valid response"
 echo $response1 | grep -i hello

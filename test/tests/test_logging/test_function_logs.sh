@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 set -euo pipefail
 
 ROOT=$(dirname $0)/../..
@@ -33,7 +32,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 15
+fission admin router-latest-update --wait
 
 log "Doing 4 HTTP GETs on the function's route"
 for i in 1 2 3 4

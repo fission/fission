@@ -1,8 +1,5 @@
 #!/bin/bash
 
-
-# we may not need this to run as a pre-check-in test for every PR. but only once in a while to ensure nothing's broken.
-
 set -euo pipefail
 
 id=""
@@ -14,6 +11,7 @@ final_cleanup() {
 }
 
 cleanup() {
+    # What are the -n tests for?  Where is 'x' defined?
     [[ -n "${1+x}"  && -n "${2+x}" ]]; fission env delete --name $1 --envns $2 || true
     [[ -n "${3+x}"  && -n "${4+x}" ]]; fission fn delete --name $3 --fns $4 || true
     [[ -n "${5+x}"  && -n "${6+x}" ]]; fission pkg delete --name $5 --pkgns $6 || true
@@ -69,7 +67,7 @@ new_deploy_mgr_and_internal_route_test_2() {
     log "Starting new_deploy_mgr_and_internal_route_test_1 with env in default ns"
     fission env create --name python --image fission/python-env
     fission fn create --name func5 --env python --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
-    sleep 15
+    fission admin router-latest-update --wait
 
     # function is loaded in $FISSION_NAMESPACE because func object was created in default ns
     verify_function_pod_ns func5 "$FUNCTION_NAMESPACE" || (log "func func5 not specialized in $FUNCTION_NAMESPACE" &&
@@ -81,13 +79,18 @@ new_deploy_mgr_and_internal_route_test_2() {
 }
 
 new_deploy_mgr_and_internal_route_test_1() {
-    log "Starting new_deploy_mgr_and_internal_route_test_1 with env and fn in different ns"
+    funcNs="ns2-$id"
+    
+    log "Starting new_deploy_mgr_and_internal_route_test_1 with env and fn in different ns ($funcNs)"
     fission env create --name python --image fission/python-env --envns "ns1-$id"
-    fission fn create --name func4 --fns "ns2-$id" --env python --envns "ns1-$id" --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
-    sleep 15
+    fission fn create --name func4 --fns $funcNs --env python --envns "ns1-$id" --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
+    fission admin router-latest-update --wait
+
+    # wait for newdeploy to deploy the function
+    kubectl --namespace "ns2-$id" wait deployment --for condition=available --timeout 120s -l functionName=func4
 
     # note that this test is diff from pool_mgr test because here function is loaded in func ns and not in env ns
-    verify_function_pod_ns func4 "ns2-$id" || (log "func func4 not specialized in ns2-$id" &&
+    verify_function_pod_ns func4 $funcNs || (log "func func4 not specialized in ns2-$id" &&
     cleanup python "ns1-$id" func4 "ns2-$id" "" "" "" "" && exit 1)
     internal_route_test_1 || (log "internal route test for http://$FISSION_ROUTER/fission-function/ns2-$id/func4 returned http_status: $http_status" &&
     cleanup python "ns1-$id" func4 "ns2-$id" "" "" "" "" && exit 1)
@@ -95,10 +98,27 @@ new_deploy_mgr_and_internal_route_test_1() {
     cleanup python "ns1-$id" func4 "ns2-$id" "" "" "" ""
 }
 
+wait_for_env_up() {
+    runNamespace=$1
+    buildNamespace=$2
+    envName=$3
+    if [ ! -z "$runNamespace" ]
+    then
+	kubectl -n $runNamespace wait deployment -l envName=$envName --for condition=available --timeout 180s
+    fi
+
+    if [ ! -z "$buildNamespace" ]
+    then
+	kubectl -n $buildNamespace wait deployment -l envName=$envName --for condition=available --timeout 180s
+    fi
+}
+
 builder_mgr_test_2() {
     log "Starting builder_mgr_test_2 with env in default ns"
     fission env create --name python-builder-env --builder fission/python-builder --image fission/python-env
-    sleep 180
+
+    # wait for builder + runtime deployments
+    wait_for_env_up "fission-function" "fission-builder" "python-builder-env"
 
     # verify the env builder pod came up in fission-builder and env runtime pod came up in fission-function ns
     verify_pod_ns python-builder-env fission-builder || (log "python-builder-env builder env not found in fission-builder ns" &&
@@ -108,12 +128,12 @@ builder_mgr_test_2() {
 
     zip -jr src-pkg.zip $ROOT/examples/python/sourcepkg/
     pkg=$(fission package create --src src-pkg.zip --env python-builder-env --buildcmd "./build.sh" --pkgns "ns2-$id"| cut -f2 -d' '| tr -d \')
-    sleep 60
+    #sleep 60 # what was this sleep for?
     fission fn create --name func4 --fns "ns2-$id" --pkg $pkg --entrypoint "user.main"
     ht=$(fission route create --function func4 --fns "ns2-$id" --url /func4 --method GET | cut -f2 -d' '| tr -d \')
 
     # get the function loaded into a pod
-    sleep 10
+    fission admin router-latest-update --wait
     response=$(curl http://$FISSION_ROUTER/func4)
     echo $response
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}" || (log "response a: 1 b: {c: 3, d: 4} not received" &&
@@ -128,19 +148,23 @@ builder_mgr_test_2() {
 }
 
 builder_mgr_test_1() {
+    envNs="ns1-$id"
+    log "Running builder_mgr_test_1 in $envNs"
+    
     log "Starting builder_mgr_test_1 with env and fn in different ns"
-    fission env create --name python-builder-env --envns "ns1-$id" --builder fission/python-builder --image fission/python-env
+    fission env create --name python-builder-env --envns $envNs --builder fission/python-builder --image fission/python-env
+
     # we need to wait sufficiently for env pods to be up
-    sleep 180
+    wait_for_env_up $envNs $envNs "python-builder-env"
 
     zip -jr src-pkg.zip $ROOT/examples/python/sourcepkg/
     pkg=$(fission package create --src src-pkg.zip --env python-builder-env --envns "ns1-$id" --buildcmd "./build.sh" --pkgns "ns2-$id"| cut -f2 -d' '| tr -d \')
-    sleep 60
+    #sleep 60
     fission fn create --name func3 --fns "ns2-$id" --pkg $pkg --entrypoint "user.main"
     ht=$(fission route create --function func3 --fns "ns2-$id" --url /func3 --method GET | cut -f2 -d' '| tr -d \')
 
     # get the function loaded into a pod
-    sleep 10
+    fission admin router-latest-update --wait
     response=$(curl http://$FISSION_ROUTER/func3)
     echo "response : $response"
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}" || (log "response a: 1 b: {c: 3, d: 4} not received" &&
@@ -164,7 +188,7 @@ pool_mgr_test_2() {
     verify_obj_in_ns environment python default|| (log "env python not found in default ns" &&
     cleanup python "default" func2 "ns2-$id" "" "" $ht "ns2-$id" && exit 1)
 
-    sleep 3
+    fission admin router-latest-update --wait
     # get the function loaded into a pod
     response=$(curl http://$FISSION_ROUTER/func2)
     echo $response | grep "Hello" || (log "response Hello not received" &&
@@ -195,7 +219,7 @@ pool_mgr_test_1() {
     verify_obj_in_ns httptrigger $ht "ns2-$id" || (log "http trigger $ht not found in ns2-$id" &&
     cleanup python "ns1-$id" func1 "ns2-$id" $pkg "ns2-$id" $ht "ns2-$id" && exit 1)
 
-    sleep 3
+    fission admin router-latest-update --wait
     # get the function loaded into a pod
     response=$(curl http://$FISSION_ROUTER/func1)
     echo $response | grep "Hello" || (log "response Hello not received" &&

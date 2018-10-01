@@ -47,7 +47,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to update cache"
-sleep 5
+fission admin router-latest-update --wait
 
 http_status=`curl -sw "%{http_code}" http://$FISSION_ROUTER/$fn -o /dev/null`
 log "http_status: $http_status"

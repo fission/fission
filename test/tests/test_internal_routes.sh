@@ -45,7 +45,7 @@ do
 done
 
 log "Waiting for router to catch up"
-sleep 2
+fission admin router-latest-update --wait
 
 log "Testing internal routes"
 for f in $f1 $f2

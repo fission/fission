@@ -35,8 +35,8 @@ log "Creating route for function $fn"
 fission route create --function ${fn}-nd --url /${fn}-nd --method GET
 fission route create --function ${fn}-gpm --url /${fn}-gpm --method GET
 
-log "Waiting for update to catch up"
-sleep 5
+log "Waiting for router to catch up"
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn ${fn}-nd 'world'"
 timeout 60 bash -c "test_fn ${fn}-gpm 'world'"

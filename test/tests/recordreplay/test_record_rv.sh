@@ -31,7 +31,7 @@ echo "Creating trigger B"
 generatedB=$(fission route create --function $fn --method GET --url rvB | awk '{print $2}'| tr -d "'")
 
 # Wait until triggers are created
-sleep 5
+fission admin router-latest-update --wait
 
 echo "Creating recorder by function"
 recName="regulus"
@@ -47,7 +47,7 @@ recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {pr
 expectedSA="200OK"
 
 # Separate records
-sleep 5
+sleep 2
 
 echo "Issuing cURL request to urlB:"
 respB=$(curl -X GET "http://$FISSION_ROUTER/rvB?time=9&date=Tuesday")
@@ -77,7 +77,7 @@ recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {pr
 expectedSA=""
 
 # Separate records
-sleep 5
+sleep 2
 
 echo "Issuing cURL request to urlB:"
 respB=$(curl -X GET "http://$FISSION_ROUTER/rvB?time=9&date=Tuesday")

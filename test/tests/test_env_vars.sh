@@ -100,7 +100,8 @@ spec:
 EOM
 log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
 
-sleep 15
+#sleep 15 # why do we need this sleep?
+
 # Wait for runtime and build env to be deployed
 retry getPodName ${FUNCTION_NS} ${ENV} | grep '.\+'
 runtimePod=$(getPodName ${FUNCTION_NS} ${ENV})

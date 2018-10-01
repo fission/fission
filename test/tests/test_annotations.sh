@@ -96,7 +96,10 @@ spec:
 EOM
 log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
 
-sleep 15
+# XXX why sleep here if we're polling anyway?
+#sleep 15
+
+
 # Wait for runtime and build env to be deployed
 retry getPodName ${FUNCTION_NS} ${ENV} | grep '.\+'
 runtimePod=$(getPodName ${FUNCTION_NS} ${ENV})

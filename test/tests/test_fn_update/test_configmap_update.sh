@@ -45,7 +45,7 @@ log "Creating route"
 fission route create --function ${fn_name} --url /${fn_name} --method GET
 
 log "Waiting for router to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Testing function"
 timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"

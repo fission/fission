@@ -465,27 +465,32 @@ run_all_tests() {
 run_test() {
     file=$1
 
+    # Used by `fission admin router-latest-update --wait`
+    export FISSION_SESSION_FILE=$(mktemp /tmp/fission-session)
+    
     test_name=${file#${ROOT}/test/tests}
-	test_path=${file}
+    test_path=${file}
 
-	if grep "^#test:disabled" ${file}
+    if grep "^#test:disabled" ${file}
+    then
+	report_test_skipped ${test_name}
+	echo ------- Skipped ${test_name} -------
+    else
+	echo ------- Running ${test_name} -------
+	pushd $(dirname ${test_path})
+	if ${test_path}
 	then
-	    report_test_skipped ${test_name}
-	    echo ------- Skipped ${test_name} -------
+	    echo [SUCCESS]: ${test_name}
+	    report_test_passed ${test_name}
 	else
-	    echo ------- Running ${test_name} -------
-	    pushd $(dirname ${test_path})
-	    if ${test_path}
-	    then
-		echo [SUCCESS]: ${test_name}
-		report_test_passed ${test_name}
-	    else
-		echo [FAILED]: ${test_name}
-		export FAILURES=$(($FAILURES+1))
-		report_test_failed ${test_name}
-	    fi
-	    popd
+	    echo [FAILED]: ${test_name}
+	    export FAILURES=$(($FAILURES+1))
+	    report_test_failed ${test_name}
 	fi
+	popd
+    fi
+
+    rm -f $FISSION_SESSION_FILE
 }
 
 install_and_test() {

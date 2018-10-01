@@ -51,7 +51,7 @@ log "Creating route"
 fission route create --function $fn_name --url /$fn_name --method GET
 
 log "Waiting for router & newdeploy deployment creation"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn_name 'world'"
 
@@ -63,7 +63,7 @@ log "Updating function with updated package"
 fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
 
 log "Waiting for deployment to update"
-sleep 5
+fission admin router-latest-update --wait
 
 timeout 60 bash -c "test_fn $fn_name 'fission'"
 

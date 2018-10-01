@@ -82,7 +82,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 3
+fission admin router-latest-update --wait
 
 pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.packageref.name}')
 

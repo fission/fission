@@ -13,13 +13,13 @@ cleanup() {
 wait_for_builder() {
     JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
 
-    # wait for tiller ready
+    # wait for builder ready
     while true; do
       kubectl --namespace fission-builder get pod -l envName=go -o jsonpath="$JSONPATH" | grep "Ready=True"
       if [[ $? -eq 0 ]]; then
           break
       fi
-      sleep 5
+      sleep 1
     done
 }
 
@@ -74,7 +74,7 @@ fission route create --function hello-go-poolmgr --url /hello-go-poolmgr --metho
 fission route create --function hello-go-nd --url /hello-go-nd --method GET
 
 log "Waiting for router & pools to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Testing pool manager function"
 timeout 60 bash -c "test_fn hello-go-poolmgr 'Hello'"
@@ -95,7 +95,7 @@ fission fn update --name hello-go-poolmgr --pkg $pkgName
 fission fn update --name hello-go-nd --pkg $pkgName
 
 log "Waiting for router & pools to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Testing pool manager function with new package"
 timeout 60 bash -c "test_fn hello-go-poolmgr 'vendor'"

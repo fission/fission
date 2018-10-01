@@ -27,7 +27,7 @@ test_pkg() {
     echo "Checking for valid response"
 
     while true; do
-      response0=$(kubectl get -ndefault package $1 -o=jsonpath='{.status.buildstatus}')
+      response0=$(kubectl get -n default package $1 -o=jsonpath='{.status.buildstatus}')
       echo $response0 | grep -i $2
       if [[ $? -eq 0 ]]; then
         break
@@ -66,7 +66,7 @@ log "Creating route for new deployment function"
 fission route create --function nbuilderhello --url /nbuilderhello --method GET
 
 log "Waiting for router & pools to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Testing pool manager function"
 timeout 60 bash -c "test_fn pbuilderhello 'Hello'"

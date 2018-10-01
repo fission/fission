@@ -42,7 +42,7 @@ log "Creating route"
 fission route create --function ${fn} --url /${fn} --method GET
 
 log "Waiting for updates to take effect"
-sleep 5
+fission admin router-latest-update --wait
 
 #If variable not used, shell assumes 'function' to be a real function
 func=function

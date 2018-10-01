@@ -46,7 +46,7 @@ log "Creating route for new deployment function"
 fission route create --function hellon --url /hellon --method GET
 
 log "Waiting for router & pools to catch up"
-sleep 5
+fission admin router-latest-update --wait
 
 log "Testing pool manager function"
 timeout 60 bash -c "test_fn hellop 'Hello'"

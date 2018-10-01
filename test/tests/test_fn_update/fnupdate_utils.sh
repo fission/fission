@@ -6,6 +6,7 @@
 
 set -euo pipefail
 
+# Infinitely polls a function until it returns the response we expect.
 test_fn() {
     echo "Doing an HTTP GET on the function's route"
     echo "Checking for valid response"

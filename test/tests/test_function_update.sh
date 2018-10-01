@@ -35,7 +35,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 10
+fission admin router-latest-update --wait
 
 log "Doing an HTTP GET on the function's route"
 response=$(curl http://$FISSION_ROUTER/$fn)
@@ -54,7 +54,7 @@ echo 'module.exports = function(context, callback) { callback(200, "bar!\n"); }'
 fission fn update --name $fn --code bar.js
 
 log "Waiting for router to update cache"
-sleep 10
+fission admin router-latest-update --wait
 
 log "Doing an HTTP GET on the function's route"
 response=$(curl http://$FISSION_ROUTER/$fn)

@@ -86,7 +86,7 @@ log "Creating route"
 fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
-sleep 3
+fission admin router-latest-update --wait
   
 checkFunctionResponse $fn 'a: 1 b: {c: 3, d: 4}'
 
@@ -101,7 +101,7 @@ log "Updating function " $fn
 fission fn update --name $fn --pkg $pkgName --entrypoint "hello.main"
 
 log "Waiting for router to update cache"
-sleep 3
+fission admin router-latest-update --wait
 
 checkFunctionResponse $fn 'Hello, world!'
 
