@@ -1,23 +1,43 @@
-# 0.10.0
-[Documentation](https://docs.fission.io/0.10.0/)
-## Downloads for 0.10.0
+# 0.11.0
+[Documentation](https://docs.fission.io/0.11.0/)
+## Downloads for 0.11.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-0.10.0.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0.yaml) | `fa903d4476dce2f3e6ee91a8606044159276f826f461a035da1b953144c2ac83`
-[fission-core-0.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0-minikube.yaml) | `14a5695343387c9834247202f6908d051c9c040532a7bc10c5b33900b9f83f63`
-[fission-all-0.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0-minikube.yaml) | `9ab0949413c0c3aa4d2026a098019eecfa9d17c7f3e39f0f879aae992f5c6cf4`
-[fission-core-0.10.0.yaml](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0.yaml) | `bf62028f4fd12de3eef656182c0aa9615cdae4ef2cc9d48d4af3e2ea09367f5c`
-[fission-all-0.9.2.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.9.2.tgz) | `8f6fafab819d5c3c63d688abcc7b2faef0ad73ad30437a86f68ebcc02b514b6b`
-[fission-core-0.10.0.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.10.0.tgz) | `d8ac31b77525075570e44cc948029fc687890007b3e0abd0f4ce92c49b429668`
-[fission-core-0.9.2.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-core-0.9.2.tgz) | `4893ec8069cf4f01b28fdfd8a7a2b73a65f01ddd3c18b410902f578a1ef19c9d`
-[fission-all-0.10.0.tgz](https://github.com/fission/fission/releases/download/0.10.0/fission-all-0.10.0.tgz) | `f0315ada0a022ba01fe45b5eb213a7c54f61f7d0294626fc65bc87ed438631cb`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-osx) | `e3fe4f278b8a652eaa6afa6c49f1a27d7db62d8743aaada16cff0ffbc39355ac`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-linux) | `b8009fdd07fd0c0cf4721e15b264a2ff9a9e5947a8a449bde09a619950ca1e56`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.10.0/fission-cli-windows.exe) | `45d91ab2a1b8b74013a7c1ee8f9ac2aaba38bb9a73a73819190bffa26052b9be`
+[fission-all-0.11.0.tgz](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0.tgz) | `3804bfd8f3b458eefce64695f4e38d9c0ac404fe8495e15e949739d5c1104e49`
+[fission-core-0.11.0.tgz](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0.tgz) | `0db7d23b75db85c8afb25fd608de303a3b3482ea810c22148a6b920b33232a6a`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-linux) | `5bcc9b4792441ae7eaa14ba4616700b3a185457f035353faa163ff4764b9b957`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-osx) | `a7854624ff6e57d91787cb5cc6d1c7f58d945387183239a1707aa97ced920863`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-windows.exe) | `833ede15bbd9f36536b3680d53f169023a12b588ffa67d27890429cf25ead3fc`
+[fission-all-0.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0-minikube.yaml) | `10c8e00b4c7f06f7426e310d4a5a51d1ebd4dc745125dd19893ca301969b7958`
+[fission-all-0.11.0.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0.yaml) | `ad3898c692713bc8f597efbda25e3e3dc2d213a665c8de03465d40ffd9a21bce`
+[fission-core-0.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0-minikube.yaml) | `0f5b21d9ad2e45b870cff0b7e6fc3c1ef0414887594e23e776af87dd21003ba8`
+[fission-core-0.11.0.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0.yaml) | `5cb4f1ba844343b655e86e8c6c40d524a64bf4dae7ba76a27f9ca02baacfa703`
 
 # Change Log
+
+## [0.11.0](https://github.com/fission/fission/tree/0.11.0) (2018-10-01)
+[Full Changelog](https://github.com/fission/fission/compare/0.10.0...0.11.0)
+
+**Merged pull requests:**
+
+- Print status with the get option. [\#907](https://github.com/fission/fission/pull/907) ([smruthi2187](https://github.com/smruthi2187))
+- Fixed the spec validation UX issue [\#898](https://github.com/fission/fission/pull/898) ([vishal-biyani](https://github.com/vishal-biyani))
+- Check CRD creation error instead of doing return directly [\#897](https://github.com/fission/fission/pull/897) ([life1347](https://github.com/life1347))
+- Fix failed to find release-builder dockerfile & push specific tag [\#870](https://github.com/fission/fission/pull/870) ([life1347](https://github.com/life1347))
+- V0.10.0 [\#868](https://github.com/fission/fission/pull/868) ([life1347](https://github.com/life1347))
+- Fixes #758, uses v2 specialize for env versions 2 or higher [\#911](https://github.com/fission/fission/pull/911) ([vishal-biyani](https://github.com/vishal-biyani))
+- Java env test - Maven verbosity reduction [\#902](https://github.com/fission/fission/pull/902) ([vishal-biyani](https://github.com/vishal-biyani))
+- Canary deployments for fission functions. [\#892](https://github.com/fission/fission/pull/892) ([smruthi2187](https://github.com/smruthi2187))
+- Fix fetcher not close file descriptor correctly [\#889](https://github.com/fission/fission/pull/889) ([life1347](https://github.com/life1347))
+- Removes the spec helm command for now to fix \#881 [\#886](https://github.com/fission/fission/pull/886) ([vishal-biyani](https://github.com/vishal-biyani))
+- FIX CleanupOldExecutorObjects in all namespaces [\#879](https://github.com/fission/fission/pull/879) ([ajbouh](https://github.com/ajbouh))
+- Check pod container ready state [\#861](https://github.com/fission/fission/pull/861) ([life1347](https://github.com/life1347))
+- Configurable namespace creation [\#855](https://github.com/fission/fission/pull/855) ([michaelgaida](https://github.com/michaelgaida))
+- Add v2 interface support for nodes env [\#836](https://github.com/fission/fission/pull/836) ([garyyeap](https://github.com/garyyeap))
+- Kafka integration [\#831](https://github.com/fission/fission/pull/831) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fission supportability: Add dump command to dump information for debugging [\#754](https://github.com/fission/fission/pull/754) ([life1347](https://github.com/life1347))
 
 ## [0.10.0](https://github.com/fission/fission/tree/0.10.0) (2018-08-17)
 [Full Changelog](https://github.com/fission/fission/compare/0.9.2...0.10.0)
