@@ -33,6 +33,10 @@ type (
 )
 
 func (rvm *ResourceVersionMonitor) Update(rv string) error {
+	if rvm == nil {
+		return nil
+	}
+
 	rvm.mutex.Lock()
 	defer rvm.mutex.Unlock()
 
@@ -48,6 +52,10 @@ func (rvm *ResourceVersionMonitor) Update(rv string) error {
 }
 
 func (rvm *ResourceVersionMonitor) Get() string {
+	if rvm == nil {
+		return ""
+	}
+
 	rvm.mutex.Lock()
 	defer rvm.mutex.Unlock()
 
