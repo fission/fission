@@ -466,7 +466,7 @@ run_test() {
     file=$1
 
     # Used by `fission admin router-latest-update --wait`
-    export FISSION_SESSION_FILE=$(mktemp /tmp/fission-session)
+    export FISSION_SESSION_FILE=$(mktemp /tmp/fission-session-XXXXXX)
     
     test_name=${file#${ROOT}/test/tests}
     test_path=${file}
