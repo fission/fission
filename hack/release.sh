@@ -120,6 +120,7 @@ push_all_env_builders() {
     push_env_builder_image "$version" "binary"   "binary-builder"   ""
     push_env_builder_image "$version" "go"       "go-builder"       ""
     push_env_builder_image "$version" "jvm"      "jvm-builder"      ""
+    push_env_builder_image "$version" "nodejs"   "node-builder"     ""
 }
 
 # Push pre-upgrade-checks image

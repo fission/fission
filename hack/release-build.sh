@@ -210,6 +210,7 @@ build_all_env_builders() {
     build_env_builder_image "$version" "binary"   "binary-builder"   ""
     build_env_builder_image "$version" "go"       "go-builder"       ""
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
+    build_env_builder_image "$version" "nodejs"   "node-builder"     ""
 }
 
 build_charts() {
