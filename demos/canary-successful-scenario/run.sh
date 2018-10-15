@@ -10,24 +10,28 @@ desc "Kubernetes cluster"
 run "kubectl get nodes"
 
 desc "Fission installed"
-run "kubectl --namespace default get deployment"
+run "kubectl --namespace fission get deployment"
 
 clear
 
 desc "NodeJS environment pods"
 run "kubectl --namespace fission-function get pod -l environmentName=nodejs"
 
-desc "Function version-1"
-run "fission function get --name fn1-v4"
+# set up functions
+fission fn create --name func-v1 --env nodejs --code func-v1.js
+desc "Function version 1"
+run "fission function get --name func-v1"
 
-desc "Function version-2"
-run "fission function get --name fn1-v5"
+fission fn create --name func-v2 --env nodejs --code func-v2.js
+desc "Function version 2"
+run "fission function get --name func-v2"
 
 desc "Create a route \(HTTP trigger\) the version-1 of the function with weight 100% and version-2 with weight 0%"
-run "fission route create --name route-hello --method GET --url /hello --function fn1-v5 --weight 0 --function fn1-v4 --weight 100"
+run "fission route create --name route-canary --method GET --url /canary --function func-v2 --weight 0 --function func-v1 --weight 100"
 
-desc "Create a canary config to gradually increment the weight of version-2 by a step of 20 every 1 minute"
-run "fission canary-config create --name canary-1 --funcN fn1-v5 --funcN-1 fn1-v4 --httptrigger route-hello --increment-step 30 --increment-interval 30s --failure-threshold 10"
+desc "Start sending requests to the route"
+run_bg "hey -n 100000 -c 1 http://$FISSION_ROUTER/canary"
 
-desc "Fire requests to the route"
-run "ab -n 10000 -c 1 http://$FISSION_ROUTER/hello"
+desc "Create a canary config: with an increment of 10 percent, every 1 minute, rolling back if 10% of requests fail"
+run "fission canary-config create --name canary-1 --funcN func-v2 --funcN-1 func-v1 --httptrigger route-canary --increment-step 10 --increment-interval 30s --failure-threshold 10"
+
