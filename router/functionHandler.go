@@ -19,8 +19,6 @@ package router
 import (
 	"bytes"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -30,6 +28,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
+	"github.com/satori/go.uuid"
+
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -37,6 +38,11 @@ import (
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
 	"github.com/fission/fission/redis"
+)
+
+const (
+	FORWARDED        = "Forwarded"
+	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
 type tsRoundTripperParams struct {
@@ -98,6 +104,9 @@ func init() {
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var needExecutor, serviceUrlFromExecutor bool
 	var serviceUrl *url.URL
+
+	// Set forwarded host header if not exists
+	addForwardedHostHeader(req)
 
 	// TODO: Keep? --> Needed for queries encoded in URL before they're stripped by the proxy
 	var originalUrl url.URL
@@ -361,4 +370,45 @@ func getCanaryBackend(fnMetadatamap map[string]*metav1.ObjectMeta, fnWtDistribut
 	fnName := findCeil(randomNumber, fnWtDistributionList)
 
 	return fnMetadatamap[fnName]
+}
+
+// addForwardedHostHeader add "forwarded host" to request header
+func addForwardedHostHeader(req *http.Request) {
+	// for more detailed information, please visit:
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
+
+	if len(req.Header.Get(FORWARDED)) > 0 || len(req.Header.Get(X_FORWARDED_HOST)) > 0 {
+		// forwarded headers were set by external proxy, leave them intact
+		return
+	}
+
+	// Format of req.Host is <host>:<port>
+	// We need to extract hostname from it, than
+	// check whether a host is ipv4 or ipv6 or FQDN
+	reqUrl := fmt.Sprintf("%s://%s", req.Proto, req.Host)
+	u, err := url.Parse(reqUrl)
+	if err != nil {
+		log.Printf("Error parsing request url (%v): %v", reqUrl, err)
+		return
+	}
+
+	var host string
+
+	// ip will be nil if the Hostname is a FQDN string
+	ip := net.ParseIP(u.Hostname())
+
+	// ip == nil -> hostname is FQDN instead of ip address
+	// The order of To4() and To16() here matters, To16() will
+	// converts an IPv4 address to IPv6 format address and may
+	// cause router append wrong host value to header. To prevent
+	// this we need to check whether To4() is nil first.
+	if ip == nil || (ip != nil && ip.To4() != nil) {
+		host = fmt.Sprintf(`host=%s;`, req.Host)
+	} else if ip != nil && ip.To16() != nil {
+		// For the "Forwarded" header, if a host is an IPv6 address it should be quoted
+		host = fmt.Sprintf(`host="%s";`, req.Host)
+	}
+
+	req.Header.Set(FORWARDED, host)
+	req.Header.Set(X_FORWARDED_HOST, req.Host)
 }
