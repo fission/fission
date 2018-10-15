@@ -6,5 +6,5 @@ RUN mvn -f /usr/src/myapp/pom.xml clean package
 FROM openjdk:8-jdk-alpine
 VOLUME /tmp
 COPY --from=BUILD /usr/src/myapp/target/env-java-0.0.1-SNAPSHOT.jar /app.jar
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar","--server.port=8888"]
+ENTRYPOINT java ${JVM_OPTS} -Djava.security.egd=file:/dev/./urandom -jar /app.jar --server.port=8888
 EXPOSE 8888
