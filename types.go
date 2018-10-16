@@ -210,7 +210,3 @@ const (
 	CanaryConfigStatusAborted    = fv1.CanaryConfigStatusAborted
 	MaxIterationsForCanaryConfig = fv1.MaxIterationsForCanaryConfig
 )
-
-const (
-	FissionDebugHeader = fv1.FissionDebugHeader
-)

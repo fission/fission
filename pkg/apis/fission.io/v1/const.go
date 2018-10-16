@@ -96,8 +96,3 @@ const (
 	// set a max number for iterations to prevent infinite processing of canary config
 	MaxIterationsForCanaryConfig = 10
 )
-
-const (
-	// FissionDebugHeader is added to the http request to the function when debugging information is requested
-	FissionDebugHeader = "X-Fission-Debug"
-)

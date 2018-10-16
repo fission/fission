@@ -57,14 +57,11 @@ func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, err
 
 	resp, err := http.Post(executorUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("Returning from http post, err : %v", err)
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Printf("Returning from client's response status code != 200. resp : %+v", resp)
-		log.Printf("respon status code  : %v", resp.StatusCode)
 		return "", fission.MakeErrorFromHTTP(resp)
 	}
 
