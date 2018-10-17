@@ -253,9 +253,10 @@ func fnCreate(c *cli.Context) error {
 		}
 
 		srcArchiveName := c.StringSlice("src")
-		deployArchiveName := c.String("code")
+		var deployArchiveName []string
+		deployArchiveName = append(deployArchiveName, c.String("code"))
 		if len(deployArchiveName) == 0 {
-			deployArchiveName = c.String("deploy")
+			deployArchiveName = c.StringSlice("deploy")
 		}
 		// fatal when both src & deploy archive are empty
 		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
@@ -466,9 +467,10 @@ func fnUpdate(c *cli.Context) error {
 		envNamespace = ""
 	}
 
-	deployArchiveName := c.String("code")
+	var deployArchiveName []string
+	deployArchiveName = append(deployArchiveName, c.String("code"))
 	if len(deployArchiveName) == 0 {
-		deployArchiveName = c.String("deploy")
+		deployArchiveName = c.StringSlice("deploy")
 	}
 	srcArchiveName := c.StringSlice("src")
 	pkgName := c.String("pkg")

@@ -3,12 +3,13 @@
 set -euo pipefail
 
 # Use package command to create packages of type:
-# 1) Multiple source files (multiple inputs, Using * expression, from a directory) # Currently only * expression implemented as a test
-# 2) Source archive file
+#     1) Multiple source files from a directory
+#     2) Source archive file
 # TBD 3) Source file from a HTTP location
-# 4) Deployment files from a directory
-# 5) Deployment archive
+#     4) Deployment files from a directory
+#     5) Deployment archive
 # TBD 6) Deployment archive from a HTTP location
+# TBD 7) Multiple files from  multiple directories
 # Then create a function to test the packages created by package command are 
 # able to work.
 
@@ -85,9 +86,9 @@ fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON
 timeout 180s bash -c "waitEnvBuilder python"
 # 1) Multiple source files (multiple inputs, Using * expression, from a directory)
 # Currently only * expression implemented as a test
-PYEX_HOMEDIR=`realpath $ROOT/examples/python/`
-pkg1=$(fission package create --src "$PYEX_HOMEDIR/sourcepkg/*" --env python --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
-
+pushd $ROOT/examples/python/
+pkg1=$(fission package create --src "sourcepkg/*" --env python --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
+popd
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkg1"
 log "Creating function " $fn1
