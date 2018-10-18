@@ -30,7 +30,7 @@ PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
 
 dump_system_info
 
-build_and_push_fission_bundle $IMAGE:$TAG
+build_and_push_fission_bundle $REPO/$IMAGE:$TAG
 
 build_and_push_pre_upgrade_check_image $PRE_UPGRADE_CHECK_IMAGE:$TAG
 
