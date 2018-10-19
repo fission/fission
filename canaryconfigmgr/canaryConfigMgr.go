@@ -139,7 +139,6 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 			if err != nil {
 				log.Printf("error removing canary config: %s from map, err : %v", canaryConfig.Metadata.Name, err)
 			}
-			log.Printf("Removed the canary config from map")
 			return
 
 		case <-ticker.C:

@@ -37,7 +37,6 @@ type (
 		Namespace string
 	}
 
-	// value
 	CanaryProcessingInfo struct {
 		CancelFunc *context.CancelFunc
 		Ticker     *time.Ticker
