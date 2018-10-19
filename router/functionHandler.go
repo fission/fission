@@ -63,6 +63,7 @@ type functionHandler struct {
 	fnWeightDistributionList []FunctionWeightDistribution
 	tsRoundTripperParams     *tsRoundTripperParams
 	recorderName             string
+	isDebugEnv               bool
 }
 
 // A layer on top of http.DefaultTransport, with retries.
@@ -165,10 +166,26 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			// send a request to executor to specialize a new pod
 			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
 				roundTripper.funcHandler.function)
+
 			if err != nil {
-				log.Printf("Err from GetServiceForFunction : %v", err)
+				statusCode, errMsg := fission.GetHTTPError(err)
+				log.Printf("Err from GetServiceForFunction : %v : %v", statusCode, errMsg)
+
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
+				if roundTripper.funcHandler.isDebugEnv {
+					return &http.Response{
+						StatusCode:    statusCode,
+						Proto:         req.Proto,
+						ProtoMajor:    req.ProtoMajor,
+						ProtoMinor:    req.ProtoMinor,
+						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
+						ContentLength: int64(len(errMsg)),
+						Request:       req,
+						Header:        make(http.Header, 0),
+					}, nil
+				}
+
 				return nil, err
 			}
 
@@ -179,7 +196,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			}
 
 			// add the address in router's cache
-			log.Printf("assigning serviceUrl : %s for function : %s", service, roundTripper.funcHandler.function.Name)
+			log.Printf("assigning serviceUrl : %s for function : %s", serviceUrl, roundTripper.funcHandler.function.Name)
 			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
 
 			// flag denotes that service was not obtained from cache, instead, created just now by executor

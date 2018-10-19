@@ -67,6 +67,7 @@ func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, err
 
 	svcName, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("Returning from ioutil read body")
 		return "", err
 	}
 
