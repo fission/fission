@@ -19,8 +19,8 @@ source $(dirname $0)/test_utils.sh
 
 REPO=gcr.io/fission-ci
 IMAGE=fission-bundle
+FLUENTD_IMAGE=fluentd
 FETCHER_IMAGE=$REPO/fetcher
-FLUENTD_IMAGE=gcr.io/fission-ci/fluentd
 BUILDER_IMAGE=$REPO/builder
 TAG=test
 PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
@@ -46,7 +46,7 @@ build_and_push_env_builder python $REPO/python-env-builder:$TAG $BUILDER_IMAGE:$
 build_and_push_env_builder jvm $REPO/jvm-env-builder:$TAG $BUILDER_IMAGE:$TAG
 build_and_push_env_builder go $REPO/go-env-builder:$TAG $BUILDER_IMAGE:$TAG
 
-build_and_push_fluentd $FLUENTD_IMAGE:$TAG
+build_and_push_fluentd $REPO/$FLUENTD_IMAGE:$TAG
 
 build_fission_cli
 
