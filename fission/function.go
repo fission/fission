@@ -254,9 +254,11 @@ func fnCreate(c *cli.Context) error {
 
 		srcArchiveName := c.StringSlice("src")
 		var deployArchiveName []string
-		deployArchiveName = append(deployArchiveName, c.String("code"))
-		if len(deployArchiveName) == 0 {
+		code := c.String("code")
+		if len(code) == 0 {
 			deployArchiveName = c.StringSlice("deploy")
+		} else {
+			deployArchiveName = append(deployArchiveName, c.String("code"))
 		}
 		// fatal when both src & deploy archive are empty
 		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
@@ -468,10 +470,13 @@ func fnUpdate(c *cli.Context) error {
 	}
 
 	var deployArchiveName []string
-	deployArchiveName = append(deployArchiveName, c.String("code"))
-	if len(deployArchiveName) == 0 {
+	code := c.String("code")
+	if len(code) == 0 {
 		deployArchiveName = c.StringSlice("deploy")
+	} else {
+		deployArchiveName = append(deployArchiveName, c.String("code"))
 	}
+
 	srcArchiveName := c.StringSlice("src")
 	pkgName := c.String("pkg")
 	entrypoint := c.String("entrypoint")
