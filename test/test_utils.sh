@@ -498,7 +498,7 @@ install_and_test() {
     fluentdImage=$6
     fluentdImageTag=$7
     pruneInterval=$8
-    routerServiceType=$8
+    routerServiceType=$9
     serviceType=${10}
     preUpgradeCheckImage=${11}
 
