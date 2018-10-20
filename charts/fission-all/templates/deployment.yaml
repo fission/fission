@@ -120,7 +120,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--prometheusSvc", "http://{{ .Release.Name }}-prometheus-server.{{ .Release.Namespace }}"]
@@ -167,7 +167,7 @@ spec:
     spec:
       containers:
       - name: router
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
@@ -242,7 +242,7 @@ spec:
     spec:
       containers:
       - name: executor
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
@@ -299,7 +299,7 @@ spec:
     spec:
       containers:
       - name: buildermgr
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
@@ -328,7 +328,7 @@ spec:
     spec:
       containers:
       - name: kubewatcher
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
@@ -438,7 +438,7 @@ spec:
     spec:
       containers:
         - name: fluentd
-          image: "{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+          image: "{{ .Values.repository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
           imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: INFLUXDB_ADDRESS
@@ -498,7 +498,7 @@ spec:
     spec:
       containers:
       - name: timer
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
@@ -525,9 +525,9 @@ spec:
 #    spec:
 #      containers:
 #      - name: nginx
-#        image: {{ .Values.fissionUiImage }}
+#        image: {{ .Values.repository }}/{{ .Values.fissionUiImage }}
 #      - name: kubectl-proxy
-#        image: lachlanevenson/k8s-kubectl
+#        image: {{ .Values.repository }}/lachlanevenson/k8s-kubectl
 #        args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
 #      serviceAccount: fission-svc
 
@@ -576,7 +576,7 @@ spec:
     spec:
       containers:
       - name: mqtrigger
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
@@ -667,7 +667,7 @@ spec:
     spec:
       containers:
       - name: storagesvc
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--storageServicePort", "8000", "--filePath", "/fission"]
