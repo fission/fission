@@ -23,10 +23,11 @@ services:
 before_install:
   - sudo apt-get update
   - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
-  - sudo apt-get -y install apache2-utils
+  - sudo apt-get -y install apache2-utils curl
   - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 
 install:
+  - curl https://raw.githubusercontent.com/helm/helm/master/scripts/get | sudo bash
   - go get github.com/Masterminds/glide
   - hack/travis-kube-setup.sh
 
