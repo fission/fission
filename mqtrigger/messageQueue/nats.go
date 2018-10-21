@@ -130,7 +130,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			// Make the request
 			resp, err = http.DefaultClient.Do(req)
 			if err != nil {
-				log.Error("Error invoking function for trigger %v: %v", trigger.Metadata.Name, err)
+				log.Errorf("Error invoking function for trigger %v: %v", trigger.Metadata.Name, err)
 				continue
 			}
 			if resp == nil {
@@ -160,7 +160,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 			if len(trigger.Spec.ErrorTopic) > 0 && len(body) > 0 {
 				publishErr := nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
 				if publishErr != nil {
-					log.Error("Failed to publish error to error topic: %v", publishErr)
+					log.Errorf("Failed to publish error to error topic: %v", publishErr)
 					// TODO: We will ack this message after max retries to prevent re-processing but
 					// this may cause message loss
 				}

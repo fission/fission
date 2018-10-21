@@ -46,7 +46,7 @@ func makeKafkaMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQ
 		routerUrl: routerUrl,
 		brokers:   strings.Split(mqCfg.Url, ","),
 	}
-	log.Infof("Created Queue ", kafka)
+	log.Infof("Created Queue %q", kafka)
 	return kafka, nil
 }
 
@@ -55,15 +55,15 @@ func isTopicValidForKafka(topic string) bool {
 }
 
 func (kafka Kafka) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubscription, error) {
-	log.Infof("Inside kakfa subscribe", trigger)
-	log.Infof("brokers set to ", kafka.brokers)
+	log.Infof("Inside kakfa subscribe %q", trigger)
+	log.Infof("brokers set to %q", kafka.brokers)
 
 	// Create new consumer
 	consumerConfig := cluster.NewConfig()
 	consumerConfig.Consumer.Return.Errors = true
 	consumerConfig.Group.Return.Notifications = true
 	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
-	log.Infof("Created a new consumer ", consumer)
+	log.Infof("Created a new consumer: %#v", consumer)
 	if err != nil {
 		panic(err)
 	}
@@ -74,7 +74,7 @@ func (kafka Kafka) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubs
 	producerConfig.Producer.Retry.Max = 10
 	producerConfig.Producer.Return.Successes = true
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
-	log.Infof("Created a new producer ", producer)
+	log.Infof("Created a new producer %q", producer)
 	if err != nil {
 		panic(err)
 	}
@@ -141,7 +141,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.Me
 		// Make the request
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
-			log.Error("Error invoking function for trigger %v: %v", trigger.Metadata.Name, err)
+			log.Errorf("Error invoking function for trigger %v: %v", trigger.Metadata.Name, err)
 			continue
 		}
 		if resp == nil {

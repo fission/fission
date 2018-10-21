@@ -43,7 +43,7 @@ func NewClient() redis.Conn {
 
 	c, err := redis.Dial("tcp", redisUrl)
 	if err != nil {
-		log.Error("Could not connect to Redis: %v\n", err)
+		log.Errorf("Could not connect to Redis: %v\n", err)
 		return nil
 	}
 	return c
