@@ -92,7 +92,7 @@ func pkgCreate(c *cli.Context) error {
 		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	meta := createPackage(client, pkgNamespace, envName, envNamespace, srcArchive, deployArchive, buildcmd, "")
+	meta := createPackage(client, pkgNamespace, envName, envNamespace, srcArchive, deployArchive, buildcmd, "", false)
 	fmt.Printf("Package '%v' created\n", meta.GetName())
 
 	return nil
@@ -148,7 +148,7 @@ func pkgUpdate(c *cli.Context) error {
 	}
 
 	newPkgMeta, err := updatePackage(client, pkg,
-		envName, envNamespace, srcArchive, deployArchive, buildcmd, false)
+		envName, envNamespace, srcArchive, deployArchive, buildcmd, false, false)
 	if err != nil {
 		util.CheckErr(err, "update package")
 	}
@@ -166,7 +166,7 @@ func pkgUpdate(c *cli.Context) error {
 }
 
 func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace string,
-	srcArchive []string, deployArchive []string, buildcmd string, forceRebuild bool) (*metav1.ObjectMeta, error) {
+	srcArchive []string, deployArchive []string, buildcmd string, forceRebuild bool, codeFlag bool) (*metav1.ObjectMeta, error) {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
 	needToBuild := false
@@ -194,7 +194,12 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	if len(deployArchive) > 0 {
-		deployArchiveName := archiveParser(deployArchive, envName)
+		var deployArchiveName string
+		if codeFlag {
+			deployArchiveName = deployArchive[0]
+		} else {
+			deployArchiveName = archiveParser(deployArchive, envName)
+		}
 		deployArchiveMetadata = createArchive(client, deployArchiveName, "")
 		pkg.Spec.Deployment = *deployArchiveMetadata
 		// Users may update the env, envNS and deploy archive at the same time,
@@ -443,7 +448,7 @@ func pkgRebuild(c *cli.Context) error {
 			pkg.Metadata.Name, fission.BuildStatusFailed))
 	}
 
-	_, err = updatePackage(client, pkg, "", "", nil, nil, "", true)
+	_, err = updatePackage(client, pkg, "", "", nil, nil, "", true, false)
 	util.CheckErr(err, "update package")
 
 	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)
@@ -534,7 +539,7 @@ func createArchive(client *client.Client, fileName string, specFile string) *fis
 	return &archive
 }
 
-func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchive []string, deployArchive []string, buildcmd string, specFile string) *metav1.ObjectMeta {
+func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchive []string, deployArchive []string, buildcmd string, specFile string, codeFlag bool) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: envNamespace,
@@ -548,10 +553,17 @@ func createPackage(client *client.Client, pkgNamespace string, envName string, e
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fission.BuildStatusNone
 		}
-		deployArchiveName := archiveParser(deployArchive, envName)
-
+		var deployArchiveName string
+		if codeFlag {
+			deployArchiveName = deployArchive[0]
+		} else {
+			deployArchiveName = archiveParser(deployArchive, envName)
+		}
+		fmt.Println("deployArchiveName=", deployArchiveName)
 		pkgSpec.Deployment = *createArchive(client, deployArchiveName, specFile)
+		fmt.Println("pkgSpec.Deployment=", pkgSpec.Deployment)
 		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveName), uniuri.NewLen(4)))
+		fmt.Println("pkgName=", pkgName)
 	}
 	if len(srcArchive) > 0 {
 		srcArchiveName := archiveParser(srcArchive, envName)
@@ -663,7 +675,8 @@ func downloadURL(fileUrl string) (io.ReadCloser, error) {
 func archiveParser(archiveInput []string, envName string) string {
 	var archiveName = ""
 
-	if (len(archiveInput) == 1 && archiver.Zip.Match(archiveInput[0])) || (len(archiveInput) == 1 && (strings.HasPrefix(archiveInput[0], "http://") || strings.HasPrefix(archiveInput[0], "https://"))) {
+	if (len(archiveInput) == 1 && archiver.Zip.Match(archiveInput[0])) ||
+		(len(archiveInput) == 1 && (strings.HasPrefix(archiveInput[0], "http://") || strings.HasPrefix(archiveInput[0], "https://"))) {
 		return archiveInput[0]
 	}
 
