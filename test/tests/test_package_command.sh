@@ -125,9 +125,9 @@ checkFunctionResponse $fn2 'a: 1 b: {c: 3, d: 4}'
 # TBD
 
 # 4) Deployment files from a directory
-
-pkg4=$(fission package create --deploy "$ROOT/examples/python/multifile/*" --env python| cut -f2 -d' '| tr -d \')
-
+pushd $ROOT/examples/python/
+pkg4=$(fission package create --deploy "multifile/*" --env python| cut -f2 -d' '| tr -d \')
+popd
 log "Creating function " $fn4
 fission fn create --name $fn4 --pkg $pkg4 --entrypoint "main.main"
 
