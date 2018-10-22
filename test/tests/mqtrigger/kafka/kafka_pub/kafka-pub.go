@@ -26,6 +26,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.Write([]byte(fmt.Sprintf("Failed to publish message to topic %s: %v", "testtopic", err)))
+		return
 	}
 	w.Write([]byte("Successfully sent to testtopic"))
 }
