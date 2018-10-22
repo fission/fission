@@ -559,11 +559,8 @@ func createPackage(client *client.Client, pkgNamespace string, envName string, e
 		} else {
 			deployArchiveName = archiveParser(deployArchive, envName)
 		}
-		fmt.Println("deployArchiveName=", deployArchiveName)
 		pkgSpec.Deployment = *createArchive(client, deployArchiveName, specFile)
-		fmt.Println("pkgSpec.Deployment=", pkgSpec.Deployment)
 		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveName), uniuri.NewLen(4)))
-		fmt.Println("pkgName=", pkgName)
 	}
 	if len(srcArchive) > 0 {
 		srcArchiveName := archiveParser(srcArchive, envName)
