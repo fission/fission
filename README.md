@@ -53,6 +53,7 @@ The following environments are currently available:
  | ------------------------------------ | ------------------------- |
  | Binary (for executables or scripts)  | `fission/binary-env`      |
  | Go                                   | `fission/go-env`          |
+ | JVM                                  | `fission/jvm-env`         |
  | .NET                                 | `fission/dotnet-env`      |
  | .NET 2.0                             | `fission/dotnet20-env`    |
  | NodeJS (Alpine)                      | `fission/node-env`        |
