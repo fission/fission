@@ -53,10 +53,12 @@ type HTTPTriggerSet struct {
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
+	svcAddrUpdateLocks         *svcAddrUpdateLocks
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, fissionClient *crd.FissionClient,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams, isDebugEnv bool) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
+	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams, isDebugEnv bool, locks *svcAddrUpdateLocks) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
+
 	httpTriggerSet := &HTTPTriggerSet{
 		functionServiceMap:         fmap,
 		triggers:                   []crd.HTTPTrigger{},
@@ -67,6 +69,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, frmap *functionRecorderMap, tr
 		updateRouterRequestChannel: make(chan struct{}),
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
+		svcAddrUpdateLocks:         locks,
 	}
 	var tStore, fnStore, rStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -153,7 +156,15 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			tsRoundTripperParams:     ts.tsRoundTripperParams,
 			recorderName:             recorderName,
 			isDebugEnv:               ts.isDebugEnv,
+			svcAddrUpdateLocks:       ts.svcAddrUpdateLocks,
 		}
+
+		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
+		// it's function metadata is set here.
+
+		// The functionHandler For HTTP trigger with fn reference type "FunctionReferenceTypeFunctionWeights",
+		// it's function metadata is decided dynamically before proxying the request in order to support canary
+		// deployment. For more details, please check "handler" function of functionHandler.
 
 		if rr.resolveResultType == resolveResultSingleFunction {
 			for _, metadata := range fh.functionMetadataMap {
@@ -201,6 +212,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			tsRoundTripperParams: ts.tsRoundTripperParams,
 			recorderName:         recorderName,
 			isDebugEnv:           ts.isDebugEnv,
+			svcAddrUpdateLocks:   ts.svcAddrUpdateLocks,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
 	}
