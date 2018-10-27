@@ -174,8 +174,11 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		serviceUrl, err = roundTripper.funcHandler.fmap.lookup(fnMeta)
 		if err != nil {
 			if e, ok := err.(fission.Error); ok && e.Code != fission.ErrorNotFound {
-				return nil, errors.Wrap(err, fmt.Sprintf("Error getting function %v;s service entry from cache", fnMeta.Name))
+				err = errors.Wrap(err, fmt.Sprintf("Error getting function %v;s service entry from cache", fnMeta.Name))
+			} else {
+				err = errors.Wrap(err, "Unknown error when looking up service entry")
 			}
+			return nil, err
 		} else {
 			serviceUrlFromCache = true
 		}

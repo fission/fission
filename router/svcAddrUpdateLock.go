@@ -26,10 +26,10 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-type svcAddrUpdateSOperation int
+type svcAddrUpdateOperation int
 
 const (
-	GET svcAddrUpdateSOperation = iota
+	GET svcAddrUpdateOperation = iota
 	DELETE
 	EXPIRE
 )
@@ -50,7 +50,7 @@ type (
 	}
 
 	svcAddrUpdateRequest struct {
-		requestType  svcAddrUpdateSOperation
+		requestType  svcAddrUpdateOperation
 		responseChan chan *svcAddrUpdateResponse
 		fnMeta       *metav1.ObjectMeta
 	}
