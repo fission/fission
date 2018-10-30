@@ -386,7 +386,7 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: tutum/influxdb
+        image: influxdb
         env:
           - name: PRE_CREATE_DB
             value: fissionFunctionLog
