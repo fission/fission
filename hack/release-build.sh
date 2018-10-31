@@ -243,8 +243,6 @@ build_yamls() {
         helm template ${c} -n ${releaseName} --set serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
         # for environments that support LoadBalancer
         helm template ${c} -n ${releaseName} > ${c}-${version}.yaml
-        # for cases where prometheus installation along with fission is not preferred
-        helm template ${c} -n ${releaseName} --set canaryDeployment.prometheusDeploy=false > ${c}-${version}-fission-only.yaml
 
         mv *.yaml ${BUILDDIR}/yamls/
     done
