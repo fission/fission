@@ -103,7 +103,7 @@ See the [installation guide](http://docs.fission.io/latest/installation).
 Compiling Fission
 =================
 
-See the [compilation guide](http://docs.fission.io/latest/contributing/compiling/).
+See the [compilation guide](http://docs.fission.io/latest/contributing/).
 
 Status
 ======
