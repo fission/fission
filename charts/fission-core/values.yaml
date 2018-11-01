@@ -74,8 +74,8 @@ preUpgradeChecksImage: fission/pre-upgrade-checks
 debugEnv: true
 
 ## set this flag to true if prometheus needs to be deployed along with fission
-prometheusDeploy: true
+prometheusDeploy: false
 
 ## set this flag to false if you dont need canary deployment feature
 canaryDeployment:
-  enabled: true
+  enabled: false
