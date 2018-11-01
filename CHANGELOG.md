@@ -1,21 +1,44 @@
-# 0.11.0
-[Documentation](https://docs.fission.io/0.11.0/)
-## Downloads for 0.11.0
+# 0.12.0
+[Documentation](https://docs.fission.io/0.12.0/)
+## Downloads for 0.12.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-0.11.0.tgz](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0.tgz) | `3804bfd8f3b458eefce64695f4e38d9c0ac404fe8495e15e949739d5c1104e49`
-[fission-core-0.11.0.tgz](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0.tgz) | `0db7d23b75db85c8afb25fd608de303a3b3482ea810c22148a6b920b33232a6a`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-linux) | `5bcc9b4792441ae7eaa14ba4616700b3a185457f035353faa163ff4764b9b957`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-osx) | `a7854624ff6e57d91787cb5cc6d1c7f58d945387183239a1707aa97ced920863`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.11.0/fission-cli-windows.exe) | `833ede15bbd9f36536b3680d53f169023a12b588ffa67d27890429cf25ead3fc`
-[fission-all-0.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0-minikube.yaml) | `10c8e00b4c7f06f7426e310d4a5a51d1ebd4dc745125dd19893ca301969b7958`
-[fission-all-0.11.0.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-all-0.11.0.yaml) | `ad3898c692713bc8f597efbda25e3e3dc2d213a665c8de03465d40ffd9a21bce`
-[fission-core-0.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0-minikube.yaml) | `0f5b21d9ad2e45b870cff0b7e6fc3c1ef0414887594e23e776af87dd21003ba8`
-[fission-core-0.11.0.yaml](https://github.com/fission/fission/releases/download/0.11.0/fission-core-0.11.0.yaml) | `5cb4f1ba844343b655e86e8c6c40d524a64bf4dae7ba76a27f9ca02baacfa703`
+[fission-all-0.12.0.yaml](https://github.com/fission/fission/releases/download/0.12.0/fission-all-0.12.0.yaml) | `1cee07f922849fb41830e2bf32d02f3999ef8c60b49fce8c244c870274c732e3`
+[fission-core-0.12.0.yaml](https://github.com/fission/fission/releases/download/0.12.0/fission-core-0.12.0.yaml) | `c8d41e62b939f39a69280360015a71d9bab0301c50ea6c3755f16bb5dbc7aa1d`
+[fission-core-0.12.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.12.0/fission-core-0.12.0-minikube.yaml) | `54b64b6363ba267d768bff4f68379d835467efd99ceab6410ff6900839b6185f`
+[fission-all-0.12.0-minikube.yaml](https://github.com/fission/fission/releases/download/0.12.0/fission-all-0.12.0-minikube.yaml) | `0044d5d2ecbebae2c8252d96949de9bcd348c8de76d013fbdf7fee5c9fe757af`
+[fission-core-0.12.0.tgz](https://github.com/fission/fission/releases/download/0.12.0/fission-core-0.12.0.tgz) | `c93949fe0428951ffe5b2fef7133f48d23b82d7b045129bb57ee2de2bd9d9257`
+[fission-all-0.12.0.tgz](https://github.com/fission/fission/releases/download/0.12.0/fission-all-0.12.0.tgz) | `7b9b739abde387bd96689e709ed25ebae879e30575036b0e4fb54544b1c9f10b`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/0.12.0/fission-cli-osx) | `54f3b0bf64d57b1996d3871415f540506c5aa9f65227d27be086dfe568a945ce`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/0.12.0/fission-cli-linux) | `c04e077c79b9211f116bb16341028f0bae2d6a8d89ddb59bb3ce1b4a2ad57364`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/0.12.0/fission-cli-windows.exe) | `987c62899fb5c26599b14bf08d713d036c18f12e74abb903665e52c41a14f9a6`
 
 # Change Log
+
+## [0.12.0](https://github.com/fission/fission/tree/0.12.0) (2018-11-01)
+[Full Changelog](https://github.com/fission/fission/compare/0.11.0...0.12.0)
+
+**Merged pull requests:**
+
+- Keep prometheus and canary deploy set to false in fission-core [\#964](https://github.com/fission/fission/pull/964) ([smruthi2187](https://github.com/smruthi2187))
+- Update readme to include JVM [\#953](https://github.com/fission/fission/pull/953) ([david-mcgillicuddy-ovo](https://github.com/david-mcgillicuddy-ovo))
+- Bump flask version  [\#942](https://github.com/fission/fission/pull/942) ([life1347](https://github.com/life1347))
+- Adding JVM heap options to environment [\#936](https://github.com/fission/fission/pull/936) ([vishal-biyani](https://github.com/vishal-biyani))
+- Demo script updates [\#934](https://github.com/fission/fission/pull/934) ([soamvasani](https://github.com/soamvasani))
+- Fix flag not found problem when running canary demo scripts [\#914](https://github.com/fission/fission/pull/914) ([life1347](https://github.com/life1347))
+- V0.11.0 [\#913](https://github.com/fission/fission/pull/913) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix failed to pull influxdb image from dockerhub [\#957](https://github.com/fission/fission/pull/957) ([life1347](https://github.com/life1347))
+- Kafka tests [\#944](https://github.com/fission/fission/pull/944) ([vishal-biyani](https://github.com/vishal-biyani))
+- fix a few canary deployment issues [\#943](https://github.com/fission/fission/pull/943) ([smruthi2187](https://github.com/smruthi2187))
+- Support for full url  \(base on aalubin 882 changes\) [\#941](https://github.com/fission/fission/pull/941) ([life1347](https://github.com/life1347))
+- Remove version from release name since it contains illegal chars for names [\#939](https://github.com/fission/fission/pull/939) ([soamvasani](https://github.com/soamvasani))
+- Feature flag to enable/disable canary + optional prometheus install [\#937](https://github.com/fission/fission/pull/937) ([smruthi2187](https://github.com/smruthi2187))
+- Return the error on failed specializations with `fn test --debug`  [\#917](https://github.com/fission/fission/pull/917) ([smruthi2187](https://github.com/smruthi2187))
+- Added build and push procedures for Nodejs builder environment [\#916](https://github.com/fission/fission/pull/916) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add X-Forwarded-Host to request header [\#890](https://github.com/fission/fission/pull/890) ([life1347](https://github.com/life1347))
+- Optimize function latency when cache expired/invalid under high concurrency [\#856](https://github.com/fission/fission/pull/856) ([life1347](https://github.com/life1347))
 
 ## [0.11.0](https://github.com/fission/fission/tree/0.11.0) (2018-10-01)
 [Full Changelog](https://github.com/fission/fission/compare/0.10.0...0.11.0)
@@ -27,7 +50,7 @@ filename | sha256 hash
 - Check CRD creation error instead of doing return directly [\#897](https://github.com/fission/fission/pull/897) ([life1347](https://github.com/life1347))
 - Fix failed to find release-builder dockerfile & push specific tag [\#870](https://github.com/fission/fission/pull/870) ([life1347](https://github.com/life1347))
 - V0.10.0 [\#868](https://github.com/fission/fission/pull/868) ([life1347](https://github.com/life1347))
-- Fixes #758, uses v2 specialize for env versions 2 or higher [\#911](https://github.com/fission/fission/pull/911) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fixes \#758, uses v2 specialize for env versions 2 or higher [\#911](https://github.com/fission/fission/pull/911) ([vishal-biyani](https://github.com/vishal-biyani))
 - Java env test - Maven verbosity reduction [\#902](https://github.com/fission/fission/pull/902) ([vishal-biyani](https://github.com/vishal-biyani))
 - Canary deployments for fission functions. [\#892](https://github.com/fission/fission/pull/892) ([smruthi2187](https://github.com/smruthi2187))
 - Fix fetcher not close file descriptor correctly [\#889](https://github.com/fission/fission/pull/889) ([life1347](https://github.com/life1347))
