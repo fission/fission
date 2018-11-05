@@ -401,9 +401,8 @@ spec:
                 name: influxdb
                 key: password
 
-{{- if .Values.heapster }}
-
 ---
+{{- if .Values.heapster }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -443,9 +442,9 @@ spec:
         - /heapster
         - --source=kubernetes:https://kubernetes.default
       serviceAccount: {{ .Release.Namespace }}/fission-svc
-{{- end -}}
 
 ---
+{{- end }}
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
