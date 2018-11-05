@@ -202,6 +202,8 @@ func fnCreate(c *cli.Context) error {
 
 		// create new package in the same namespace as the function.
 		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, specFile)
+
+		fmt.Printf("package '%v' created\n", pkgMetadata.Name)
 	}
 
 	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
@@ -681,7 +683,7 @@ func fnLogs(c *cli.Context) error {
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
 				if err != nil {
-					log.Fatal("failed to query logs")
+					log.Fatal(fmt.Sprintf("Error querying logs: %v", err))
 				}
 				for _, logEntry := range logEntries {
 					if c.Bool("d") {
