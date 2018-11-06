@@ -442,8 +442,9 @@ spec:
         - /heapster
         - --source=kubernetes:https://kubernetes.default
       serviceAccount: {{ .Release.Namespace }}/fission-svc
----      
-{{- end -}}
+
+---
+{{- end }}
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
