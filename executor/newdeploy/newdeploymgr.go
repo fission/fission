@@ -72,6 +72,7 @@ type (
 		reqType         requestType
 		fn              *crd.Function
 		responseChannel chan *fnResponse
+		precreate       bool
 	}
 
 	fnResponse struct {
@@ -156,7 +157,7 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
-			deploy.createFunction(fn)
+			deploy.createFunction(fn, true)
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
@@ -176,7 +177,7 @@ func (deploy *NewDeploy) service() {
 		req := <-deploy.requestChannel
 		switch req.reqType {
 		case FnCreate:
-			fsvc, err := deploy.fnCreate(req.fn)
+			fsvc, err := deploy.fnCreate(req.fn, req.precreate)
 			req.responseChannel <- &fnResponse{
 				error: err,
 				fSvc:  fsvc,
@@ -205,6 +206,7 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 		fn:              fn,
 		reqType:         FnCreate,
 		responseChannel: c,
+		precreate:       false,
 	}
 
 	resp := <-c
@@ -214,13 +216,11 @@ func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncS
 	return resp.fSvc, nil
 }
 
-func (deploy *NewDeploy) createFunction(fn *crd.Function) {
+func (deploy *NewDeploy) createFunction(fn *crd.Function, precreate bool) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy {
 		return
 	}
-	if fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale <= 0 {
-		return
-	}
+
 	// Eager creation of function if minScale is greater than 0
 	log.Printf("Eagerly creating newDeploy objects for function")
 	c := make(chan *fnResponse)
@@ -228,6 +228,7 @@ func (deploy *NewDeploy) createFunction(fn *crd.Function) {
 		fn:              fn,
 		reqType:         FnCreate,
 		responseChannel: c,
+		precreate:       precreate,
 	}
 	resp := <-c
 	if resp.error != nil {
@@ -263,7 +264,7 @@ func (deploy *NewDeploy) deleteFunction(fn *crd.Function) {
 	}
 }
 
-func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) fnCreate(fn *crd.Function, precreate bool) (*fscache.FuncSvc, error) {
 	fsvc, err := deploy.fsCache.GetByFunction(&fn.Metadata)
 	if err == nil {
 		return fsvc, err
@@ -298,8 +299,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 		return fsvc, err
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
-
-	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, ns)
+	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, ns, precreate)
 	if err != nil {
 		log.Printf("Error creating the deployment %v: %v", objName, err)
 		return fsvc, err
@@ -384,7 +384,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		if oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypeNewdeploy &&
 			newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
 			log.Printf("function type changed to new deployment, creating resources: %v", newFn)
-			_, err := deploy.fnCreate(newFn)
+			_, err := deploy.fnCreate(newFn, false)
 			if err != nil {
 				updateStatus(oldFn, err, "error changing the function's type to newdeploy")
 			}
