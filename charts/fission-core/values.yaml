@@ -61,6 +61,9 @@ persistence:
 ## false to disable analytics.
 analytics: true
 
+## Internally used for generating an analytics job for non-helm installs
+analyticsNonHelmInstall: false
+
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
