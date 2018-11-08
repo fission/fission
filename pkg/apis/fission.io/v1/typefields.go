@@ -279,6 +279,8 @@ type (
 		// or unarchived file should be placed, which is then used by specialize handler
 		KeepArchive bool `json:"keeparchive"`
 
+		// Optional, defaults to empty.
+		// The secretes list for fission to pull images from private registries
 		ImagePullSecrets []apiv1.LocalObjectReference `json:"imagepullsecrets"`
 	}
 
