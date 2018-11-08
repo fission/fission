@@ -1,0 +1,31 @@
+{{ if .Values.analyticsNonHelmInstall }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "fullname" . }}-{{ .Chart.Version }}-{{ randNumeric 3 }}
+  labels:
+    # The "release" convention makes it easy to tie a release to all of the
+    # Kubernetes resources that were created as part of that release.
+    release: {{ .Release.Name }}
+    # This makes it easy to audit chart usage.
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ template "name" . }}
+spec:
+  #ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      name: {{ template "fullname" . }}
+      labels:
+        release: {{ .Release.Name }}
+        app: {{ template "name" . }}
+      annotations:
+        {{- if .Values.enableIstio }}
+        "sidecar.istio.io/inject": "false"
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: post-install-job
+          image: "fission/alpinecurl"
+          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"yaml-post-install\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.sh/analytics || true"]
+{{ end }}
