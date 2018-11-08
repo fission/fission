@@ -278,6 +278,8 @@ type (
 		// KeepArchive is used by fetcher to determine if the extracted archive
 		// or unarchived file should be placed, which is then used by specialize handler
 		KeepArchive bool `json:"keeparchive"`
+
+		ImagePullSecrets []apiv1.LocalObjectReference `json:"imagepullsecrets"`
 	}
 
 	AllowedFunctionsPerContainer string

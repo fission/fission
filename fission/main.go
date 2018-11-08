@@ -204,10 +204,11 @@ func main() {
 	envExternalNetworkFlag := cli.BoolFlag{Name: "externalnetwork", Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
 	envTerminationGracePeriodFlag := cli.Int64Flag{Name: "graceperiod, period", Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
 	envVersionFlag := cli.IntFlag{Name: "version", Value: 1, Usage: "Environment API version (1 means v1 interface)"}
+	envImagePullSecretFlag := cli.StringSliceFlag{Name: "imagepullsecret, pullsecret", Usage: "Name of Kubernetes secretes for fission to pull images from private registries: --pullsecret=foo,bar"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, specSaveFlag}, Action: envCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, envImagePullSecretFlag, specSaveFlag}, Action: envCreate},
 		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envGet},
-		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag, envTerminationGracePeriodFlag}, Action: envUpdate},
+		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag, envTerminationGracePeriodFlag, envImagePullSecretFlag}, Action: envUpdate},
 		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envDelete},
 		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{envNamespaceFlag}, Action: envList},
 	}

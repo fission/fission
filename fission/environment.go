@@ -48,6 +48,19 @@ func getFunctionsByEnvironment(client *client.Client, envName, envNamespace stri
 	return fns, nil
 }
 
+func getImagePullSecrets(c *cli.Context) []v1.LocalObjectReference {
+	var imagePullSecrets []v1.LocalObjectReference
+	for _, s := range c.StringSlice("imagepullsecret") {
+		imagePullSecrets = append(
+			imagePullSecrets,
+			v1.LocalObjectReference{
+				Name: s,
+			},
+		)
+	}
+	return imagePullSecrets
+}
+
 func envCreate(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 
@@ -123,6 +136,7 @@ func envCreate(c *cli.Context) error {
 			AllowAccessToExternalNetwork: envExternalNetwork,
 			TerminationGracePeriod:       envGracePeriod,
 			KeepArchive:                  keepArchive,
+			ImagePullSecrets:             getImagePullSecrets(c),
 		},
 	}
 
@@ -214,6 +228,10 @@ func envUpdate(c *cli.Context) error {
 
 	if c.IsSet("keeparchive") {
 		env.Spec.KeepArchive = c.Bool("keeparchive")
+	}
+
+	if c.IsSet("imagepullsecret") {
+		env.Spec.ImagePullSecrets = getImagePullSecrets(c)
 	}
 
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork

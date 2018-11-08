@@ -616,6 +616,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 							},
 						},
 					},
+					ImagePullSecrets:   env.Spec.ImagePullSecrets,
 					ServiceAccountName: "fission-builder",
 				},
 			},

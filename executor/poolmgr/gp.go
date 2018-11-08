@@ -625,6 +625,7 @@ func (gp *GenericPool) createPool() error {
 							},
 						},
 					},
+					ImagePullSecrets:   gp.env.Spec.ImagePullSecrets,
 					ServiceAccountName: "fission-fetcher",
 					// TerminationGracePeriodSeconds should be equal to the
 					// sleep time of preStop to make sure that SIGTERM is sent

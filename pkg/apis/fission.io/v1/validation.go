@@ -401,6 +401,12 @@ func (spec EnvironmentSpec) Validate() error {
 		}
 	}
 
+	if len(spec.ImagePullSecrets) > 0 {
+		for _, s := range spec.ImagePullSecrets {
+			result = multierror.Append(result, ValidateKubeName("ImagePullSecrets.Name", s.Name))
+		}
+	}
+
 	if spec.Poolsize < 0 {
 		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "Poolsize must be greater or equal to 0"))
 	}

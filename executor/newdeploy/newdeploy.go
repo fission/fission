@@ -340,6 +340,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 							},
 						},
 					},
+					ImagePullSecrets:              env.Spec.ImagePullSecrets,
 					ServiceAccountName:            "fission-fetcher",
 					TerminationGracePeriodSeconds: &gracePeriodSeconds,
 				},
