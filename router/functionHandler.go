@@ -19,6 +19,7 @@ package router
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -89,32 +90,24 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
-// from router's cache or from executor if router entry is stale.
-//
-// It first checks if the service address for this function came from router's cache.
-// If it didn't, it makes a request to executor to get a new service for function. If that succeeds, it adds the address
-// to it's cache and makes a request to that address with transport.RoundTrip call.
-// Initial requests to new k8s services sometimes seem to fail, but retries work. So, it retries with an exponential
-// back-off for maxRetries times.
-//
-// Else if it came from the cache, it makes a transport.RoundTrip with that cached address. If the response received is
-// a network dial error (which means that the pod doesn't exist anymore), it removes the cache entry and makes a request
-// to executor to get a new service for function. It then retries transport.RoundTrip with the new address.
-//
-// At any point in time, if the response received from transport.RoundTrip is other than dial network error, it is
-// relayed as-is to the user, without any retries.
-//
-// While this RoundTripper handles the case where a previously cached address of the function pod isn't valid anymore
-// (probably because the pod got deleted somehow), by making a request to executor to get a new service for this function,
-// it doesn't handle a case where a newly specialized pod gets deleted just after the GetServiceForFunction succeeds.
-// In such a case, the RoundTripper will retry requests against the new address and give up after maxRetries.
-// However, the subsequent http call for this function will ensure the cache is invalidated.
-//
-// If GetServiceForFunction returns an error or if RoundTripper exits with an error, it get's translated into 502
-// inside ServeHttp function of the reverseProxy.
-// Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
-// if it returned an error.
+// To keep the request body open during retries, we create an interface with Close operation being a no-op.
+// Details : https://github.com/flynn/flynn/pull/875/files
+type fakeCloseReadCloser struct {
+	io.ReadCloser
+}
+
+func (w *fakeCloseReadCloser) Close() error {
+	return nil
+}
+
+func (w *fakeCloseReadCloser) RealClose() error {
+	if w.ReadCloser == nil {
+		return nil
+	}
+	return w.ReadCloser.Close()
+}
+
+// RoundTrip is a custom transport with retries to function service endpoint
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var serviceUrlFromCache bool
 	var serviceUrl *url.URL
@@ -168,13 +161,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
-	var reqBody []byte
-	if req.Body != nil {
-		reqBody, err = ioutil.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// wrap the req.Body with another ReadCloser interface.
+	req.Body = &fakeCloseReadCloser{req.Body}
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
 
@@ -225,9 +213,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				go roundTripper.funcHandler.tapService(serviceUrl)
 			}
 
-			// reset the body before every retry
-			req.Body = ioutil.NopCloser(bytes.NewReader(reqBody))
-
 			// forward the request to the function service
 			resp, err = transport.RoundTrip(req)
 			if err == nil {
@@ -252,6 +237,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 					}
 				}
 
+				// close req body
+				req.Body.(*fakeCloseReadCloser).RealClose()
+
 				// return response back to user
 				return resp, nil
 			}
@@ -259,6 +247,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			// if transport.RoundTrip returns a non-network dial error, then relay it back to user
 			if !fission.IsNetworkDialError(err) {
 				err = errors.Wrapf(err, "Error sending request to function %v", fnMeta.Name)
+				// close req body
+				req.Body.(*fakeCloseReadCloser).RealClose()
 				return resp, err
 			}
 
@@ -342,6 +332,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				}
 
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
+				// close req body
+				req.Body.(*fakeCloseReadCloser).RealClose()
 				return nil, err
 			}
 
@@ -350,6 +342,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			if err != nil {
 				log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
+				// close req body
+				req.Body.(*fakeCloseReadCloser).RealClose()
 				return nil, err
 			}
 
@@ -369,6 +363,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	if err != nil {
 		log.Printf("Error getting response from function %v: %v",
 			fnMeta.Name, err)
+		// close req body
+		req.Body.(*fakeCloseReadCloser).RealClose()
 	}
 
 	return resp, err
