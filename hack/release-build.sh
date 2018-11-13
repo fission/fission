@@ -241,18 +241,18 @@ build_yamls() {
 
     for c in fission-all fission-core
     do
-        pushd ${c}
-
         # fetch dependencies
+        pushd ${c}
         helm dependency update
-        # for minikube and other environment that don't support LoadBalancer
+        popd
+
+        # for minikube and other environments that don't support LoadBalancer
         helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
         # for environments that support LoadBalancer
         helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true > ${c}-${version}.yaml
+
         # copy yaml files to build directory
         mv *.yaml ${BUILDDIR}/yamls/
-
-        popd
     done
 
     popd
