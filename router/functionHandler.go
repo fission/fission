@@ -91,7 +91,7 @@ func init() {
 }
 
 // To keep the request body open during retries, we create an interface with Close operation being a no-op.
-// Details : https://github.com/flynn/flynn/pull/875/files
+// Details : https://github.com/flynn/flynn/pull/875
 type fakeCloseReadCloser struct {
 	io.ReadCloser
 }
@@ -107,7 +107,8 @@ func (w *fakeCloseReadCloser) RealClose() error {
 	return w.ReadCloser.Close()
 }
 
-// RoundTrip is a custom transport with retries to function service endpoint
+// RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
+// from executor or router's cache.
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var serviceUrlFromCache bool
 	var serviceUrl *url.URL
@@ -165,6 +166,13 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	if req.Body != nil {
 		req.Body = &fakeCloseReadCloser{req.Body}
 	}
+
+	// close req body
+	defer func() {
+		if req.Body != nil {
+			req.Body.(*fakeCloseReadCloser).RealClose()
+		}
+	}()
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
 
@@ -239,11 +247,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 					}
 				}
 
-				// close req body
-				if req.Body != nil {
-					req.Body.(*fakeCloseReadCloser).RealClose()
-				}
-
 				// return response back to user
 				return resp, nil
 			}
@@ -251,10 +254,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			// if transport.RoundTrip returns a non-network dial error, then relay it back to user
 			if !fission.IsNetworkDialError(err) {
 				err = errors.Wrapf(err, "Error sending request to function %v", fnMeta.Name)
-				// close req body
-				if req.Body != nil {
-					req.Body.(*fakeCloseReadCloser).RealClose()
-				}
 				return resp, err
 			}
 
@@ -338,10 +337,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				}
 
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-				// close req body
-				if req.Body != nil {
-					req.Body.(*fakeCloseReadCloser).RealClose()
-				}
 				return nil, err
 			}
 
@@ -350,10 +345,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			if err != nil {
 				log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-				// close req body
-				if req.Body != nil {
-					req.Body.(*fakeCloseReadCloser).RealClose()
-				}
 				return nil, err
 			}
 
@@ -373,10 +364,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	if err != nil {
 		log.Printf("Error getting response from function %v: %v",
 			fnMeta.Name, err)
-		// close req body
-		if req.Body != nil {
-			req.Body.(*fakeCloseReadCloser).RealClose()
-		}
 	}
 
 	return resp, err
