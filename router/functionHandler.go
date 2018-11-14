@@ -162,7 +162,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
 	// wrap the req.Body with another ReadCloser interface.
-	req.Body = &fakeCloseReadCloser{req.Body}
+	if req.Body != nil {
+		req.Body = &fakeCloseReadCloser{req.Body}
+	}
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
 
@@ -238,7 +240,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				}
 
 				// close req body
-				req.Body.(*fakeCloseReadCloser).RealClose()
+				if req.Body != nil {
+					req.Body.(*fakeCloseReadCloser).RealClose()
+				}
 
 				// return response back to user
 				return resp, nil
@@ -248,7 +252,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			if !fission.IsNetworkDialError(err) {
 				err = errors.Wrapf(err, "Error sending request to function %v", fnMeta.Name)
 				// close req body
-				req.Body.(*fakeCloseReadCloser).RealClose()
+				if req.Body != nil {
+					req.Body.(*fakeCloseReadCloser).RealClose()
+				}
 				return resp, err
 			}
 
@@ -333,7 +339,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
 				// close req body
-				req.Body.(*fakeCloseReadCloser).RealClose()
+				if req.Body != nil {
+					req.Body.(*fakeCloseReadCloser).RealClose()
+				}
 				return nil, err
 			}
 
@@ -343,7 +351,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
 				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
 				// close req body
-				req.Body.(*fakeCloseReadCloser).RealClose()
+				if req.Body != nil {
+					req.Body.(*fakeCloseReadCloser).RealClose()
+				}
 				return nil, err
 			}
 
@@ -364,7 +374,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		log.Printf("Error getting response from function %v: %v",
 			fnMeta.Name, err)
 		// close req body
-		req.Body.(*fakeCloseReadCloser).RealClose()
+		if req.Body != nil {
+			req.Body.(*fakeCloseReadCloser).RealClose()
+		}
 	}
 
 	return resp, err
