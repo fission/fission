@@ -236,14 +236,22 @@ build_yamls() {
     find . -iname *.~?~ | xargs -r rm
 
     releaseName=fission-$(echo ${version} | sed 's/\./-/g')
-    
+
+    helm init --client-only
+
     for c in fission-all fission-core
     do
-        # for minikube and other environment that don't support LoadBalancer
+        # fetch dependencies
+        pushd ${c}
+        helm dependency update
+        popd
+
+        # for minikube and other environments that don't support LoadBalancer
         helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
         # for environments that support LoadBalancer
         helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true > ${c}-${version}.yaml
 
+        # copy yaml files to build directory
         mv *.yaml ${BUILDDIR}/yamls/
     done
 
