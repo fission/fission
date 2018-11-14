@@ -409,7 +409,6 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
 			replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 			hpa.Spec.MinReplicas = &replicas
-			deployChanged = true
 			hpaChanged = true
 		}
 
