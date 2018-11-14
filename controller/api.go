@@ -32,7 +32,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	config "github.com/fission/fission/featureconfig"
 	"github.com/fission/fission/fission/logdb"
 )
 
@@ -54,7 +53,7 @@ type (
 		workflowApiUrl    string
 		functionNamespace string
 		useIstio          bool
-		featureConfig     *config.FeatureConfig
+		featureStatus     map[string]string
 	}
 
 	logDBConfig struct {
@@ -64,7 +63,7 @@ type (
 	}
 )
 
-func MakeAPI(featureConfig *config.FeatureConfig) (*API, error) {
+func MakeAPI(featureStatus *map[string]string) (*API, error) {
 	api, err := makeCRDBackedAPI()
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
@@ -95,7 +94,7 @@ func MakeAPI(featureConfig *config.FeatureConfig) (*API, error) {
 		api.functionNamespace = "fission-function"
 	}
 
-	api.featureConfig = featureConfig
+	api.featureStatus = *featureStatus
 
 	return api, err
 }
