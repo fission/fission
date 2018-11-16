@@ -157,12 +157,7 @@ func MakeGenericPool(
 	}
 
 	// Labels for generic deployment/RS/pods.
-	gp.labelsForPool = map[string]string{
-		"environmentName":                 gp.env.Metadata.Name,
-		"environmentUid":                  string(gp.env.Metadata.UID),
-		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		"executorType":                    fission.ExecutorTypePoolmgr,
-	}
+	gp.labelsForPool = gp.getDeployLabels()
 
 	// create the pool
 	err = gp.createPool()
@@ -174,6 +169,16 @@ func MakeGenericPool(
 	go gp.choosePodService()
 
 	return gp, nil
+}
+
+func (gp *GenericPool) getDeployLabels() map[string]string {
+	return map[string]string{
+		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
+		util.EXECUTOR_TYPE:                fission.ExecutorTypePoolmgr,
+		util.ENVIRONMENT_NAME:             gp.env.Metadata.Name,
+		util.ENVIRONMENT_NAMESPACE:        gp.env.Metadata.Namespace,
+		util.ENVIRONMENT_UID:              string(gp.env.Metadata.UID),
+	}
 }
 
 // choosePodService serializes the choosing of pods
@@ -456,11 +461,13 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 	return nil
 }
 
+func (gp *GenericPool) getPoolName() string {
+	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, gp.poolInstanceId))
+}
+
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
-	poolDeploymentName := strings.ToLower(fmt.Sprintf("poolmgr-%v-%v", gp.env.Metadata.Name, gp.poolInstanceId))
-
 	fetcherResources, err := util.GetFetcherResources()
 	if err != nil {
 		return err
@@ -483,12 +490,8 @@ func (gp *GenericPool) createPool() error {
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   poolDeploymentName,
+			Name:   gp.getPoolName(),
 			Labels: gp.labelsForPool,
-			Annotations: map[string]string{
-				"env-name": gp.env.Metadata.Name,
-				"env-uuid": string(gp.env.Metadata.UID),
-			},
 		},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &gp.replicas,

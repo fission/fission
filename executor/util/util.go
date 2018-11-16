@@ -23,6 +23,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+const (
+	ENVIRONMENT_NAMESPACE = "environmentNamespace"
+	ENVIRONMENT_NAME      = "environmentName"
+	ENVIRONMENT_UID       = "environmentUid"
+	FUNCTION_NAMESPACE    = "functionNamespace"
+	FUNCTION_NAME         = "functionName"
+	FUNCTION_UID          = "functionUid"
+	EXECUTOR_TYPE         = "executorType"
+)
+
 func GetFetcherResources() (v1.ResourceRequirements, error) {
 	mincpu, err := resource.ParseQuantity(os.Getenv("FETCHER_MINCPU"))
 	if err != nil {
