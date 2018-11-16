@@ -17,10 +17,10 @@ limitations under the License.
 package router
 
 import (
-	"errors"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/crd"
@@ -103,7 +103,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			lock, ok := ul.locks[key]
 			if ok && !lock.isOld() {
 				req.responseChan <- &svcAddrUpdateResponse{
-					lock: lock, loaded: false,
+					lock: lock, loaded: true,
 				}
 				continue
 			} else if ok && lock.isOld() {
@@ -122,7 +122,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			ul.locks[key] = lock
 
 			req.responseChan <- &svcAddrUpdateResponse{
-				lock: lock, loaded: true,
+				lock: lock, loaded: false,
 			}
 
 		case DELETE:
@@ -144,7 +144,7 @@ func (ul *svcAddrUpdateLocks) service() {
 	}
 }
 
-func (locks *svcAddrUpdateLocks) Get(fnMeta *metav1.ObjectMeta) (lock *svcAddrUpdateLock, ableToUpdate bool) {
+func (locks *svcAddrUpdateLocks) RunOrWait(fnMeta *metav1.ObjectMeta) (ableToUpdate bool, err error) {
 	ch := make(chan *svcAddrUpdateResponse)
 	locks.requestChan <- &svcAddrUpdateRequest{
 		requestType:  GET,
@@ -152,10 +152,17 @@ func (locks *svcAddrUpdateLocks) Get(fnMeta *metav1.ObjectMeta) (lock *svcAddrUp
 		fnMeta:       fnMeta,
 	}
 	resp := <-ch
-	return resp.lock, resp.loaded
+
+	// wait for the first goroutine to update the service entry
+	if resp.loaded {
+		err := resp.lock.Wait()
+		return false, err
+	}
+
+	return true, nil
 }
 
-func (locks *svcAddrUpdateLocks) Delete(fnMeta *metav1.ObjectMeta) {
+func (locks *svcAddrUpdateLocks) Done(fnMeta *metav1.ObjectMeta) {
 	locks.requestChan <- &svcAddrUpdateRequest{
 		requestType: DELETE,
 		fnMeta:      fnMeta,

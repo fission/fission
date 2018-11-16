@@ -207,8 +207,14 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	retryCounter := 0
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
+		// get function service url from cache or executor
+		serviceUrl, serviceUrlFromCache, err := roundTripper.funcHandler.getServiceEntry()
 
-		serviceUrl, serviceUrlFromCache, err := roundTripper.getServiceEntry(fnMeta)
+		// retry to get service url again
+		if serviceUrl == nil {
+			continue
+		}
+
 		if err != nil {
 			// We might want a specific error code or header for fission failures as opposed to
 			// user function bugs.
@@ -226,9 +232,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				}, nil
 			}
 			return nil, fission.MakeError(http.StatusInternalServerError, err.Error())
-		} else if serviceUrl == nil {
-			// retry to get service url again
-			continue
 		}
 
 		// tapService before invoking roundTrip for the serviceUrl
@@ -298,9 +301,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		// dial timeout or dial network errors goes here
 
 		if retryCounter < roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
-			retryCounter++
-
 			executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
+			retryCounter++
 
 			log.Printf("request to %s errored out. backing off for %v before retrying",
 				req.URL.Host, executingTimeout)
@@ -334,93 +336,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	}
 
 	return resp, err
-}
-
-func (roundTripper RetryingRoundTripper) getServiceEntry(fnMeta *metav1.ObjectMeta) (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
-
-	// try to find service url from cache first
-	serviceUrl, err = roundTripper.getServiceFromCache(fnMeta)
-	if err == nil && serviceUrl != nil {
-		return serviceUrl, true, nil
-	} else if err != nil {
-		return nil, false, err
-	}
-
-	// cache miss or nil entry in cache
-
-	// To prevent multiple update requests will be sent to executor and make executor overloaded,
-	// all goroutines for the same function need to grab an update lock first.
-	lock, ableToUpdateCache := roundTripper.funcHandler.grabUpdateEntryLock(fnMeta)
-
-	if !ableToUpdateCache {
-		// The goroutines that didn't get updateEntryLock should wait for the update of service map to finish.
-		err = lock.Wait()
-		if err != nil {
-			log.Println(errors.Wrap(err,
-				fmt.Sprintf("Error updating service address entry for function %v_%v", fnMeta.Name, fnMeta.Namespace)))
-			return nil, false, err
-		}
-
-		serviceUrl, err = roundTripper.getServiceFromCache(fnMeta)
-
-		return serviceUrl, true, err
-	}
-
-	// Update cache if goroutine grabs update lock
-	log.Printf("Calling getServiceForFunction for function: %s", fnMeta.Name)
-
-	serviceUrl, err = roundTripper.updateServiceEntry(fnMeta)
-	if err == nil && serviceUrl != nil {
-		// add the address in router's cache
-		log.Printf("Assigning serviceUrl : %s for function : %s", serviceUrl, roundTripper.funcHandler.function.Name)
-		roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
-		roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-	}
-
-	return serviceUrl, false, err
-}
-
-func (roundTripper RetryingRoundTripper) getServiceFromCache(fnMeta *metav1.ObjectMeta) (serviceUrl *url.URL, err error) {
-	// cache lookup to get serviceUrl
-	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(fnMeta)
-	if err != nil {
-		var errMsg string
-
-		e, ok := err.(fission.Error)
-		if !ok {
-			errMsg = fmt.Sprintf("Unknown error when looking up service entry: %v", err)
-		} else {
-			// Ignore ErrorNotFound error here, it's an expected error,
-			// roundTripper will try to get service url later.
-			if e.Code == fission.ErrorNotFound {
-				return nil, nil
-			}
-			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fnMeta.Name, err)
-		}
-		return nil, fission.MakeError(http.StatusInternalServerError, errMsg)
-	}
-	return serviceUrl, nil
-}
-
-func (roundTripper RetryingRoundTripper) updateServiceEntry(fnMeta *metav1.ObjectMeta) (*url.URL, error) {
-	// send a request to executor to specialize a new pod
-	service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
-		roundTripper.funcHandler.function)
-
-	if err != nil {
-		statusCode, errMsg := fission.GetHTTPError(err)
-		log.Printf("Error from GetServiceForFunction for function (%v): %v : %v", roundTripper.funcHandler.function, statusCode, errMsg)
-		return nil, err
-	}
-
-	// parse the address into url
-	serviceUrl, err := url.Parse(fmt.Sprintf("http://%v", service))
-	if err != nil {
-		log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
-		return nil, err
-	}
-
-	return serviceUrl, nil
 }
 
 func (fh *functionHandler) tapService(serviceUrl *url.URL) {
@@ -553,14 +468,88 @@ func addForwardedHostHeader(req *http.Request) {
 	req.Header.Set(X_FORWARDED_HOST, req.Host)
 }
 
-// grabUpdateEntryLock helps goroutine to grab update lock for updating function service cache.
-// If the update lock exists, return old svcAddrUpdateLock.
-func (fh *functionHandler) grabUpdateEntryLock(fnMeta *metav1.ObjectMeta) (lock *svcAddrUpdateLock, ableToUpdateCache bool) {
-	return fh.svcAddrUpdateLocks.Get(fnMeta)
+func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
+	// try to find service url from cache first
+	serviceUrl, err = fh.getServiceEntryFromCache()
+	if err == nil && serviceUrl != nil {
+		return serviceUrl, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	// cache miss or nil entry in cache
+
+	// To prevent multiple update requests will be sent to executor and make executor overloaded,
+	// the first goroutine is responsible to update the service url entry, all other goroutines
+	// for the same function will wait until first goroutine finished.
+	ableToUpdateCache, err := fh.svcAddrUpdateLocks.RunOrWait(fh.function)
+	if err != nil {
+		log.Println(errors.Wrap(err,
+			fmt.Sprintf("Error updating service address entry for function %v_%v", fh.function.Name, fh.function.Namespace)))
+		return nil, false, err
+	}
+
+	if !ableToUpdateCache {
+		return serviceUrl, true, err
+	}
+
+	// release update lock so that other goroutines can take over the responsibility
+	// of updating the service map if failed.
+	defer func() {
+		go fh.svcAddrUpdateLocks.Done(fh.function)
+	}()
+
+	// Get service entry from executor and update cache
+	log.Printf("Calling getServiceForFunction for function: %s", fh.function.Name)
+
+	serviceUrl, err = fh.getServiceEntryFromExecutor()
+	if err == nil && serviceUrl != nil {
+		// add the address in router's cache
+		log.Printf("Assigning serviceUrl : %s for function : %s", serviceUrl, fh.function.Name)
+		fh.fmap.assign(fh.function, serviceUrl)
+	}
+
+	return serviceUrl, false, err
 }
 
-// releaseUpdateEntryLock release update lock so that other goroutines can take over the responsibility
-// of updating the service map.
-func (fh *functionHandler) releaseUpdateEntryLock(fnMeta *metav1.ObjectMeta) {
-	fh.svcAddrUpdateLocks.Delete(fnMeta)
+func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
+	// cache lookup to get serviceUrl
+	serviceUrl, err = fh.fmap.lookup(fh.function)
+	if err != nil {
+		var errMsg string
+
+		e, ok := err.(fission.Error)
+		if !ok {
+			errMsg = fmt.Sprintf("Unknown error when looking up service entry: %v", err)
+		} else {
+			// Ignore ErrorNotFound error here, it's an expected error,
+			// roundTripper will try to get service url later.
+			if e.Code == fission.ErrorNotFound {
+				return nil, nil
+			}
+			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Name, err)
+		}
+		return nil, fission.MakeError(http.StatusInternalServerError, errMsg)
+	}
+	return serviceUrl, nil
+}
+
+func (fh *functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
+	// send a request to executor to specialize a new pod
+	service, err := fh.executor.GetServiceForFunction(fh.function)
+
+	if err != nil {
+		statusCode, errMsg := fission.GetHTTPError(err)
+		log.Printf("Error from GetServiceForFunction for function (%v): %v : %v", fh.function, statusCode, errMsg)
+		return nil, err
+	}
+
+	// parse the address into url
+	serviceUrl, err := url.Parse(fmt.Sprintf("http://%v", service))
+	if err != nil {
+		log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
+		return nil, err
+	}
+
+	return serviceUrl, nil
 }
