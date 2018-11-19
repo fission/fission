@@ -300,7 +300,7 @@ func pkgInfo(c *cli.Context) error {
 		Name:      pkgName,
 	})
 	if err != nil {
-		return err
+		util.CheckErr(err, fmt.Sprintf("find package %s", pkgName))
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
