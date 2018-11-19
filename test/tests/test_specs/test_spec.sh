@@ -23,7 +23,7 @@ log "verify env created"
 fission env list | grep python
 
 log "generate function spec"
-fission fn create --spec --name $fn --env $env --code $(dirname $0)/hello.py
+fission fn create --spec --name $fn --env $env --code hello.py
 
 
 [ -f specs/function-$fn.yaml ]
