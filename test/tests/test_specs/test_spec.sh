@@ -17,7 +17,7 @@ fission env create --spec --name $env --image fission/python-env
 
 log "create env spec"
 fission spec apply
-trap "fission env delete --name $env" EXIT
+trap "fission spec destroy" EXIT
 
 log "verify env created"
 fission env list | grep python
@@ -42,6 +42,3 @@ sleep 3
 
 log "Test the function"
 fission fn test --name $fn | grep -i hello
-
-log "Destroying spec objects"
-fission spec destroy

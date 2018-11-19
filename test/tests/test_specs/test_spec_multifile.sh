@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT=$(dirname $0)/../..
+ROOT=$(dirname $0)/../../..
 
 fn=spec-$(date +%N)
 env=python-$fn
