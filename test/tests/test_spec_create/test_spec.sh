@@ -16,17 +16,7 @@ fission spec init
 [ -f specs/fission-deployment-config.yaml ]
 
 # TODO replace with `fission env create --spec`
-cat > specs/env.yaml <<EOF
-apiVersion: fission.io/v1
-kind: Environment
-metadata:
-  name: $env
-  namespace: default
-spec:
-  version: 1
-  runtime:
-    image: fission/python-env:0.4.0
-EOF
+fission env create --spec --name $env --image fission/python-env:0.4.0
 
 # create env
 fission spec apply
@@ -55,4 +45,4 @@ sleep 3
 
 fission fn test --name $fn | grep -i hello
 
-
+fission spec destroy
