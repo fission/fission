@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#test:disabled
-
 set -euo pipefail
 
 fn=spec-$(date +%N)
@@ -15,34 +13,35 @@ fission spec init
 [ -f specs/README ]
 [ -f specs/fission-deployment-config.yaml ]
 
-# TODO replace with `fission env create --spec`
-fission env create --spec --name $env --image fission/python-env:0.4.0
+fission env create --spec --name $env --image fission/python-env
 
-# create env
+log "create env spec"
 fission spec apply
 trap "fission env delete --name $env" EXIT
 
-# verify env created
+log "verify env created"
 fission env list | grep python
 
-# generate function spec
+log "generate function spec"
 fission fn create --spec --name $fn --env $env --code $(dirname $0)/hello.py
 
-# verify that function spec exists and has ArchiveUploadSpec, Package and Function
+
 [ -f specs/function-$fn.yaml ]
 grep ArchiveUploadSpec specs/*.yaml
 grep Package specs/*.yaml
 grep Function specs/*.yaml
 
-# create function
+log "Apply specs"
 fission spec apply
 trap "fission fn delete --name $fn" EXIT
 
-# verify function
+log "verify function exists"
 fission fn list | grep $fn
 
 sleep 3
 
+log "Test the function"
 fission fn test --name $fn | grep -i hello
 
+log "Destroying spec objects"
 fission spec destroy
