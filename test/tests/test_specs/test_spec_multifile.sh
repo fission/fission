@@ -7,14 +7,9 @@ ROOT=$(dirname $0)/../../..
 fn=spec-$(date +%N)
 env=python-$fn
 
-pushd $ROOT/examples/python/multifile
-# init
-fission spec init
+pushd $ROOT/examples/python
 
-log "Verifying init"
-[ -d specs ]
-[ -f specs/README ]
-[ -f specs/fission-deployment-config.yaml ]
+fission spec init
 
 log "Creating environment spec"
 fission env create --spec --name $env --image fission/python-env --builder fission/python-builder
