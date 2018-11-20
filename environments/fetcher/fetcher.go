@@ -1,20 +1,23 @@
 package fetcher
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/mholt/archiver"
+	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,34 +29,6 @@ import (
 )
 
 type (
-	FetchRequestType int
-
-	FetchRequest struct {
-		FetchType     FetchRequestType             `json:"fetchType"`
-		Package       metav1.ObjectMeta            `json:"package"`
-		Url           string                       `json:"url"`
-		StorageSvcUrl string                       `json:"storagesvcurl"`
-		Filename      string                       `json:"filename"`
-		Secrets       []fission.SecretReference    `json:"secretList"`
-		ConfigMaps    []fission.ConfigMapReference `json:"configMapList"`
-		KeepArchive   bool                         `json:"keeparchive"`
-	}
-
-	// UploadRequest send from builder manager describes which
-	// deployment package should be upload to storage service.
-	UploadRequest struct {
-		Filename       string `json:"filename"`
-		StorageSvcUrl  string `json:"storagesvcurl"`
-		ArchivePackage bool   `json:"archivepackage"`
-	}
-
-	// UploadResponse defines the download url of an archive and
-	// its checksum.
-	UploadResponse struct {
-		ArchiveDownloadUrl string           `json:"archiveDownloadUrl"`
-		Checksum           fission.Checksum `json:"checksum"`
-	}
-
 	Fetcher struct {
 		sharedVolumePath string
 		sharedSecretPath string
@@ -61,12 +36,6 @@ type (
 		fissionClient    *crd.FissionClient
 		kubeClient       *kubernetes.Clientset
 	}
-)
-
-const (
-	FETCH_SOURCE = iota
-	FETCH_DEPLOYMENT
-	FETCH_URL // remove this?
 )
 
 func makeVolumeDir(dirPath string) {
@@ -198,7 +167,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var req FetchRequest
+	var req fission.FunctionFetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
@@ -225,9 +194,42 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// parse request
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading request body")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var req fission.FunctionSpecializeRequest
+	err = json.Unmarshal(body, &req)
+	if err != nil {
+		log.Printf("Error reading request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	//log.Printf("fetcher received fetch request and started downloading: %v", req)
+
+	err = fetcher.SpecializePod(req.FetchReq, req.LoadReq)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// all done
+	w.WriteHeader(http.StatusOK)
+}
+
 // Fetch takes FetchRequest and makes the fetch call
 // It returns the HTTP code and error if any
-func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
+func (fetcher *Fetcher) Fetch(req fission.FunctionFetchRequest) (int, error) {
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
 		e := fmt.Sprintf("Fetch request received for an empty file name, request: %v", req)
@@ -244,7 +246,7 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
-	if req.FetchType == FETCH_URL {
+	if req.FetchType == fission.FETCH_URL {
 		// fetch the file and save it to the tmp path
 		err := downloadUrl(req.Url, tmpPath)
 		if err != nil {
@@ -262,9 +264,9 @@ func (fetcher *Fetcher) Fetch(req FetchRequest) (int, error) {
 		}
 
 		var archive *fission.Archive
-		if req.FetchType == FETCH_SOURCE {
+		if req.FetchType == fission.FETCH_SOURCE {
 			archive = &pkg.Spec.Source
-		} else if req.FetchType == FETCH_DEPLOYMENT {
+		} else if req.FetchType == fission.FETCH_DEPLOYMENT {
 			// sometimes, the user may invoke the function even before the source code is built into a deploy pkg.
 			// this results in executor sending a fetch request of type FETCH_DEPLOYMENT and since pkg.Spec.Deployment.Url will be empty,
 			// we hit this "Get : unsupported protocol scheme "" error.
@@ -418,7 +420,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req UploadRequest
+	var req fission.ArchiveUploadRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
@@ -468,7 +470,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := UploadResponse{
+	resp := fission.ArchiveUploadResponse{
 		ArchiveDownloadUrl: ssClient.GetUrl(fileID),
 		Checksum:           *sum,
 	}
@@ -522,4 +524,74 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 		return errors.New(fmt.Sprintf("Failed to unzip file: %v", err))
 	}
 	return nil
+}
+
+func (fetcher *Fetcher) SpecializePod(fetchReq fission.FunctionFetchRequest, loadReq fission.FunctionLoadRequest) error {
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		log.Printf("Elapsed time in fetch request = %v", elapsed)
+	}()
+
+	_, err := fetcher.Fetch(fetchReq)
+	if err != nil {
+		return errors.Wrap(err, "Error fetching deploy package")
+	}
+
+	_, err = fetcher.FetchSecretsAndCfgMaps(fetchReq.Secrets, fetchReq.ConfigMaps)
+	if err != nil {
+		return errors.Wrap(err, "Error fetching secrets/configmaps")
+	}
+
+	// Specialize the pod
+
+	maxRetries := 30
+	var contentType string
+	var specializeURL string
+	var reader *bytes.Reader
+
+	loadPayload, err := json.Marshal(loadReq)
+	if err != nil {
+		return errors.Wrap(err, "Error encoding load request")
+	}
+
+	if loadReq.EnvVersion >= 2 {
+		contentType = "application/json"
+		specializeURL = "http://localhost:8888/v2/specialize"
+		reader = bytes.NewReader(loadPayload)
+	} else {
+		contentType = "text/plain"
+		specializeURL = "http://localhost:8888/specialize"
+		reader = bytes.NewReader([]byte{})
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Post(specializeURL, contentType, reader)
+		if err == nil && resp.StatusCode < 300 {
+			// Success
+			resp.Body.Close()
+			return nil
+		}
+
+		// Only retry for the specific case of a connection error.
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				if netErr.Op == "dial" {
+					if i < maxRetries-1 {
+						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+						log.Printf("Error connecting to pod (%v), retrying", netErr)
+						continue
+					}
+				}
+			}
+		}
+
+		if err == nil {
+			err = fission.MakeErrorFromHTTP(resp)
+		}
+
+		return errors.Wrap(err, "Error specializing function pod")
+	}
+
+	return errors.Wrap(err, fmt.Sprintf("Error specializing function pod after %v times", maxRetries))
 }

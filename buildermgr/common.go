@@ -27,7 +27,6 @@ import (
 	"github.com/fission/fission/builder"
 	builderClient "github.com/fission/fission/builder/client"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
 )
 
@@ -39,7 +38,7 @@ import (
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
 func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
-	storageSvcUrl string, pkg *crd.Package) (uploadResp *fetcher.UploadResponse, buildLogs string, err error) {
+	storageSvcUrl string, pkg *crd.Package) (uploadResp *fission.ArchiveUploadResponse, buildLogs string, err error) {
 
 	env, err := fissionClient.Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name)
 	if err != nil {
@@ -53,8 +52,8 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcName))
 	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcName))
 
-	fetchReq := &fetcher.FetchRequest{
-		FetchType:   fetcher.FETCH_SOURCE,
+	fetchReq := &fission.FunctionFetchRequest{
+		FetchType:   fission.FETCH_SOURCE,
 		Package:     pkg.Metadata,
 		Filename:    srcPkgFilename,
 		KeepArchive: false,
@@ -96,7 +95,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 
 	archivePackage := !env.Spec.KeepArchive
 
-	uploadReq := &fetcher.UploadRequest{
+	uploadReq := &fission.ArchiveUploadRequest{
 		Filename:       buildResp.ArtifactFilename,
 		StorageSvcUrl:  storageSvcUrl,
 		ArchivePackage: archivePackage,
@@ -117,7 +116,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 
 func updatePackage(fissionClient *crd.FissionClient,
 	pkg *crd.Package, status fission.BuildStatus, buildLogs string,
-	uploadResp *fetcher.UploadResponse) (*crd.Package, error) {
+	uploadResp *fission.ArchiveUploadResponse) (*crd.Package, error) {
 
 	pkg.Status = fission.PackageStatus{
 		BuildStatus: status,

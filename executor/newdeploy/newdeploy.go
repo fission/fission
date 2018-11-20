@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	asv1 "k8s.io/api/autoscaling/v1"
@@ -35,7 +34,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/environments/fetcher"
 	"github.com/fission/fission/executor/util"
 )
 
@@ -167,29 +165,26 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
-	fetchReq := &fetcher.FetchRequest{
-		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Package: metav1.ObjectMeta{
-			Namespace: fn.Spec.Package.PackageRef.Namespace,
-			Name:      fn.Spec.Package.PackageRef.Name,
+	specializeReq := fission.FunctionSpecializeRequest{
+		FetchReq: fission.FunctionFetchRequest{
+			FetchType: fission.FETCH_DEPLOYMENT,
+			Package: metav1.ObjectMeta{
+				Namespace: fn.Spec.Package.PackageRef.Namespace,
+				Name:      fn.Spec.Package.PackageRef.Name,
+			},
+			Filename:    targetFilename,
+			Secrets:     fn.Spec.Secrets,
+			ConfigMaps:  fn.Spec.ConfigMaps,
+			KeepArchive: env.Spec.KeepArchive,
 		},
-		Filename:    targetFilename,
-		Secrets:     fn.Spec.Secrets,
-		ConfigMaps:  fn.Spec.ConfigMaps,
-		KeepArchive: env.Spec.KeepArchive,
+		LoadReq: fission.FunctionLoadRequest{
+			FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
+			FunctionName:     fn.Spec.Package.FunctionName,
+			FunctionMetadata: &fn.Metadata,
+		},
 	}
 
-	loadReq := fission.FunctionLoadRequest{
-		FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
-		FunctionName:     fn.Spec.Package.FunctionName,
-		FunctionMetadata: &fn.Metadata,
-	}
-
-	fetchPayload, err := json.Marshal(fetchReq)
-	if err != nil {
-		return nil, err
-	}
-	loadPayload, err := json.Marshal(loadReq)
+	specializePayload, err := json.Marshal(specializeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -297,8 +292,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 								},
 							},
 							Command: []string{"/fetcher", "-specialize-on-startup",
-								"-fetch-request", string(fetchPayload),
-								"-load-request", string(loadPayload),
+								"-specialize-request", string(specializePayload),
 								"-secret-dir", deploy.sharedSecretPath,
 								"-cfgmap-dir", deploy.sharedCfgMapPath,
 								deploy.sharedMountPath},
@@ -310,12 +304,6 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 											fmt.Sprintf("%v", gracePeriodSeconds),
 										},
 									},
-								},
-							},
-							Env: []apiv1.EnvVar{
-								{
-									Name:  envVersion,
-									Value: strconv.Itoa(env.Spec.Version),
 								},
 							},
 							Resources: fetcherResources,
