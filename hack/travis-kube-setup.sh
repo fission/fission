@@ -6,26 +6,11 @@
 
 set -e 
 
-# If we don't have gcloud credentials, bail out of these tests.
-if [ -z "$FISSION_CI_SERVICE_ACCOUNT" ]
-then
-    echo "Skipping tests, no cluster credentials"
-    exit 0
-fi
-
 K8SCLI_DIR=$HOME/k8scli
 
 if [ ! -d $K8SCLI_DIR ]
 then
     mkdir -p $K8SCLI_DIR
-fi
-
-# Get kubectl
-if [ ! -f $K8SCLI_DIR/kubectl ]
-then
-   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-   chmod +x ./kubectl
-   mv kubectl $K8SCLI_DIR/kubectl
 fi
 
 # Get helm
@@ -34,6 +19,21 @@ then
     curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.2-linux-amd64.tar.gz
     tar xzvf helm-*.tar.gz
     mv linux-amd64/helm $K8SCLI_DIR/helm
+fi
+
+# If we don't have gcloud credentials, bail out of these tests.
+if [ -z "$FISSION_CI_SERVICE_ACCOUNT" ]
+then
+    echo "Skipping tests, no cluster credentials"
+    exit 0
+fi
+
+# Get kubectl
+if [ ! -f $K8SCLI_DIR/kubectl ]
+then
+   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+   chmod +x ./kubectl
+   mv kubectl $K8SCLI_DIR/kubectl
 fi
 
 mkdir ${HOME}/.kube

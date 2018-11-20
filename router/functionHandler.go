@@ -237,7 +237,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 							time.Now().UnixNano(),
 						)
 					} else {
-						log.Println("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
+						log.Printf("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
 					}
 				}
 
