@@ -108,7 +108,31 @@ func (w *fakeCloseReadCloser) RealClose() error {
 }
 
 // RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
-// from executor or router's cache.
+// from router's cache or from executor if router entry is stale.
+//
+// It first checks if the service address for this function came from router's cache.
+// If it didn't, it makes a request to executor to get a new service for function. If that succeeds, it adds the address
+// to it's cache and makes a request to that address with transport.RoundTrip call.
+// Initial requests to new k8s services sometimes seem to fail, but retries work. So, it retries with an exponential
+// back-off for maxRetries times.
+//
+// Else if it came from the cache, it makes a transport.RoundTrip with that cached address. If the response received is
+// a network dial error (which means that the pod doesn't exist anymore), it removes the cache entry and makes a request
+// to executor to get a new service for function. It then retries transport.RoundTrip with the new address.
+//
+// At any point in time, if the response received from transport.RoundTrip is other than dial network error, it is
+// relayed as-is to the user, without any retries.
+//
+// While this RoundTripper handles the case where a previously cached address of the function pod isn't valid anymore
+// (probably because the pod got deleted somehow), by making a request to executor to get a new service for this function,
+// it doesn't handle a case where a newly specialized pod gets deleted just after the GetServiceForFunction succeeds.
+// In such a case, the RoundTripper will retry requests against the new address and give up after maxRetries.
+// However, the subsequent http call for this function will ensure the cache is invalidated.
+//
+// If GetServiceForFunction returns an error or if RoundTripper exits with an error, it get's translated into 502
+// inside ServeHttp function of the reverseProxy.
+// Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
+// if it returned an error.
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var serviceUrlFromCache bool
 	var serviceUrl *url.URL
