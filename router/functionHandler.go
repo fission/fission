@@ -19,6 +19,7 @@ package router
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -87,6 +88,23 @@ type RetryingRoundTripper struct {
 func init() {
 	// just seeding the random number for getting the canary function
 	rand.Seed(time.Now().UnixNano())
+}
+
+// To keep the request body open during retries, we create an interface with Close operation being a no-op.
+// Details : https://github.com/flynn/flynn/pull/875
+type fakeCloseReadCloser struct {
+	io.ReadCloser
+}
+
+func (w *fakeCloseReadCloser) Close() error {
+	return nil
+}
+
+func (w *fakeCloseReadCloser) RealClose() error {
+	if w.ReadCloser == nil {
+		return nil
+	}
+	return w.ReadCloser.Close()
 }
 
 // RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
@@ -167,6 +185,18 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	transport.DisableKeepAlives = true
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
+
+	// wrap the req.Body with another ReadCloser interface.
+	if req.Body != nil {
+		req.Body = &fakeCloseReadCloser{req.Body}
+	}
+
+	// close req body
+	defer func() {
+		if req.Body != nil {
+			req.Body.(*fakeCloseReadCloser).RealClose()
+		}
+	}()
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
 
