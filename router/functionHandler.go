@@ -284,7 +284,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 						time.Now().UnixNano(),
 					)
 				} else {
-					log.Println("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
+					log.Printf("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
 				}
 			}
 
@@ -331,8 +331,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	// finally, one more retry with the default timeout
 	resp, err = http.DefaultTransport.RoundTrip(req)
 	if err != nil {
-		log.Printf("Error getting response from function %v: %v",
-			fnMeta.Name, err)
+		log.Printf("Error getting response from function %v: %v", fnMeta.Name, err)
 	}
 
 	return resp, err
