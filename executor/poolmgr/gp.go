@@ -174,10 +174,10 @@ func MakeGenericPool(
 func (gp *GenericPool) getDeployLabels() map[string]string {
 	return map[string]string{
 		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		util.EXECUTOR_TYPE:                fission.ExecutorTypePoolmgr,
-		util.ENVIRONMENT_NAME:             gp.env.Metadata.Name,
-		util.ENVIRONMENT_NAMESPACE:        gp.env.Metadata.Namespace,
-		util.ENVIRONMENT_UID:              string(gp.env.Metadata.UID),
+		fission.EXECUTOR_TYPE:             fission.ExecutorTypePoolmgr,
+		fission.ENVIRONMENT_NAME:          gp.env.Metadata.Name,
+		fission.ENVIRONMENT_NAMESPACE:     gp.env.Metadata.Namespace,
+		fission.ENVIRONMENT_UID:           string(gp.env.Metadata.UID),
 	}
 }
 
@@ -462,7 +462,8 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 }
 
 func (gp *GenericPool) getPoolName() string {
-	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, gp.poolInstanceId))
+	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v",
+		gp.env.Metadata.Name, gp.env.Metadata.Namespace, uniuri.NewLen(8)))
 }
 
 // A pool is a deployment of generic containers for an env.  This

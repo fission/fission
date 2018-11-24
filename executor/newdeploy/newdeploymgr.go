@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -39,7 +40,6 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
-	"github.com/fission/fission/executor/util"
 )
 
 type (
@@ -548,19 +548,20 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 }
 
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
-	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v", fn.Metadata.Name, fn.Metadata.Namespace, deploy.instanceID))
+	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v",
+		fn.Metadata.Name, fn.Metadata.Namespace, uniuri.NewLen(8)))
 }
 
 func (deploy *NewDeploy) getDeployLabels(fn *crd.Function, env *crd.Environment) map[string]string {
 	return map[string]string{
 		fission.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		util.EXECUTOR_TYPE:                fission.ExecutorTypeNewdeploy,
-		util.ENVIRONMENT_NAME:             env.Metadata.Name,
-		util.ENVIRONMENT_NAMESPACE:        env.Metadata.Namespace,
-		util.ENVIRONMENT_UID:              string(env.Metadata.UID),
-		util.FUNCTION_NAME:                fn.Metadata.Name,
-		util.FUNCTION_NAMESPACE:           fn.Metadata.Namespace,
-		util.FUNCTION_UID:                 string(fn.Metadata.UID),
+		fission.EXECUTOR_TYPE:             fission.ExecutorTypeNewdeploy,
+		fission.ENVIRONMENT_NAME:          env.Metadata.Name,
+		fission.ENVIRONMENT_NAMESPACE:     env.Metadata.Namespace,
+		fission.ENVIRONMENT_UID:           string(env.Metadata.UID),
+		fission.FUNCTION_NAME:             fn.Metadata.Name,
+		fission.FUNCTION_NAMESPACE:        fn.Metadata.Namespace,
+		fission.FUNCTION_UID:              string(fn.Metadata.UID),
 	}
 }
 
