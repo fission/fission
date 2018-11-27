@@ -123,6 +123,17 @@ const (
 	AllowedFunctionsPerContainerInfinite = fv1.AllowedFunctionsPerContainerInfinite
 )
 
+// executor kubernetes object label key
+const (
+	ENVIRONMENT_NAMESPACE = "environmentNamespace"
+	ENVIRONMENT_NAME      = "environmentName"
+	ENVIRONMENT_UID       = "environmentUid"
+	FUNCTION_NAMESPACE    = "functionNamespace"
+	FUNCTION_NAME         = "functionName"
+	FUNCTION_UID          = "functionUid"
+	EXECUTOR_TYPE         = "executorType"
+)
+
 const (
 	ExecutorTypePoolmgr   = fv1.ExecutorTypePoolmgr
 	ExecutorTypeNewdeploy = fv1.ExecutorTypeNewdeploy

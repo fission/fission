@@ -165,6 +165,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 					// this may cause message loss
 				}
 			}
+			return
 		}
 
 		// Trigger acks message only if a request was processed successfully

@@ -165,6 +165,9 @@ func fnCreate(c *cli.Context) error {
 		util.CheckErr(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
 		pkgMetadata = &pkg.Metadata
 		envName = pkg.Spec.Environment.Name
+		if envName != c.String("env") {
+			log.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
+		}
 		envNamespace = pkg.Spec.Environment.Namespace
 	} else {
 		// need to specify environment for creating new package
@@ -499,7 +502,7 @@ func fnUpdate(c *cli.Context) error {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata, err = updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, false)
+		pkgMetadata, err = updatePackage(client, pkg, pkg.Spec.Environment.Name, pkg.Spec.Environment.Namespace, srcArchiveName, deployArchiveName, buildcmd, false)
 		util.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
@@ -523,6 +526,12 @@ func fnUpdate(c *cli.Context) error {
 		Namespace:       pkgMetadata.Namespace,
 		Name:            pkgMetadata.Name,
 		ResourceVersion: pkgMetadata.ResourceVersion,
+	}
+
+	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
+		log.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
+		function.Spec.Environment.Name = pkg.Spec.Environment.Name
+		function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
 	}
 
 	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
