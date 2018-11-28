@@ -41,8 +41,8 @@ func canaryConfigCreate(c *cli.Context) error {
 	}
 
 	trigger := c.String("httptrigger")
-	newFunc := c.String("newfunc")
-	oldFunc := c.String("oldfunc")
+	newFunc := c.String("newfunction")
+	oldFunc := c.String("oldfunction")
 	ns := c.String("fnNamespace")
 	incrementStep := c.Int("increment-step")
 	failureThreshold := c.Int("failure-threshold")

@@ -277,8 +277,8 @@ func main() {
 	// canary configs
 	canaryConfigNameFlag := cli.StringFlag{Name: "name", Usage: "Name for the canary config"}
 	triggerNameFlag := cli.StringFlag{Name: "httptrigger", Usage: "Http trigger that this config references"}
-	newFunc := cli.StringFlag{Name: "newfunc", Usage: "New version of the function"}
-	oldFunc := cli.StringFlag{Name: "oldfunc", Usage: "Old stable version of the function"}
+	newFunc := cli.StringFlag{Name: "newfunction", Usage: "New version of the function"}
+	oldFunc := cli.StringFlag{Name: "oldfunction", Usage: "Old stable version of the function"}
 	weightIncrementFlag := cli.IntFlag{Name: "increment-step", Value: 20, Usage: "Weight increment step for function"}
 	incrementIntervalFlag := cli.StringFlag{Name: "increment-interval", Value: "2m", Usage: "Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d"}
 	failureThresholdFlag := cli.IntFlag{Name: "failure-threshold", Value: 10, Usage: "Threshold in percentage beyond which the new version of the function is considered unstable"}
