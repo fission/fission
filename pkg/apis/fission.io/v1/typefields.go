@@ -338,8 +338,8 @@ type (
 	// Canary Config Spec
 	CanaryConfigSpec struct {
 		Trigger                 string      `json:"trigger"`
-		FunctionN               string      `json:"funcn"`
-		FunctionNminus1         string      `json:"funcn-1"`
+		NewFunction             string      `json:"newfunction"`
+		OldFunction             string      `json:"oldfunction"`
 		WeightIncrement         int         `json:"weightincrement"`
 		WeightIncrementDuration string      `json:"duration"`
 		FailureThreshold        int         `json:"failurethreshold"`
