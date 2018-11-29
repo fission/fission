@@ -41,6 +41,11 @@ import (
 	"github.com/fission/fission/fission/util"
 )
 
+const (
+	DEFAULT_MIN_SCALE             = 1
+	DEFAULT_TARGET_CPU_PERCENTAGE = 80
+)
+
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
@@ -69,40 +74,91 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) fission.InvokeStrategy {
+func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fission.InvokeStrategy) (strategy *fission.InvokeStrategy, err error) {
 
-	if maxScale == 0 {
-		maxScale = 1
-	}
+	var fnExecutor, newFnExecutor fission.ExecutorType
 
-	if minScale > maxScale {
-		log.Fatal("Maxscale must be higher than or equal to minscale")
-	}
-
-	var fnExecutor fission.ExecutorType
-	switch executorType {
+	switch c.String("executortype") {
 	case "":
-		fnExecutor = fission.ExecutorTypePoolmgr
+		fallthrough
 	case fission.ExecutorTypePoolmgr:
-		fnExecutor = fission.ExecutorTypePoolmgr
+		newFnExecutor = fission.ExecutorTypePoolmgr
 	case fission.ExecutorTypeNewdeploy:
-		fnExecutor = fission.ExecutorTypeNewdeploy
+		newFnExecutor = fission.ExecutorTypeNewdeploy
 	default:
-		log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+		return nil, errors.New("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 	}
 
-	// Right now a simple single case strategy implementation
-	// This will potentially get more sophisticated once we have more strategies in place
-	strategy := fission.InvokeStrategy{
-		StrategyType: fission.StrategyTypeExecution,
-		ExecutionStrategy: fission.ExecutionStrategy{
-			ExecutorType:     fnExecutor,
-			MinScale:         minScale,
-			MaxScale:         maxScale,
-			TargetCPUPercent: targetcpu,
-		},
+	if existingInvokeStrategy != nil {
+		fnExecutor = existingInvokeStrategy.ExecutionStrategy.ExecutorType
+
+		// override the executor type if user specified a new executor type
+		if c.IsSet("executortype") {
+			fnExecutor = newFnExecutor
+		}
+	} else {
+		fnExecutor = newFnExecutor
 	}
-	return strategy
+
+	if fnExecutor == fission.ExecutorTypePoolmgr {
+		if c.IsSet("targetcpu") || c.IsSet("minscale") || c.IsSet("maxscale") {
+			log.Fatal("To set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
+		}
+
+		if c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory") {
+			log.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
+		}
+		strategy = &fission.InvokeStrategy{
+			StrategyType: fission.StrategyTypeExecution,
+			ExecutionStrategy: fission.ExecutionStrategy{
+				ExecutorType: fission.ExecutorTypePoolmgr,
+			},
+		}
+	} else {
+		// set default value
+		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
+		minScale := DEFAULT_MIN_SCALE
+		maxScale := minScale
+
+		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
+			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
+			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
+		}
+
+		if c.IsSet("targetcpu") {
+			targetCPU = getTargetCPU(c)
+		}
+
+		if c.IsSet("minscale") {
+			minScale = c.Int("minscale")
+		}
+
+		if c.IsSet("maxscale") {
+			maxScale = c.Int("maxscale")
+			if maxScale <= 0 {
+				return nil, errors.New("Maxscale must be greater than 0")
+			}
+		}
+
+		if minScale > maxScale {
+			return nil, errors.New(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale))
+		}
+
+		// Right now a simple single case strategy implementation
+		// This will potentially get more sophisticated once we have more strategies in place
+		strategy = &fission.InvokeStrategy{
+			StrategyType: fission.StrategyTypeExecution,
+			ExecutionStrategy: fission.ExecutionStrategy{
+				ExecutorType:     fnExecutor,
+				MinScale:         minScale,
+				MaxScale:         maxScale,
+				TargetCPUPercent: targetCPU,
+			},
+		}
+	}
+
+	return strategy, nil
 }
 
 func getTargetCPU(c *cli.Context) int {
@@ -113,7 +169,7 @@ func getTargetCPU(c *cli.Context) int {
 			log.Fatal("TargetCPU must be a value between 1 - 100")
 		}
 	} else {
-		targetCPU = 80
+		targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
 	}
 	return targetCPU
 }
@@ -150,12 +206,17 @@ func fnCreate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
 
-	var pkgMetadata *metav1.ObjectMeta
-	var envName string
-
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 
+	invokeStrategy, err := getInvokeStrategy(c, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
+
+	var pkgMetadata *metav1.ObjectMeta
+	var envName string
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -207,13 +268,6 @@ func fnCreate(c *cli.Context) error {
 		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, specFile)
 
 		fmt.Printf("package '%v' created\n", pkgMetadata.Name)
-	}
-
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
-	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
-	if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
-		invokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr {
-		log.Warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
 	}
 
 	var secrets []fission.SecretReference
@@ -274,7 +328,7 @@ func fnCreate(c *cli.Context) error {
 			Secrets:        secrets,
 			ConfigMaps:     cfgmaps,
 			Resources:      resourceReq,
-			InvokeStrategy: invokeStrategy,
+			InvokeStrategy: *invokeStrategy,
 		},
 	}
 
@@ -486,6 +540,13 @@ func fnUpdate(c *cli.Context) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
+	strategy, err := getInvokeStrategy(c, &function.Spec.InvokeStrategy)
+	if err != nil {
+		log.Fatal(err)
+	}
+	function.Spec.InvokeStrategy = *strategy
+	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
+
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: fnNamespace,
 		Name:      pkgName,
@@ -532,54 +593,6 @@ func fnUpdate(c *cli.Context) error {
 		log.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
 		function.Spec.Environment.Name = pkg.Spec.Environment.Name
 		function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
-	}
-
-	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
-
-	if c.IsSet("targetcpu") {
-		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = getTargetCPU(c)
-	}
-
-	if c.IsSet("minscale") {
-		minscale := c.Int("minscale")
-		maxscale := c.Int("maxscale")
-		if c.IsSet("maxscale") && minscale > c.Int("maxscale") {
-			log.Fatal(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
-		}
-		if function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
-			minscale > function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			log.Fatal(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
-				function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale))
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minscale
-	}
-
-	if c.IsSet("maxscale") {
-		maxscale := c.Int("maxscale")
-		if maxscale < function.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			log.Fatal(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
-				function.Spec.InvokeStrategy.ExecutionStrategy.MinScale, maxscale))
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
-	}
-
-	if c.IsSet("executortype") {
-		var fnExecutor fission.ExecutorType
-		switch c.String("executortype") {
-		case "":
-			fnExecutor = fission.ExecutorTypePoolmgr
-		case fission.ExecutorTypePoolmgr:
-			fnExecutor = fission.ExecutorTypePoolmgr
-		case fission.ExecutorTypeNewdeploy:
-			fnExecutor = fission.ExecutorTypeNewdeploy
-		default:
-			log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
-		}
-		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
-			fnExecutor == fission.ExecutorTypePoolmgr {
-			log.Warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fnExecutor
 	}
 
 	_, err = client.FunctionUpdate(function)

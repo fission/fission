@@ -361,23 +361,23 @@ func (deploy *NewDeploy) getResources(env *crd.Environment, fn *crd.Function) ap
 		resources.Limits = make(map[apiv1.ResourceName]resource.Quantity)
 	}
 	// Only override the once specified at function, rest default to values from env.
-	_, ok := fn.Spec.Resources.Requests[apiv1.ResourceCPU]
-	if ok {
+	val, ok := fn.Spec.Resources.Requests[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
 		resources.Requests[apiv1.ResourceCPU] = fn.Spec.Resources.Requests[apiv1.ResourceCPU]
 	}
 
-	_, ok = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
-	if ok {
+	val, ok = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
 		resources.Requests[apiv1.ResourceMemory] = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
 	}
 
-	_, ok = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
-	if ok {
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
 		resources.Limits[apiv1.ResourceCPU] = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
 	}
 
-	_, ok = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
-	if ok {
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
 		resources.Limits[apiv1.ResourceMemory] = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
 	}
 

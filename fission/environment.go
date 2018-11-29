@@ -218,6 +218,10 @@ func envUpdate(c *cli.Context) error {
 
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
+	if c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory") || c.IsSet("minscale") || c.IsSet("maxscale") {
+		log.Fatal("Updating resource limits/requests for existing environments is currently unsupported; re-create the environment instead.")
+	}
+
 	_, err = client.EnvironmentUpdate(env)
 	util.CheckErr(err, "update environment")
 
@@ -295,6 +299,7 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 	}
 
 	var limitResources map[v1.ResourceName]resource.Quantity
+
 	if len(resources.Limits) == 0 {
 		limitResources = make(map[v1.ResourceName]resource.Quantity)
 	} else {
@@ -319,9 +324,28 @@ func getResourceReq(c *cli.Context, resources v1.ResourceRequirements) v1.Resour
 		limitResources[v1.ResourceMemory] = memLimit
 	}
 
+	limitCPU := limitResources[v1.ResourceCPU]
+	requestCPU := requestResources[v1.ResourceCPU]
+
+	if limitCPU.IsZero() && !requestCPU.IsZero() {
+		limitResources[v1.ResourceCPU] = requestCPU
+	} else if limitCPU.Cmp(requestCPU) < 0 {
+		log.Fatal(fmt.Sprintf("MinCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+	}
+
+	limitMem := limitResources[v1.ResourceMemory]
+	requestMem := requestResources[v1.ResourceMemory]
+
+	if limitMem.IsZero() && !requestMem.IsZero() {
+		limitResources[v1.ResourceMemory] = requestMem
+	} else if limitMem.Cmp(requestMem) < 0 {
+		log.Fatal(fmt.Sprintf("MinMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+	}
+
 	resources = v1.ResourceRequirements{
 		Requests: requestResources,
 		Limits:   limitResources,
 	}
+
 	return resources
 }
