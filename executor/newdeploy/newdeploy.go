@@ -49,18 +49,21 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLabels map[string]string, deployNamespace string, precreate bool) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	// we need to distinguish between the situations of pre-creating objs and serving request.
-	// if its not pre-create and minScale is equal to 0, we should scale deploy to at least 1 replica.
-	if !precreate && minScale <= 0 {
+
+	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
+	// in such cases we need set minscale to 1 for router to serve requests.
+	if !firstcreate && minScale <= 0 {
 		minScale = 1
 	}
 
+	waitForDeploy := minScale > 0
+
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		if !precreate || (precreate && minScale > 0) {
+		if waitForDeploy {
 			err = scaleDeployment(deploy.kubernetesClient,
 				existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
@@ -92,7 +95,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		if !precreate || (precreate && minScale > 0) {
+		if waitForDeploy {
 			depl, err = deploy.waitForDeploy(depl, minScale)
 		}
 
