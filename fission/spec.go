@@ -969,6 +969,9 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	// XXX if there are lots of globs it's probably more efficient
 	// to do a filepath.Walk and call path.Match on each path...
 	files := make([]string, 0)
+	if len(aus.IncludeGlobs) == 1 && archiver.Zip.Match(aus.IncludeGlobs[0]) {
+		files = append(files, aus.IncludeGlobs[0])
+	}
 	for _, relativeGlob := range aus.IncludeGlobs {
 		absGlob := rootDir + "/" + relativeGlob
 		f, err := filepath.Glob(absGlob)
