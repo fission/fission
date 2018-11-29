@@ -78,10 +78,6 @@ func downloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser 
 func pkgCreate(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 
-	if len(c.Args()) > 0 {
-		log.Fatal("ERROR : Need to quote the wildcard input")
-	}
-
 	pkgNamespace := c.String("pkgNamespace")
 	envName := c.String("env")
 	if len(envName) == 0 {
@@ -104,10 +100,6 @@ func pkgCreate(c *cli.Context) error {
 
 func pkgUpdate(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
-
-	if len(c.Args()) > 0 {
-		log.Fatal("ERROR : Need to quote the wildcard input")
-	}
 
 	pkgName := c.String("name")
 	if len(pkgName) == 0 {
