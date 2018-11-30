@@ -547,6 +547,10 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 }
 
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
+	// Use executor type as delimiter between function name and namespace to prevent deployment name conflict.
+	// For example:
+	// 1. fn-name: a-b fn-namespace: c => a-b-newdeploy-c
+	// 2. fn-name: a fn-namespace: b-c => a-newdeploy-b-c
 	return strings.ToLower(fmt.Sprintf("%v-newdeploy-%v", fn.Metadata.Name, fn.Metadata.Namespace))
 }
 

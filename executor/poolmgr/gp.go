@@ -462,6 +462,10 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 }
 
 func (gp *GenericPool) getPoolName() string {
+	// Use executor type as delimiter between function name and namespace to prevent deployment name conflict.
+	// For example:
+	// 1. fn-name: a-b fn-namespace: c => a-b-poolmgr-c
+	// 2. fn-name: a fn-namespace: b-c => a-poolmgr-b-c
 	return strings.ToLower(fmt.Sprintf("%v-poolmgr-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace))
 }
 
