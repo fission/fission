@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -548,8 +547,7 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 }
 
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
-	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v",
-		fn.Metadata.Name, fn.Metadata.Namespace, uniuri.NewLen(8)))
+	return strings.ToLower(fmt.Sprintf("%v-newdeploy-%v", fn.Metadata.Name, fn.Metadata.Namespace))
 }
 
 func (deploy *NewDeploy) getDeployLabels(fn *crd.Function, env *crd.Environment) map[string]string {

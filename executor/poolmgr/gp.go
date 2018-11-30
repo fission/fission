@@ -462,8 +462,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 }
 
 func (gp *GenericPool) getPoolName() string {
-	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v",
-		gp.env.Metadata.Name, gp.env.Metadata.Namespace, uniuri.NewLen(8)))
+	return strings.ToLower(fmt.Sprintf("%v-poolmgr-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace))
 }
 
 // A pool is a deployment of generic containers for an env.  This
