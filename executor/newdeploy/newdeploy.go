@@ -49,24 +49,31 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if minScale == 0 {
+
+	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
+	// in such cases we need set minscale to 1 for router to serve requests.
+	if !firstcreate && minScale <= 0 {
 		minScale = 1
 	}
 
+	waitForDeploy := minScale > 0
+
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		err = scaleDeployment(deploy.kubernetesClient,
-			existingDepl.Namespace, existingDepl.Name, minScale)
-		if err != nil {
-			log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
-			return nil, err
-		}
+		if waitForDeploy {
+			err = scaleDeployment(deploy.kubernetesClient,
+				existingDepl.Namespace, existingDepl.Name, minScale)
+			if err != nil {
+				log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
+				return nil, err
+			}
 
-		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+			if existingDepl.Status.AvailableReplicas < minScale {
+				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+			}
 		}
 		return existingDepl, err
 	}
@@ -88,7 +95,11 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		return deploy.waitForDeploy(depl, minScale)
+		if waitForDeploy {
+			depl, err = deploy.waitForDeploy(depl, minScale)
+		}
+
+		return depl, err
 	}
 
 	return nil, err
@@ -148,9 +159,6 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if replicas == 0 {
-		replicas = 1
-	}
 
 	targetFilename := "user"
 
@@ -391,6 +399,9 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		minRepl = 1
 	}
 	maxRepl := int32(execStrategy.MaxScale)
+	if maxRepl == 0 {
+		maxRepl = minRepl
+	}
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
