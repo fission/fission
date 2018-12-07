@@ -381,7 +381,8 @@ func flagValueParser(args []string) error {
 
 	// find out all flag indexes
 	for i, v := range args {
-		if strings.HasPrefix(v, "--") {
+		// support both flags with "--" and "-"
+		if strings.HasPrefix(v, "-") {
 			flagIndexes = append(flagIndexes, i)
 		}
 	}
@@ -392,7 +393,11 @@ func flagValueParser(args []string) error {
 	for i := 0; i < len(flagIndexes)-1; i++ {
 		// if the difference between the flag index i and i+1
 		// is bigger then 2 means that CLI receives extra arguments
-		// for one flag.
+		// for one flag. For example,
+		// 1. fission fn create --name e1 --code examples/nodejs/* --env nodejs ...
+		//    The wildcard will be extracted to multiple files and cause the difference between `--code` and `--env` large than 2.
+		// 2. fission fn create --spec --name e1 ...
+		//    The difference between --spec and --name is 1.
 		if flagIndexes[i+1]-flagIndexes[i] > 2 {
 			index := flagIndexes[i]
 			errorFlags = append(errorFlags, args[index])
