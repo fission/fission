@@ -91,7 +91,7 @@ func pkgCreate(c *cli.Context) error {
 		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	createPackage(client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", false)
+	createPackage(client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
 
 	return nil
 }
@@ -185,13 +185,13 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchiveMetadata = createArchive(client, srcArchiveFiles, false, "")
+		srcArchiveMetadata = createArchive(client, srcArchiveFiles, false, "", "")
 		pkg.Spec.Source = *srcArchiveMetadata
 		needToBuild = true
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchiveMetadata = createArchive(client, deployArchiveFiles, noZip, "")
+		deployArchiveMetadata = createArchive(client, deployArchiveFiles, noZip, "", "")
 		pkg.Spec.Deployment = *deployArchiveMetadata
 		// Users may update the env, envNS and deploy archive at the same time,
 		// but without the source archive. In this case, we should set needToBuild to false
@@ -476,7 +476,7 @@ func fileChecksum(fileName string) (*fission.Checksum, error) {
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func createArchive(client *client.Client, includeFiles []string, noZip bool, specFile string) *fission.Archive {
+func createArchive(client *client.Client, includeFiles []string, noZip bool, specDir string, specFile string) *fission.Archive {
 	if len(specFile) > 0 {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &ArchiveUploadSpec{
@@ -485,7 +485,7 @@ func createArchive(client *client.Client, includeFiles []string, noZip bool, spe
 		}
 
 		// check if this AUS exists in the specs; if so, don't create a new one
-		fr, err := readSpecs(getSpecDir(nil))
+		fr, err := readSpecs(specDir)
 		util.CheckErr(err, "read specs")
 		if m := fr.specExists(aus, false, true); m != nil {
 			aus.Name = m.Name
@@ -547,7 +547,7 @@ func uploadArchive(client *client.Client, fileName string) *fission.Archive {
 	return &archive
 }
 
-func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specFile string, noZip bool) *metav1.ObjectMeta {
+func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
 			Namespace: envNamespace,
@@ -561,11 +561,11 @@ func createPackage(client *client.Client, pkgNamespace string, envName string, e
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fission.BuildStatusNone
 		}
-		pkgSpec.Deployment = *createArchive(client, deployArchiveFiles, noZip, specFile)
+		pkgSpec.Deployment = *createArchive(client, deployArchiveFiles, noZip, specDir, specFile)
 		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveFiles[0]), uniuri.NewLen(4)))
 	}
 	if len(srcArchiveFiles) > 0 {
-		pkgSpec.Source = *createArchive(client, srcArchiveFiles, false, specFile)
+		pkgSpec.Source = *createArchive(client, srcArchiveFiles, false, specDir, specFile)
 		pkgStatus = fission.BuildStatusPending // set package build status to pending
 		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveFiles[0]), uniuri.NewLen(4)))
 	}

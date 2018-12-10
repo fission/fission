@@ -193,6 +193,7 @@ func fnCreate(c *cli.Context) error {
 		spec = true
 		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
+	specDir := getSpecDir(c)
 
 	// check for unique function names within a namespace
 	fnList, err := client.FunctionList(fnNamespace)
@@ -270,7 +271,7 @@ func fnCreate(c *cli.Context) error {
 		buildcmd := c.String("buildcmd")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specFile, noZip)
+		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 
 		fmt.Printf("package '%v' created\n", pkgMetadata.Name)
 	}
