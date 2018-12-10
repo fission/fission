@@ -1784,7 +1784,7 @@ func specSave(resource interface{}, specFile string) error {
 	return nil
 }
 
-// Returns true if the given resource exists in the specs, false
+// Returns metadata if the given resource exists in the specs, nil
 // otherwise.  compareMetadata and compareSpec control how the
 // equality check is performed.
 func (fr *FissionResources) specExists(resource interface{}, compareMetadata bool, compareSpec bool) *metav1.ObjectMeta {
@@ -1800,7 +1800,6 @@ func (fr *FissionResources) specExists(resource interface{}, compareMetadata boo
 					reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
 				continue
 			}
-			fmt.Printf("found: %#v\n", aus)
 			return &metav1.ObjectMeta{Name: aus.Name}
 		}
 		return nil

@@ -488,6 +488,7 @@ func createArchive(client *client.Client, includeFiles []string, noZip bool, spe
 		fr, err := readSpecs(specDir)
 		util.CheckErr(err, "read specs")
 		if m := fr.specExists(aus, false, true); m != nil {
+			fmt.Printf("Re-using previously created archive %v\n", m.Name)
 			aus.Name = m.Name
 		} else {
 			// save the uploadspec
@@ -709,7 +710,7 @@ func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZi
 		}
 
 		// if it's an HTTP URL, just use the URL.
-		if len(files) == 1 && (strings.HasPrefix(files[0], "http://") || strings.HasPrefix(files[0], "https://")) {
+		if strings.HasPrefix(files[0], "http://") || strings.HasPrefix(files[0], "https://") {
 			return files[0]
 		}
 	}
