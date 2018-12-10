@@ -21,6 +21,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,6 +35,14 @@ import (
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
 	log.Verbose(2, "Verbosity = 2")
+
+	err := flagValueParser(c.Args())
+	if err != nil {
+		// The cli package wont't print out error, as a workaround we need to
+		// fatal here instead of return it.
+		log.Fatal(err)
+	}
+
 	return nil
 }
 
@@ -311,6 +320,7 @@ func newCliApp() *cli.App {
 		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
 	}
+
 	app.Before = cliHook
 	app.CommandNotFound = handleCommandNotFound
 	return app
@@ -358,6 +368,48 @@ func versionPrinter(_ *cli.Context) {
 	client := util.GetApiClient(util.GetServerUrl())
 	ver := util.GetVersion(client)
 	fmt.Print(string(ver))
+}
+
+func flagValueParser(args []string) error {
+	// all input value for flags are properly set
+	if len(args) == 0 {
+		return nil
+	}
+
+	var flagIndexes []int
+	var errorFlags []string
+
+	// find out all flag indexes
+	for i, v := range args {
+		// support both flags with "--" and "-"
+		if strings.HasPrefix(v, "-") {
+			flagIndexes = append(flagIndexes, i)
+		}
+	}
+
+	// add total length of args to indicate the end of args
+	flagIndexes = append(flagIndexes, len(args))
+
+	for i := 0; i < len(flagIndexes)-1; i++ {
+		// if the difference between the flag index i and i+1
+		// is bigger then 2 means that CLI receives extra arguments
+		// for one flag. For example,
+		// 1. fission fn create --name e1 --code examples/nodejs/* --env nodejs ...
+		//    The wildcard will be extracted to multiple files and cause the difference between `--code` and `--env` large than 2.
+		// 2. fission fn create --spec --name e1 ...
+		//    The difference between --spec and --name is 1.
+		if flagIndexes[i+1]-flagIndexes[i] > 2 {
+			index := flagIndexes[i]
+			errorFlags = append(errorFlags, args[index])
+		}
+	}
+
+	if len(errorFlags) > 0 {
+		e := fmt.Sprintf("Unable to parse flags: %v\nThe argument should have only one input value. Please quote the input value if it contains wildcard characters(*).", strings.Join(errorFlags[:], ", "))
+		return errors.New(e)
+	}
+
+	return nil
 }
 
 var helpTemplate = `NAME:
