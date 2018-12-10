@@ -691,13 +691,9 @@ func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZi
 	archiveName := archiveName(archiveNameHint, archiveInput)
 
 	// Get files from inputs as number of files decide next steps
-	files := make([]string, 0)
-	for _, glob := range archiveInput {
-		f, err := filepath.Glob(glob)
-		if err != nil {
-			log.Fatal(fmt.Sprintf("Invalid glob %v: %v", glob, err))
-		}
-		files = append(files, f...)
+	files, err := fission.FindAllGlobs(archiveInput)
+	if err != nil {
+		util.CheckErr(err, "finding all globs")
 	}
 
 	// We have one file; if it's a zip file or a URL, no need to archive it

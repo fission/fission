@@ -28,12 +28,10 @@ import (
 	"strings"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/gorilla/handlers"
 	"github.com/imdario/mergo"
 	"github.com/mholt/archiver"
-	uuid "github.com/satori/go.uuid"
+	"github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -144,18 +142,27 @@ func GetTempDir() (string, error) {
 	return dir, err
 }
 
-func MakeArchive(targetName string, globs ...string) (string, error) {
+// FindAllGlobs returns a list of globs of input list.
+func FindAllGlobs(inputList []string) ([]string, error) {
 	files := make([]string, 0)
-	for _, glob := range globs {
+	for _, glob := range inputList {
 		f, err := filepath.Glob(glob)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Invalid glob %v: %v", glob, err))
-			return "", err
+			return nil, fmt.Errorf("Invalid glob %v: %v", glob, err)
 		}
 		files = append(files, f...)
 	}
+	return files, nil
+}
+
+func MakeArchive(targetName string, globs ...string) (string, error) {
+	files, err := FindAllGlobs(globs)
+	if err != nil {
+		return "", err
+	}
+
 	// zip up the file list
-	err := archiver.Zip.Make(targetName, files)
+	err = archiver.Zip.Make(targetName, files)
 	if err != nil {
 		return "", err
 	}
