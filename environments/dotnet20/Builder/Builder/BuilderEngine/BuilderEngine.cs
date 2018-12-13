@@ -41,6 +41,9 @@ namespace Builder.Engine
 
             Console.WriteLine("DLL Info Gathered!!");
             // try to compile the function and if compilation succedd ,then create func spec file
+            //this enables us to find compilation issues during package creation itself thus saving time 
+            // however this feature impose that  the function file name should be func.cs 
+            //if we dont want it , we can comment the  TryCompile() logic
             Console.WriteLine("Trying to compile it during build itslef !!");
             bool compiled =await TryCompile();
             Console.WriteLine($"Compilation result Gathered as : {compiled}!!");
