@@ -73,7 +73,8 @@ namespace Fission.DotNetCore.Compiler
                     ms.Seek(0, SeekOrigin.Begin);
 
                     Assembly assembly = AssemblyLoadContext.Default.LoadFromStream(ms);
-                    var type = assembly.GetType("FissionFunction");
+                    //support for Namespace , as well as backward compatibility for existing functions
+                    var type = assembly.GetTypes().FirstOrDefault(x => x.Name.EndsWith("FissionFunction"));
                     var info = type.GetMember("Execute").First() as MethodInfo;
                     return new Function(assembly, type, info);
                 }
@@ -176,7 +177,10 @@ namespace Fission.DotNetCore.Compiler
                     ms.Seek(0, SeekOrigin.Begin);
 
                     Assembly assembly = AssemblyLoadContext.Default.LoadFromStream(ms);
-                    var type = assembly.GetType("FissionFunction");
+                    //var type = assembly.GetType("FissionFunction");
+                    //support for Namespace , as well as backward compatibility for existing functions
+                    var type = assembly.GetTypes().FirstOrDefault(x => x.Name.EndsWith("FissionFunction"));
+                    //assembly.GetTypes().Where(x=>x.Name.ToLower().EndsWith("FissionFunction".ToLower())).FirstOrDefault();
                     var info = type.GetMember("Execute").First() as MethodInfo;
                     return new Function(assembly, type, info);
                 }

@@ -4,6 +4,8 @@ using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Nancy;
+using Newtonsoft.Json;
+
 
 namespace Fission.DotNetCore.Api
 {
@@ -31,6 +33,27 @@ namespace Fission.DotNetCore.Api
                                         logger,
                                         new FissionHttpRequest(request));
         }
+
+        //this are curruntly dummy , not being implemented, just to pass compilation
+        //actual execution is written in environment to use the app settings as there we need it
+        public T GetSettings<T>(string relativePath)
+        {
+            //intentionaly doing it as these are just dummy methods not being called
+            //but if tomorrow if we decide to give implementation for execution in build then we 
+            //need to implement it
+            throw new NotImplementedException();
+        }
+
+        //this are curruntly dummy , not being implemented, just to pass compilation
+        //actual execution is written in environment to use the app settings as there we need it
+        private string GetSettingsJson(string relativePath)
+        {
+            //intentionaly doing it as these are just dummy methods not being called
+            //but if tomorrow if we decide to give implementation for execution in build then we 
+            //need to implement it
+            throw new NotImplementedException();
+        }
+
     }
 
     public class Logger

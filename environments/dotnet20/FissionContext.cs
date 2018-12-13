@@ -4,11 +4,14 @@ using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Nancy;
+using Newtonsoft.Json;
+
 
 namespace Fission.DotNetCore.Api
 {
     public class FissionContext
     {
+        public string PackagePath { get; set; }
         public FissionContext(Dictionary<string, object> args, Logger logger, FissionHttpRequest request)
         {
             if (args == null) throw new ArgumentNullException(nameof(args));
@@ -31,6 +34,20 @@ namespace Fission.DotNetCore.Api
                                         logger,
                                         new FissionHttpRequest(request));
         }
+        //this is to support aditional setting file read from source/deployment package via function
+        public T GetSettings<T>(string relativePath)
+        {
+            var filePath = Path.Combine(this.PackagePath, relativePath);
+            Console.WriteLine($"Going to Get Setting from :{filePath}");
+            string json = GetSettingsJson(filePath);
+            return JsonConvert.DeserializeObject<T>(json);
+        }
+
+        private string GetSettingsJson(string relativePath)
+        {
+            return File.ReadAllText(Path.Combine(this.PackagePath, relativePath));
+        }
+
     }
 
     public class Logger

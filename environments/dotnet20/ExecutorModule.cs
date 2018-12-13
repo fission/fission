@@ -13,6 +13,7 @@ namespace Fission.DotNetCore
 {
     public class ExecutorModule : NancyModule
     {
+        private static string PackagePath = string.Empty;
 #if DEBUG
         private const string CODE_PATH = "/tmp/func.cs";
 #else
@@ -56,6 +57,7 @@ namespace Fission.DotNetCore
                 string functionPath = string.Empty;
                 // functionPath = Path.Combine(builderRequest.filepath, $"{builderRequest.functionName}.cs");
 
+                PackagePath = builderRequest.filepath;
                 //following will enable us to skip --entrypoint flag during function creation 
                 if (!string.IsNullOrWhiteSpace(builderRequest.functionName))
                 {
@@ -159,7 +161,10 @@ namespace Fission.DotNetCore
             
             try
             {
-                return _userFunc.Invoke(FissionContext.Build(Request, new Logger()));
+                var context = FissionContext.Build(Request, new Logger());
+                //set the package path ,as that will be required to get appsetting files from package
+                context.PackagePath = PackagePath;
+                return _userFunc.Invoke(context);
             }
             catch (Exception e)
             {
