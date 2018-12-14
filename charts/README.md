@@ -79,7 +79,7 @@ If you're using minikube, set serviceType to NodePort:
 $ helm install --name my-release --set serviceType=NodePort fission-all
 ```
 
-You can also set parameters with a yaml file (see values.yaml for
+You can also set parameters with a yaml file (see [values.yaml](fission-all/values.yaml) for
 what it should look like):
 
 ```bash
