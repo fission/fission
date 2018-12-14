@@ -98,7 +98,10 @@ namespace Builder.Engine
             string CODE_PATH = Path.Combine(SRC_PKG, BuilderHelper.Instance.builderSettings.functionBodyFileName);
             if (!File.Exists(CODE_PATH))
             {
-                compile_errors.Add($"Source Code not found at : {CODE_PATH}");
+                Console.WriteLine($"Source Code not found at : {CODE_PATH} !" +
+                    $" to use TryCompile() in Builder, make sure , your main function file name is " +
+                    $"{BuilderHelper.Instance.builderSettings.functionBodyFileName} and " +
+                    $"it is located at root of zip!!" );
                 return issuccess;
             }
 
