@@ -30,7 +30,7 @@ type PrometheusApiClient struct {
 	client promClient.QueryAPI
 }
 
-func MakePrometheusClient(prometheusSvc string) *PrometheusApiClient {
+func MakePrometheusClient(prometheusSvc string) (*PrometheusApiClient, error) {
 	promApiConfig := promClient.Config{
 		Address: prometheusSvc,
 	}
@@ -38,14 +38,24 @@ func MakePrometheusClient(prometheusSvc string) *PrometheusApiClient {
 	promApiClient, err := promClient.New(promApiConfig)
 	if err != nil {
 		log.Errorf("Error creating prometheus api client for svc : %s, err : %v", prometheusSvc, err)
+		return nil, err
 	}
 
 	apiQueryClient := promClient.NewQueryAPI(promApiClient)
 
+	// By default, the prometheus client library doesn't test server connectivity when creating
+	// prometheus client. As a workaround, here we send out a test qeury string to ensure that
+	// prometheus server is running.
+	_, err = apiQueryClient.Query(context.Background(), "http_requests_total", time.Now())
+	if err != nil {
+		log.Printf("Error sending test query to prometheus server: %v", err)
+		return nil, err
+	}
+
 	log.Printf("Successfully made prometheus client with service : %s", prometheusSvc)
 	return &PrometheusApiClient{
 		client: apiQueryClient,
-	}
+	}, nil
 }
 
 func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path, method, funcName, funcNs string, window string) (float64, error) {

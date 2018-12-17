@@ -63,7 +63,7 @@ type (
 	}
 )
 
-func MakeAPI(featureStatus *map[string]string) (*API, error) {
+func MakeAPI(featureStatus map[string]string) (*API, error) {
 	api, err := makeCRDBackedAPI()
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
@@ -94,7 +94,7 @@ func MakeAPI(featureStatus *map[string]string) (*API, error) {
 		api.functionNamespace = "fission-function"
 	}
 
-	api.featureStatus = *featureStatus
+	api.featureStatus = featureStatus
 
 	return api, err
 }

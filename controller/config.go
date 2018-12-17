@@ -28,13 +28,13 @@ import (
 	config "github.com/fission/fission/featureconfig"
 )
 
-func ConfigCanaryFeature(context context.Context, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus *map[string]string) error {
+func ConfigCanaryFeature(context context.Context, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
 	// start the appropriate controller
 	if featureConfig.CanaryConfig.IsEnabled {
 		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(fissionClient, kubeClient, fissionClient.GetCrdClient(),
 			featureConfig.CanaryConfig.PrometheusSvc)
 		if err != nil {
-			(*featureStatus)[config.CanaryFeature] = err.Error()
+			featureStatus[config.CanaryFeature] = err.Error()
 			return fmt.Errorf("failed to start canary config manager: %v", err)
 		}
 		canaryCfgMgr.Run(context)
@@ -45,7 +45,7 @@ func ConfigCanaryFeature(context context.Context, fissionClient *crd.FissionClie
 }
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(context context.Context, unitTestMode bool, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset) (*map[string]string, error) {
+func ConfigureFeatures(context context.Context, unitTestMode bool, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset) (map[string]string, error) {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil, nil
@@ -62,6 +62,6 @@ func ConfigureFeatures(context context.Context, unitTestMode bool, fissionClient
 
 	// configure respective features
 	// in the future when new optional features are added, we need to add corresponding feature handlers and invoke them here
-	err = ConfigCanaryFeature(context, fissionClient, kubeClient, featureConfig, &featureStatus)
-	return &featureStatus, err
+	err = ConfigCanaryFeature(context, fissionClient, kubeClient, featureConfig, featureStatus)
+	return featureStatus, err
 }
