@@ -483,8 +483,8 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Completed upload request")
 	w.Header().Add("Content-Type", "application/json")
-	w.Write(rBody)
 	w.WriteHeader(http.StatusOK)
+	w.Write(rBody)
 }
 
 func (fetcher *Fetcher) rename(src string, dst string) error {
