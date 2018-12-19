@@ -84,17 +84,6 @@ type (
 	}
 )
 
-func getImagePullPolicy(policy string) apiv1.PullPolicy {
-	switch policy {
-	case "Always":
-		return apiv1.PullAlways
-	case "Never":
-		return apiv1.PullNever
-	default:
-		return apiv1.PullIfNotPresent
-	}
-}
-
 func MakeGenericPool(
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
@@ -144,9 +133,9 @@ func MakeGenericPool(
 		sharedCfgMapPath:  "/configs",
 	}
 
-	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
+	gp.runtimeImagePullPolicy = fission.GetImagePullPolicy(runtimeImagePullPolicy)
 
-	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
+	gp.fetcherImagePullPolicy = fission.GetImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
 
 	// create fetcher SA in this ns, if not already created

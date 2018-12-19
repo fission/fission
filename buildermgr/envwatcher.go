@@ -80,6 +80,7 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		fetcherImage           string
 		fetcherImagePullPolicy apiv1.PullPolicy
+		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
 	}
 )
@@ -102,20 +103,8 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 		fetcherImage = "fission/fetcher"
 	}
 
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
-
-	var pullPolicy apiv1.PullPolicy
-	switch fetcherImagePullPolicy {
-	case "Always":
-		pullPolicy = apiv1.PullAlways
-	case "Never":
-		pullPolicy = apiv1.PullNever
-	default:
-		pullPolicy = apiv1.PullIfNotPresent
-	}
+	fetcherImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
+	builderImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("BUILDER_IMAGE_PULL_POLICY"))
 
 	envWatcher := &environmentWatcher{
 		cache:                  make(map[string]*builderInfo),
@@ -124,7 +113,8 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
 		fetcherImage:           fetcherImage,
-		fetcherImagePullPolicy: pullPolicy,
+		fetcherImagePullPolicy: fetcherImagePullPolicy,
+		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 	}
 
@@ -547,7 +537,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 						fission.MergeContainerSpecs(&apiv1.Container{
 							Name:                   "builder",
 							Image:                  env.Spec.Builder.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							ImagePullPolicy:        envw.builderImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
