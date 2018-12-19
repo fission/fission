@@ -122,7 +122,7 @@ func msgHandler(nats *Nats, trigger *crd.MessageQueueTrigger) func(*ns.Msg) {
 		}
 
 		for k, v := range headers {
-			req.Header.Add(k, v)
+			req.Header.Set(k, v)
 		}
 
 		var resp *http.Response

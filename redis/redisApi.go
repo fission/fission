@@ -401,7 +401,7 @@ func ReplayRequest(routerUrl string, request *redisCache.Request) ([]string, err
 		}
 	}
 
-	req.Header.Add("X-Fission-Replayed", "true")
+	req.Header.Set("X-Fission-Replayed", "true")
 	resp, err := client.Do(req)
 
 	if err != nil {

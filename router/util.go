@@ -13,10 +13,10 @@ const (
 )
 
 func MetadataToHeaders(prefix string, meta *metav1.ObjectMeta, request *http.Request) {
-	request.Header.Add(fmt.Sprintf("X-%s-Uid", prefix), string(meta.UID))
-	request.Header.Add(fmt.Sprintf("X-%s-Name", prefix), meta.Name)
-	request.Header.Add(fmt.Sprintf("X-%s-Namespace", prefix), meta.Namespace)
-	request.Header.Add(fmt.Sprintf("X-%s-ResourceVersion", prefix), meta.ResourceVersion)
+	request.Header.Set(fmt.Sprintf("X-%s-Uid", prefix), string(meta.UID))
+	request.Header.Set(fmt.Sprintf("X-%s-Name", prefix), meta.Name)
+	request.Header.Set(fmt.Sprintf("X-%s-Namespace", prefix), meta.Namespace)
+	request.Header.Set(fmt.Sprintf("X-%s-ResourceVersion", prefix), meta.ResourceVersion)
 }
 
 func HeadersToMetadata(prefix string, headers http.Header) *metav1.ObjectMeta {
