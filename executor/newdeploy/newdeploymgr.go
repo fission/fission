@@ -52,6 +52,7 @@ type (
 
 		fetcherImg             string
 		fetcherImagePullPolicy apiv1.PullPolicy
+		runtimeImagePullPolicy apiv1.PullPolicy
 		namespace              string
 		sharedMountPath        string
 		sharedSecretPath       string
@@ -125,16 +126,18 @@ func MakeNewDeploy(
 		namespace: namespace,
 		fsCache:   fsCache,
 
-		fetcherImg:             fetcherImg,
-		fetcherImagePullPolicy: apiv1.PullIfNotPresent,
-		sharedMountPath:        "/userfunc",
-		sharedSecretPath:       "/secrets",
-		sharedCfgMapPath:       "/configs",
-		useIstio:               enableIstio,
+		fetcherImg:       fetcherImg,
+		sharedMountPath:  "/userfunc",
+		sharedSecretPath: "/secrets",
+		sharedCfgMapPath: "/configs",
+		useIstio:         enableIstio,
 
 		requestChannel:  make(chan *fnRequest),
 		idlePodReapTime: 2 * time.Minute,
 	}
+
+	nd.runtimeImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
+	nd.fetcherImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
 
 	if nd.crdClient != nil {
 		fnStore, fnController := nd.initFuncController()

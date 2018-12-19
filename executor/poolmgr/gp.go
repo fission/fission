@@ -101,14 +101,6 @@ func MakeGenericPool(
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
 	}
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
-	runtimeImagePullPolicy := os.Getenv("RUNTIME_IMAGE_PULL_POLICY")
-	if len(runtimeImagePullPolicy) == 0 {
-		runtimeImagePullPolicy = "IfNotPresent"
-	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
@@ -133,9 +125,9 @@ func MakeGenericPool(
 		sharedCfgMapPath:  "/configs",
 	}
 
-	gp.runtimeImagePullPolicy = fission.GetImagePullPolicy(runtimeImagePullPolicy)
+	gp.runtimeImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
+	gp.fetcherImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
 
-	gp.fetcherImagePullPolicy = fission.GetImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
 
 	// create fetcher SA in this ns, if not already created
