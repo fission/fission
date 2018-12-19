@@ -249,7 +249,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 						fission.MergeContainerSpecs(&apiv1.Container{
 							Name:                   fn.Metadata.Name,
 							Image:                  env.Spec.Runtime.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{

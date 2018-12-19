@@ -84,17 +84,6 @@ type (
 	}
 )
 
-func getImagePullPolicy(policy string) apiv1.PullPolicy {
-	switch policy {
-	case "Always":
-		return apiv1.PullAlways
-	case "Never":
-		return apiv1.PullNever
-	default:
-		return apiv1.PullIfNotPresent
-	}
-}
-
 func MakeGenericPool(
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
@@ -111,14 +100,6 @@ func MakeGenericPool(
 	fetcherImage := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImage) == 0 {
 		fetcherImage = "fission/fetcher"
-	}
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
-	runtimeImagePullPolicy := os.Getenv("RUNTIME_IMAGE_PULL_POLICY")
-	if len(runtimeImagePullPolicy) == 0 {
-		runtimeImagePullPolicy = "IfNotPresent"
 	}
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
@@ -144,9 +125,9 @@ func MakeGenericPool(
 		sharedCfgMapPath:  "/configs",
 	}
 
-	gp.runtimeImagePullPolicy = getImagePullPolicy(runtimeImagePullPolicy)
+	gp.runtimeImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
+	gp.fetcherImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
 
-	gp.fetcherImagePullPolicy = getImagePullPolicy(fetcherImagePullPolicy)
 	log.Printf("fetcher image: %v, pull policy: %v", gp.fetcherImage, gp.fetcherImagePullPolicy)
 
 	// create fetcher SA in this ns, if not already created

@@ -184,3 +184,15 @@ func RemoveZeroBytes(src []byte) []byte {
 	}
 	return bs
 }
+
+// GetImagePullPolicy returns the image pull policy base on the input value.
+func GetImagePullPolicy(policy string) apiv1.PullPolicy {
+	switch policy {
+	case "Always":
+		return apiv1.PullAlways
+	case "Never":
+		return apiv1.PullNever
+	default:
+		return apiv1.PullIfNotPresent
+	}
+}
