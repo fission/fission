@@ -84,7 +84,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	// Create request
 	req, err := http.NewRequest("POST", url, &buf)
 	for k, v := range r.headers {
-		req.Header.Add(k, v)
+		req.Header.Set(k, v)
 	}
 
 	// Make the request

@@ -142,7 +142,7 @@ func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLo
 		statusCode = http.StatusInternalServerError
 	}
 
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	// should write header before writing the body,
 	// or client will receive HTTP 200 regardless the real status code
 	w.WriteHeader(statusCode)
