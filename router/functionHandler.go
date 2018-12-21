@@ -404,14 +404,14 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	// retrieve url params and add them to request header
 	vars := mux.Vars(request)
 	for k, v := range vars {
-		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
+		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
 	var reqUID string
 	if len(fh.recorderName) > 0 {
 		UID := strings.ToLower(uuid.NewV4().String())
 		reqUID = "REQ" + UID
-		request.Header.Add("X-Fission-ReqUID", reqUID)
+		request.Header.Set("X-Fission-ReqUID", reqUID)
 		log.Print("Record request with ReqUID: ", reqUID)
 	}
 
