@@ -35,54 +35,17 @@ Please see examples below.
 
 ## Rebuilding and pushing the image
 
-To rebuild the image you need either a computer with dotnet 1.1.0
-installed or else you will have to map the source directory into a
-container containing the dotnet 1.1.0 environment.
+To rebuild the image you will have to install Docker with version higher than 17.05+
+in order to support multi-stage builds feature.  
 
-### Locally installed Dotnet 1.1.0
+### Rebuild containers
 
-Simply move to the source directory in a terminal and run the ./build.sh script.
-
-The script will restore dependencies, compile a release build and
-and build the container. If you need to change the name of the container
-simply change it in the script.
-
-After the build finishes push the new image to a Docker registry using the 
-standard procedure.
-
-### Build in a container
-
-Move to the directory containing the source and start the Docker container
-with dotnet and mount the current directory to a build location:
+Move to the directory containing the source and start the container build process:
 
 ```
-docker run -it --rm -v $PWD:/build microsoft/dotnet
-```
-
-Move to the build directory inside the container and restore the packages:
-
-```
-cd /build 
-dotnet restore
-log  : Restoring packages for /source/project.json...
-log  : Installing System.Net.WebSockets 4.0.0.
-log  : Installing runtime.native.System.IO.Compression 4.1.0.
-...
-```
-
-Compile and publish a release build of the source to the 'out' folder:
-
-```
-dotnet publish -c Release -o out
-Publishing source for .NETCoreApp,Version
-...
-```
-Exit the build container and build the Docker container on the local host:
-
-```
-exit
 docker build -t USER/dotnet-env .
-``` 
+```
+
 After the build finishes push the new image to a Docker registry using the 
 standard procedure.
 
