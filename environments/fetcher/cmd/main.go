@@ -33,7 +33,7 @@ func main() {
 
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
-	specializePayload := flag.String("-specialize-request", "", "JSON payload for specialize request")
+	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
 	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
 	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")
 
@@ -100,5 +100,5 @@ func main() {
 }
 
 func fetcherUsage() {
-	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path> \n")
+	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-specialize-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path> \n")
 }
