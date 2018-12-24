@@ -597,7 +597,7 @@ func (gp *GenericPool) createPool() error {
 								FailureThreshold:    30,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
+										Path: "/readniess-healthz",
 										Port: intstr.IntOrString{
 											Type:   intstr.Int,
 											IntVal: 8000,
@@ -606,7 +606,7 @@ func (gp *GenericPool) createPool() error {
 								},
 							},
 							LivenessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 35,
+								InitialDelaySeconds: 1,
 								PeriodSeconds:       5,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{

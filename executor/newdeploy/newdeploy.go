@@ -313,7 +313,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 								FailureThreshold:    30,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
+										Path: "/readniess-healthz",
 										Port: intstr.IntOrString{
 											Type:   intstr.Int,
 											IntVal: 8000,
@@ -322,7 +322,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 								},
 							},
 							LivenessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 35,
+								InitialDelaySeconds: 1,
 								PeriodSeconds:       5,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
