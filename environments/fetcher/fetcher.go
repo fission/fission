@@ -196,7 +196,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 
 func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
+		http.Error(w, fmt.Sprintf("only POST is supported on this endpoint, %v received", r.Method), http.StatusMethodNotAllowed)
 		return
 	}
 

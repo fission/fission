@@ -58,25 +58,39 @@ func main() {
 		log.Fatalf("Error making fetcher: %v", err)
 	}
 
-	if *specializeOnStart {
-		var specializeReq fission.FunctionSpecializeRequest
+	readyToServe := false
 
-		err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
-		if err != nil {
-			log.Fatalf("Error decoding specialize request: %v", err)
-		}
+	// do specialization in other goroutine to prevent blocking in newdeploy
+	go func() {
+		if *specializeOnStart {
+			var specializeReq fission.FunctionSpecializeRequest
 
-		err = f.SpecializePod(specializeReq.FetchReq, specializeReq.LoadReq)
-		if err != nil {
-			log.Fatalf("Error specialing function poadt: %v", err)
+			err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
+			if err != nil {
+				log.Fatalf("Error decoding specialize request: %v", err)
+			}
+
+			err = f.SpecializePod(specializeReq.FetchReq, specializeReq.LoadReq)
+			if err != nil {
+				log.Fatalf("Error specialing function poadt: %v", err)
+			}
+
+			readyToServe = true
 		}
-	}
+	}()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/fetch", f.FetchHandler)
 	mux.HandleFunc("/specialize", f.SpecializeHandler)
 	mux.HandleFunc("/upload", f.UploadHandler)
 	mux.HandleFunc("/version", f.VersionHandler)
+	mux.HandleFunc("/readniess-healthz", func(w http.ResponseWriter, r *http.Request) {
+		if !*specializeOnStart || readyToServe {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

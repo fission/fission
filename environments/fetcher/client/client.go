@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/fission/fission"
@@ -19,7 +20,7 @@ type (
 
 func MakeClient(fetcherUrl string) *Client {
 	return &Client{
-		url: fetcherUrl,
+		url: strings.TrimSuffix(fetcherUrl, "/"),
 	}
 }
 
@@ -83,7 +84,7 @@ func sendRequest(req interface{}, url string) ([]byte, error) {
 
 		if i < maxRetries-1 {
 			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
-			log.Printf("Error specialize/fetch/upload package (%v), retrying", err)
+			log.Printf("Error specializing/fetching/uploading package (%v) with url %v, retrying", err, url)
 			continue
 		}
 	}
