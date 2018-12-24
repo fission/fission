@@ -42,10 +42,6 @@ const (
 	DeploymentVersion = "extensions/v1beta1"
 )
 
-const (
-	envVersion = "ENV_VERSION"
-)
-
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
 	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
@@ -181,6 +177,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 			FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
 			FunctionName:     fn.Spec.Package.FunctionName,
 			FunctionMetadata: &fn.Metadata,
+			EnvVersion:       env.Spec.Version,
 		},
 	}
 
