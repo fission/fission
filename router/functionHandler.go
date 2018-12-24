@@ -209,12 +209,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
 		// get function service url from cache or executor
 		serviceUrl, serviceUrlFromCache, err := roundTripper.funcHandler.getServiceEntry()
-
-		// retry to get service url again
-		if serviceUrl == nil {
-			continue
-		}
-
 		if err != nil {
 			// We might want a specific error code or header for fission failures as opposed to
 			// user function bugs.
@@ -232,6 +226,12 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 				}, nil
 			}
 			return nil, fission.MakeError(http.StatusInternalServerError, err.Error())
+		}
+
+		// retry to get service url again
+		if serviceUrl == nil {
+			time.Sleep(executingTimeout)
+			continue
 		}
 
 		// tapService before invoking roundTrip for the serviceUrl
@@ -467,6 +467,7 @@ func addForwardedHostHeader(req *http.Request) {
 	req.Header.Set(X_FORWARDED_HOST, req.Host)
 }
 
+// getServiceEntry is a short-hand for developer to get service url entry that may returns from executor or cache
 func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
 	// try to find service url from cache first
 	serviceUrl, err = fh.getServiceEntryFromCache()
@@ -481,36 +482,36 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 	// To prevent multiple update requests will be sent to executor and make executor overloaded,
 	// the first goroutine is responsible to update the service url entry, all other goroutines
 	// for the same function will wait until first goroutine finished.
-	ableToUpdateCache, err := fh.svcAddrUpdateLocks.RunOrWait(fh.function)
+	serviceUrl, serviceUrlFromCache, err = fh.svcAddrUpdateLocks.RunOnce(
+		fh.function,
+		func(firstToTheLock bool) (u *url.URL, fromCache bool, err error) {
+
+			// Get service entry from executor and update cache if its the first goroutine
+			if firstToTheLock { // first to the service url
+				log.Printf("Calling getServiceForFunction for function: %s", fh.function.Name)
+				u, err = fh.getServiceEntryFromExecutor()
+				if err == nil && u != nil {
+					// add the address in router's cache
+					log.Printf("Assigning service url: %s for function: %s", u, fh.function.Name)
+					fh.fmap.assign(fh.function, u)
+				}
+			} else {
+				u, err = fh.getServiceEntryFromCache()
+			}
+
+			return u, firstToTheLock, err
+		},
+	)
 	if err != nil {
-		log.Println(errors.Wrap(err,
-			fmt.Sprintf("Error updating service address entry for function %v_%v", fh.function.Name, fh.function.Namespace)))
+		err = errors.Wrap(err, fmt.Sprintf("Error updating service address entry for function %v_%v", fh.function.Name, fh.function.Namespace))
+		log.Println(err)
 		return nil, false, err
 	}
 
-	if !ableToUpdateCache {
-		return serviceUrl, true, err
-	}
-
-	// release update lock so that other goroutines can take over the responsibility
-	// of updating the service map if failed.
-	defer func() {
-		go fh.svcAddrUpdateLocks.Done(fh.function)
-	}()
-
-	// Get service entry from executor and update cache
-	log.Printf("Calling getServiceForFunction for function: %s", fh.function.Name)
-
-	serviceUrl, err = fh.getServiceEntryFromExecutor()
-	if err == nil && serviceUrl != nil {
-		// add the address in router's cache
-		log.Printf("Assigning serviceUrl : %s for function : %s", serviceUrl, fh.function.Name)
-		fh.fmap.assign(fh.function, serviceUrl)
-	}
-
-	return serviceUrl, false, err
+	return serviceUrl, serviceUrlFromCache, err
 }
 
+// getServiceEntryFromCache returns service url entry returns from cache
 func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
 	// cache lookup to get serviceUrl
 	serviceUrl, err = fh.fmap.lookup(fh.function)
@@ -533,10 +534,10 @@ func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err 
 	return serviceUrl, nil
 }
 
+// getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh *functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
 	// send a request to executor to specialize a new pod
 	service, err := fh.executor.GetServiceForFunction(fh.function)
-
 	if err != nil {
 		statusCode, errMsg := fission.GetHTTPError(err)
 		log.Printf("Error from GetServiceForFunction for function (%v): %v : %v", fh.function, statusCode, errMsg)

@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"net/url"
 	"sync"
 	"time"
 
@@ -56,8 +57,8 @@ type (
 	}
 
 	svcAddrUpdateResponse struct {
-		lock   *svcAddrUpdateLock
-		loaded bool // denote the lock for same function already exists
+		lock           *svcAddrUpdateLock
+		firstGoroutine bool // denote this goroutine should wait for result from first goroutine to the same function
 	}
 )
 
@@ -103,7 +104,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			lock, ok := ul.locks[key]
 			if ok && !lock.isOld() {
 				req.responseChan <- &svcAddrUpdateResponse{
-					lock: lock, loaded: true,
+					lock: lock, firstGoroutine: false,
 				}
 				continue
 			} else if ok && lock.isOld() {
@@ -122,7 +123,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			ul.locks[key] = lock
 
 			req.responseChan <- &svcAddrUpdateResponse{
-				lock: lock, loaded: false,
+				lock: lock, firstGoroutine: true,
 			}
 
 		case DELETE:
@@ -144,7 +145,9 @@ func (ul *svcAddrUpdateLocks) service() {
 	}
 }
 
-func (locks *svcAddrUpdateLocks) RunOrWait(fnMeta *metav1.ObjectMeta) (ableToUpdate bool, err error) {
+func (locks *svcAddrUpdateLocks) RunOnce(fnMeta *metav1.ObjectMeta,
+	callbackFunc func(bool) (*url.URL, bool, error)) (*url.URL, bool, error) {
+
 	ch := make(chan *svcAddrUpdateResponse)
 	locks.requestChan <- &svcAddrUpdateRequest{
 		requestType:  GET,
@@ -154,12 +157,20 @@ func (locks *svcAddrUpdateLocks) RunOrWait(fnMeta *metav1.ObjectMeta) (ableToUpd
 	resp := <-ch
 
 	// wait for the first goroutine to update the service entry
-	if resp.loaded {
+	if resp.firstGoroutine {
+		// release update lock so that other goroutines can take over the responsibility
+		// of updating the service map if failed.
+		defer func() {
+			go locks.Done(fnMeta)
+		}()
+	} else {
 		err := resp.lock.Wait()
-		return false, err
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
-	return true, nil
+	return callbackFunc(resp.firstGoroutine)
 }
 
 func (locks *svcAddrUpdateLocks) Done(fnMeta *metav1.ObjectMeta) {
