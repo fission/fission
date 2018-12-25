@@ -58,7 +58,7 @@ type (
 
 	svcAddrUpdateResponse struct {
 		lock           *svcAddrUpdateLock
-		firstGoroutine bool // denote this goroutine should wait for result from first goroutine to the same function
+		firstGoroutine bool // denote this goroutine is the first goroutine
 	}
 )
 
@@ -156,7 +156,6 @@ func (locks *svcAddrUpdateLocks) RunOnce(fnMeta *metav1.ObjectMeta,
 	}
 	resp := <-ch
 
-	// wait for the first goroutine to update the service entry
 	if resp.firstGoroutine {
 		// release update lock so that other goroutines can take over the responsibility
 		// of updating the service map if failed.
@@ -164,6 +163,7 @@ func (locks *svcAddrUpdateLocks) RunOnce(fnMeta *metav1.ObjectMeta,
 			go locks.Done(fnMeta)
 		}()
 	} else {
+		// wait for the first goroutine to update the service entry
 		err := resp.lock.Wait()
 		if err != nil {
 			return nil, false, err

@@ -467,7 +467,7 @@ func addForwardedHostHeader(req *http.Request) {
 	req.Header.Set(X_FORWARDED_HOST, req.Host)
 }
 
-// getServiceEntry is a short-hand for developer to get service url entry that may returns from executor or cache
+// getServiceEntry is a short-hand for developers to get service url entry that may returns from executor or cache
 func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
 	// try to find service url from cache first
 	serviceUrl, err = fh.getServiceEntryFromCache()
