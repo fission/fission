@@ -134,10 +134,6 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
 // if it returned an error.
 func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	var serviceUrlFromCache bool
-	var serviceUrl *url.URL
-	var retryCounter int
-
 	// Set forwarded host header if not exists
 	addForwardedHostHeader(req)
 
@@ -198,196 +194,144 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		}
 	}()
 
-	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
+	// The reason for request failure may vary from case to case.
+	// After some investigation, found most of the failure are due to
+	// network timeout or target function is under heavy workload. In
+	// such cases, if router keeps trying to get new function service
+	// will increase executor burden and cause 502 error.
+	//
+	// The "retryCounter" was introduced to solve this problem by retrying
+	// requests for "limited threshold". Once a request's retryCounter higher
+	// than the predefined threshold, reset retryCounter and remove service
+	// cache, then retry to get new svc record from executor again.
+	retryCounter := 0
 
-		// cache lookup to get serviceUrl
-		serviceUrl, err = roundTripper.funcHandler.fmap.lookup(fnMeta)
+	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1; i++ {
+		// get function service url from cache or executor
+		serviceUrl, serviceUrlFromCache, err := roundTripper.funcHandler.getServiceEntry()
 		if err != nil {
-			e, ok := err.(fission.Error)
-			if (ok && e.Code != fission.ErrorNotFound) || !ok {
-				if ok {
-					err = errors.Wrap(err, fmt.Sprintf("Error getting function %v;s service entry from cache", fnMeta.Name))
-				} else {
-					err = errors.Wrap(err, "Unknown error when looking up service entry")
-				}
-				return nil, err
+			// We might want a specific error code or header for fission failures as opposed to
+			// user function bugs.
+			statusCode, errMsg := fission.GetHTTPError(err)
+			if roundTripper.funcHandler.isDebugEnv {
+				return &http.Response{
+					StatusCode:    statusCode,
+					Proto:         req.Proto,
+					ProtoMajor:    req.ProtoMajor,
+					ProtoMinor:    req.ProtoMinor,
+					Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
+					ContentLength: int64(len(errMsg)),
+					Request:       req,
+					Header:        make(http.Header, 0),
+				}, nil
 			}
-		} else {
-			serviceUrlFromCache = true
+			return nil, fission.MakeError(http.StatusInternalServerError, err.Error())
 		}
 
-		if serviceUrl != nil {
-			// modify the request to reflect the service url
-			// this service url may have come from the cache lookup or from executor response
-			req.URL.Scheme = serviceUrl.Scheme
-			req.URL.Host = serviceUrl.Host
+		// retry to get service url again
+		if serviceUrl == nil {
+			time.Sleep(executingTimeout)
+			continue
+		}
 
-			// To keep the function run container simple, it
-			// doesn't do any routing.  In the future if we have
-			// multiple functions per container, we could use the
-			// function metadata here.
-			// leave the query string intact (req.URL.RawQuery)
-			req.URL.Path = "/"
+		// tapService before invoking roundTrip for the serviceUrl
+		if serviceUrlFromCache {
+			go roundTripper.funcHandler.tapService(serviceUrl)
+		}
 
-			// Overwrite request host with internal host,
-			// or request will be blocked in some situations
-			// (e.g. istio-proxy)
-			req.Host = serviceUrl.Host
+		// modify the request to reflect the service url
+		// this service url may have come from the cache lookup or from executor response
+		req.URL.Scheme = serviceUrl.Scheme
+		req.URL.Host = serviceUrl.Host
 
-			// over-riding default settings.
-			transport.DialContext = (&net.Dialer{
-				Timeout:   executingTimeout,
-				KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAlive,
-			}).DialContext
+		// To keep the function run container simple, it
+		// doesn't do any routing.  In the future if we have
+		// multiple functions per container, we could use the
+		// function metadata here.
+		// leave the query string intact (req.URL.RawQuery)
+		req.URL.Path = "/"
 
-			overhead := time.Since(startTime)
+		// Overwrite request host with internal host,
+		// or request will be blocked in some situations
+		// (e.g. istio-proxy)
+		req.Host = serviceUrl.Host
 
-			// tapService before invoking roundTrip for the serviceUrl
+		// over-riding default settings.
+		transport.DialContext = (&net.Dialer{
+			Timeout:   executingTimeout,
+			KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAlive,
+		}).DialContext
+
+		overhead := time.Since(startTime)
+
+		// forward the request to the function service
+		resp, err = transport.RoundTrip(req)
+		if err == nil {
+			// Track metrics
+			httpMetricLabels.code = resp.StatusCode
+			funcMetricLabels.cached = serviceUrlFromCache
+
+			functionCallCompleted(funcMetricLabels, httpMetricLabels,
+				overhead, time.Since(startTime), resp.ContentLength)
+
+			if len(roundTripper.funcHandler.recorderName) > 0 {
+				if roundTripper.funcHandler.httpTrigger != nil {
+					trigger := roundTripper.funcHandler.httpTrigger.Metadata.Name
+					redis.Record(
+						trigger,
+						roundTripper.funcHandler.recorderName,
+						req.Header.Get("X-Fission-ReqUID"), req, originalUrl, postedBody, resp, fnMeta.Namespace,
+						time.Now().UnixNano(),
+					)
+				} else {
+					log.Printf("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
+				}
+			}
+
+			// return response back to user
+			return resp, nil
+		}
+
+		// if transport.RoundTrip returns a non-network dial error, then relay it back to user
+		if !fission.IsNetworkDialError(err) {
+			err = errors.Wrapf(err, "Error sending request to function %v", fnMeta.Name)
+			return resp, err
+		}
+
+		// dial timeout or dial network errors goes here
+
+		if retryCounter < roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
+			executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
+			retryCounter++
+
+			log.Printf("request to %s errored out. backing off for %v before retrying",
+				req.URL.Host, executingTimeout)
+
+			time.Sleep(executingTimeout)
+
 			if serviceUrlFromCache {
-				go roundTripper.funcHandler.tapService(serviceUrl)
+				continue
 			}
-
-			// forward the request to the function service
-			resp, err = transport.RoundTrip(req)
-			if err == nil {
-				// Track metrics
-				httpMetricLabels.code = resp.StatusCode
-				funcMetricLabels.cached = serviceUrlFromCache
-
-				functionCallCompleted(funcMetricLabels, httpMetricLabels,
-					overhead, time.Since(startTime), resp.ContentLength)
-
-				if len(roundTripper.funcHandler.recorderName) > 0 {
-					if roundTripper.funcHandler.httpTrigger != nil {
-						trigger := roundTripper.funcHandler.httpTrigger.Metadata.Name
-						redis.Record(
-							trigger,
-							roundTripper.funcHandler.recorderName,
-							req.Header.Get("X-Fission-ReqUID"), req, originalUrl, postedBody, resp, fnMeta.Namespace,
-							time.Now().UnixNano(),
-						)
-					} else {
-						log.Printf("No http trigger attached for recorder: %v", roundTripper.funcHandler.recorderName)
-					}
-				}
-
-				// return response back to user
-				return resp, nil
-			}
-
-			// if transport.RoundTrip returns a non-network dial error, then relay it back to user
-			if !fission.IsNetworkDialError(err) {
-				err = errors.Wrapf(err, "Error sending request to function %v", fnMeta.Name)
-				return resp, err
-			}
-
-			// dial timeout or dial network errors goes here
-
-			// The reason for request failure may vary from case to case.
-			// After some investigation, found most of the failure are due to
-			// network timeout or target function is under heavy workload. In
-			// such cases, if router keeps trying to get new function service
-			// will increase executor burden and cause 502 error.
-			//
-			// The "retryCounter" was introduced to solve this problem by retrying
-			// requests for "limited threshold". Once a request's retryCounter higher
-			// than the predefined threshold, reset retryCounter and remove service
-			// cache, then retry to get new svc record from executor again.
-			if retryCounter < roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
-				retryCounter++
-
-				executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
-
-				log.Printf("request to %s errored out. backing off for %v before retrying",
-					req.URL.Host, executingTimeout)
-
-				time.Sleep(executingTimeout)
-
-				if serviceUrlFromCache {
-					continue
-				}
-			} else {
-				// if transport.RoundTrip returns a network dial error and serviceUrl was from cache,
-				// it means, the entry in router cache is stale, so invalidate it.
-				log.Printf("request to %s errored out. removing function : %s from router's cache "+
-					"and requesting a new service for function",
-					req.URL.Host, fnMeta.Name)
-				roundTripper.funcHandler.fmap.remove(fnMeta)
-				retryCounter = 0
-			}
+		} else {
+			// if transport.RoundTrip returns a network dial error and serviceUrl was from cache,
+			// it means, the entry in router cache is stale, so invalidate it.
+			log.Printf("request to %s errored out. removing function : %s from router's cache "+
+				"and requesting a new service for function",
+				req.URL.Host, fnMeta.Name)
+			roundTripper.funcHandler.fmap.remove(fnMeta)
+			retryCounter = 0
 		}
 
 		// break directly if we still fail at the last round
 		if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			break
 		}
-
-		// cache miss or nil entry in cache
-		lock, ableToUpdateCache := roundTripper.funcHandler.grabUpdateEntryLock(fnMeta)
-
-		if !ableToUpdateCache {
-			// This goroutine wait for update of service map to finish.
-			err = lock.Wait()
-			if err != nil {
-				log.Println(errors.Wrap(err,
-					fmt.Sprintf("Error updating service address entry for function %v_%v", fnMeta.Name, fnMeta.Namespace)))
-			}
-		} else {
-			// This goroutine is the first one to grab update lock
-
-			log.Printf("Calling getServiceForFunction for function: %s", fnMeta.Name)
-
-			// send a request to executor to specialize a new pod
-			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
-				roundTripper.funcHandler.function)
-
-			if err != nil {
-				statusCode, errMsg := fission.GetHTTPError(err)
-				log.Printf("Err from GetServiceForFunction for function (%v): %v : %v", roundTripper.funcHandler.function, statusCode, errMsg)
-
-				// We might want a specific error code or header for fission failures as opposed to
-				// user function bugs.
-				if roundTripper.funcHandler.isDebugEnv {
-					return &http.Response{
-						StatusCode:    statusCode,
-						Proto:         req.Proto,
-						ProtoMajor:    req.ProtoMajor,
-						ProtoMinor:    req.ProtoMinor,
-						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
-						ContentLength: int64(len(errMsg)),
-						Request:       req,
-						Header:        make(http.Header, 0),
-					}, nil
-				}
-
-				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-				return nil, err
-			}
-
-			// parse the address into url
-			serviceUrl, err = url.Parse(fmt.Sprintf("http://%v", service))
-			if err != nil {
-				log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
-				roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-				return nil, err
-			}
-
-			// add the address in router's cache
-			log.Printf("Assigning serviceUrl : %s for function : %s", serviceUrl, roundTripper.funcHandler.function.Name)
-			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
-
-			// flag denotes that service was not obtained from cache, instead, created just now by executor
-			serviceUrlFromCache = false
-
-			roundTripper.funcHandler.releaseUpdateEntryLock(fnMeta)
-		}
 	}
 
 	// finally, one more retry with the default timeout
 	resp, err = http.DefaultTransport.RoundTrip(req)
 	if err != nil {
-		log.Printf("Error getting response from function %v: %v",
-			fnMeta.Name, err)
+		log.Printf("Error getting response from function %v: %v", fnMeta.Name, err)
 	}
 
 	return resp, err
@@ -523,14 +467,89 @@ func addForwardedHostHeader(req *http.Request) {
 	req.Header.Set(X_FORWARDED_HOST, req.Host)
 }
 
-// grabUpdateEntryLock helps goroutine to grab update lock for updating function service cache.
-// If the update lock exists, return old svcAddrUpdateLock.
-func (fh *functionHandler) grabUpdateEntryLock(fnMeta *metav1.ObjectMeta) (lock *svcAddrUpdateLock, ableToUpdateCache bool) {
-	return fh.svcAddrUpdateLocks.Get(fnMeta)
+// getServiceEntry is a short-hand for developers to get service url entry that may returns from executor or cache
+func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
+	// try to find service url from cache first
+	serviceUrl, err = fh.getServiceEntryFromCache()
+	if err == nil && serviceUrl != nil {
+		return serviceUrl, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	// cache miss or nil entry in cache
+
+	// To prevent multiple update requests will be sent to executor and make executor overloaded,
+	// the first goroutine is responsible to update the service url entry, all other goroutines
+	// for the same function will wait until first goroutine finished.
+	serviceUrl, serviceUrlFromCache, err = fh.svcAddrUpdateLocks.RunOnce(
+		fh.function,
+		func(firstToTheLock bool) (u *url.URL, fromCache bool, err error) {
+
+			// Get service entry from executor and update cache if its the first goroutine
+			if firstToTheLock { // first to the service url
+				log.Printf("Calling getServiceForFunction for function: %s", fh.function.Name)
+				u, err = fh.getServiceEntryFromExecutor()
+				if err == nil && u != nil {
+					// add the address in router's cache
+					log.Printf("Assigning service url: %s for function: %s", u, fh.function.Name)
+					fh.fmap.assign(fh.function, u)
+				}
+			} else {
+				u, err = fh.getServiceEntryFromCache()
+			}
+
+			return u, firstToTheLock, err
+		},
+	)
+	if err != nil {
+		err = errors.Wrap(err, fmt.Sprintf("Error updating service address entry for function %v_%v", fh.function.Name, fh.function.Namespace))
+		log.Println(err)
+		return nil, false, err
+	}
+
+	return serviceUrl, serviceUrlFromCache, err
 }
 
-// releaseUpdateEntryLock release update lock so that other goroutines can take over the responsibility
-// of updating the service map.
-func (fh *functionHandler) releaseUpdateEntryLock(fnMeta *metav1.ObjectMeta) {
-	fh.svcAddrUpdateLocks.Delete(fnMeta)
+// getServiceEntryFromCache returns service url entry returns from cache
+func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
+	// cache lookup to get serviceUrl
+	serviceUrl, err = fh.fmap.lookup(fh.function)
+	if err != nil {
+		var errMsg string
+
+		e, ok := err.(fission.Error)
+		if !ok {
+			errMsg = fmt.Sprintf("Unknown error when looking up service entry: %v", err)
+		} else {
+			// Ignore ErrorNotFound error here, it's an expected error,
+			// roundTripper will try to get service url later.
+			if e.Code == fission.ErrorNotFound {
+				return nil, nil
+			}
+			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Name, err)
+		}
+		return nil, fission.MakeError(http.StatusInternalServerError, errMsg)
+	}
+	return serviceUrl, nil
+}
+
+// getServiceEntryFromExecutor returns service url entry returns from executor
+func (fh *functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
+	// send a request to executor to specialize a new pod
+	service, err := fh.executor.GetServiceForFunction(fh.function)
+	if err != nil {
+		statusCode, errMsg := fission.GetHTTPError(err)
+		log.Printf("Error from GetServiceForFunction for function (%v): %v : %v", fh.function, statusCode, errMsg)
+		return nil, err
+	}
+
+	// parse the address into url
+	serviceUrl, err := url.Parse(fmt.Sprintf("http://%v", service))
+	if err != nil {
+		log.Printf("Error parsing service url (%v): %v", serviceUrl, err)
+		return nil, err
+	}
+
+	return serviceUrl, nil
 }
