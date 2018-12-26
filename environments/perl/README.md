@@ -9,6 +9,12 @@ It is implemented using the lightweight web application framework
 Since Twiggy is implemented with [AnyEvent](https://metacpan.org/pod/AnyEvent),
 you can write async code using AnyEvent in your function.
 
+## Build this image
+   
+```
+docker build -t USER/perl . && docker push USER/perl
+```
+
 ## Usage
 
 The function you upload is actually a perl package returning a coderef (see the
