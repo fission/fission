@@ -23,16 +23,17 @@
       "IsPasswordClearText": false,
       "Username": "",
       "Password": ""
-    },
-    {
-      "Order": 3,
-      "IsPrivate": true,
-      "Name": "myPrivateRepository", //in case of private repo , if not using, then just remove this section No 3
-      "Source": "https://URL-FOR-myPrivateRepository/api/nuget/nugetcore/COMPLETE-END-POINT",
-      "IsPasswordClearText": true,
-      "Username": "johndeo@myorg.com",
-      "Password": "AlPH24GAMAc49fDELTA"
     }
+	 //,
+    //{
+    //  "Order": 3,
+    //  "IsPrivate": true,
+    //  "Name": "myPrivateRepository", //in case of private repo , if not using, then just remove this section No 3
+    //  "Source": "https://URL-FOR-myPrivateRepository/api/nuget/nugetcore/COMPLETE-END-POINT",
+    //  "IsPasswordClearText": true,
+    //  "Username": "johndeo@myorg.com",
+    //  "Password": "AlPH24GAMAc49fDELTA"
+    //}
 
   ]
 }
