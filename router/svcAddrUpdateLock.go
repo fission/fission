@@ -17,10 +17,11 @@ limitations under the License.
 package router
 
 import (
-	"errors"
+	"net/url"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/crd"
@@ -56,8 +57,8 @@ type (
 	}
 
 	svcAddrUpdateResponse struct {
-		lock   *svcAddrUpdateLock
-		loaded bool // denote the lock for same function already exists
+		lock           *svcAddrUpdateLock
+		firstGoroutine bool // denote this goroutine is the first goroutine
 	}
 )
 
@@ -103,7 +104,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			lock, ok := ul.locks[key]
 			if ok && !lock.isOld() {
 				req.responseChan <- &svcAddrUpdateResponse{
-					lock: lock, loaded: false,
+					lock: lock, firstGoroutine: false,
 				}
 				continue
 			} else if ok && lock.isOld() {
@@ -122,7 +123,7 @@ func (ul *svcAddrUpdateLocks) service() {
 			ul.locks[key] = lock
 
 			req.responseChan <- &svcAddrUpdateResponse{
-				lock: lock, loaded: true,
+				lock: lock, firstGoroutine: true,
 			}
 
 		case DELETE:
@@ -144,7 +145,9 @@ func (ul *svcAddrUpdateLocks) service() {
 	}
 }
 
-func (locks *svcAddrUpdateLocks) Get(fnMeta *metav1.ObjectMeta) (lock *svcAddrUpdateLock, ableToUpdate bool) {
+func (locks *svcAddrUpdateLocks) RunOnce(fnMeta *metav1.ObjectMeta,
+	callbackFunc func(bool) (*url.URL, bool, error)) (*url.URL, bool, error) {
+
 	ch := make(chan *svcAddrUpdateResponse)
 	locks.requestChan <- &svcAddrUpdateRequest{
 		requestType:  GET,
@@ -152,10 +155,25 @@ func (locks *svcAddrUpdateLocks) Get(fnMeta *metav1.ObjectMeta) (lock *svcAddrUp
 		fnMeta:       fnMeta,
 	}
 	resp := <-ch
-	return resp.lock, resp.loaded
+
+	if resp.firstGoroutine {
+		// release update lock so that other goroutines can take over the responsibility
+		// of updating the service map if failed.
+		defer func() {
+			go locks.Done(fnMeta)
+		}()
+	} else {
+		// wait for the first goroutine to update the service entry
+		err := resp.lock.Wait()
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	return callbackFunc(resp.firstGoroutine)
 }
 
-func (locks *svcAddrUpdateLocks) Delete(fnMeta *metav1.ObjectMeta) {
+func (locks *svcAddrUpdateLocks) Done(fnMeta *metav1.ObjectMeta) {
 	locks.requestChan <- &svcAddrUpdateRequest{
 		requestType: DELETE,
 		fnMeta:      fnMeta,

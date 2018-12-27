@@ -272,8 +272,6 @@ func fnCreate(c *cli.Context) error {
 
 		// create new package in the same namespace as the function.
 		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
-
-		fmt.Printf("package '%v' created\n", pkgMetadata.Name)
 	}
 
 	var secrets []fission.SecretReference

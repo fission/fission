@@ -34,7 +34,9 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/fission/util"
 	storageSvcClient "github.com/fission/fission/storagesvc/client"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
+	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -477,6 +479,31 @@ func fileChecksum(fileName string) (*fission.Checksum, error) {
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
 func createArchive(client *client.Client, includeFiles []string, noZip bool, specDir string, specFile string) *fission.Archive {
+
+	var errs *multierror.Error
+
+	// check files existence
+	for _, path := range includeFiles {
+		// ignore http files
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			continue
+		}
+
+		// Get files from inputs as number of files decide next steps
+		files, err := fission.FindAllGlobs([]string{path})
+		if err != nil {
+			util.CheckErr(err, "finding all globs")
+		}
+
+		if len(files) == 0 {
+			errs = multierror.Append(errs, errors.New(fmt.Sprintf("Error finding any files with path \"%v\"", path)))
+		}
+	}
+
+	if errs.ErrorOrNil() != nil {
+		log.Fatal(errs.Error())
+	}
+
 	if len(specFile) > 0 {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &ArchiveUploadSpec{
