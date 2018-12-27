@@ -18,8 +18,9 @@ package canaryconfigmgr
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"time"
+
+	"golang.org/x/net/context"
 
 	promClient "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
@@ -44,9 +45,16 @@ func MakePrometheusClient(prometheusSvc string) (*PrometheusApiClient, error) {
 	apiQueryClient := promClient.NewQueryAPI(promApiClient)
 
 	// By default, the prometheus client library doesn't test server connectivity when creating
-	// prometheus client. As a workaround, here we send out a test qeury string to ensure that
+	// prometheus client. As a workaround, here we send out a test query string to ensure that
 	// prometheus server is running.
-	_, err = apiQueryClient.Query(context.Background(), "http_requests_total", time.Now())
+	for i := 0; i < 15; i++ {
+		_, err = apiQueryClient.Query(context.Background(), "http_requests_total", time.Now())
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
 	if err != nil {
 		log.Printf("Error sending test query to prometheus server: %v", err)
 		return nil, err

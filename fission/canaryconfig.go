@@ -60,7 +60,7 @@ func canaryConfigCreate(c *cli.Context) error {
 
 	htTrigger, err := client.HTTPTriggerGet(m)
 	if err != nil {
-		util.CheckErr(err, "Trigger referenced in the canary config is not created")
+		util.CheckErr(err, "find trigger referenced in the canary config")
 	}
 
 	// check that the trigger has function reference type function weights
