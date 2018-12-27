@@ -39,21 +39,22 @@ sed -i "s/{{ FN_CFGMAP }}/${fn_cfgmap}/g" cfgmap.py
 
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
-    response=$(curl http://$FISSION_ROUTER/${1})
     val=${2}
     type=${3}
 
     log "Checking for valid response"
-    log ${response}
-
-    if [[ ${response} != ${val} ]]
-    then
-        log "test ${type} failed"
-        cleanup
-        exit 1
-    fi
-    log "test ${type} passed"
+    while true; do
+      log curl http://$FISSION_ROUTER/$1
+      response0=$(curl http://$FISSION_ROUTER/$1)
+      log $response0 | grep -i ${val}
+      if [[ $? -eq 0 ]]; then
+        log "test ${type} passed"
+        break
+      fi
+      sleep 1
+    done
 }
+export -f checkFunctionResponse
 
 # Create a hello world function in nodejs, test it with an http trigger
 log "Pre-test cleanup"
@@ -74,7 +75,7 @@ fission route create --function ${fn_secret} --url /${fn_secret} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'
+timeout 60 bash -c "checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'"
 
 log "Creating function with newdeploy executorType and new secret value"
 kubectl patch secrets ${fn_secret} -p '{"data":{"TEST_KEY":"TkVXVkFMCg=="}}' -n default
@@ -86,7 +87,7 @@ fission route create --function ${fn_secret}-1 --url /${fn_secret}-1 --method GE
 log "Waiting for router catch up"
 sleep 5
 
-checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'
+timeout 60 bash -c "checkFunctionResponse ${fn_secret}-1 'NEWVAL' 'secret'"
 
 log "Creating configmap"
 kubectl create configmap ${fn_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
@@ -100,7 +101,7 @@ fission route create --function ${fn_cfgmap} --url /${fn_cfgmap} --method GET
 log "Waiting for router to catch up"
 sleep 5
 
-checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'
+timeout 60 bash -c "checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'"
 
 log "Creating function with newdeploy executorType and new configmap value"
 kubectl patch configmap ${fn_cfgmap} -p '{"data":{"TEST_KEY":"NEWVAL"}}' -n default
@@ -112,7 +113,7 @@ fission route create --function ${fn_cfgmap}-1 --url /${fn_cfgmap}-1 --method GE
 log "Waiting for router catch up"
 sleep 5
 
-checkFunctionResponse ${fn_cfgmap}-1 'NEWVAL' 'configmap'
+timeout 60 bash -c "checkFunctionResponse ${fn_cfgmap}-1 'NEWVAL' 'configmap'"
 
 log "testing creating a function without a secret or configmap"
 fission function create --name ${fn} --env python --code empty.py
@@ -124,13 +125,4 @@ log "Waiting for router to catch up"
 sleep 5
 
 log "HTTP GET on the function's route"
-resnormal=$(curl http://${FISSION_ROUTER}/${fn})
-if [ ${resnormal} != "yes" ]
-then
-	log "test empty failed"
-	cleanup
-	exit 1
-fi
-log "test empty passed"
-
-log "All done."
+timeout 60 bash -c "checkFunctionResponse ${fn} 'yes' 'configmap'"

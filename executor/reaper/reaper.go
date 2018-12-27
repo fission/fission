@@ -137,7 +137,6 @@ func cleanupPods(client *kubernetes.Clientset, instanceId string) error {
 		return err
 	}
 	for _, pod := range podList.Items {
-		log.Printf("Clean pod: %v", pod.ObjectMeta.Name)
 		id, ok := pod.ObjectMeta.Labels[fission.EXECUTOR_INSTANCEID_LABEL]
 		if ok && id != instanceId {
 			log.Printf("Cleaning up pod %v", pod.ObjectMeta.Name)

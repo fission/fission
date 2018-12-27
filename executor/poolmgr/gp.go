@@ -17,14 +17,10 @@ limitations under the License.
 package poolmgr
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +37,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/environments/fetcher"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
 	"github.com/fission/fission/executor/fscache"
 	"github.com/fission/fission/executor/util"
@@ -282,8 +277,8 @@ func IsIPv6(podIP string) bool {
 	return ip != nil && strings.Contains(podIP, ":")
 }
 
-func (gp *GenericPool) getFetcherUrl(podIP string) string {
-	testUrl := os.Getenv("TEST_FETCHER_URL")
+func (gp *GenericPool) getSpecializeUrl(podIP string) string {
+	testUrl := os.Getenv("TEST_SPECIALIZE_URL")
 	if len(testUrl) != 0 {
 		// it takes a second or so for the test service to
 		// become routable once a pod is relabeled. This is
@@ -302,26 +297,6 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 
 }
 
-func (gp *GenericPool) getSpecializeUrl(podIP string, version int) string {
-	u := os.Getenv("TEST_SPECIALIZE_URL")
-	isv6 := IsIPv6(podIP)
-	var baseUrl string
-	if len(u) != 0 {
-		return u
-	}
-	if isv6 == false {
-		baseUrl = fmt.Sprintf("http://%v:8888", podIP)
-	} else if isv6 == true { // We use bracket if the IP is in IPv6.
-		baseUrl = fmt.Sprintf("http://[%v]:8888", podIP)
-	}
-
-	if version == 1 {
-		return fmt.Sprintf("%v/specialize", baseUrl)
-	} else {
-		return fmt.Sprintf("%v/v%v/specialize", baseUrl, version)
-	}
-}
-
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
@@ -338,7 +313,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 	}
 
 	// tell fetcher to get the function.
-	fetcherUrl := gp.getFetcherUrl(podIP)
+	fetcherUrl := gp.getSpecializeUrl(podIP)
 	log.Printf("[%v] calling fetcher to copy function with fetcher url: %v", metadata.Name, fetcherUrl)
 
 	fn, err := gp.fissionClient.
@@ -356,86 +331,30 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 		targetFilename = string(fn.Metadata.UID)
 	}
 
-	err = fetcherClient.MakeClient(fetcherUrl).Fetch(&fetcher.FetchRequest{
-		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Package: metav1.ObjectMeta{
-			Namespace: fn.Spec.Package.PackageRef.Namespace,
-			Name:      fn.Spec.Package.PackageRef.Name,
+	specializeReq := fission.FunctionSpecializeRequest{
+		FetchReq: fission.FunctionFetchRequest{
+			FetchType: fission.FETCH_DEPLOYMENT,
+			Package: metav1.ObjectMeta{
+				Namespace: fn.Spec.Package.PackageRef.Namespace,
+				Name:      fn.Spec.Package.PackageRef.Name,
+			},
+			Filename:    targetFilename,
+			Secrets:     fn.Spec.Secrets,
+			ConfigMaps:  fn.Spec.ConfigMaps,
+			KeepArchive: gp.env.Spec.KeepArchive,
 		},
-		Filename:    targetFilename,
-		Secrets:     fn.Spec.Secrets,
-		ConfigMaps:  fn.Spec.ConfigMaps,
-		KeepArchive: gp.env.Spec.KeepArchive,
-	})
-	if err != nil {
-		return err
+		LoadReq: fission.FunctionLoadRequest{
+			FilePath:         filepath.Join(gp.sharedMountPath, targetFilename),
+			FunctionName:     fn.Spec.Package.FunctionName,
+			FunctionMetadata: &fn.Metadata,
+			EnvVersion:       gp.env.Spec.Version,
+		},
 	}
 
-	// get function run container to specialize
 	log.Printf("[%v] specializing pod", metadata.Name)
 
-	// retry the specialize call a few times in case the env server hasn't come up yet
-	maxRetries := 20
-
-	loadReq := fission.FunctionLoadRequest{
-		FilePath:         filepath.Join(gp.sharedMountPath, targetFilename),
-		FunctionName:     fn.Spec.Package.FunctionName,
-		FunctionMetadata: &fn.Metadata,
-	}
-
-	body, err := json.Marshal(loadReq)
+	err = fetcherClient.MakeClient(fetcherUrl).Specialize(&specializeReq)
 	if err != nil {
-		return err
-	}
-
-	for i := 0; i < maxRetries; i++ {
-		var resp2 *http.Response
-		if gp.env.Spec.Version == 2 {
-			specializeUrl := gp.getSpecializeUrl(podIP, 2)
-			log.Printf("specialize url: %v", specializeUrl)
-			resp2, err = http.Post(specializeUrl, "application/json", bytes.NewReader(body))
-		} else {
-			specializeUrl := gp.getSpecializeUrl(podIP, 1)
-			resp2, err = http.Post(specializeUrl, "text/plain", bytes.NewReader([]byte{}))
-		}
-
-		if err == nil && resp2.StatusCode < 300 {
-			// Success
-			resp2.Body.Close()
-			return nil
-		}
-
-		retry := false
-
-		// Only retry for the specific case of a connection error.
-		if urlErr, ok := err.(*url.Error); ok {
-			if netErr, ok := urlErr.Err.(*net.OpError); ok {
-				if netErr.Op == "dial" {
-					if i < maxRetries-1 {
-						retry = true
-					}
-				}
-			}
-		}
-
-		// Receive response with non-200 http code
-		if err == nil {
-			err = fission.MakeErrorFromHTTP(resp2)
-		}
-
-		// The istio-proxy block all http requests until it's ready
-		// to serve traffic. Retry if istio feature is enabled.
-		if gp.useIstio {
-			retry = true
-		}
-
-		if retry && i < maxRetries-1 {
-			time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-			log.Printf("Error connecting to pod (%v), retrying", err)
-			continue
-		}
-
-		log.Printf("Failed to specialize pod: %v", err)
 		return err
 	}
 
@@ -593,7 +512,7 @@ func (gp *GenericPool) createPool() error {
 								FailureThreshold:    30,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
+										Path: "/readniess-healthz",
 										Port: intstr.IntOrString{
 											Type:   intstr.Int,
 											IntVal: 8000,
@@ -602,7 +521,7 @@ func (gp *GenericPool) createPool() error {
 								},
 							},
 							LivenessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 35,
+								InitialDelaySeconds: 1,
 								PeriodSeconds:       5,
 								Handler: apiv1.Handler{
 									HTTPGet: &apiv1.HTTPGetAction{
