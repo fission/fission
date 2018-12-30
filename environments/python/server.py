@@ -7,6 +7,7 @@ import os
 import bjoern
 from gevent.pywsgi import WSGIServer
 from flask import Flask, request, abort, g
+from lib.tracing import initialize_tracing
 
 
 class FuncApp(Flask):
@@ -36,7 +37,11 @@ class FuncApp(Flask):
         def load():
             # load user function from codepath
             codepath = '/userfunc/user'
-            self.userfunc = (imp.load_source('user', codepath)).main
+            userfunc = (imp.load_source('user', codepath)).main
+            if os.getenv('ENABLE_TRACING') is not None:
+                self.userfunc = initialize_tracing(userfunc)
+            else:
+                self.userfunc = userfunc
             return ""
 
         @self.route('/v2/specialize', methods=['POST'])
@@ -78,8 +83,11 @@ class FuncApp(Flask):
                 mod = imp.load_source(moduleName, filepath)
 
             # load user function from module
-            self.userfunc = getattr(mod, funcName)
-
+            userfunc = getattr(mod, funcName)
+            if os.getenv('ENABLE_TRACING') is not None:
+                self.userfunc = initialize_tracing(userfunc)
+            else:
+                self.userfunc = userfunc
             return ""
 
         @self.route('/healthz', methods=['GET'])
