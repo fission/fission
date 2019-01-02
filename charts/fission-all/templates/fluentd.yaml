@@ -11,7 +11,7 @@ data:
   td-agent.conf: |
 {{ .Files.Get "config/fluentd.conf" | indent 3 }}
 {{ else }}
-{{ fail "you need to supply a fluentd config file! add 'fluentd.conf' to your chart 'config' directory." }}
+{{ fail "invalid chart" }}
 {{ end }}
 ---
 apiVersion: extensions/v1beta1
