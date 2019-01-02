@@ -45,10 +45,17 @@ class FuncApp(Flask):
             filepath = body['filepath']
             handler = body['functionName']
 
-            # The value of "functionName" is consist of
-            # `<module-name>.<function-name>`.
-            moduleName, funcName = handler.split(".")
+            # handler looks like `path.to.module.function`
+            t = handler.split(".")
+            moduleName = ".".join(t[0:-1])
+            funcName = t[-1]
 
+            # default to main.main if entrypoint wasn't provided
+            if len(moduleName) == 0:
+                moduleName = 'main'
+            if len(funcName) == 0:
+                funcName == 'main'
+            
             # check whether the destination is a directory or a file
             if os.path.isdir(filepath):
                 # add package directory path into module search path
@@ -61,7 +68,7 @@ class FuncApp(Flask):
                 # otherwise, an exception "ImportError" is raised.
                 # Second parameter of find_module enforces python to
                 # find same name module from the given list of
-                # directories to prevent name confliction with
+                # directories to prevent name conflicts with
                 # built-in modules.
                 f, path, desc = imp.find_module(moduleName, [filepath])
 
