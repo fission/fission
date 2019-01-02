@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: fluentd
-          image: "{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+          image: "{{ .Values.repository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
           imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: INFLUXDB_ADDRESS
@@ -66,16 +66,16 @@ spec:
       volumes:
         - name: container-log
           hostPath:
-              path: /var/log/
+            path: /var/log/
         - name: docker-log
           hostPath:
-              path: /var/lib/docker/containers
+            path: /var/lib/docker/containers
         - name: fission-log
           hostPath:
-              path: /var/log/fission
+            path: /var/log/fission
         # Fluentd config location: /etc/td-agent/td-agent.conf
         - name: fluentd-config
           configMap:
-            name: {{ .Release.Name }}-fluentd-conf
+            name: {{ .Release.Name }}-fission-fluentd
   updateStrategy:
     type: RollingUpdate
