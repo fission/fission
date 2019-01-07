@@ -69,3 +69,23 @@ This is specifically important because for example newdeploy function will creat
     service-annotations: '{"service.annotation1": "somevalue"}'
     deployment-annotations: '{"deploy.annotation1": "somevalue"}'
 ```
+
+### Implementation 3
+
+Based on discussion in the team there is a additional option of adding a explicit field in the spec to hold the annotations. For now this assumes that we are only considering HTTPTriggers for annotations and not other objects such as Functions.
+
+```
+HTTPTriggerSpec struct {
+		Host              string            `json:"host"`
+		RelativeURL       string            `json:"relativeurl"`
+		CreateIngress     bool              `json:"createingress"`
+		Method            string            `json:"method"`
+		FunctionReference FunctionReference `json:"functionref"`
+		Annotations       map[string]string `json:annotations`
+	}
+  ```
+
+## Final thoughts
+
+- The implementation idea 2 & 3 look better than 1. The third option involves HTTPTrigger Spec change.
+- For both (2) & (3) - if in future we have to implement annotations for Functions etc. we will have to consider the fact that a function will in turn create 3 objects (Service, Pod & HPA) and annotations for all three would need to be accommodated.
