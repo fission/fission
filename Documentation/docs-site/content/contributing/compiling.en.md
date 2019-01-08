@@ -26,7 +26,7 @@ minikube, you'll need to set the proper environment variables with
 
 ```
   # Get dependencies
-  $ glide install
+  $ glide install --strip-vendor
 
   # Build fission server and an image
   $ pushd fission-bundle
