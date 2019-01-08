@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -euo pipefail
-source $(dirname $0)/mac_util.sh
 
 # Use package command to create packages of type:
 #     1) Multiple source files from a directory
@@ -70,6 +69,9 @@ cleanup() {
     fission fn delete --name $fn2 || true
     fission fn delete --name $fn4 || true
     fission fn delete --name $fn5 || true
+    rm demo-src-pkg.zip || true
+    rm -rf testDir/ || true
+    rm demo-deploy-pkg.zip || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then

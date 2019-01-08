@@ -13,6 +13,8 @@ final_cleanup() {
     kubectl delete ns "ns1-$id" "ns2-$id" &
 }
 
+trap final_cleanup EXIT
+
 cleanup() {
     [[ -n "${1+x}"  && -n "${2+x}" ]]; fission env delete --name $1 --envns $2 || true
     [[ -n "${3+x}"  && -n "${4+x}" ]]; fission fn delete --name $3 --fns $4 || true

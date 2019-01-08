@@ -5,6 +5,14 @@ set -euo pipefail
 fn=spec-$(date +%N)
 env=python-$fn
 
+cleanup() {
+    log "Cleaning up..."
+    fission spec destroy || true
+    rm -rf specs || true
+}
+
+trap cleanup EXIT
+
 # init
 fission spec init
 
@@ -17,7 +25,6 @@ fission env create --spec --name $env --image fission/python-env
 
 log "create env spec"
 fission spec apply
-trap "fission spec destroy" EXIT
 
 log "verify env created"
 fission env list | grep python

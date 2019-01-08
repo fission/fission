@@ -8,6 +8,7 @@ cleanup() {
     fission fn delete --name hello-go-poolmgr || true
     fission fn delete --name hello-go-nd || true
     fission env delete --name go || true
+    rm $ROOT/examples/go/vendor-example/vendor.zip || true
 }
 
 wait_for_builder() {
@@ -55,8 +56,11 @@ cd $ROOT/examples/go
 
 trap cleanup EXIT
 
+GO_RUNTIME_IMAGE=${GO_RUNTIME_IMAGE:-gcr.io/fission-ci/go-env:test}
+GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-gcr.io/fission-ci/go-env-builder:test}
+
 log "Creating environment for Golang"
-fission env create --name go --image gcr.io/fission-ci/go-env:test --builder gcr.io/fission-ci/go-env-builder:test --period 5
+fission env create --name go --image $GO_RUNTIME_IMAGE --builder $GO_BUILDER_IMAGE --period 5
 
 timeout 90 bash -c "wait_for_builder"
 

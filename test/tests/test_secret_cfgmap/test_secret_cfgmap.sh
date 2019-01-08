@@ -13,6 +13,7 @@ cleanup() {
     fission env delete --name python || true
     kubectl delete secret -n default ${fn_secret} || true
     kubectl delete configmap -n default ${fn_cfgmap} || true
+    rm cfgmap.py || true
     # delete functions
     for f in ${fn_secret} ${fn_cfgmap} ${fn}
     do

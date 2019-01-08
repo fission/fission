@@ -8,6 +8,7 @@ cleanup() {
     fission fn delete --name pbuilderhello || true
     fission fn delete --name nbuilderhello || true
     fission env delete --name java || true
+    rm $ROOT/examples/jvm/java/java-src-pkg.zip || true
 }
 
 test_fn() {
@@ -41,11 +42,13 @@ export -f test_pkg
 
 cd $ROOT/examples/jvm/java
 
+trap cleanup EXIT
+
 log "Creating zip from source code"
 zip -r java-src-pkg.zip *
 
 log "Creating Java environment with Java Builder"
-fission env create --name java --image gcr.io/fission-ci/jvm-env:test --version 2 --keeparchive --builder gcr.io/fission-ci/jvm-env-builder:test
+fission env create --name java --image fission/jvm-env --version 2 --keeparchive --builder fission/jvm-env-builder
 
 log "Creating package from the source archive"
 pkg_name=`fission package create --sourcearchive java-src-pkg.zip --env java|cut -d' ' -f 2|cut -d"'" -f 2`
@@ -57,7 +60,6 @@ timeout 300 bash -c "test_pkg $pkg_name 'succeeded'"
 log "Creating pool manager & new deployment function for Java"
 fission fn create --name nbuilderhello --pkg $pkg_name --env java --entrypoint io.fission.HelloWorld --executortype newdeploy --minscale 1 --maxscale 1
 fission fn create --name pbuilderhello --pkg $pkg_name --env java --entrypoint io.fission.HelloWorld
-trap cleanup EXIT
 
 log "Creating route for pool manager function"
 fission route create --function pbuilderhello --url /pbuilderhello --method GET
