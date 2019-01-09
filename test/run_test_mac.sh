@@ -20,6 +20,8 @@
 #### Caution #### 
 # Some scripts might use additional variables only available during CI cycle such as an image 
 # being built by CI - which you will have to override manually in that script.
+# Some tests known to fail as of now:
+# test_mqtrigger_error.sh, test_mqtrigger.sh (Needs connection to MQ), test_archive_pruner.sh (The package somehow gets created in default package in local setup), test_obj_create_in_diff_ns.sh
 
 
 set -euo pipefail
@@ -89,6 +91,3 @@ else
     run_test ${file}
   done
 fi 
-
-
-

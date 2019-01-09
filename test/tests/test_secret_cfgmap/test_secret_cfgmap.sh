@@ -14,6 +14,7 @@ cleanup() {
     kubectl delete secret -n default ${fn_secret} || true
     kubectl delete configmap -n default ${fn_cfgmap} || true
     rm cfgmap.py || true
+    rm secret.py || true
     # delete functions
     for f in ${fn_secret} ${fn_cfgmap} ${fn}
     do
