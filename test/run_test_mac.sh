@@ -38,6 +38,8 @@ export PYTHON_RUNTIME_IMAGE=fission/python-env
 export PYTHON_BUILDER_IMAGE=fission/python-builder
 export GO_RUNTIME_IMAGE=fission/go-env
 export GO_BUILDER_IMAGE=fission/go-builder
+export JVM_RUNTIME_IMAGE=fission/jvm-env
+export JVM_BUILDER_IMAGE=fission/jvm-builder
 
 
 if [ $(uname -s) == 'Darwin' ]

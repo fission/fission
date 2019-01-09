@@ -9,7 +9,7 @@ id=""
 ROOT=$(dirname $0)/../..
 
 final_cleanup() {
-    rm -rf testDir1 || true
+    rm -rf testDir1/ || true
     kubectl delete ns "ns1-$id" "ns2-$id" &
 }
 

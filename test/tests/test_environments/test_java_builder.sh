@@ -4,6 +4,9 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/../../..
 
+JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-gcr.io/fission-ci/jvm-env:test}
+JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-gcr.io/fission-ci/jvm-env-builder:test}
+
 cleanup() {
     fission fn delete --name pbuilderhello || true
     fission fn delete --name nbuilderhello || true
@@ -48,7 +51,7 @@ log "Creating zip from source code"
 zip -r java-src-pkg.zip *
 
 log "Creating Java environment with Java Builder"
-fission env create --name java --image fission/jvm-env --version 2 --keeparchive --builder fission/jvm-env-builder
+fission env create --name java --image $JVM_RUNTIME_IMAGE --version 2 --keeparchive --builder $JVM_BUILDER_IMAGE
 
 log "Creating package from the source archive"
 pkg_name=`fission package create --sourcearchive java-src-pkg.zip --env java|cut -d' ' -f 2|cut -d"'" -f 2`
