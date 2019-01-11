@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -299,17 +300,20 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function, firstcreate bool) (*fscache.
 	svc, err := deploy.createOrGetSvc(deployLabels, objName, ns)
 	if err != nil {
 		log.Printf("Error creating the service %v: %v", objName, err)
-		return fsvc, err
+		go deploy.cleanupNewdeploy(ns, objName)
+		return fsvc, errors.Wrap(err, fmt.Sprintf("error creating service %v", objName))
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, ns, firstcreate)
 	if err != nil {
 		log.Printf("Error creating the deployment %v: %v", objName, err)
-		return fsvc, err
+		go deploy.cleanupNewdeploy(ns, objName)
+		return fsvc, errors.Wrap(err, fmt.Sprintf("error creating deployment %v", objName))
 	}
 
 	hpa, err := deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl)
 	if err != nil {
+		go deploy.cleanupNewdeploy(ns, objName)
 		return fsvc, errors.Wrap(err, fmt.Sprintf("error creating the HPA %v:", objName))
 	}
 
@@ -496,7 +500,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 
 func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 
-	var delError error
+	var multierr *multierror.Error
 
 	// GetByFunction uses resource version as part of cache key, however,
 	// the resource version in function metadata will be changed when a function
@@ -506,14 +510,13 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	if err != nil {
 		log.Printf("fsvc not found in cache: %v", fn.Metadata)
-		delError = err
 		return nil, err
 	}
 
 	_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
 	if err != nil {
 		log.Printf("Error deleting the function from cache: %v", fsvc)
-		delError = err
+		multierror.Append(multierr, err)
 	}
 	objName := fsvc.Name
 
@@ -524,29 +527,10 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 		ns = fn.Metadata.Namespace
 	}
 
-	err = deploy.deleteDeployment(ns, objName)
-	if err != nil {
-		log.Printf("Error deleting the deployment: %v", objName)
-		delError = err
-	}
+	err = deploy.cleanupNewdeploy(ns, objName)
+	multierror.Append(multierr, err)
 
-	err = deploy.deleteSvc(ns, objName)
-	if err != nil {
-		log.Printf("Error deleting the service: %v", objName)
-		delError = err
-	}
-
-	err = deploy.deleteHpa(ns, objName)
-	if err != nil {
-		log.Printf("Error deleting the HPA: %v", objName)
-		delError = err
-	}
-
-	if delError != nil {
-		return nil, delError
-	}
-
-	return nil, nil
+	return nil, multierr.ErrorOrNil()
 }
 
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {

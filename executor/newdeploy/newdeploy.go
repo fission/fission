@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -507,4 +508,27 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 		time.Sleep(time.Second)
 	}
 	return nil, errors.New("failed to create deployment within timeout window")
+}
+
+func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
+	var multierr *multierror.Error
+
+	err := deploy.deleteSvc(ns, name)
+	if err != nil {
+		log.Printf("Error deleting service for newdeploy function %v in namespace %v, error: %v", name, ns, err)
+		multierror.Append(multierr, err)
+	}
+
+	err = deploy.deleteHpa(ns, name)
+	if err != nil {
+		log.Printf("Error deleting HPA for newdeploy function %v in namespace %v, error: %v", name, ns, err)
+		multierror.Append(multierr, err)
+	}
+
+	err = deploy.deleteDeployment(ns, name)
+	if err != nil {
+		log.Printf("Error deleting deployment for newdeploy function %v in namespace %v, error: %v", name, ns, err)
+		multierror.Append(multierr, err)
+	}
+	return multierr.ErrorOrNil()
 }
