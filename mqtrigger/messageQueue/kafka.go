@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	sarama "github.com/Shopify/sarama"
@@ -35,6 +36,7 @@ type (
 	Kafka struct {
 		routerUrl string
 		brokers   []string
+		version   sarama.KafkaVersion
 	}
 )
 
@@ -42,11 +44,20 @@ func makeKafkaMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQ
 	if len(routerUrl) == 0 || len(mqCfg.Url) == 0 {
 		return nil, errors.New("The router URL or MQ URL is empty")
 	}
+	mqKafkaVersion := os.Getenv("MESSAGE_QUEUE_KAFKA_VERSION")
+
+	// Parse version string
+	kafkaVersion, err := sarama.ParseKafkaVersion(mqKafkaVersion)
+	if err != nil {
+		log.Warningf("Error parsing version string %q: %v. Falling back to %q", mqKafkaVersion, err, kafkaVersion)
+	}
+
 	kafka := Kafka{
 		routerUrl: routerUrl,
 		brokers:   strings.Split(mqCfg.Url, ","),
+		version:   kafkaVersion,
 	}
-	log.Infof("Created Queue %q", kafka)
+	log.Infof("Created Queue %v", kafka)
 	return kafka, nil
 }
 
@@ -62,6 +73,7 @@ func (kafka Kafka) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubs
 	consumerConfig := cluster.NewConfig()
 	consumerConfig.Consumer.Return.Errors = true
 	consumerConfig.Group.Return.Notifications = true
+	consumerConfig.Config.Version = kafka.version
 	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
 	log.Infof("Created a new consumer: %#v", consumer)
 	if err != nil {
@@ -73,6 +85,7 @@ func (kafka Kafka) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubs
 	producerConfig.Producer.RequiredAcks = sarama.WaitForAll
 	producerConfig.Producer.Retry.Max = 10
 	producerConfig.Producer.Return.Successes = true
+	producerConfig.Version = kafka.version
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
 	log.Infof("Created a new producer %q", producer)
 	if err != nil {
@@ -97,7 +110,7 @@ func (kafka Kafka) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubs
 	go func() {
 		for msg := range consumer.Messages() {
 			log.Infof("Calling message handler with value " + string(msg.Value[:]))
-			if kafkaMsgHandler(&kafka, producer, trigger, string(msg.Value[:])) {
+			if kafkaMsgHandler(&kafka, producer, trigger, msg) {
 				consumer.MarkOffset(msg, "") // mark message as processed
 			}
 		}
@@ -110,7 +123,8 @@ func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
 	return subscription.(*cluster.Consumer).Close()
 }
 
-func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.MessageQueueTrigger, value string) bool {
+func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.MessageQueueTrigger, msg *sarama.ConsumerMessage) bool {
+	var value string = string(msg.Value[:])
 	// Support other function ref types
 	if trigger.Spec.FunctionReference.Type != fission.FunctionReferenceTypeFunctionName {
 		log.Fatalf("Unsupported function reference type (%v) for trigger %v",
@@ -119,12 +133,15 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.Me
 
 	url := kafka.routerUrl + "/" + strings.TrimPrefix(fission.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/")
 	log.Printf("Making HTTP request to %v", url)
-	headers := map[string]string{
+
+	// Generate the Headers
+	fissionHeaders := map[string]string{
 		"X-Fission-MQTrigger-Topic":      trigger.Spec.Topic,
 		"X-Fission-MQTrigger-RespTopic":  trigger.Spec.ResponseTopic,
 		"X-Fission-MQTrigger-ErrorTopic": trigger.Spec.ErrorTopic,
 		"Content-Type":                   trigger.Spec.ContentType,
 	}
+
 	// Create request
 	req, err := http.NewRequest("POST", url, strings.NewReader(value))
 	if err != nil {
@@ -132,9 +149,16 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.Me
 		return false
 	}
 
-	for k, v := range headers {
+	// Set the headers came from Kafka record
+	// Using Header.Add() as msg.Headers may have keys with more than one value
+	for _, h := range msg.Headers {
+		req.Header.Add(string(h.Key), string(h.Value))
+	}
+
+	for k, v := range fissionHeaders {
 		req.Header.Set(k, v)
 	}
+
 	// Make the request
 	var resp *http.Response
 	for attempt := 0; attempt <= trigger.Spec.MaxRetries; attempt++ {
@@ -169,9 +193,23 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.Me
 		return false
 	}
 	if len(trigger.Spec.ResponseTopic) > 0 {
+		// Generate Kafka record headers
+		var kafkaRecordHeaders []sarama.RecordHeader
+		if kafka.version.IsAtLeast(sarama.V0_11_0_0) {
+			for k, v := range resp.Header {
+				// One key may have multiple values
+				for _, v := range v {
+					kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+				}
+			}
+		} else {
+			log.Warningf("Headers are not supported by Kafka version %q, needs v0.11+: dropping the headers", kafka.version)
+		}
+
 		_, _, err := producer.SendMessage(&sarama.ProducerMessage{
-			Topic: trigger.Spec.ResponseTopic,
-			Value: sarama.StringEncoder(body),
+			Topic:   trigger.Spec.ResponseTopic,
+			Value:   sarama.StringEncoder(body),
+			Headers: kafkaRecordHeaders,
 		})
 		if err != nil {
 			log.Warningf("Failed to publish message to topic %s: %v", trigger.Spec.ResponseTopic, err)
