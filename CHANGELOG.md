@@ -1,5 +1,5 @@
 # 1.0-rc2
-[Documentation](https://docs.fission.io/1.0-rc2/)
+[Documentation](https://docs.fission.io)
 ## Downloads for 1.0-rc2
 
 
