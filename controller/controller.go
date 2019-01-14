@@ -44,15 +44,13 @@ func Start(port int, unitTestFlag bool) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	featureConfig, err := ConfigureFeatures(ctx, unitTestFlag, fc, kc)
+	featureStatus, err := ConfigureFeatures(ctx, unitTestFlag, fc, kc)
 	if err != nil {
 		log.Printf("Error configuring features : %v. Proceeding without optional features", err.Error())
-		// set all features to false for the MakeApi call below
-		featureConfig.CanaryConfig.IsEnabled = false
 	}
 	defer cancel()
 
-	api, err := MakeAPI(featureConfig)
+	api, err := MakeAPI(featureStatus)
 	if err != nil {
 		log.Fatalf("Failed to start controller: %v", err)
 	}

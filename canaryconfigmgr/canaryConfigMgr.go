@@ -62,11 +62,16 @@ func MakeCanaryConfigMgr(fissionClient *crd.FissionClient, kubeClient *kubernete
 		}
 	}
 
+	promClient, err := MakePrometheusClient(prometheusSvc)
+	if err != nil {
+		return nil, err
+	}
+
 	configMgr := &canaryConfigMgr{
 		fissionClient:          fissionClient,
 		kubeClient:             kubeClient,
 		crdClient:              crdClient,
-		promClient:             MakePrometheusClient(prometheusSvc),
+		promClient:             promClient,
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}
 
