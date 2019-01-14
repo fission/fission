@@ -40,9 +40,9 @@ type (
 		timeExpiry time.Duration
 	}
 
-	// Throttler is a simple throttling mechanism implementation provides
-	// ability to limit the total amount of requests to do the same thing
-	// at the same time.
+	// Throttler is a simple throttling mechanism that provides the abil-
+	// ity to limit the total amount of requests to do the same thing at
+	// the same time.
 	//
 	// In router, for example, multiple goroutines may try to get the la-
 	// test service URL from executor when there is no service URL entry

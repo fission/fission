@@ -488,9 +488,8 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 
 	// cache miss or nil entry in cache
 
-	// To prevent multiple update requests will be sent to executor and make executor overloaded,
-	// the first goroutine is responsible to update the service url entry, all other goroutines
-	// for the same function will wait until first goroutine finished.
+	// Use throttle to limit the total amount of requests sent
+	// to the executor to prevent it from overloaded.
 	recordObj, err := fh.svcAddrUpdateThrottler.RunOnce(
 		crd.CacheKey(fh.function),
 		func(firstToTheLock bool) (interface{}, error) {
