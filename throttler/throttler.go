@@ -194,17 +194,15 @@ func (tr *Throttler) RunOnce(resourceKey string,
 	}
 	resp := <-ch
 
-	// if we are not the first one, wait for the first goroutine to finish the update
+	// if we are not the first one, wait for the first goroutine to finish its task
 	if !resp.firstGoroutine {
-		// wait for the first goroutine to update the service entry
 		err := resp.lock.wait()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// release actionLock so that other goroutines can take over the responsibility
-	// of updating the service map if failed.
+	// release actionLock so that other goroutines can take over the responsibility if failed.
 	defer func() {
 		go func() {
 			tr.requestChan <- &request{
