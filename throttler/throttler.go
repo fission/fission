@@ -32,8 +32,8 @@ const (
 )
 
 type (
-	// actionLock is the lock that will be used when
-	// gorountine tries to update service address entry.
+	// actionLock is a lock that indicates whether a resource with
+	// certain key is being updated or not.
 	actionLock struct {
 		wg         *sync.WaitGroup
 		ctimestamp time.Time // creation time of lock
@@ -153,10 +153,10 @@ func (tr *Throttler) service() {
 // 1. function metadata:
 //   It's used to check whether the actionLock of a function exists.
 //
-//   If not exists, a updateLock will be inserted into the map with
-//   metadata as key. Then, router pass true to callbackFunc to indi-
+//   If not exists, an actionLock will be inserted into the map with
+//   passing key. Then, throttler pass true to callbackFunc to indi-
 //   cate this goroutine is the first goroutine and is responsible for
-//   updating service URL entry.
+//   calling backend service, like updating service URL entry in router.
 //
 //   If exists, the goroutines have to wait until the first goroutine
 //   finishes the update process.
@@ -203,7 +203,7 @@ func (tr *Throttler) RunOnce(resourceKey string,
 		}
 	}
 
-	// release update lock so that other goroutines can take over the responsibility
+	// release actionLock so that other goroutines can take over the responsibility
 	// of updating the service map if failed.
 	defer func() {
 		go func() {
