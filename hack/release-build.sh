@@ -169,6 +169,7 @@ build_all_envs() {
     build_env_image "$version" "dotnet"   "dotnet-env"   ""
     build_env_image "$version" "dotnet20" "dotnet20-env" ""
     build_env_image "$version" "go"       "go-env"       ""
+    build_env_image "$version" "go"       "go-env"       "1.11.4"
     build_env_image "$version" "perl"     "perl-env"     ""
     build_env_image "$version" "php7"     "php-env"      ""
     build_env_image "$version" "python"   "python-env"   ""
@@ -209,6 +210,7 @@ build_all_env_builders() {
     build_env_builder_image "$version" "python"   "python-builder"   ""
     build_env_builder_image "$version" "binary"   "binary-builder"   ""
     build_env_builder_image "$version" "go"       "go-builder"       ""
+    build_env_builder_image "$version" "go"       "go-builder"       "1.11.4"
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     build_env_builder_image "$version" "nodejs"   "node-builder"     ""
 }
