@@ -55,7 +55,9 @@ type (
 		instanceId     string
 		requestChannel chan *request
 
-		enableIstio    bool
+		enableIstio             bool
+		jaegerCollectorEndpoint string
+
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
 		pkgStore       k8sCache.Store
@@ -82,15 +84,16 @@ func MakeGenericPoolManager(
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{
-		pools:            make(map[string]*GenericPool),
-		kubernetesClient: kubernetesClient,
-		namespace:        functionNamespace,
-		fissionClient:    fissionClient,
-		functionEnv:      cache.MakeCache(10*time.Second, 0),
-		fsCache:          fscache.MakeFunctionServiceCache(),
-		instanceId:       instanceId,
-		requestChannel:   make(chan *request),
-		idlePodReapTime:  2 * time.Minute,
+		pools:                   make(map[string]*GenericPool),
+		kubernetesClient:        kubernetesClient,
+		namespace:               functionNamespace,
+		fissionClient:           fissionClient,
+		functionEnv:             cache.MakeCache(10*time.Second, 0),
+		fsCache:                 fscache.MakeFunctionServiceCache(),
+		instanceId:              instanceId,
+		requestChannel:          make(chan *request),
+		idlePodReapTime:         2 * time.Minute,
+		jaegerCollectorEndpoint: os.Getenv("OPENCENSUS_TRACE_JAEGER_COLLECTOR_ENDPOINT"),
 	}
 	go gpm.service()
 	go gpm.eagerPoolCreator()
@@ -141,7 +144,8 @@ func (gpm *GenericPoolManager) service() {
 
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
-					ns, gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio)
+					ns, gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio,
+					gpm.jaegerCollectorEndpoint)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
@@ -189,7 +193,7 @@ func (gpm *GenericPoolManager) CleanupPools(envs []crd.Environment) {
 	}
 }
 
-func (gpm *GenericPoolManager) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	// from Func -> get Env
 	log.Printf("[%v] getting environment for function", metadata.Name)
 	env, err := gpm.getFunctionEnv(metadata)
@@ -204,7 +208,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	log.Printf("[%v] getting function service from pool", metadata.Name)
-	return pool.GetFuncSvc(metadata)
+	return pool.GetFuncSvc(ctx, metadata)
 }
 
 func (gpm *GenericPoolManager) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {

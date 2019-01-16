@@ -51,14 +51,15 @@ type (
 		crdClient        *rest.RESTClient
 		instanceID       string
 
-		fetcherImg             string
-		fetcherImagePullPolicy apiv1.PullPolicy
-		runtimeImagePullPolicy apiv1.PullPolicy
-		namespace              string
-		sharedMountPath        string
-		sharedSecretPath       string
-		sharedCfgMapPath       string
-		useIstio               bool
+		fetcherImg              string
+		fetcherImagePullPolicy  apiv1.PullPolicy
+		runtimeImagePullPolicy  apiv1.PullPolicy
+		namespace               string
+		sharedMountPath         string
+		sharedSecretPath        string
+		sharedCfgMapPath        string
+		useIstio                bool
+		jaegerCollectorEndpoint string
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
 
@@ -85,6 +86,8 @@ func MakeNewDeploy(
 		fetcherImg = "fission/fetcher"
 	}
 
+	jaegerCollectorEndpoint := os.Getenv("OPENCENSUS_TRACE_JAEGER_COLLECTOR_ENDPOINT")
+
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -104,13 +107,14 @@ func MakeNewDeploy(
 		fsCache:   fscache.MakeFunctionServiceCache(),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
-		fetcherImg:             fetcherImg,
-		fetcherImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY")),
-		runtimeImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
-		sharedMountPath:        "/userfunc",
-		sharedSecretPath:       "/secrets",
-		sharedCfgMapPath:       "/configs",
-		useIstio:               enableIstio,
+		fetcherImg:              fetcherImg,
+		fetcherImagePullPolicy:  fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY")),
+		runtimeImagePullPolicy:  fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
+		sharedMountPath:         "/userfunc",
+		sharedSecretPath:        "/secrets",
+		sharedCfgMapPath:        "/configs",
+		jaegerCollectorEndpoint: jaegerCollectorEndpoint,
+		useIstio:                enableIstio,
 
 		idlePodReapTime: 2 * time.Minute,
 	}
@@ -160,7 +164,7 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 	return store, controller
 }
 
-func (deploy *NewDeploy) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	fn, err := deploy.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
 	if err != nil {
 		return nil, err
