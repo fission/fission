@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#test:disabled
-# Disabled because CI Fails for invalid function https://github.com/fission/fission/issues/653
-
 set -euo pipefail
 
 env=nodejs-$(date +%N)
