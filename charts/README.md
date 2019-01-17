@@ -49,7 +49,7 @@ The following table lists the configurable parameters of the Fission chart and t
 | `functionNamespace` | Namespace for Fission functions            | `fission-function`       |
 | `builderNamespace`  | Namespace for Fission environment builders | `fission-builder`        |
 
-* Extra configuration for `fission-all`
+### Extra configuration for `fission-all`
 
 | Parameter                       | Description                 | Default                                                                 |
 | ------------------------------- | --------------------------- | ----------------------------------------------------------              |
