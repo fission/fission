@@ -1,4 +1,3 @@
----
 {{- if .Values.createNamespace }}
 apiVersion: v1
 kind: Namespace
@@ -403,8 +402,8 @@ spec:
                 name: influxdb
                 key: password
 
----
 {{- if .Values.heapster }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -444,9 +443,8 @@ spec:
         - /heapster
         - --source=kubernetes:https://kubernetes.default
       serviceAccount: {{ .Release.Namespace }}/fission-svc
-
----
 {{- end }}
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -495,8 +493,8 @@ spec:
 #        args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
 #      serviceAccount: fission-svc
 
----
 {{- if .Values.nats.enabled }}
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -551,8 +549,9 @@ spec:
           value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
       serviceAccount: fission-svc
 {{- end }}
----
+
 {{- if .Values.kafka.enabled }}
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -582,8 +581,9 @@ spec:
           value: "{{.Values.kafka.version}}"
       serviceAccount: fission-svc
 {{- end }}
----
+
 {{- if .Values.azureStorageQueue.enabled }}
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:

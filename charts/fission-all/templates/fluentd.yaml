@@ -7,12 +7,12 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-fission-fluentd
 data:
-{{ if .Files.Get "config/fluentd.conf" }}
+{{- if .Files.Get "config/fluentd.conf" }}
   td-agent.conf: |
 {{ .Files.Get "config/fluentd.conf" | indent 3 }}
 {{ else }}
 {{ fail "invalid chart" }}
-{{ end }}
+{{- end }}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
