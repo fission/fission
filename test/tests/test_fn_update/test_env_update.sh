@@ -14,7 +14,7 @@ cleanup() {
     log "Cleaning up..."
     fission env delete --name $env_old || true
     fission fn delete --name $fn || true
-    fission env delete --name $env_old || true
+    fission env delete --name $env_new || true
 }
 
 cleanup

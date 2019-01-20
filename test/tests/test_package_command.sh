@@ -69,6 +69,9 @@ cleanup() {
     fission fn delete --name $fn2 || true
     fission fn delete --name $fn4 || true
     fission fn delete --name $fn5 || true
+    rm demo-src-pkg.zip || true
+    rm -rf testDir/ || true
+    rm demo-deploy-pkg.zip || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then

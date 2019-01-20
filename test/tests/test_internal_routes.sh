@@ -9,11 +9,18 @@ set -euo pipefail
 
 ROOT=$(dirname $0)/../..
 
+log "Writing functions"
+f1=f1-$(date +%s)
+f2=f2-$(date +%s)
+log $f1 $f2
+
 cleanup() {
     log "Cleaning up..."
     fission env delete --name nodejs || true
     fission fn delete --name $f1 || true
     fission fn delete --name $f2 || true
+    rm $f1.js || true
+    rm $f2.js || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -28,10 +35,7 @@ fission env delete --name nodejs || true
 log "Creating nodejs env"
 fission env create --name nodejs --image fission/node-env
 
-log "Writing functions"
-f1=f1-$(date +%s)
-f2=f2-$(date +%s)
-log $f1 $f2
+
 
 for f in $f1 $f2
 do
