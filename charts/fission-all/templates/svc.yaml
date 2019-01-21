@@ -11,9 +11,9 @@ spec:
   ports:
   - port: 80
     targetPort: 8888
-{{ if eq .Values.routerServiceType "NodePort" }}
+{{- if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
-{{ end }}
+{{- end }}
   selector:
     svc: router
 
@@ -31,14 +31,14 @@ spec:
   ports:
   - port: 80
     targetPort: 8888
-{{ if eq .Values.serviceType "NodePort" }}
+{{- if eq .Values.serviceType "NodePort" }}
     nodePort: {{ .Values.controllerPort }}
-{{ end }}
+{{- end }}
   selector:
     svc: controller
 
----
 {{- if .Values.nats.enabled }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -51,9 +51,9 @@ spec:
   ports:
   - port: 4222
     targetPort: 4222
-{{ if eq .Values.serviceType "NodePort" }}
+{{- if eq .Values.serviceType "NodePort" }}
     nodePort: {{ .Values.natsStreamingPort }}
-{{ end }}
+{{- end }}
   selector:
     svc: nats-streaming
 {{- end }}

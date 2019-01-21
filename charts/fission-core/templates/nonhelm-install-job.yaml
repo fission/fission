@@ -1,4 +1,4 @@
-{{ if .Values.analyticsNonHelmInstall }}
+{{- if .Values.analyticsNonHelmInstall }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,4 +28,4 @@ spec:
         - name: post-install-job
           image: "fission/alpinecurl"
           command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"yaml-post-install\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.sh/analytics || true"]
-{{ end }}
+{{- end }}
