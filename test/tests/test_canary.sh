@@ -18,6 +18,8 @@ cleanup() {
     fission canary-config delete --name canary-2 || true
 }
 
+trap cleanup EXIT
+
 success_scenario() {
     log "Creating nodejs env"
     fission env create --name nodejs --image fission/node-env --graceperiod 1

@@ -9,8 +9,8 @@ set -euo pipefail
 # 2. package watcher triggers the build if any changes to packages
 
 ROOT=$(dirname $0)/../..
-PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
-PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
+PYTHON_RUNTIME_IMAGE=${PYTHON_RUNTIME_IMAGE:-gcr.io/fission-ci/python-env:test}
+PYTHON_BUILDER_IMAGE=${PYTHON_BUILDER_IMAGE:-gcr.io/fission-ci/python-env-builder:test}
 
 fn=python-srcbuild-$(date +%s)
 
@@ -55,6 +55,7 @@ cleanup() {
     log "Cleaning up..."
     fission env delete --name python || true
     fission fn delete --name $fn || true
+    rm demo-src-pkg.zip || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then

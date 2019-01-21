@@ -9,9 +9,11 @@ id=""
 ROOT=$(dirname $0)/../..
 
 final_cleanup() {
-    rm -rf testDir1 || true
+    rm -rf testDir1/ || true
     kubectl delete ns "ns1-$id" "ns2-$id" &
 }
+
+trap final_cleanup EXIT
 
 cleanup() {
     [[ -n "${1+x}"  && -n "${2+x}" ]]; fission env delete --name $1 --envns $2 || true

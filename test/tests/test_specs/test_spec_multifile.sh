@@ -7,6 +7,14 @@ ROOT=$(dirname $0)/../../..
 fn=spec-$(date +%N)
 env=python-$fn
 
+cleanup() {
+    pushd $ROOT/examples/python
+    fission spec destroy
+    rm -rf $ROOT/examples/python/specs
+}
+
+trap cleanup EXIT
+
 pushd $ROOT/examples/python
 
 fission spec init
