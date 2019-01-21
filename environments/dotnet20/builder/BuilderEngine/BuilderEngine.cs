@@ -61,7 +61,12 @@ namespace Builder.Engine
             else
             {
                 Console.WriteLine("Compilation failed , throwing exception !!");
+                   foreach(var error  in  compile_errors)
+                    {
+                        Console.WriteLine($"COMPILATION ERROR : {error}");
+                    }
                 throw new Exception($"COMPILATION FAILED !! , See builder logs for details , total Errors :  {compile_errors.Count}");
+                
             }
 
         }
