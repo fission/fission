@@ -2,13 +2,19 @@
 
 This is a simple dotnet core 2.0 C# environment builder for Fission.
 
-It's a Docker image containing the dotnet 2.0.0 runtime builder. This image read the source package and uses 
-Roslyn to compile the source package code and creates deployment package out of it.
+It's a docker image containing the dotnet 2.0.0 (core) runtime builder. This image read the source package and uses 
+*roslyn* to compile the source package code and creates deployment package out of it.
 This enables using  nuget packages as part of function and thus user can use extended functionality in fission functions via nuget.
 
+During build , builder also does a pre-compile to prevent any compilation issues during function envrionment pod specialization.
+Thus we get the function compilation issues during builder phase in package info's build logs itself.
 
-Now , When function is created with the output package , then on function execution when pod is specialized , 
-this builder will send the deployment package to function environment /v2/specialized endpoint.
+**Note** : In future we can further enhance the compiled assembaly to be saved as physical file in deployment package , 
+as this will save cold start time for function. 
+
+Now , once after the build is finished, the output package (deploy archive) will be uploaded to storagesvc to store.
+Then, during the specialization, the fetcher inside function pod will fetch the package from storagesvc for function loading
+ and will call on the  /v2/specialized endpoint of fission envrionment with required parameteres.
 
 There further envrionment will compile it and execute the function.
 
@@ -20,34 +26,39 @@ The source package structure in zip file :
 ```
  Source Package zip :
  --soruce.zip
-	|--Func.cs
+	|--func.cs
 	|--nuget.txt
 	|--exclude.txt
 	|--....MiscFiles(optional)
 	|--....MiscFiles(optional)
 ```
 
-Func.cs --> This contains orignal function body with Executing method name as : Execute
-nuget.txt--> this file contains list of nuget packages required by your function , in this file
-		         	put one line per nuget with nugetpackage name:version(optional) formate 
-			       Forexample :
+**func.cs** --> This contains original function body with Executing method name as : Execute
+
+ 
+**nuget.txt**--> this file contains list of nuget packages required by your function , in this file
+put one line per nuget with nugetpackage name:version(optional) format, for example :
 
 ```
 				   RestSharp
 				   Newtonsoft.json:10.2.1.0
 ```
 
-'		  	      this should match the following regex as mentions in builderSetting.json
+
+		  	      this should match the following regex as mentioned in builderSetting.json
+
 
 ```
      		      "NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n"
 ```
-'	     	      (Note: Please do not forget to add newline /enter in the last line of file else last line will be immited)
+
+	     	      (Note: Please do not forget to add newline /enter in the last line of file else last line will be omitted )
   
- exclude.txt--> as nuget.txt will download orignal package and their dependent packages , thus sometime dependent packages might not be
- 							that usefull and can break compilation , thus this file contains list of dlls of specific nuget packages which doesnt need to be
-				      added during compilation if  they  break compilation .put one line per nuget with dllname:nugetpackagename
-				      formate ,For example :
+ **exclude.txt**--> as nuget.txt will download original package and their dependent packages , thus sometime dependent packages might not be
+that usefull and can break compilation , thus this file contains list of dlls of specific nuget packages which doesnt need to be
+ added during compilation if  they  break compilation .Put one line per nuget with dllname:nugetpackagename
+ formate ,for example :
+ 
 ```
 			     Newtonsoft.json.dll:Newtonsoft.json
 ```
@@ -57,12 +68,12 @@ nuget.txt--> this file contains list of nuget packages required by your function
 ```
           		"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
 ```
- From above , builder will creat a deployment package with all dlls in a folder and one functionspecification file :
+ From above , builder will create a deployment package with all dlls in a folder and one functionspecification file :
  Deployement Package zip :
 
 ```
  --Deploye.zip
-	|--Func.cs
+	|--func.cs
 	|--nuget.txt
 	|--exclude.txt
 	|--dll()
@@ -84,6 +95,7 @@ using Fission.DotNetCore.Api;
 public class FissionFunction 
 {
     public string Execute(FissionContext context){
+		 string respo="initial value";
 	        try
             {
 				context.Logger.WriteInfo("Staring..... ");
@@ -115,9 +127,9 @@ fission env list
 fission fn list
  ```
  Create Environment with builder (choose a unique which doesn't exist , here we have chosen : dotnetcorewithnuget  ) 
- also suppose the builder image name is fissionbuilder and hosted on dockerhub as fission/dotnetbuilder
+ also suppose the builder image name is fissiondotnet20-builder and hosted on dockerhub as fission/dotnet20-builder
  ```
-fission environment create --name dotnetcorewithnuget --image fission/dotnet20-env --builder  fission/dotnetbuilder
+fission environment create --name dotnetcorewithnuget --image fission/dotnet20-env  --builder  fission/dotnet20-builder
  ```
  Verify fission-builder and fission-function namespace for new pods (pods name beginning with env name which we have given like dotnetcorewithnuget-xxx-xxx)
  ```
@@ -139,8 +151,10 @@ fission package info --name funccsv-zip-xyz
  Wait if the status is running , until it fails or succeeded.
  For detailed build logs, you can shell into builder pod in fission-builder namespace and verify log location mentioned in above result.
 
+**Note** : Even If the result is succeeded , please have a look at detailed build logs to see compilation success and builder job done.
 
-Now If the result is succeeded , then go ahead and create function using this package
+Now If the result is succeeded , then go ahead and create function using this package.
+
 *--entrypoint* flag is optional if your function body file name is func.cs  (which it should be as builder need that), else put the filename (without extension )
  ```
  fission fn create --name dotnetcsvtest --pkg funccsv-zip-xyz --env dotnetcorewithnuget --entrypoint "func"
@@ -148,7 +162,7 @@ Now If the result is succeeded , then go ahead and create function using this pa
 Test the function execution :
 
 ``` 
- fission fn test --name dotnetcsvtest`
+ fission fn test --name dotnetcsvtest
 ```
 above would execute the function and will output the enum value as written in dll.
 
@@ -157,7 +171,7 @@ rest of the feature are same as normal fission environment.
 Benifit of using builder :
 
 1. Ability to use various nuget packages.
-2. Ability ti use many aditional files and functions as part of deployment package.
+2. Ability to use many aditional files and functions as part of deployment package.
 3. Ability to know the compilation issue in advance via package logs , instead of environment giving compilation issue.
 
 
