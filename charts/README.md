@@ -85,7 +85,7 @@ Parameter | Description | Default
 `kafka.version` | Kafka broker version | `nil`
 `heapster` | Enable Heapster (only enable this in clusters where heapster does not exist already) | `false`
 
-* - Please note that deploying of Azure Storage Queue or Kafka is not done by Fission chart and you will have to explicitly deploy them.
+Please note that deploying of Azure Storage Queue or Kafka is not done by Fission chart and you will have to explicitly deploy them.
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
