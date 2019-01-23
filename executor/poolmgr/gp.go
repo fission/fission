@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -584,16 +585,15 @@ func (gp *GenericPool) waitForReadyPod() error {
 
 			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
 			pod := podList.Items[0]
-			var podErr string
+			var multierr *multierror.Error
 			for _, cStatus := range pod.Status.ContainerStatuses {
 				if cStatus.Ready != true {
-					podErr = cStatus.State.Waiting.Reason + cStatus.State.Waiting.Message
+					multierr = multierror.Append(multierr, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
 				}
 			}
-
 			return errors.Errorf(
 				"Timeout: waited too long for pod of deployment %v in namespace %v to be ready, error: %v",
-				gp.deployment.ObjectMeta.Name, gp.namespace, podErr)
+				gp.deployment.ObjectMeta.Name, gp.namespace, multierr)
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
