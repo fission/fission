@@ -16,4 +16,7 @@ RUN BUILD_DEPS="make gcc g++ libc6-dev ruby-dev libffi-dev" \
               /var/log/* \
               /var/tmp/*
 
-COPY fluent.conf /etc/fluent/fluent.conf
+# Now, we use configmap to mount fluent.conf into contaienr,
+# so comment out this line. For config details, please check
+# charts/fission-all/config/fluentd.conf
+# COPY fluent.conf /etc/fluent/fluent.conf

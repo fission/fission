@@ -8,7 +8,7 @@ metadata:
   name: {{ .Release.Name }}-fission-fluentd
 data:
 {{- if .Files.Get "config/fluentd.conf" }}
-  td-agent.conf: |
+  fluent.conf: |
 {{ .Files.Get "config/fluentd.conf" | indent 3 }}
 {{ else }}
 {{ fail "invalid chart" }}
@@ -60,7 +60,7 @@ spec:
               mountPath: /var/log/fission
               readOnly: false
             - name: fluentd-config
-              mountPath: /etc/td-agent/
+              mountPath: /etc/fluent/
               readOnly: true
       serviceAccount: fission-svc
       volumes:
@@ -73,7 +73,7 @@ spec:
         - name: fission-log
           hostPath:
             path: /var/log/fission
-        # Fluentd config location: /etc/td-agent/td-agent.conf
+        # Fluentd config location: /etc/fluent/fluent.conf
         - name: fluentd-config
           configMap:
             name: {{ .Release.Name }}-fission-fluentd
