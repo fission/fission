@@ -44,9 +44,9 @@ RUN apt-get -qq update && \
     td-agent-gem install --no-document fluent-plugin-systemd -v 0.0.5 && \
     td-agent-gem install --no-document fluent-plugin-google-cloud -v 0.5.2 && \
     td-agent-gem install --no-document fluent-plugin-detect-exceptions -v 0.0.4 && \
-    td-agent-gem install --no-document fluent-plugin-influxdb && \
-    td-agent-gem install --no-document fluent-plugin-kubernetes_metadata_filter && \
-    td-agent-gem install --no-document fluent-plugin-flatten-hash && \
+    td-agent-gem install --no-document fluent-plugin-influxdb -v 1.1.0 && \
+    td-agent-gem install --no-document fluent-plugin-kubernetes_metadata_filter -v 2.1.5 && \
+    td-agent-gem install --no-document fluent-plugin-flatten-hash -v 0.5.1 && \
     # Remove build tools
     apt-get remove -y -qq gcc make && \
     apt-get autoremove -y -qq && \
