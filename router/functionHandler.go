@@ -183,10 +183,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	}
 
 	// set the timeout for transport context
-	transport := http.DefaultTransport.(*http.Transport)
-
-	// Disables caching, Please refer to issue and specifically comment: https://github.com/fission/fission/issues/723#issuecomment-398781995
-	transport.DisableKeepAlives = true
+	transport := roundTripper.getDefaultTransport()
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
@@ -344,6 +341,26 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	}
 
 	return resp, err
+}
+
+// getDefaultTransport returns a pointer to new copy of http.Transport object to prevent
+// the value of http.DefaultTransport from being changed by goroutines.
+func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
+	// The transport setup here follows the configurations of http.DefaultTransport
+	// but without Dialer since we will change it later.
+	transport := http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// Disables caching, Please refer to issue and specifically
+	// comment: https://github.com/fission/fission/issues/723#issuecomment-398781995
+	transport.DisableKeepAlives = true
+
+	return &transport
 }
 
 func (fh *functionHandler) tapService(serviceUrl *url.URL) {
