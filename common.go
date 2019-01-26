@@ -120,9 +120,23 @@ func IsReadyPod(pod *apiv1.Pod) bool {
 		return false
 	}
 
+	// pod is not in Running Phase. It can be in Pending,
+	// Succeeded, Failed, Unknown. In some cases the pod can be in
+	// different sate than Running, for example Kubernetes sets a
+	// pod to Termination while k8s waits for the grace period of
+	// the pod, even if all the containers are in Ready state.
+	if pod.Status.Phase != apiv1.PodRunning {
+		return false
+	}
+
 	// pod is in "Terminating" status if deletionTimestamp is not nil
 	// https://github.com/kubernetes/kubernetes/issues/61376
 	if pod.ObjectMeta.DeletionTimestamp != nil {
+		return false
+	}
+
+	// pod does not have an IP address allocated to it yet
+	if pod.Status.PodIP == "" {
 		return false
 	}
 
