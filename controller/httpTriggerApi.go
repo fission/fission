@@ -50,12 +50,17 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	a.respondWithSuccess(w, resp)
 }
 
+// checkHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
 func (a *API) checkHTTPTriggerDuplicates(t *crd.HTTPTrigger) error {
 	triggers, err := a.fissionClient.HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 	for _, ht := range triggers.Items {
+		if ht.Metadata.UID == t.Metadata.UID {
+			// Same resource. No need to check.
+			continue
+		}
 		if ht.Spec.RelativeURL == t.Spec.RelativeURL && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return fission.MakeError(fission.ErrorNameExists,
 				fmt.Sprintf("HTTPTrigger with same Host, URL & method already exists (%v)",
