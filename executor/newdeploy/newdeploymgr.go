@@ -547,6 +547,7 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	return nil, multierr.ErrorOrNil()
 }
 
+// getObjName returns a unique name for kubernetes objects of function
 func (deploy *NewDeploy) getObjName(fn *crd.Function) string {
 	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v", fn.Metadata.Name, fn.Metadata.Namespace, uniuri.NewLen(8)))
 }
