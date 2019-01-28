@@ -160,6 +160,12 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		log.Print(fsvcErr)
 	}
 
+	executor.fsCache.IncreaseColdStarts(meta.Name, string(meta.UID))
+	_, err = executor.fsCache.Add(*fsvc)
+	if err != nil {
+		return nil, err
+	}
+
 	return fsvc, fsvcErr
 }
 

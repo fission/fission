@@ -175,14 +175,14 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
-		if existing != nil {
+		if IsNameExistError(err) {
 			f := existing.(*FuncSvc)
 			err2 := fsc.TouchByAddress(f.Address)
 			if err2 != nil {
 				return nil, err2
 			}
 			fCopy := *f
-			return &fCopy, err
+			return &fCopy, nil
 		}
 		return nil, err
 	}
