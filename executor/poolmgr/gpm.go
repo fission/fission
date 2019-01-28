@@ -30,6 +30,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/fission/fission"
+	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
 	"github.com/fission/fission/executor/reaper"
@@ -49,6 +50,7 @@ type (
 		namespace        string
 
 		fissionClient  *crd.FissionClient
+		functionEnv    *cache.Cache
 		fsCache        *fscache.FunctionServiceCache
 		instanceId     string
 		requestChannel chan *request
@@ -77,7 +79,6 @@ func MakeGenericPoolManager(
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
 	functionNamespace string,
-	fsCache *fscache.FunctionServiceCache,
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{
@@ -85,7 +86,8 @@ func MakeGenericPoolManager(
 		kubernetesClient: kubernetesClient,
 		namespace:        functionNamespace,
 		fissionClient:    fissionClient,
-		fsCache:          fsCache,
+		functionEnv:      cache.MakeCache(10*time.Second, 0),
+		fsCache:          fscache.MakeFunctionServiceCache(),
 		instanceId:       instanceId,
 		requestChannel:   make(chan *request),
 		idlePodReapTime:  2 * time.Minute,
@@ -185,6 +187,53 @@ func (gpm *GenericPoolManager) CleanupPools(envs []crd.Environment) {
 		requestType: CLEANUP_POOLS,
 		envList:     envs,
 	}
+}
+
+func (gpm *GenericPoolManager) GetFuncSvc(metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+	// from Func -> get Env
+	log.Printf("[%v] getting environment for function", metadata.Name)
+	env, err := gpm.getFunctionEnv(metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	pool, err := gpm.GetPool(env)
+	if err != nil {
+		return nil, err
+	}
+	// from GenericPool -> get one function container
+	// (this also adds to the cache)
+	log.Printf("[%v] getting function service from pool", metadata.Name)
+	return pool.GetFuncSvc(metadata)
+}
+
+func (gpm *GenericPoolManager) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {
+	var env *crd.Environment
+
+	// Cached ?
+	result, err := gpm.functionEnv.Get(crd.CacheKey(m))
+	if err == nil {
+		env = result.(*crd.Environment)
+		return env, nil
+	}
+
+	// Cache miss -- get func from controller
+	f, err := gpm.fissionClient.Functions(m.Namespace).Get(m.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get env from metadata
+	log.Printf("[%v] getting env", m)
+	env, err = gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// cache for future lookups
+	gpm.functionEnv.Set(crd.CacheKey(m), env)
+
+	return env, nil
 }
 
 func (gpm *GenericPoolManager) eagerPoolCreator() {

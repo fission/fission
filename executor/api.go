@@ -90,6 +90,10 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 		return "", resp.err
 	}
 	executor.fsCache.IncreaseColdStarts(m.Name, string(m.UID))
+	_, err = executor.fsCache.Add(*resp.funcSvc)
+	if err != nil {
+		return "", err
+	}
 	return resp.funcSvc.Address, resp.err
 }
 

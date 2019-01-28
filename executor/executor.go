@@ -31,7 +31,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/fission/fission/cache"
 	"github.com/fission/fission/crd"
 	"github.com/fission/fission/executor/fscache"
 	"github.com/fission/fission/executor/newdeploy"
@@ -41,9 +40,9 @@ import (
 
 type (
 	Executor struct {
-		gpm           *poolmgr.GenericPoolManager
-		ndm           *newdeploy.NewDeploy
-		functionEnv   *cache.Cache
+		gpm *poolmgr.GenericPoolManager
+		ndm *newdeploy.NewDeploy
+
 		fissionClient *crd.FissionClient
 		fsCache       *fscache.FunctionServiceCache
 
@@ -65,7 +64,6 @@ func MakeExecutor(gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fis
 	executor := &Executor{
 		gpm:           gpm,
 		ndm:           ndm,
-		functionEnv:   cache.MakeCache(10*time.Second, 0),
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
 
@@ -154,21 +152,7 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 	case fission.ExecutorTypeNewdeploy:
 		fsvc, fsvcErr = executor.ndm.GetFuncSvc(meta)
 	default:
-		// from Func -> get Env
-		log.Printf("[%v] getting environment for function", meta.Name)
-		env, err := executor.getFunctionEnv(meta)
-		if err != nil {
-			return nil, err
-		}
-
-		pool, err := executor.gpm.GetPool(env)
-		if err != nil {
-			return nil, err
-		}
-		// from GenericPool -> get one function container
-		// (this also adds to the cache)
-		log.Printf("[%v] getting function service from pool", meta.Name)
-		fsvc, fsvcErr = pool.GetFuncSvc(meta)
+		fsvc, fsvcErr = executor.gpm.GetFuncSvc(meta)
 	}
 
 	if fsvcErr != nil {
@@ -177,35 +161,6 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 	}
 
 	return fsvc, fsvcErr
-}
-
-func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment, error) {
-	var env *crd.Environment
-
-	// Cached ?
-	result, err := executor.functionEnv.Get(crd.CacheKey(m))
-	if err == nil {
-		env = result.(*crd.Environment)
-		return env, nil
-	}
-
-	// Cache miss -- get func from controller
-	f, err := executor.fissionClient.Functions(m.Namespace).Get(m.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get env from metadata
-	log.Printf("[%v] getting env", m)
-	env, err = executor.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// cache for future lookups
-	executor.functionEnv.Set(crd.CacheKey(m), env)
-
-	return env, nil
 }
 
 // isValidAddress invokes isValidService or isValidPod depending on the type of executor
@@ -255,11 +210,11 @@ func StartExecutor(fissionNamespace string, functionNamespace string, envBuilder
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient,
-		functionNamespace, fsCache, poolID)
+		functionNamespace, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(
 		fissionClient, kubernetesClient, restClient,
-		functionNamespace, fsCache, poolID)
+		functionNamespace, poolID)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 
