@@ -276,11 +276,6 @@ func (deploy *NewDeploy) deleteFunction(fn *crd.Function) error {
 }
 
 func (deploy *NewDeploy) fnCreate(fn *crd.Function, firstcreate bool) (*fscache.FuncSvc, error) {
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
-	if err == nil {
-		return fsvc, err
-	}
-
 	env, err := deploy.fissionClient.
 		Environments(fn.Spec.Environment.Namespace).
 		Get(fn.Spec.Environment.Name)
@@ -289,6 +284,13 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function, firstcreate bool) (*fscache.
 	}
 
 	objName := deploy.getObjName(fn)
+	if !firstcreate {
+		// retrieve back the previous obj name for later use.
+		fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
+		if err == nil {
+			objName = fsvc.Name
+		}
+	}
 	deployLabels := deploy.getDeployLabels(fn, env)
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
@@ -351,7 +353,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function, firstcreate bool) (*fscache.
 		},
 	}
 
-	fsvc = &fscache.FuncSvc{
+	fsvc := &fscache.FuncSvc{
 		Name:              objName,
 		Function:          &fn.Metadata,
 		Environment:       env,
