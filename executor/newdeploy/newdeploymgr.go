@@ -251,7 +251,7 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function, firstcreate bool) (*fscache.
 
 	kubeObjRefs := []apiv1.ObjectReference{
 		{
-			//obj.TypeMeta.Kind does not work hence this, needs investigationa and a fix
+			//obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
 			Name:            depl.ObjectMeta.Name,
 			APIVersion:      depl.TypeMeta.APIVersion,
