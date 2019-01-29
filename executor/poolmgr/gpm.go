@@ -159,7 +159,7 @@ func (gpm *GenericPoolManager) service() {
 				if !ok || poolsize == 0 {
 					// Env no longer exists or pool size changed to zero
 
-					log.Printf("Destroying generic pool for environment [%v]", key)
+					log.Printf("Destroying generic pool for environment %v", pool.env.Metadata)
 					delete(gpm.pools, key)
 
 					// and delete the pool asynchronously.
