@@ -127,9 +127,8 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *crd.Function)
 	return nil
 }
 
-func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, error) {
-	deployName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(fn.Metadata.Namespace).Get(deployName, metav1.GetOptions{})
+func (deploy *NewDeploy) getDeployment(ns, name string) (*v1beta1.Deployment, error) {
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Get(name, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment, ns string) error {
@@ -428,9 +427,8 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 }
 
-func (deploy *NewDeploy) getHpa(ns string, fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
-	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(hpaName, metav1.GetOptions{})
+func (deploy *NewDeploy) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(name, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
@@ -510,6 +508,7 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 	return nil, errors.New("failed to create deployment within timeout window")
 }
 
+// cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 	var multierr *multierror.Error
 
