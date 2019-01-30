@@ -39,6 +39,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	fetcherConfig "github.com/fission/fission/environments/fetcher/config"
 	"github.com/fission/fission/executor/fscache"
 )
 
@@ -50,14 +51,10 @@ type (
 		fissionClient    *crd.FissionClient
 		crdClient        *rest.RESTClient
 		instanceID       string
+		fetcherConfig    *fetcherConfig.Config
 
-		fetcherImg             string
-		fetcherImagePullPolicy apiv1.PullPolicy
 		runtimeImagePullPolicy apiv1.PullPolicy
 		namespace              string
-		sharedMountPath        string
-		sharedSecretPath       string
-		sharedCfgMapPath       string
 		useIstio               bool
 
 		fsCache        *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
@@ -95,19 +92,11 @@ func MakeNewDeploy(
 	crdClient *rest.RESTClient,
 	namespace string,
 	fsCache *fscache.FunctionServiceCache,
+	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 ) *NewDeploy {
 
 	log.Printf("Creating NewDeploy ExecutorType")
-
-	fetcherImg := os.Getenv("FETCHER_IMAGE")
-	if len(fetcherImg) == 0 {
-		fetcherImg = "fission/fetcher"
-	}
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
 
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -124,21 +113,17 @@ func MakeNewDeploy(
 		crdClient:        crdClient,
 		instanceID:       instanceID,
 
-		namespace: namespace,
-		fsCache:   fsCache,
+		fetcherConfig: fetcherConfig,
+		namespace:     namespace,
+		fsCache:       fsCache,
 
-		fetcherImg:       fetcherImg,
-		sharedMountPath:  "/userfunc",
-		sharedSecretPath: "/secrets",
-		sharedCfgMapPath: "/configs",
-		useIstio:         enableIstio,
+		useIstio: enableIstio,
 
 		requestChannel:  make(chan *fnRequest),
 		idlePodReapTime: 2 * time.Minute,
 	}
 
 	nd.runtimeImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
-	nd.fetcherImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
 
 	if nd.crdClient != nil {
 		fnStore, fnController := nd.initFuncController()

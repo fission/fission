@@ -20,6 +20,7 @@ import (
 	"log"
 
 	"github.com/fission/fission/crd"
+	fetcherConfig "github.com/fission/fission/environments/fetcher/config"
 )
 
 // Start the buildermgr service.
@@ -36,7 +37,12 @@ func Start(storageSvcUrl string, envBuilderNamespace string) error {
 		log.Fatalf("Error waiting for CRDs: %v", err)
 	}
 
-	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, envBuilderNamespace)
+	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/packages")
+	if err != nil {
+		log.Fatalf("Error making fetcher config: %v", err)
+	}
+
+	envWatcher := makeEnvironmentWatcher(fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
 	pkgWatcher := makePackageWatcher(fissionClient,
