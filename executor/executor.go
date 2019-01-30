@@ -158,13 +158,14 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 	if fsvcErr != nil {
 		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%v] Error creating service for function", meta.Name))
 		log.Print(fsvcErr)
+	} else if fsvc != nil {
+		_, err = executor.fsCache.Add(*fsvc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	executor.fsCache.IncreaseColdStarts(meta.Name, string(meta.UID))
-	_, err = executor.fsCache.Add(*fsvc)
-	if err != nil {
-		return nil, err
-	}
 
 	return fsvc, fsvcErr
 }
