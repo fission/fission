@@ -66,10 +66,10 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	//the parameters above are only for the where clause and do not work with LIMIT
 
 	if filter.Pod != "" {
-		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from \"log\" where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
-		queryCmd = "select * from \"log\" where \"funcuid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from \"log\" where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 	}
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)

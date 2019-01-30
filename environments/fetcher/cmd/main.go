@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 
 	"go.uber.org/zap"
@@ -21,10 +20,6 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
-
-func dumpStackTrace() {
-	debug.PrintStack()
-}
 
 func registerTraceExporter(collectorEndpoint string) error {
 	if collectorEndpoint == "" {
@@ -51,6 +46,7 @@ func registerTraceExporter(collectorEndpoint string) error {
 
 // Usage: fetcher <shared volume path>
 func main() {
+<<<<<<< HEAD
 	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
@@ -58,11 +54,18 @@ func main() {
 	defer logger.Sync()
 
 	// register signal handler for dumping stack trace.
+=======
+>>>>>>> Switch from fluentd to fluentbit for log forwarding
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM)
 	go func() {
 		<-c
+<<<<<<< HEAD
 		logger.Fatal("received SIGTERM")
+=======
+		log.Println("Received SIGTERM")
+		os.Exit(1)
+>>>>>>> Switch from fluentd to fluentbit for log forwarding
 	}()
 
 	flag.Usage = fetcherUsage

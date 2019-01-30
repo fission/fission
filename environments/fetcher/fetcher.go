@@ -16,12 +16,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
