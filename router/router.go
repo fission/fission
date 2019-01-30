@@ -76,7 +76,6 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 	url := fmt.Sprintf(":%v", port)
 	http.ListenAndServe(url, &ochttp.Handler{
 		Handler: mr,
-		// Propagation: &b3.HTTPFormat{},
 		StartOptions: trace.StartOptions{
 			Sampler: trace.AlwaysSample(),
 		},
