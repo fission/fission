@@ -107,19 +107,6 @@ build_and_push_builder() {
     popd
 }
 
-build_and_push_fluentd(){
-    image_tag=$1
-
-    pushd $ROOT/logger/fluentd
-    docker build -q -t $image_tag .
-
-    gcloud_login
-
-    gcloud docker -- push $image_tag
-    popd
-
-}
-
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2

@@ -71,8 +71,9 @@ Parameter | Description | Default
 --------- | ----------- | -------
 `createNamespace` | If true, create `fission-function` and `fission-builder` namespaces | ` true`
 `logger.influxdbAdmin` | Log database admin username | `admin`
-`logger.fluentdImage` | Logger fluentd image | `fission/fluentd`
-`logger.fluentdImageTag` | Fission ui image tag | `1.0.0`
+`logger.fluentdImage` | Logger fluentd image | `fluent/fluent-bit`
+`logger.fluentdImageTag` | Fission ui image tag | `0.13`
+>>>>>>> Fix CLI unable to query logs
 `nats.enabled` | Nats streaming enabled | `true`
 `nats.authToken` | Nats streaming auth token | `defaultFissionAuthToken`
 `nats.clusterID` | Nats streaming clusterID | `fissionMQTrigger`

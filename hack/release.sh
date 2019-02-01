@@ -46,12 +46,6 @@ push_builder_image() {
     docker push $tag
 }
 
-push_logger_image() {
-    local version=$1
-    local tag=fission/fluentd:$version
-    docker push $tag
-}
-
 push_env_image() {
     local version=$1
     envdir=$2
@@ -140,9 +134,6 @@ push_all() {
 
     push_builder_image $version
     push_builder_image latest
-
-    push_logger_image $version
-    push_logger_image latest
 
     push_pre_upgrade_checks_image $version
     push_pre_upgrade_checks_image latest

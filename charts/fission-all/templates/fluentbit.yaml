@@ -33,13 +33,8 @@ spec:
         svc: logger
     spec:
       containers:
-<<<<<<< HEAD:charts/fission-all/templates/fluentd.yaml
-        - name: fluentd
-          image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
-=======
         - name: fluentbit
-          image: fluent/fluent-bit:0.13
->>>>>>> Switch from fluentd to fluentbit for log forwarding:charts/fission-all/templates/fluentbit.yaml
+          image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
           imagePullPolicy: {{ .Values.pullPolicy }}
           # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
           command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
