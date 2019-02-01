@@ -85,8 +85,8 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 
 	// A bug in fluent-bit influxdb plugin adds additional double quotes to value of tag key. (value -> "value")
 	// which breaks the query. To fix this, we use single quote to quote the tag value ('"value"'). However, it
-	// makes influxdb client unable to do parameter replacement in the query, so here we use fmt.Sprint to replace
-	// value manually until the bug is fixed.
+	// makes influxdb client unable to do parameter replacement in the query, so here we use fmt.Sprintf to replace
+	// value manually until the bug gets fixed.
 	// More details: https://github.com/fluent/fluent-bit/issues/592
 	queryCmd = fmt.Sprintf(queryCmd, filter.FuncUid)
 

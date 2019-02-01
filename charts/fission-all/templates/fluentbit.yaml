@@ -34,7 +34,11 @@ spec:
     spec:
       containers:
         - name: fluentbit
+<<<<<<< HEAD
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+=======
+          image: fluent/fluent-bit:0.13
+>>>>>>> Fix bugs & CI failure
           imagePullPolicy: {{ .Values.pullPolicy }}
           # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
           command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
