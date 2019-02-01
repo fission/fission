@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	ns "github.com/nats-io/go-nats-streaming"
@@ -47,6 +48,9 @@ type (
 )
 
 func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
+
+	natsClusterID := getEnv("NATSCLUSTERID", natsClusterID)
+	natsClientID := getEnv("NATSCLIENTID", natsClientID)
 	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url))
 	if err != nil {
 		return nil, err
@@ -56,6 +60,14 @@ func makeNatsMessageQueue(routerUrl string, mqCfg MessageQueueConfig) (MessageQu
 		routerUrl: routerUrl,
 	}
 	return nats, nil
+}
+
+func getEnv(key, fallback string) string {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		value = fallback
+	}
+	return value
 }
 
 func (nats Nats) subscribe(trigger *crd.MessageQueueTrigger) (messageQueueSubscription, error) {
