@@ -41,6 +41,8 @@ spec:
           image: fluent/fluent-bit:0.13
 >>>>>>> Switch from fluentd to fluentbit for log forwarding:charts/fission-all/templates/fluentbit.yaml
           imagePullPolicy: {{ .Values.pullPolicy }}
+          # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+          command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
           env:
             - name: INFLUXDB_ADDRESS
               value: influxdb
