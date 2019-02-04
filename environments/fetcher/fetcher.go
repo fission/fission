@@ -99,7 +99,7 @@ func downloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 		return err
 	}
 
-	nil
+	return nil
 }
 
 func getChecksum(path string) (*fission.Checksum, error) {

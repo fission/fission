@@ -24,14 +24,14 @@ func dumpStackTrace() {
 	debug.PrintStack()
 }
 
-func registerTraceExporter(jaegerCollectorEndpoint string) error {
-	if jaegerCollectorEndpoint == "" {
+func registerTraceExporter(collectorEndpoint string) error {
+	if collectorEndpoint == "" {
 		return nil
 	}
 
 	serviceName := "Fission-Fetcher"
 	exporter, err := jaeger.NewExporter(jaeger.Options{
-		CollectorEndpoint: jaegerCollectorEndpoint,
+		CollectorEndpoint: collectorEndpoint,
 		Process: jaeger.Process{
 			ServiceName: serviceName,
 			Tags: []jaeger.Tag{
@@ -60,7 +60,7 @@ func main() {
 	}()
 
 	flag.Usage = fetcherUsage
-	jaegerCollectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
+	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
 	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
@@ -82,7 +82,7 @@ func main() {
 		}
 	}
 
-	if err := registerTraceExporter(*jaegerCollectorEndpoint); err != nil {
+	if err := registerTraceExporter(*collectorEndpoint); err != nil {
 		log.Fatalf("Could not register trace exporter: %v", err)
 	}
 

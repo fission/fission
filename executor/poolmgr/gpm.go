@@ -55,8 +55,8 @@ type (
 		instanceId     string
 		requestChannel chan *request
 
-		enableIstio             bool
-		jaegerCollectorEndpoint string
+		enableIstio       bool
+		collectorEndpoint string
 
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
@@ -84,16 +84,16 @@ func MakeGenericPoolManager(
 	instanceId string) *GenericPoolManager {
 
 	gpm := &GenericPoolManager{
-		pools:                   make(map[string]*GenericPool),
-		kubernetesClient:        kubernetesClient,
-		namespace:               functionNamespace,
-		fissionClient:           fissionClient,
-		functionEnv:             cache.MakeCache(10*time.Second, 0),
-		fsCache:                 fscache.MakeFunctionServiceCache(),
-		instanceId:              instanceId,
-		requestChannel:          make(chan *request),
-		idlePodReapTime:         2 * time.Minute,
-		jaegerCollectorEndpoint: os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"),
+		pools:             make(map[string]*GenericPool),
+		kubernetesClient:  kubernetesClient,
+		namespace:         functionNamespace,
+		fissionClient:     fissionClient,
+		functionEnv:       cache.MakeCache(10*time.Second, 0),
+		fsCache:           fscache.MakeFunctionServiceCache(),
+		instanceId:        instanceId,
+		requestChannel:    make(chan *request),
+		idlePodReapTime:   2 * time.Minute,
+		collectorEndpoint: os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"),
 	}
 	go gpm.service()
 	go gpm.eagerPoolCreator()
@@ -145,7 +145,7 @@ func (gpm *GenericPoolManager) service() {
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
 					ns, gpm.namespace, gpm.fsCache, gpm.instanceId, gpm.enableIstio,
-					gpm.jaegerCollectorEndpoint)
+					gpm.collectorEndpoint)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue

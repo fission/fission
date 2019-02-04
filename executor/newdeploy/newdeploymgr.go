@@ -51,15 +51,15 @@ type (
 		crdClient        *rest.RESTClient
 		instanceID       string
 
-		fetcherImg              string
-		fetcherImagePullPolicy  apiv1.PullPolicy
-		runtimeImagePullPolicy  apiv1.PullPolicy
-		namespace               string
-		sharedMountPath         string
-		sharedSecretPath        string
-		sharedCfgMapPath        string
-		useIstio                bool
-		jaegerCollectorEndpoint string
+		fetcherImg             string
+		fetcherImagePullPolicy apiv1.PullPolicy
+		runtimeImagePullPolicy apiv1.PullPolicy
+		namespace              string
+		sharedMountPath        string
+		sharedSecretPath       string
+		sharedCfgMapPath       string
+		useIstio               bool
+		collectorEndpoint      string
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
 
@@ -86,7 +86,7 @@ func MakeNewDeploy(
 		fetcherImg = "fission/fetcher"
 	}
 
-	jaegerCollectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
+	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
 
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -107,14 +107,14 @@ func MakeNewDeploy(
 		fsCache:   fscache.MakeFunctionServiceCache(),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
-		fetcherImg:              fetcherImg,
-		fetcherImagePullPolicy:  fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY")),
-		runtimeImagePullPolicy:  fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
-		sharedMountPath:         "/userfunc",
-		sharedSecretPath:        "/secrets",
-		sharedCfgMapPath:        "/configs",
-		jaegerCollectorEndpoint: jaegerCollectorEndpoint,
-		useIstio:                enableIstio,
+		fetcherImg:             fetcherImg,
+		fetcherImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY")),
+		runtimeImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
+		sharedMountPath:        "/userfunc",
+		sharedSecretPath:       "/secrets",
+		sharedCfgMapPath:       "/configs",
+		collectorEndpoint:      collectorEndpoint,
+		useIstio:               enableIstio,
 
 		idlePodReapTime: 2 * time.Minute,
 	}

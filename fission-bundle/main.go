@@ -95,7 +95,7 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 }
 
 func registerTraceExporter(arguments map[string]interface{}) error {
-	collectorEndpoint := getStringArgWithDefault(arguments["--jaegerCollectorEndpoint"], "")
+	collectorEndpoint := getStringArgWithDefault(arguments["--collectorEndpoint"], "")
 	if collectorEndpoint == "" {
 		log.Print("Skipping trace exporter registration")
 		return nil
@@ -133,8 +133,13 @@ func registerTraceExporter(arguments map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	samplingRate, err := strconv.ParseFloat(os.Getenv("TRACING_SAMPLING_RATE"), 32)
+	if err != nil {
+		return err
+	}
 	trace.RegisterExporter(exporter)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.ProbabilitySampler(samplingRate)})
 	return nil
 }
 
@@ -161,17 +166,17 @@ Use it to start one or more of the fission servers:
  backends.
 
 Usage:
-  fission-bundle --controllerPort=<port> [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --routerPort=<port> [--executorUrl=<url>] [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>] [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --kubewatcher [--routerUrl=<url>] [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --storageServicePort=<port> --filePath=<filePath> [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>] [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --timer [--routerUrl=<url>] [--jaegerCollectorEndpoint=<url>]
-  fission-bundle --mqt   [--routerUrl=<url>] [--jaegerCollectorEndpoint=<url>]
+  fission-bundle --controllerPort=<port> [--collectorEndpoint=<url>]
+  fission-bundle --routerPort=<port> [--executorUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>] [--collectorEndpoint=<url>]
+  fission-bundle --kubewatcher [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --storageServicePort=<port> --filePath=<filePath> [--collectorEndpoint=<url>]
+  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>] [--collectorEndpoint=<url>]
+  fission-bundle --timer [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --mqt   [--routerUrl=<url>] [--collectorEndpoint=<url>]
   fission-bundle --version
 Options:
-  --jaegerCollectorEndpoint=<url> Jaeger HTTP Thrift collector URL.
+  --collectorEndpoint=<url> Jaeger HTTP Thrift collector URL.
   --controllerPort=<port>         Port that the controller should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
