@@ -288,8 +288,8 @@ spec:
           value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}
-          - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         readinessProbe:
           httpGet:
             path: "/healthz"
