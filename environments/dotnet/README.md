@@ -31,7 +31,8 @@ public class FissionFunction {
 }
 ```
 
-Please see examples below.
+Please see examples below, or if you are looking for ready-to-run examples, see 
+the [DotNet examples directory](../../examples/dotnet).
 
 ## Rebuilding and pushing the image
 
