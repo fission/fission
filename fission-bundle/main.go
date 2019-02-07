@@ -6,7 +6,10 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/docopt/docopt-go"
+	"go.opencensus.io/exporter/jaeger"
+	"go.opencensus.io/trace"
+
+	docopt "github.com/docopt/docopt-go"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/buildermgr"
@@ -91,6 +94,55 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 	}
 }
 
+func registerTraceExporter(arguments map[string]interface{}) error {
+	collectorEndpoint := getStringArgWithDefault(arguments["--collectorEndpoint"], "")
+	if collectorEndpoint == "" {
+		log.Print("Skipping trace exporter registration")
+		return nil
+	}
+
+	serviceName := "Fission-Unknown"
+
+	if arguments["--controllerPort"] != nil {
+		serviceName = "Fission-Controller"
+	} else if arguments["--routerPort"] != nil {
+		serviceName = "Fission-Router"
+	} else if arguments["--executorPort"] != nil {
+		serviceName = "Fission-Executor"
+	} else if arguments["--kubewatcher"] == true {
+		serviceName = "Fission-KubeWatcher"
+	} else if arguments["--timer"] == true {
+		serviceName = "Fission-Timer"
+	} else if arguments["--mqt"] == true {
+		serviceName = "Fission-MessageQueueTrigger"
+	} else if arguments["--builderMgr"] == true {
+		serviceName = "Fission-BuilderMgr"
+	} else if arguments["--storageServicePort"] != nil {
+		serviceName = "Fission-StorageSvc"
+	}
+
+	exporter, err := jaeger.NewExporter(jaeger.Options{
+		CollectorEndpoint: collectorEndpoint,
+		Process: jaeger.Process{
+			ServiceName: serviceName,
+			Tags: []jaeger.Tag{
+				jaeger.BoolTag("fission", true),
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	samplingRate, err := strconv.ParseFloat(os.Getenv("TRACING_SAMPLING_RATE"), 32)
+	if err != nil {
+		return err
+	}
+	trace.RegisterExporter(exporter)
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.ProbabilitySampler(samplingRate)})
+	return nil
+}
+
 func main() {
 	usage := `fission-bundle: Package of all fission microservices: controller, router, executor.
 
@@ -114,16 +166,17 @@ Use it to start one or more of the fission servers:
  backends.
 
 Usage:
-  fission-bundle --controllerPort=<port>
-  fission-bundle --routerPort=<port> [--executorUrl=<url>]
-  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
-  fission-bundle --kubewatcher [--routerUrl=<url>]
-  fission-bundle --storageServicePort=<port> --filePath=<filePath>
-  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
-  fission-bundle --timer [--routerUrl=<url>]
-  fission-bundle --mqt   [--routerUrl=<url>]
+  fission-bundle --controllerPort=<port> [--collectorEndpoint=<url>]
+  fission-bundle --routerPort=<port> [--executorUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>] [--collectorEndpoint=<url>]
+  fission-bundle --kubewatcher [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --storageServicePort=<port> --filePath=<filePath> [--collectorEndpoint=<url>]
+  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>] [--collectorEndpoint=<url>]
+  fission-bundle --timer [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --mqt   [--routerUrl=<url>] [--collectorEndpoint=<url>]
   fission-bundle --version
 Options:
+  --collectorEndpoint=<url> Jaeger HTTP Thrift collector URL.
   --controllerPort=<port>         Port that the controller should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
@@ -142,6 +195,11 @@ Options:
 `
 	version := fmt.Sprintf("Fission Bundle Version: %v", fission.BuildInfo().String())
 	arguments, err := docopt.Parse(usage, nil, true, version, false)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+
+	err = registerTraceExporter(arguments)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}

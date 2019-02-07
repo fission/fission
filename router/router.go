@@ -50,6 +50,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/trace"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
@@ -72,7 +74,12 @@ func router(ctx context.Context, httpTriggerSet *HTTPTriggerSet, resolver *funct
 func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) {
 	mr := router(ctx, httpTriggerSet, resolver)
 	url := fmt.Sprintf(":%v", port)
-	http.ListenAndServe(url, mr)
+	http.ListenAndServe(url, &ochttp.Handler{
+		Handler: mr,
+		StartOptions: trace.StartOptions{
+			Sampler: trace.AlwaysSample(),
+		},
+	})
 }
 
 func serveMetric() {

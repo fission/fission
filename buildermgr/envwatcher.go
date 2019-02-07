@@ -82,6 +82,7 @@ type (
 		fetcherImagePullPolicy apiv1.PullPolicy
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
+		collectorEndpoint      string
 	}
 )
 
@@ -105,6 +106,7 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 
 	fetcherImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
 	builderImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("BUILDER_IMAGE_PULL_POLICY"))
+	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
 
 	envWatcher := &environmentWatcher{
 		cache:                  make(map[string]*builderInfo),
@@ -116,6 +118,7 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 		fetcherImagePullPolicy: fetcherImagePullPolicy,
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
+		collectorEndpoint:      collectorEndpoint,
 	}
 
 	go envWatcher.service()
@@ -590,6 +593,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 							Command: []string{"/fetcher",
 								"-secret-dir", sharedSecretPath,
 								"-cfgmap-dir", sharedCfgMapPath,
+								"-jaeger-collector-endpoint", envw.collectorEndpoint,
 								sharedMountPath},
 							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,

@@ -17,6 +17,7 @@ limitations under the License.
 package poolmgr
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -67,6 +68,7 @@ type (
 		sharedMountPath        string // used by generic pool when creating env deployment to specify the share volume path for fetcher & env
 		sharedSecretPath       string
 		sharedCfgMapPath       string
+		collectorEndpoint      string
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -89,7 +91,8 @@ func MakeGenericPool(
 	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	instanceId string,
-	enableIstio bool) (*GenericPool, error) {
+	enableIstio bool,
+	collectorEndpoint string) (*GenericPool, error) {
 
 	log.Printf("Creating pool for environment %v", env.Metadata)
 
@@ -119,6 +122,7 @@ func MakeGenericPool(
 		sharedMountPath:   "/userfunc", // change this may break v1 compatibility, since most of the v1 environments have hard-coded "/userfunc" in loading path
 		sharedSecretPath:  "/secrets",
 		sharedCfgMapPath:  "/configs",
+		collectorEndpoint: collectorEndpoint,
 	}
 
 	gp.runtimeImagePullPolicy = fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -301,7 +305,7 @@ func (gp *GenericPool) getSpecializeUrl(podIP string) string {
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
-func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta) error {
+func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metadata *metav1.ObjectMeta) error {
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
@@ -354,7 +358,7 @@ func (gp *GenericPool) specializePod(pod *apiv1.Pod, metadata *metav1.ObjectMeta
 
 	log.Printf("[%v] specializing pod", metadata.Name)
 
-	err = fetcherClient.MakeClient(fetcherUrl).Specialize(&specializeReq)
+	err = fetcherClient.MakeClient(fetcherUrl).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
 	}
@@ -487,6 +491,7 @@ func (gp *GenericPool) createPool() error {
 							Command: []string{"/fetcher",
 								"-secret-dir", gp.sharedSecretPath,
 								"-cfgmap-dir", gp.sharedCfgMapPath,
+								"-jaeger-collector-endpoint", gp.collectorEndpoint,
 								gp.sharedMountPath},
 							// Pod is removed from endpoints list for service when it's
 							// state became "Termination". We used preStop hook as the
@@ -617,7 +622,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 	return svc, err
 }
 
-func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	log.Printf("[%v] Choosing pod from pool", m.Name)
 	newLabels := gp.labelsForFunction(m)
 
@@ -667,7 +672,7 @@ func (gp *GenericPool) GetFuncSvc(m *metav1.ObjectMeta) (*fscache.FuncSvc, error
 		return nil, err
 	}
 
-	err = gp.specializePod(pod, m)
+	err = gp.specializePod(ctx, pod, m)
 	if err != nil {
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err

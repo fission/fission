@@ -17,6 +17,7 @@ limitations under the License.
 package executor
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -50,6 +51,7 @@ type (
 		fsCreateWg  map[string]*sync.WaitGroup
 	}
 	createFuncServiceRequest struct {
+		ctx      context.Context
 		funcMeta *metav1.ObjectMeta
 		respChan chan *createFuncServiceResponse
 	}
@@ -98,7 +100,7 @@ func (executor *Executor) serveCreateFuncServices() {
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
 			go func() {
-				fsvc, err := executor.createServiceForFunction(m)
+				fsvc, err := executor.createServiceForFunction(req.ctx, m)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
@@ -137,7 +139,7 @@ func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fiss
 	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, nil
 }
 
-func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (executor *Executor) createServiceForFunction(ctx context.Context, meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
 	executorType, err := executor.getFunctionExecutorType(meta)
@@ -150,9 +152,9 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 
 	switch executorType {
 	case fission.ExecutorTypeNewdeploy:
-		fsvc, fsvcErr = executor.ndm.GetFuncSvc(meta)
+		fsvc, fsvcErr = executor.ndm.GetFuncSvc(ctx, meta)
 	default:
-		fsvc, fsvcErr = executor.gpm.GetFuncSvc(meta)
+		fsvc, fsvcErr = executor.gpm.GetFuncSvc(ctx, meta)
 	}
 
 	if fsvcErr != nil {
