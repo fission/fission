@@ -1,24 +1,24 @@
-# 1.0-rc2
-[Documentation](https://docs.fission.io/1.0-rc2/)
-## Downloads for 1.0-rc2
+# 1.0
+[Documentation](https://docs.fission.io/1.0/)
+## Downloads for 1.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-1.0-rc2.tgz](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2.tgz) | `c7fb37be332b2d4531933b288e89ec7173dde0408bcf4b53d1d2baac9c8e4041`
-[fission-core-1.0-rc2.tgz](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2.tgz) | `8c809ac8e22354671d5675f5c4e37ee0cb6c8db1f663a30a58f3a50fd01aa543`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-linux) | `dca4ff052aa51b2a28124141d56aa5adc5f79dac3e204ca1a9248a0f9a41ad9d`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-osx) | `b85e0702c33b5cb55c947f7b03034e050db2530de0d91cc76d121b9f3093c1b5`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-windows.exe) | `c917a04df2612c03815a7fd3f96e2130780d170a96c80d1c377d0f71fae602c4`
-[fission-all-1.0-rc2-minikube.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2-minikube.yaml) | `a0dd2bf3d29a4f4afd8d1b82a2d727fe742fd410a7de01223528ad296812ad1a`
-[fission-all-1.0-rc2.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2.yaml) | `db04835d2d0487bf314197de721bc54cc45725c22e0bd245b54ba0bf68149389`
-[fission-core-1.0-rc2-minikube.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2-minikube.yaml) | `0c420f503fc3c596a6b2ebd202d2ae54296cf782b2039c8260de4d942109a3f0`
-[fission-core-1.0-rc2.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2.yaml) | `5fe4171420c1c9312515852d8ded4431d77c7341614efbb303dd4d97cf876e24`
+[fission-all-1.0.tgz](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0.tgz) | `c7fb37be332b2d4531933b288e89ec7173dde0408bcf4b53d1d2baac9c8e4041`
+[fission-core-1.0.tgz](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0.tgz) | `8c809ac8e22354671d5675f5c4e37ee0cb6c8db1f663a30a58f3a50fd01aa543`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.0/fission-cli-linux) | `dca4ff052aa51b2a28124141d56aa5adc5f79dac3e204ca1a9248a0f9a41ad9d`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.0/fission-cli-osx) | `b85e0702c33b5cb55c947f7b03034e050db2530de0d91cc76d121b9f3093c1b5`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.0/fission-cli-windows.exe) | `c917a04df2612c03815a7fd3f96e2130780d170a96c80d1c377d0f71fae602c4`
+[fission-all-1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0-minikube.yaml) | `a0dd2bf3d29a4f4afd8d1b82a2d727fe742fd410a7de01223528ad296812ad1a`
+[fission-all-1.0.yaml](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0.yaml) | `db04835d2d0487bf314197de721bc54cc45725c22e0bd245b54ba0bf68149389`
+[fission-core-1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0-minikube.yaml) | `0c420f503fc3c596a6b2ebd202d2ae54296cf782b2039c8260de4d942109a3f0`
+[fission-core-1.0.yaml](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0.yaml) | `5fe4171420c1c9312515852d8ded4431d77c7341614efbb303dd4d97cf876e24`
 
 # Change Log
 
-## [1.0-rc2](https://github.com/fission/fission/tree/1.0-rc2) (2019-01-14)
-[Full Changelog](https://github.com/fission/fission/compare/1.0-rc1...1.0-rc2)
+## [1.0](https://github.com/fission/fission/tree/1.0) (2019-01-14)
+[Full Changelog](https://github.com/fission/fission/compare/1.0-rc1...1.0)
 
 **Merged pull requests:**
 

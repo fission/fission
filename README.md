@@ -104,12 +104,6 @@ Compiling Fission
 
 See the [compilation guide](https://docs.fission.io/contributing/).
 
-Status
-======
-
-Fission is in early alpha.  It's not suitable for production use just
-yet.  
-
 Reach us on [slack](http://slack.fission.io) or
 [twitter](https://twitter.com/fissionio).
 
