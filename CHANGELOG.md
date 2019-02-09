@@ -1,28 +1,51 @@
-# 1.0-rc2
-[Documentation](https://docs.fission.io/1.0-rc2/)
-## Downloads for 1.0-rc2
+# 1.0
+[Documentation](https://docs.fission.io/1.0/)
+## Downloads for 1.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-1.0-rc2.tgz](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2.tgz) | `c7fb37be332b2d4531933b288e89ec7173dde0408bcf4b53d1d2baac9c8e4041`
-[fission-core-1.0-rc2.tgz](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2.tgz) | `8c809ac8e22354671d5675f5c4e37ee0cb6c8db1f663a30a58f3a50fd01aa543`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-linux) | `dca4ff052aa51b2a28124141d56aa5adc5f79dac3e204ca1a9248a0f9a41ad9d`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-osx) | `b85e0702c33b5cb55c947f7b03034e050db2530de0d91cc76d121b9f3093c1b5`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.0-rc2/fission-cli-windows.exe) | `c917a04df2612c03815a7fd3f96e2130780d170a96c80d1c377d0f71fae602c4`
-[fission-all-1.0-rc2-minikube.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2-minikube.yaml) | `a0dd2bf3d29a4f4afd8d1b82a2d727fe742fd410a7de01223528ad296812ad1a`
-[fission-all-1.0-rc2.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-all-1.0-rc2.yaml) | `db04835d2d0487bf314197de721bc54cc45725c22e0bd245b54ba0bf68149389`
-[fission-core-1.0-rc2-minikube.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2-minikube.yaml) | `0c420f503fc3c596a6b2ebd202d2ae54296cf782b2039c8260de4d942109a3f0`
-[fission-core-1.0-rc2.yaml](https://github.com/fission/fission/releases/download/1.0-rc2/fission-core-1.0-rc2.yaml) | `5fe4171420c1c9312515852d8ded4431d77c7341614efbb303dd4d97cf876e24`
+[fission-all-1.0.tgz](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0.tgz) | `d209cc759a82b0defc31fec1692a6940a283458eef51784a73595067274a79d9`
+[fission-core-1.0.tgz](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0.tgz) | `c4e6fdc5e80c9c1bb59df5a10c4ac5a90056c3d1f043ad25b09c117840232b80`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.0/fission-cli-linux) | `f75d860784de7acbd864b7466378f432af1e04efeb5fe89c2e8a721bbc436112`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.0/fission-cli-osx) | `17bc29a7376a89998214a3335c2c96be638804556cd50ee295d8685e4d8a2752`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.0/fission-cli-windows.exe) | `f5ac8621c8e4e41b025745a6b77929a8165eb529573e1dbc512934f514afad3b`
+[fission-all-1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0-minikube.yaml) | `8f75ba7103549989c36c8079b9dcce65cca3f5cab1b6e8630eb2f44be1a5f174`
+[fission-all-1.0.yaml](https://github.com/fission/fission/releases/download/1.0/fission-all-1.0.yaml) | `985dda00d0a2db339e1ebe6e086ee36085bfb520c70c89ae8c1f0f6fa4c90a53`
+[fission-core-1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0-minikube.yaml) | `b9e1edf81cd042f7af294a74e6a9308c89260a39e9547646e941e98c8f45bf28`
+[fission-core-1.0.yaml](https://github.com/fission/fission/releases/download/1.0/fission-core-1.0.yaml) | `60118c5ec64e387c31f81b3a53f90a7aa31a4ae39ec69e9ddbda4a295b4e28f1`
 
 # Change Log
+
+## [1.0](https://github.com/fission/fission/tree/1.0) (2019-02-08)
+[Full Changelog](https://github.com/fission/fission/compare/1.0-rc2...1.0)
+
+**Merged pull requests:**
+
+- Fix unable to update the function value of route [\#1081](https://github.com/fission/fission/pull/1081) ([darkgerm](https://github.com/darkgerm))
+- Consider Pod Phase in IsReadyPod [\#1080](https://github.com/fission/fission/pull/1080) ([bhavin192](https://github.com/bhavin192))
+- Spec archive optimisation [\#1068](https://github.com/fission/fission/pull/1068) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix helm charts blank line [\#1065](https://github.com/fission/fission/pull/1065) ([darkgerm](https://github.com/darkgerm))
+- Update helm charts README [\#1064](https://github.com/fission/fission/pull/1064) ([darkgerm](https://github.com/darkgerm))
+- Make extra configuration a sub heading [\#1062](https://github.com/fission/fission/pull/1062) ([bhavin192](https://github.com/bhavin192))
+- Remove/Redirect out-of-date docs to fission doc site [\#1061](https://github.com/fission/fission/pull/1061) ([life1347](https://github.com/life1347))
+- V1.0 rc2 [\#1056](https://github.com/fission/fission/pull/1056) ([vishal-biyani](https://github.com/vishal-biyani))
+- Mac test utility [\#986](https://github.com/fission/fission/pull/986) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix executor tries to create same name deployment [\#1082](https://github.com/fission/fission/pull/1082) ([life1347](https://github.com/life1347))
+- OpenTracing for Fission [\#1079](https://github.com/fission/fission/pull/1079) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix fluentd plugin version to prevent version incompatible problem [\#1076](https://github.com/fission/fission/pull/1076) ([life1347](https://github.com/life1347))
+- Clear message in case of function/pod failure [\#1069](https://github.com/fission/fission/pull/1069) ([vishal-biyani](https://github.com/vishal-biyani))
+- Adding check for requirements file [\#1067](https://github.com/fission/fission/pull/1067) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix threads change value of http.DefaultTransport in router [\#1063](https://github.com/fission/fission/pull/1063) ([life1347](https://github.com/life1347))
+- Bumped up default CPU for fetcher, fixes \#1058 [\#1059](https://github.com/fission/fission/pull/1059) ([vishal-biyani](https://github.com/vishal-biyani))
+- Replace router svcAddrUpdateLocks with new throttler package for code readability&reusability [\#1047](https://github.com/fission/fission/pull/1047) ([life1347](https://github.com/life1347))
 
 ## [1.0-rc2](https://github.com/fission/fission/tree/1.0-rc2) (2019-01-14)
 [Full Changelog](https://github.com/fission/fission/compare/1.0-rc1...1.0-rc2)
 
 **Merged pull requests:**
 
-- Solve kubernetes/client-go nested vendor [\#1048](https://github.com/fission/fission/pull/1048) ([yesqiao](https://github.com/yesqiao))
+- solve kubernetes/client-go nested vendor [\#1048](https://github.com/fission/fission/pull/1048) ([yesqiao](https://github.com/yesqiao))
 - Include All Currently Supported Trigger Types [\#1043](https://github.com/fission/fission/pull/1043) ([gravypod](https://github.com/gravypod))
 - Update dotnet and perl environment docs for rebuilding env images [\#1035](https://github.com/fission/fission/pull/1035) ([life1347](https://github.com/life1347))
 - \[python-env\] PEP8 Fixes for server.py [\#1034](https://github.com/fission/fission/pull/1034) ([bhavin192](https://github.com/bhavin192))
