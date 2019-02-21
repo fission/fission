@@ -19,6 +19,7 @@ package canaryconfigmgr
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -47,19 +48,29 @@ type canaryConfigMgr struct {
 
 func MakeCanaryConfigMgr(fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, crdClient *rest.RESTClient, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
+		log.Info("Try to retrieve prometheus server information from environment variables")
+
+		var prometheusSvcHost, prometheusSvcPort string
 		// handle a case where there is a prometheus server is already installed, try to find the service from env variable
 		envVars := os.Environ()
+
 		for _, envVar := range envVars {
 			if strings.Contains(envVar, "PROMETHEUS_SERVER_SERVICE_HOST") {
-				envVarSplit := strings.Split(envVar, "=")
-				prometheusSvc = envVarSplit[1]
+				prometheusSvcHost = getEnvValue(envVar)
+			} else if strings.Contains(envVar, "PROMETHEUS_SERVER_SERVICE_PORT") {
+				prometheusSvcPort = getEnvValue(envVar)
+			}
+
+			if len(prometheusSvcHost) > 0 && len(prometheusSvcPort) > 0 {
 				break
 			}
 		}
+		prometheusSvc = fmt.Sprintf("http://%v:%v", prometheusSvcHost, prometheusSvcPort)
+	}
 
-		if prometheusSvc == "" {
-			return nil, fmt.Errorf("prometheus service not found, cant create canary config manager")
-		}
+	_, err := url.Parse(prometheusSvc)
+	if err != nil {
+		return nil, fmt.Errorf("prometheus service url not found/invalid, cant create canary config manager: %v", prometheusSvc)
 	}
 
 	promClient, err := MakePrometheusClient(prometheusSvc)
@@ -389,4 +400,9 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(oldCanaryConfig *crd.Can
 		return
 	}
 	canaryCfgMgr.addCanaryConfig(newCanaryConfig)
+}
+
+func getEnvValue(envVar string) string {
+	envVarSplit := strings.Split(envVar, "=")
+	return envVarSplit[1]
 }
