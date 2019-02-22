@@ -1,4 +1,4 @@
-FROM php:7.1-alpine
+FROM php:7.3-alpine
 
 ENV PATH="/root/.composer/vendor/bin:${PATH}" \
     COMPOSER_ALLOW_SUPERUSER=1
