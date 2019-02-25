@@ -22,6 +22,7 @@ RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositor
     jpeg-dev \
     libjpeg-turbo-dev \
     postgresql-dev \
+    libmcrypt-dev \
     libpng-dev \
     icu-dev \
     gettext-dev \
@@ -33,7 +34,9 @@ RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositor
     libc6-compat \
     openssl \
     gcc \
-    autoconf
+    autoconf \
+    make \
+    libc-dev
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/
 
@@ -61,6 +64,11 @@ RUN docker-php-ext-install \
     simplexml \
     xmlrpc \
     zip
+
+RUN pecl install \
+    mcrypt-1.0.2
+RUN docker-php-ext-enable \
+    mcrypt
 
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
