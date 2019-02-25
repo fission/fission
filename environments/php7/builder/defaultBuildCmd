@@ -3,7 +3,7 @@ set -euxo pipefail
 
 if [ -f ${SRC_PKG}/composer.json ]
 then
-    composer install -d ${SRC_PKG}
-    mv vendor ${SRC_PKG}
+    cd ${SRC_PKG}
+    composer install --no-interaction
 fi
 cp -r ${SRC_PKG} ${DEPLOY_PKG}

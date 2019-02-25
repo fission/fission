@@ -66,5 +66,3 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 COPY --from=0 /builder /builder
 COPY defaultBuildCmd /usr/local/bin/build
-RUN chmod +x /usr/local/bin/build
-
