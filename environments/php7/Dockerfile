@@ -3,13 +3,8 @@ FROM php:7.3-alpine
 ENV PATH="/root/.composer/vendor/bin:${PATH}" \
     COMPOSER_ALLOW_SUPERUSER=1
 
-RUN echo '#!/bin/sh' > /usr/local/bin/apk-install \
-    && echo 'apk add --update "$@" && rm -rf /var/cache/apk/*' >> /usr/local/bin/apk-install \
-    && chmod +x /usr/local/bin/apk-install
-
 RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositories \
-    && apk update \
-    && apk-install \
+    && apk --no-cache add \
     git \
     curl \
     curl-dev \
