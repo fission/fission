@@ -151,8 +151,12 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *crd.Me
 
 	// Set the headers came from Kafka record
 	// Using Header.Add() as msg.Headers may have keys with more than one value
-	for _, h := range msg.Headers {
-		req.Header.Add(string(h.Key), string(h.Value))
+	if kafka.version.IsAtLeast(sarama.V0_11_0_0) {
+		for _, h := range msg.Headers {
+			req.Header.Add(string(h.Key), string(h.Value))
+		}
+	} else {
+		log.Warningf("Headers are not supported by Kafka version %q, needs v0.11+: no record headers to add in HTTP request", kafka.version)
 	}
 
 	for k, v := range fissionHeaders {
