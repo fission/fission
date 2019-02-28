@@ -1,3 +1,6 @@
+ARG BUILDER_IMAGE=fission/builder
+FROM ${BUILDER_IMAGE}
+
 FROM php:7.3-alpine
 
 ENV PATH="/root/.composer/vendor/bin:${PATH}" \
@@ -61,12 +64,7 @@ RUN docker-php-ext-install \
 
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-COPY . /app
-WORKDIR /app
+COPY --from=0 /builder /builder
+COPY defaultBuildCmd /usr/local/bin/build
+RUN chmod +x /usr/local/bin/build
 
-RUN composer install
-
-EXPOSE 8888
-
-ENTRYPOINT ["php"]
-CMD ["server.php"]
