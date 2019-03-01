@@ -3,13 +3,8 @@ FROM php:7.3-alpine
 ENV PATH="/root/.composer/vendor/bin:${PATH}" \
     COMPOSER_ALLOW_SUPERUSER=1
 
-RUN echo '#!/bin/sh' > /usr/local/bin/apk-install \
-    && echo 'apk add --update "$@" && rm -rf /var/cache/apk/*' >> /usr/local/bin/apk-install \
-    && chmod +x /usr/local/bin/apk-install
-
 RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositories \
-    && apk update \
-    && apk-install \
+    && apk --no-cache add \
     git \
     curl \
     curl-dev \
@@ -19,6 +14,7 @@ RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositor
     jpeg-dev \
     libjpeg-turbo-dev \
     postgresql-dev \
+    libmcrypt-dev \
     libpng-dev \
     icu-dev \
     gettext-dev \
@@ -30,7 +26,9 @@ RUN echo 'http://dl-4.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositor
     libc6-compat \
     openssl \
     gcc \
-    autoconf
+    autoconf \
+    make \
+    libc-dev
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/
 
@@ -58,6 +56,11 @@ RUN docker-php-ext-install \
     simplexml \
     xmlrpc \
     zip
+
+RUN pecl install \
+    mcrypt-1.0.2
+RUN docker-php-ext-enable \
+    mcrypt
 
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
