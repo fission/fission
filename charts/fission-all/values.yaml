@@ -74,7 +74,10 @@ kafka:
   enabled: false
   brokers: 'broker.kafka:9092'
   ## version of Kafka broker
-  ## Must be a string in the format "major.minor.veryMinor.patch"
+  ## For 0.x it must be a string in the format
+  ## "major.minor.veryMinor.patch" example: 0.8.2.0
+  ## For 1.x it must be a string in the format
+  ## "major.major.veryMinor" example: 2.0.1
   ## Should be >= 0.11.0.0 to enable Kafka record headers support
   # version: "0.11.0.0"
 
