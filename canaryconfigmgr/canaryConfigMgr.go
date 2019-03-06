@@ -50,7 +50,7 @@ type canaryConfigMgr struct {
 
 func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, crdClient *rest.RESTClient, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
-		log.Info("Try to retrieve prometheus server information from environment variables")
+		logger.Info("try to retrieve prometheus server information from environment variables")
 
 		var prometheusSvcHost, prometheusSvcPort string
 		// handle a case where there is a prometheus server is already installed, try to find the service from env variable
