@@ -4,6 +4,7 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use PhpParser\ParserFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use React\Http\Server;
 use RingCentral\Psr7\Response;
@@ -46,14 +47,27 @@ $server = new Server(function (ServerRequestInterface $request) use (&$codePath,
     }
     if ('/' === $path) {
         if (null === $codePath) {
+            $logger->error("$codePath not found");
             return new Response(500, [], 'Generic container: no requests supported');
         }
 
         ob_start();
 
-        if (!require $codePath) {
+        if (!file_exists($codePath)) {
+            $logger->error("$codePath not found");
             return new Response(500, [], "$codePath not found");
         }
+
+        $parser = (new ParserFactory)->create(ParserFactory::PREFER_PHP7);
+        try {
+            $parser->parse(file_get_contents($codePath));
+        } catch (Throwable $throwable) {
+            $logger->error($codePath . ' - ' . $throwable->getMessage());
+            return new Response(500, [], $codePath . ' - ' . $throwable->getMessage());
+        }
+
+        require $codePath;
+
         //If the function as an handler class it will be called with request, response and logger
         if (function_exists($userFunction)) {
             $response = new Response();
@@ -67,7 +81,6 @@ $server = new Server(function (ServerRequestInterface $request) use (&$codePath,
 
         return new Response(200, [], $bodyRowContent);
     }
-
 
     return new Response(404, ['Content-Type' => 'text/plain'], 'Not found');
 });
