@@ -30,11 +30,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dchest/uniuri"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/dchest/uniuri"
 	"github.com/fission/fission"
-	"github.com/pkg/errors"
 )
 
 const (

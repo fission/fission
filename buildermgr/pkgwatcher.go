@@ -91,15 +91,9 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 
 	pkgw.logger.Info("starting build for package", zap.String("package_name", srcpkg.Metadata.Name), zap.String("resource_version", srcpkg.Metadata.ResourceVersion))
 
-	pkg, err := updatePackage(pkgw.fissionClient, srcpkg, fission.BuildStatusRunning, "", nil)
+	pkg, err := updatePackage(pkgw.logger, pkgw.fissionClient, srcpkg, fission.BuildStatusRunning, "", nil)
 	if err != nil {
-		e := "error setting package pending state"
-		pkgw.logger.Error(e, zap.Error(err))
-		// I don't understand what the following line does - it seems like it's
-		// just to log the above error with the package, but the only error
-		// from that function comes from trying to update the package, so in
-		// theory this doesn't seem to do anything at all
-		updatePackage(pkgw.fissionClient, srcpkg, fission.BuildStatusFailed, fmt.Sprintf("%s: %v", e, err), nil)
+		pkgw.logger.Error("error setting package pending state", zap.Error(err))
 		return
 	}
 
@@ -107,7 +101,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
 		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
-		updatePackage(pkgw.fissionClient, pkg,
+		updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
 			fission.BuildStatusFailed, fmt.Sprintf("%s: %q", e, pkg.Spec.Environment.Name), nil)
 		return
 	}
@@ -180,11 +174,11 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.Metadata.Name))
-				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
+				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 				return
 			}
 
-			pkgw.logger.Info("starting package info update updating", zap.String("package_name", pkg.Metadata.Name))
+			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.Metadata.Name))
 
 			fnList, err := pkgw.fissionClient.
 				Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
@@ -192,7 +186,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 				e := "error getting function list"
 				pkgw.logger.Error(e, zap.Error(err))
 				buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
+				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 			}
 
 			// A package may be used by multiple functions. Update
@@ -208,17 +202,17 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 						e := "error updating function package resource version"
 						pkgw.logger.Error(e, zap.Error(err))
 						buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-						updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
+						updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 						return
 					}
 				}
 			}
 
-			_, err = updatePackage(pkgw.fissionClient, pkg,
+			_, err = updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
 				fission.BuildStatusSucceeded, buildLogs, uploadResp)
 			if err != nil {
 				pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.Metadata.Name))
-				updatePackage(pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
+				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fission.BuildStatusFailed, buildLogs, nil)
 				return
 			}
 
@@ -227,7 +221,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *crd.Package) 
 		}
 	}
 	// build timeout
-	updatePackage(pkgw.fissionClient, pkg,
+	updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
 		fission.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
 
 	pkgw.logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready",

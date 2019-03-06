@@ -137,7 +137,7 @@ func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
 }
 
 func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(canaryConfig *crd.CanaryConfig) {
-	canaryCfgMgr.logger.Info("addCanaryConfig called", zap.String("called_for", canaryConfig.Metadata.Name))
+	canaryCfgMgr.logger.Info("addCanaryConfig called", zap.String("canary_config", canaryConfig.Metadata.Name))
 
 	// for each canary config, create a ticker with increment interval
 	interval, err := time.ParseDuration(canaryConfig.Spec.WeightIncrementDuration)
@@ -355,7 +355,9 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 	for i := 0; i < fission.MaxRetries; i++ {
 		triggerObj, err := canaryCfgMgr.fissionClient.HTTPTriggers(triggerNamespace).Get(triggerName)
 		if err != nil {
-			return errors.Wrap(err, "error getting http trigger object")
+			e := "error getting http trigger object"
+			canaryCfgMgr.logger.Error(e, zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
+			return errors.Wrap(err, e)
 		}
 
 		triggerObj.Spec.FunctionReference.FunctionWeights = fnWeights
@@ -363,13 +365,21 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 		_, err = canaryCfgMgr.fissionClient.HTTPTriggers(triggerNamespace).Update(triggerObj)
 		switch {
 		case err == nil:
-			canaryCfgMgr.logger.Info("updated http trigger", zap.String("trigger", fmt.Sprintf("%s.%s", triggerName, triggerNamespace)))
+			canaryCfgMgr.logger.Info("updated http trigger", zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
 			return nil
 		case k8serrors.IsConflict(err):
-			canaryCfgMgr.logger.Info("conflict in updating http trigger, retrying", zap.Error(err), zap.String("trigger", fmt.Sprintf("%s.%s", triggerName, triggerNamespace)))
+			canaryCfgMgr.logger.Info("conflict in updating http trigger, retrying",
+				zap.Error(err),
+				zap.String("trigger_name", triggerName),
+				zap.String("trigger_namespace", triggerNamespace))
 			continue
 		default:
-			return errors.Wrapf(err, "error updating trigger: %s.%s", triggerName, triggerNamespace)
+			e := "error updating http trigger"
+			canaryCfgMgr.logger.Info(e,
+				zap.Error(err),
+				zap.String("trigger_name", triggerName),
+				zap.String("trigger_namespace", triggerNamespace))
+			return errors.Wrapf(err, "%s: %s.%s", e, triggerName, triggerNamespace)
 		}
 	}
 
@@ -380,7 +390,13 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName
 	for i := 0; i < fission.MaxRetries; i++ {
 		canaryCfgObj, err := canaryCfgMgr.fissionClient.CanaryConfigs(cfgNamespace).Get(cfgName)
 		if err != nil {
-			return errors.Wrap(err, "error getting http canary config object")
+			e := "error getting http canary config object"
+			canaryCfgMgr.logger.Error(e,
+				zap.Error(err),
+				zap.String("name", cfgName),
+				zap.String("namespace", cfgNamespace),
+				zap.String("status", status))
+			return errors.Wrap(err, e)
 		}
 
 		canaryCfgMgr.logger.Info("updating status of canary config",
@@ -404,7 +420,12 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName
 				zap.String("namespace", cfgNamespace))
 			continue
 		default:
-			return errors.Wrapf(err, "error updating canary config: %s.%s", cfgName, cfgNamespace)
+			e := "error updating canary config"
+			canaryCfgMgr.logger.Error(e,
+				zap.Error(err),
+				zap.String("name", cfgName),
+				zap.String("namespace", cfgNamespace))
+			return errors.Wrapf(err, "%s: %s.%s", e, cfgName, cfgNamespace)
 		}
 	}
 

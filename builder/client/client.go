@@ -24,11 +24,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	builder "github.com/fission/fission/builder"
-	"github.com/pkg/errors"
 )
 
 type (

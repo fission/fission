@@ -117,7 +117,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 	return uploadResp, buildResp.BuildLogs, nil
 }
 
-func updatePackage(fissionClient *crd.FissionClient,
+func updatePackage(logger *zap.Logger, fissionClient *crd.FissionClient,
 	pkg *crd.Package, status fission.BuildStatus, buildLogs string,
 	uploadResp *fission.ArchiveUploadResponse) (*crd.Package, error) {
 
@@ -137,7 +137,9 @@ func updatePackage(fissionClient *crd.FissionClient,
 	// update package spec
 	pkg, err := fissionClient.Packages(pkg.Metadata.Namespace).Update(pkg)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error updating package")
+		e := "error updating package"
+		logger.Error(e, zap.Error(err))
+		return nil, errors.Wrap(err, e)
 	}
 
 	// return resource version for function to update function package ref
