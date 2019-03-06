@@ -23,10 +23,9 @@ import (
 	"net/http"
 	"strings"
 
-	"go.uber.org/zap"
-
 	ns "github.com/nats-io/go-nats-streaming"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"

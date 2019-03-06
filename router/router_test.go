@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"

@@ -24,12 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/throttler"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"

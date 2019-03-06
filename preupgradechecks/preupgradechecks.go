@@ -19,10 +19,9 @@ package main
 import (
 	"fmt"
 
-	"go.uber.org/zap"
-
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

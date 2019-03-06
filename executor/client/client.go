@@ -26,14 +26,13 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
-	"github.com/pkg/errors"
 )
 
 type Client struct {

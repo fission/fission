@@ -20,9 +20,8 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"go.uber.org/zap"
-
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 //

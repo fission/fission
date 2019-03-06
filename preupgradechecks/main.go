@@ -19,9 +19,8 @@ package main
 import (
 	"log"
 
-	"go.uber.org/zap"
-
 	"github.com/docopt/docopt-go"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 )

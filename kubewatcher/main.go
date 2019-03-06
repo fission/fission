@@ -17,10 +17,11 @@ limitations under the License.
 package kubewatcher
 
 import (
-	"github.com/fission/fission/crd"
-	"github.com/fission/fission/publisher"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/publisher"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {

@@ -22,12 +22,11 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/local"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
+	"go.uber.org/zap"
 )
 
 type (

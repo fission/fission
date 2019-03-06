@@ -28,14 +28,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-
-	"github.com/pkg/errors"
-
-	"github.com/Azure/azure-sdk-for-go/storage"
 )
 
 // TODO: some of these constants should probably be environment variables

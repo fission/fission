@@ -22,15 +22,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dchest/uniuri"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/dchest/uniuri"
 	"github.com/fission/fission"
 	"github.com/fission/fission/builder"
 	builderClient "github.com/fission/fission/builder/client"
 	"github.com/fission/fission/crd"
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
-	"github.com/pkg/errors"
 )
 
 // buildPackage helps to build source package into deployment package.

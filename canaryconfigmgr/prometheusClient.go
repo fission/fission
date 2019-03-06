@@ -20,13 +20,11 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
-
-	"golang.org/x/net/context"
-
 	"github.com/pkg/errors"
 	promClient "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
+	"go.uber.org/zap"
+	"golang.org/x/net/context"
 )
 
 type PrometheusApiClient struct {

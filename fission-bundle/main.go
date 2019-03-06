@@ -6,12 +6,10 @@ import (
 	"os"
 	"strconv"
 
-	"go.uber.org/zap"
-
+	docopt "github.com/docopt/docopt-go"
 	"go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/trace"
-
-	docopt "github.com/docopt/docopt-go"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/buildermgr"

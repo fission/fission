@@ -17,8 +17,9 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/fission/fission/crd"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/crd"
 )
 
 func makeCRDBackedAPI(logger *zap.Logger) (*API, error) {

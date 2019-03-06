@@ -24,10 +24,9 @@ import (
 	"os"
 	"strings"
 
-	"go.uber.org/zap"
-
 	sarama "github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"

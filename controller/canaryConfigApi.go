@@ -22,9 +22,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"go.uber.org/zap"
-
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"

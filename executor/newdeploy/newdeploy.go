@@ -23,9 +23,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/hashicorp/go-multierror"
+	"go.uber.org/zap"
 	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"

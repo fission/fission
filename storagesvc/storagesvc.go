@@ -25,12 +25,12 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
-
-	"github.com/fission/fission"
 	"github.com/gorilla/mux"
 	_ "github.com/graymeta/stow/local"
 	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
+
+	"github.com/fission/fission"
 )
 
 type (

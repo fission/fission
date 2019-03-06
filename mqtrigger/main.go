@@ -19,10 +19,11 @@ package messagequeue
 import (
 	"os"
 
-	"github.com/fission/fission/crd"
-	"github.com/fission/fission/mqtrigger/messageQueue"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/crd"
+	"github.com/fission/fission/mqtrigger/messageQueue"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {

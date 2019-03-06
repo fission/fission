@@ -20,7 +20,6 @@ import (
 	"os"
 
 	"go.uber.org/zap"
-
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -26,9 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/dchest/uniuri"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission/storagesvc"
 )

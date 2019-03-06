@@ -17,9 +17,8 @@ limitations under the License.
 package timer
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/robfig/cron"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"

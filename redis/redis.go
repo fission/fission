@@ -24,12 +24,10 @@ import (
 	"os"
 	"strings"
 
-	"go.uber.org/zap"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
-
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission/redis/build/gen"
 )

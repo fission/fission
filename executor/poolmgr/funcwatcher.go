@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

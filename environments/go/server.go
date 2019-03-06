@@ -9,9 +9,8 @@ import (
 	"path/filepath"
 	"plugin"
 
-	"go.uber.org/zap"
-
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission/environments/go/context"
 )

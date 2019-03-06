@@ -1,10 +1,11 @@
 package router
 
 import (
-	"github.com/fission/fission/crd"
 	"go.uber.org/zap"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/fission/fission/crd"
 )
 
 type RecorderSet struct {

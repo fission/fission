@@ -26,9 +26,8 @@ import (
 	"net/url"
 	"sort"
 
-	"go.uber.org/zap"
-
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	restclient "k8s.io/client-go/rest"

@@ -21,8 +21,9 @@ import (
 	"net/http"
 	"os"
 
-	builder "github.com/fission/fission/builder"
 	"go.uber.org/zap"
+
+	builder "github.com/fission/fission/builder"
 )
 
 // Usage: builder <shared volume path>

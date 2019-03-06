@@ -19,14 +19,13 @@ package controller
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission/canaryconfigmgr"
 	"github.com/fission/fission/crd"
 	config "github.com/fission/fission/featureconfig"
-	"github.com/pkg/errors"
 )
 
 func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {

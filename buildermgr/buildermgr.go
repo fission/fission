@@ -17,9 +17,10 @@ limitations under the License.
 package buildermgr
 
 import (
-	"github.com/fission/fission/crd"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/crd"
 )
 
 // Start the buildermgr service.
