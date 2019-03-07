@@ -66,7 +66,7 @@ $server = new Server(function (ServerRequestInterface $request) use (&$codePath,
             return new Response(500, [], $codePath . ' - ' . $throwable->getMessage());
         }
 
-        require $codePath;
+        require_once $codePath;
 
         //If the function as an handler class it will be called with request, response and logger
         if (function_exists($userFunction)) {
