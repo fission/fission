@@ -24,14 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fission/fission"
-	"github.com/fission/fission/crd"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/Azure/azure-sdk-for-go/storage"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission"
+	"github.com/fission/fission/crd"
 )
 
 const (
@@ -103,7 +103,7 @@ func (m *azureHTTPClientMock) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestNewStorageConnectionMissingAccountName(t *testing.T) {
-	connection, err := newAzureStorageConnection(DummyRouterURL, MessageQueueConfig{
+	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
 		MQType: fission.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -113,7 +113,7 @@ func TestNewStorageConnectionMissingAccountName(t *testing.T) {
 
 func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
-	connection, err := newAzureStorageConnection(DummyRouterURL, MessageQueueConfig{
+	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
 		MQType: fission.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -125,7 +125,7 @@ func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
 func TestNewStorageConnection(t *testing.T) {
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_KEY", "bm90IGEga2V5")
-	connection, err := newAzureStorageConnection(DummyRouterURL, MessageQueueConfig{
+	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
 		MQType: "azure-storage-queue",
 		Url:    "",
 	})
@@ -278,6 +278,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 
 	// Create the storage connection and subscribe to the trigger
 	connection := AzureStorageConnection{
+		logger:     zap.New(nil),
 		routerURL:  DummyRouterURL,
 		service:    service,
 		httpClient: httpClient,
@@ -422,6 +423,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 
 	// Create the storage connection and subscribe to the trigger
 	connection := AzureStorageConnection{
+		logger:     zap.New(nil),
 		routerURL:  DummyRouterURL,
 		service:    service,
 		httpClient: httpClient,
