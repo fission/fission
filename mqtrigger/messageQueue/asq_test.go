@@ -18,6 +18,7 @@ package messageQueue
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -37,6 +38,12 @@ import (
 const (
 	DummyRouterURL = "http://localhost"
 )
+
+func panicIf(err error) {
+	if err != nil {
+		log.Panicf("Error: %v", err)
+	}
+}
 
 type azureQueueServiceMock struct {
 	mock.Mock
@@ -103,7 +110,10 @@ func (m *azureHTTPClientMock) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestNewStorageConnectionMissingAccountName(t *testing.T) {
-	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
+	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
 		MQType: fission.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -112,8 +122,11 @@ func TestNewStorageConnectionMissingAccountName(t *testing.T) {
 }
 
 func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
-	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
+	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
 		MQType: fission.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -123,9 +136,12 @@ func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
 }
 
 func TestNewStorageConnection(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_KEY", "bm90IGEga2V5")
-	connection, err := newAzureStorageConnection(zap.New(nil), DummyRouterURL, MessageQueueConfig{
+	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
 		MQType: "azure-storage-queue",
 		Url:    "",
 	})
@@ -276,9 +292,12 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	service.On("GetQueue", QueueName).Return(queue).Once()
 	service.On("GetQueue", QueueName+AzurePoisonQueueSuffix).Return(poisonQueue).Once()
 
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	// Create the storage connection and subscribe to the trigger
 	connection := AzureStorageConnection{
-		logger:     zap.New(nil),
+		logger:     logger,
 		routerURL:  DummyRouterURL,
 		service:    service,
 		httpClient: httpClient,
@@ -421,9 +440,12 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 		service.On("GetQueue", OutputQueueName).Return(outputQueue).Times(count)
 	}
 
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	// Create the storage connection and subscribe to the trigger
 	connection := AzureStorageConnection{
-		logger:     zap.New(nil),
+		logger:     logger,
 		routerURL:  DummyRouterURL,
 		service:    service,
 		httpClient: httpClient,

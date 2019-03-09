@@ -428,8 +428,11 @@ func TestCrd(t *testing.T) {
 	config, _, apiExtClient, err := GetKubernetesClient()
 	panicIf(err)
 
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	// init our types
-	err = EnsureFissionCRDs(zap.New(nil), apiExtClient)
+	err = EnsureFissionCRDs(logger, apiExtClient)
 	panicIf(err)
 
 	// rest client with knowledge about our crd types

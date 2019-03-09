@@ -26,7 +26,10 @@ import (
 )
 
 func TestFunctionServiceMap(t *testing.T) {
-	m := makeFunctionServiceMap(zap.New(nil), 0)
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
+	m := makeFunctionServiceMap(logger, 0)
 	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 	u, err := url.Parse("/foo012")
 	if err != nil {

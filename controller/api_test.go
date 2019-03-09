@@ -345,7 +345,10 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	go Start(zap.New(nil), 8888, true)
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
+	go Start(logger, 8888, true)
 
 	time.Sleep(5 * time.Second)
 	g.client = client.MakeClient("http://localhost:8888")
