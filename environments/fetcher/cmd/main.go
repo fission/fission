@@ -106,7 +106,7 @@ func main() {
 			ctx := context.Background()
 			err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
 			if err != nil {
-				log.Fatalf("Error specialing function poadt: %v", err)
+				log.Fatalf("Error specialing function pod: %v", err)
 			}
 
 			readyToServe = true
