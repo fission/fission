@@ -52,6 +52,8 @@ enableIstio: false
 
 ## Logger config
 logger:
+  fluentdImage: fluent/fluent-bit
+  fluentdImageTag: 1.0.4
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
