@@ -163,7 +163,7 @@ func (gp *GenericPool) getDeployLabels() map[string]string {
 		fission.ENVIRONMENT_NAME:          gp.env.Metadata.Name,
 		fission.ENVIRONMENT_NAMESPACE:     gp.env.Metadata.Namespace,
 		fission.ENVIRONMENT_UID:           string(gp.env.Metadata.UID),
-		"managed":                         "true", // this allows us to easily find pods that are managed by the deployment
+		"managed":                         "true", // this allows us to easily find pods managed by the deployment
 	}
 }
 
