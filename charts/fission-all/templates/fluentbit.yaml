@@ -23,7 +23,7 @@ data:
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
-  name: fluentbit
+  name: logger
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
@@ -33,6 +33,24 @@ spec:
         svc: logger
     spec:
       containers:
+        - name: logger
+          image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          command: ["/fission-bundle"]
+          args: ["--logger"]
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/
+              readOnly: false
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
         - name: fluentbit
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
           imagePullPolicy: {{ .Values.pullPolicy }}
@@ -56,7 +74,7 @@ spec:
                   name: influxdb
                   key: password
             - name: LOG_PATH
-              value: /var/log/containers/*{{.Values.functionNamespace}}*.log
+              value: /var/log/fission/*.log
           volumeMounts:
             - name: container-log
               mountPath: /var/log/

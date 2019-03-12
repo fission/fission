@@ -16,20 +16,12 @@ limitations under the License.
 
 package logger
 
-import "sync"
-
 type (
-	LogRequest struct {
-		Namespace   string `json:"namespace"`
-		Pod         string `json:"pod"`
-		Container   string `json:"container"`
-		FuncName    string `json:"funcname"`
-		FuncUid     string `json:"funcuid"`
-		ContainerID string `json:"-"`
-	}
-
-	logRequestTracker struct {
-		sync.RWMutex
-		logMap map[string]LogRequest
+	logInfo struct {
+		PodNamespace string
+		PodName      string
+		FuncName     string
+		FuncUid      string
+		//ContainerIDs []string
 	}
 )

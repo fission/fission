@@ -67,28 +67,19 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 
 	// In fluentd, we are able to use "rewrite-tag-filter" to rewrite tag to "log", so that we can
 	// select series from "log" measurements. The query would be like: SELECT * FROM "log" ....
-	// However. the fluent-bit doesn't such plugin yet, we have to select series from multiple measurements.
-	// The query becomes: SELECT * FROM /^kube.var.log.containers.*/
+	// However. the fluent-bit doesn't have such plugin yet, we need to select series from multiple measurements.
+	// The query becomes: SELECT * FROM /^kube.*/
 	// Once the tag rewrite feature is implemented, we can rollback to previous query.
 	// More details: https://github.com/fluent/fluent-bit/issues/293
 
 	if filter.Pod != "" {
 		// wait for bug fix for fluent-bit influxdb plugin
-		// queryCmd = "select * from /^kube.var.log.containers.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
-		queryCmd = "select * from /^kube.var.log.containers.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = '\"%v\"' AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^kube.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
 		// wait for bug fix for fluent-bit influxdb plugin
-		// queryCmd = "select * from /^kube.var.log.containers.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
-		queryCmd = "select * from /^kube.var.log.containers.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = '\"%v\"' AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^kube.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 	}
-
-	// A bug in fluent-bit influxdb plugin adds additional double quotes to value of tag key. (value -> "value")
-	// which breaks the query. To fix this, we use single quote to quote the tag value ('"value"'). However, it
-	// makes influxdb client unable to do parameter replacement in the query, so here we use fmt.Sprintf to replace
-	// value manually until the bug gets fixed.
-	// More details: https://github.com/fluent/fluent-bit/issues/592
-	queryCmd = fmt.Sprintf(queryCmd, filter.FuncUid)
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
 	logEntries := []LogEntry{}
