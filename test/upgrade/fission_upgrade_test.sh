@@ -93,7 +93,7 @@ sudo mv $ROOT/fission/fission /usr/local/bin/
 
 ## Upgrade 
 
-helmVars=repository=$repo,image=$IMAGE,imageTag=$TAG,fetcherImage=$FETCHER_IMAGE,fetcherImageTag=$TAG,logger.fluentdImage=$FLUENTD_IMAGE,logger.fluentdImageTag=$TAG,functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
+helmVars=repository=$repo,image=$IMAGE,imageTag=$TAG,fetcherImage=$FETCHER_IMAGE,fetcherImageTag=$TAG,logger.fluentdImageRepository=$repo,logger.fluentdImage=$FLUENTD_IMAGE,logger.fluentdImageTag=$TAG,functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType
 
 echo "Upgrading fission"
 helm upgrade	\
