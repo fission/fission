@@ -179,6 +179,10 @@ spec:
       labels:
         application: fission-router
         svc: router
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: router
@@ -251,6 +255,10 @@ spec:
     metadata:
       labels:
         svc: executor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: executor
