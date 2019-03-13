@@ -65,20 +65,13 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	parameters["time"] = timestamp
 	//the parameters above are only for the where clause and do not work with LIMIT
 
-	// In fluentd, we are able to use "rewrite-tag-filter" to rewrite tag to "log", so that we can
-	// select series from "log" measurements. The query would be like: SELECT * FROM "log" ....
-	// However. the fluent-bit doesn't have such plugin yet, we need to select series from multiple measurements.
-	// The query becomes: SELECT * FROM /^kube.*/
-	// Once the tag rewrite feature is implemented, we can rollback to previous query.
-	// More details: https://github.com/fluent/fluent-bit/issues/293
-
 	if filter.Pod != "" {
 		// wait for bug fix for fluent-bit influxdb plugin
-		queryCmd = "select * from /^kube.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
 		// wait for bug fix for fluent-bit influxdb plugin
-		queryCmd = "select * from /^kube.*/ where \"kubernetes_container_name\" != 'fetcher' AND \"kubernetes_labels_functionUid\" = $funcuid AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid  OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
 	}
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
@@ -93,9 +86,13 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 			//create map of columns to row indeces
 			indexMap := makeIndexMap(series.Columns)
 
-			container := indexMap["docker_container_id"]
+			// TODO: Remove fallback indexes. Some of index's name changed in fluent-bit, here we add extra fallbackIndexes to address compatibility problem.
+			container := indexMap["kubernetes_docker_id"]
+			container_1 := indexMap["docker_container_id"] // for backward compatibility
 			functionName := indexMap["kubernetes_labels_functionName"]
 			funcuid := indexMap["kubernetes_labels_functionUid"]
+			funcuid_1 := indexMap["funcuid"]                         // for backward compatibility
+			funcuid_2 := indexMap["kubernetes_labels_functionUid_1"] // for backward compatibility
 			logMessage := indexMap["log"]
 			nameSpace := indexMap["kubernetes_namespace_name"]
 			podName := indexMap["kubernetes_pod_name"]
@@ -111,18 +108,19 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 				if err != nil {
 					return logEntries, err
 				}
-				logEntries = append(logEntries, LogEntry{
+				entry := LogEntry{
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
 					Timestamp: t,
-					Container: row[container].(string),                            //docker_container_id
-					FuncName:  row[functionName].(string),                         //kubernetes_labels_functionName
-					FuncUid:   row[funcuid].(string),                              //funcuid
-					Message:   strings.TrimSuffix(row[logMessage].(string), "\n"), //log field
-					Namespace: row[nameSpace].(string),                            //kubernetes_namespace_name
-					Pod:       row[podName].(string),                              //kubernetes_pod_name
-					Stream:    row[stream].(string),                               //stream
-					Sequence:  seqNum,                                             //sequence tag
-				})
+					Container: getEntryValue(row, container, container_1),
+					FuncName:  getEntryValue(row, functionName, -1),
+					FuncUid:   getEntryValue(row, funcuid, funcuid_1, funcuid_2),
+					Message:   strings.TrimSuffix(getEntryValue(row, logMessage, -1), "\n"), //log field
+					Namespace: getEntryValue(row, nameSpace, -1),
+					Pod:       getEntryValue(row, podName, -1),
+					Stream:    getEntryValue(row, stream, -1),
+					Sequence:  seqNum, //sequence tag
+				}
+				logEntries = append(logEntries, entry)
 			}
 		}
 	}
@@ -183,4 +181,22 @@ func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Respon
 		return nil, fmt.Errorf("Failed to decode influxdb response: %v", err)
 	}
 	return &response, nil
+}
+
+// getEntryValue returns a field value in string type of log entry by providing index of log entry.
+// Since we switch from fluentd to fluent-bit, there are some field names' changed which will break
+// CLI due to empty value. For backward compatibility, getEntryValue also supports to get value from
+// fallbackIndex if exists, otherwise an empty string returned instead.
+func getEntryValue(list []interface{}, index int, fallbackIndex ...int) string {
+	if index < len(list) && list[index] != nil {
+		return list[index].(string)
+	}
+
+	for _, i := range fallbackIndex {
+		if i >= 0 && i < len(list) && list[i] != nil {
+			return list[i].(string)
+		}
+	}
+
+	return ""
 }
