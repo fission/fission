@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2018 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,13 @@ limitations under the License.
 package crd
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 
@@ -34,7 +36,7 @@ func panicIf(err error) {
 	}
 }
 
-func functionTests(crdClient *rest.RESTClient) {
+func functionTests(crdClient *rest.RESTClient) error {
 	// sample function object
 	function := &Function{
 		TypeMeta: metav1.TypeMeta{
@@ -79,15 +81,11 @@ func functionTests(crdClient *rest.RESTClient) {
 		log.Panicf("Bad result from Get: %v", f)
 	}
 
-	log.Printf("f.Metadata = %#v", f.Metadata)
-
 	// update
 	function.Metadata.ResourceVersion = f.Metadata.ResourceVersion
 	function.Spec.Environment.Name = "yyy"
 	f, err = fi.Update(function)
 	panicIf(err)
-
-	log.Printf("f.Metadata = %#v", f.Metadata)
 
 	// list
 	fl, err := fi.List(metav1.ListOptions{})
@@ -104,6 +102,12 @@ func functionTests(crdClient *rest.RESTClient) {
 	panicIf(err)
 
 	// start a watch
+
+	// Kubernetes watch returns a sequence changes of CRD resources.
+	// In some cases, the older changes will be returned and breaks the test.
+	// To prevent this, we wait for a couple of seconds to ensure we get all
+	// changes from the server and then verify the content of the object.
+
 	wi, err := fi.Watch(metav1.ListOptions{})
 	panicIf(err)
 
@@ -111,30 +115,32 @@ func functionTests(crdClient *rest.RESTClient) {
 	function.Metadata.ResourceVersion = ""
 	f, err = fi.Create(function)
 	panicIf(err)
-	defer fi.Delete(f.Metadata.Name, nil)
+	defer func() {
+		fi.Delete(f.Metadata.Name, nil)
+		wi.Stop()
+	}()
 
 	// assert that we get a watch event for the new function
-	recvd := false
-	select {
-	case <-time.NewTimer(1 * time.Second).C:
-		if !recvd {
-			log.Panicf("Didn't get watch event")
+	var watchFunc *Function
+	for {
+		select {
+		case <-time.NewTimer(3 * time.Second).C:
+			if watchFunc.Spec.Environment.Name != function.Spec.Environment.Name {
+				return fmt.Errorf("Bad object from watch: %#v", watchFunc)
+			}
+			log.Printf("watch event took %v", time.Since(start))
+			return nil
+		case ev := <-wi.ResultChan():
+			obj, ok := ev.Object.(*Function)
+			if !ok {
+				log.Panicf("Can't cast to Function")
+			}
+			watchFunc = obj
 		}
-	case ev := <-wi.ResultChan():
-		wf, ok := ev.Object.(*Function)
-		if !ok {
-			log.Panicf("Can't cast to Function")
-		}
-		if wf.Spec.Environment.Name != function.Spec.Environment.Name {
-			log.Panicf("Bad object from watch: %#v", wf)
-		}
-		log.Printf("watch event took %v", time.Since(start))
-		recvd = true
 	}
-
 }
 
-func environmentTests(crdClient *rest.RESTClient) {
+func environmentTests(crdClient *rest.RESTClient) error {
 	// sample environment object
 	environment := &Environment{
 		TypeMeta: metav1.TypeMeta{
@@ -204,30 +210,32 @@ func environmentTests(crdClient *rest.RESTClient) {
 	environment.Metadata.ResourceVersion = ""
 	e, err = ei.Create(environment)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer func() {
+		ei.Delete(e.Metadata.Name, nil)
+		wi.Stop()
+	}()
 
 	// assert that we get a watch event for the new environment
-	recvd := false
-	select {
-	case <-time.NewTimer(1 * time.Second).C:
-		if !recvd {
-			log.Panicf("Didn't get watch event")
+	var watchEnv *Environment
+	for {
+		select {
+		case <-time.NewTimer(3 * time.Second).C:
+			if watchEnv.Spec.Runtime.Image != environment.Spec.Runtime.Image {
+				return fmt.Errorf("Bad object from watch: %#v", watchEnv)
+			}
+			log.Printf("watch event took %v", time.Since(start))
+			return nil
+		case ev := <-wi.ResultChan():
+			obj, ok := ev.Object.(*Environment)
+			if !ok {
+				log.Panicf("Can't cast to Environment")
+			}
+			watchEnv = obj
 		}
-	case ev := <-wi.ResultChan():
-		obj, ok := ev.Object.(*Environment)
-		if !ok {
-			log.Panicf("Can't cast to Environment")
-		}
-		if obj.Spec.Runtime.Image != environment.Spec.Runtime.Image {
-			log.Panicf("Bad object from watch: %#v", obj)
-		}
-		log.Printf("watch event took %v", time.Since(start))
-		recvd = true
 	}
-
 }
 
-func httpTriggerTests(crdClient *rest.RESTClient) {
+func httpTriggerTests(crdClient *rest.RESTClient) error {
 	// sample httpTrigger object
 	httpTrigger := &HTTPTrigger{
 		TypeMeta: metav1.TypeMeta{
@@ -296,30 +304,32 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	httpTrigger.Metadata.ResourceVersion = ""
 	e, err = ei.Create(httpTrigger)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer func() {
+		ei.Delete(e.Metadata.Name, nil)
+		wi.Stop()
+	}()
 
 	// assert that we get a watch event for the new httpTrigger
-	recvd := false
-	select {
-	case <-time.NewTimer(1 * time.Second).C:
-		if !recvd {
-			log.Panicf("Didn't get watch event")
+	var watchHT *HTTPTrigger
+	for {
+		select {
+		case <-time.NewTimer(3 * time.Second).C:
+			if watchHT.Spec.Method != httpTrigger.Spec.Method {
+				return fmt.Errorf("Bad object from watch: %#v", watchHT)
+			}
+			log.Printf("watch event took %v", time.Since(start))
+			return nil
+		case ev := <-wi.ResultChan():
+			obj, ok := ev.Object.(*HTTPTrigger)
+			if !ok {
+				log.Panicf("Can't cast to HTTPTrigger")
+			}
+			watchHT = obj
 		}
-	case ev := <-wi.ResultChan():
-		obj, ok := ev.Object.(*HTTPTrigger)
-		if !ok {
-			log.Panicf("Can't cast to HTTPTrigger")
-		}
-		if obj.Spec.Method != httpTrigger.Spec.Method {
-			log.Panicf("Bad object from watch: %#v", obj)
-		}
-		log.Printf("watch event took %v", time.Since(start))
-		recvd = true
 	}
-
 }
 
-func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
+func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) error {
 	// sample kubernetesWatchTrigger object
 	kubernetesWatchTrigger := &KubernetesWatchTrigger{
 		TypeMeta: metav1.TypeMeta{
@@ -391,28 +401,32 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	kubernetesWatchTrigger.Metadata.ResourceVersion = ""
 	e, err = ei.Create(kubernetesWatchTrigger)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer func() {
+		ei.Delete(e.Metadata.Name, nil)
+		wi.Stop()
+	}()
 
 	// assert that we get a watch event for the new kubernetesWatchTrigger
-	recvd := false
-	select {
-	case <-time.NewTimer(1 * time.Second).C:
-		if !recvd {
-			log.Panicf("Didn't get watch event")
+	var watchKWT *KubernetesWatchTrigger
+	for {
+		select {
+		case <-time.NewTimer(3 * time.Second).C:
+			if watchKWT.Spec.Type != kubernetesWatchTrigger.Spec.Type {
+				return fmt.Errorf("Bad object from watch: %#v", watchKWT)
+			}
+			log.Printf("watch event took %v", time.Since(start))
+			return nil
+		case ev := <-wi.ResultChan():
+			obj, ok := ev.Object.(*KubernetesWatchTrigger)
+			if !ok {
+				log.Panicf("Can't cast to KubernetesWatchTrigger")
+			}
+			watchKWT = obj
 		}
-	case ev := <-wi.ResultChan():
-		obj, ok := ev.Object.(*KubernetesWatchTrigger)
-		if !ok {
-			log.Panicf("Can't cast to KubernetesWatchTrigger")
-		}
-		if obj.Spec.Type != kubernetesWatchTrigger.Spec.Type {
-			log.Panicf("Bad object from watch: %#v", obj)
-		}
-		log.Printf("watch event took %v", time.Since(start))
-		recvd = true
 	}
-
 }
+
+type crdTestFunc func(*rest.RESTClient) error
 
 func TestCrd(t *testing.T) {
 	// skip test if no cluster available for testing
@@ -438,8 +452,23 @@ func TestCrd(t *testing.T) {
 	err = waitForCRDs(crdClient)
 	panicIf(err)
 
-	functionTests(crdClient)
-	environmentTests(crdClient)
-	httpTriggerTests(crdClient)
-	kubernetesWatchTriggerTests(crdClient)
+	var g errgroup.Group
+
+	crdTestFuncs := []crdTestFunc{
+		functionTests,
+		environmentTests,
+		httpTriggerTests,
+		kubernetesWatchTriggerTests,
+	}
+
+	for i := range crdTestFuncs {
+		f := crdTestFuncs[i]
+		g.Go(func() error {
+			return f(crdClient)
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		log.Panicf("Error running test: %v", err)
+	}
 }
