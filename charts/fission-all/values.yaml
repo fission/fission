@@ -52,12 +52,10 @@ enableIstio: false
 
 ## Logger config
 logger:
-  fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.0.4
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 0.13
+  fluentdImageTag: 1.0.4
 
 ## Message queue trigger config
 ### NATS Streaming, enabled by default

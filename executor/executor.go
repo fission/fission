@@ -193,10 +193,6 @@ func (executor *Executor) isValidAddress(fsvc *fscache.FuncSvc) bool {
 	}
 }
 
-func dumpStackTrace() {
-	debug.PrintStack()
-}
-
 func serveMetric(logger *zap.Logger) {
 	// Expose the registered metrics via HTTP.
 	metricAddr := ":8080"
