@@ -52,7 +52,7 @@ func makePodLoggerController(zapLogger *zap.Logger, k8sClientSet *kubernetes.Cli
 				if !isValidFunctionPodOnNode(pod) || !fission.IsReadyPod(pod) {
 					return
 				}
-				err := createLogSymlinks(pod)
+				err := createLogSymlinks(zapLogger, pod)
 				if err != nil {
 					funcName := pod.Labels[fission.FUNCTION_NAME]
 					zapLogger.Error("error creating symlink",
