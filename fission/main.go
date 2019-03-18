@@ -324,7 +324,6 @@ func newCliApp() *cli.App {
 	}
 
 	app.Before = cliHook
-	app.CommandNotFound = handleCommandNotFound
 	app.Action = handleNoCommand
 	return app
 }
