@@ -1,15 +1,21 @@
-# Fluentd deployment for Fission
+# Fluentbit deployment for Fission
 #
 # Requires:
 # - service account: fission-svc
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-fission-fluentd
+  name: {{ .Release.Name }}-fission-fluentbit
 data:
-{{- if .Files.Get "config/fluentd.conf" }}
-  td-agent.conf: |
-{{ .Files.Get "config/fluentd.conf" | indent 3 }}
+{{- if .Files.Get "config/fluentbit.conf" }}
+  fluentbit.conf: |
+{{ .Files.Get "config/fluentbit.conf" | indent 3 }}
+{{ else }}
+{{ fail "invalid chart" }}
+{{- end }}
+{{- if .Files.Get "config/parsers.conf" }}
+  parsers.conf: |
+{{ .Files.Get "config/parsers.conf" | indent 3 }}
 {{ else }}
 {{ fail "invalid chart" }}
 {{- end }}
@@ -27,9 +33,29 @@ spec:
         svc: logger
     spec:
       containers:
-        - name: fluentd
+        - name: logger
+          image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          command: ["/fission-bundle"]
+          args: ["--logger"]
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/
+              readOnly: false
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+        - name: fluentbit
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
           imagePullPolicy: {{ .Values.pullPolicy }}
+          # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+          command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
           env:
             - name: INFLUXDB_ADDRESS
               value: influxdb
@@ -47,8 +73,8 @@ spec:
                 secretKeyRef:
                   name: influxdb
                   key: password
-            - name: FLUENTD_PATH
-              value: /var/log/containers/*{{.Values.functionNamespace}}*.log
+            - name: LOG_PATH
+              value: /var/log/fission/*.log
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
@@ -56,11 +82,8 @@ spec:
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true
-            - name: fission-log
-              mountPath: /var/log/fission
-              readOnly: false
-            - name: fluentd-config
-              mountPath: /etc/td-agent/
+            - name: fluentbit-config
+              mountPath: /fluent-bit/etc/
               readOnly: true
       serviceAccount: fission-svc
       volumes:
@@ -70,12 +93,9 @@ spec:
         - name: docker-log
           hostPath:
             path: /var/lib/docker/containers
-        - name: fission-log
-          hostPath:
-            path: /var/log/fission
-        # Fluentd config location: /etc/td-agent/td-agent.conf
-        - name: fluentd-config
+        # Fluentbit config location: /fluent-bit/etc/*.conf
+        - name: fluentbit-config
           configMap:
-            name: {{ .Release.Name }}-fission-fluentd
+            name: {{ .Release.Name }}-fission-fluentbit
   updateStrategy:
     type: RollingUpdate

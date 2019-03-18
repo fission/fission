@@ -16,6 +16,7 @@ import (
 	"github.com/fission/fission/controller"
 	"github.com/fission/fission/executor"
 	"github.com/fission/fission/kubewatcher"
+	functionLogger "github.com/fission/fission/logger"
 	"github.com/fission/fission/mqtrigger"
 	"github.com/fission/fission/router"
 	"github.com/fission/fission/storagesvc"
@@ -75,6 +76,11 @@ func runBuilderMgr(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace
 	if err != nil {
 		logger.Fatal("error starting builder manager", zap.Error(err))
 	}
+}
+
+func runLogger() {
+	functionLogger.Start()
+	log.Fatalf("Error: Logger exited.")
 }
 
 func getPort(logger *zap.Logger, portArg interface{}) int {
@@ -174,6 +180,7 @@ Usage:
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>] [--collectorEndpoint=<url>]
   fission-bundle --timer [--routerUrl=<url>] [--collectorEndpoint=<url>]
   fission-bundle --mqt   [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --logger
   fission-bundle --version
 Options:
   --collectorEndpoint=<url> Jaeger HTTP Thrift collector URL.
@@ -247,6 +254,10 @@ Options:
 
 	if arguments["--builderMgr"] == true {
 		runBuilderMgr(logger, storageSvcUrl, envBuilderNs)
+	}
+
+	if arguments["--logger"] == true {
+		runLogger()
 	}
 
 	if arguments["--storageServicePort"] != nil {

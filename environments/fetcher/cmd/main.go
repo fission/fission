@@ -8,23 +8,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"runtime/debug"
-	"syscall"
-
-	"go.uber.org/zap"
 
 	"go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
-
-func dumpStackTrace() {
-	debug.PrintStack()
-}
 
 func registerTraceExporter(collectorEndpoint string) error {
 	if collectorEndpoint == "" {
@@ -56,14 +48,6 @@ func main() {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
-
-	// register signal handler for dumping stack trace.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		logger.Fatal("received SIGTERM")
-	}()
 
 	flag.Usage = fetcherUsage
 	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")

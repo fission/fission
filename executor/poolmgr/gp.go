@@ -163,6 +163,7 @@ func (gp *GenericPool) getDeployLabels() map[string]string {
 		fission.ENVIRONMENT_NAME:          gp.env.Metadata.Name,
 		fission.ENVIRONMENT_NAMESPACE:     gp.env.Metadata.Namespace,
 		fission.ENVIRONMENT_UID:           string(gp.env.Metadata.UID),
+		"managed":                         "true", // this allows us to easily find pods managed by the deployment
 	}
 }
 
@@ -261,12 +262,13 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 }
 
 func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string]string {
-	return map[string]string{
-		"functionName":                    metadata.Name,
-		"functionUid":                     string(metadata.UID),
-		"unmanaged":                       "true", // this allows us to easily find pods not managed by the deployment
-		fission.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-	}
+	label := gp.getDeployLabels()
+	label[fission.FUNCTION_NAME] = metadata.Name
+	label[fission.FUNCTION_UID] = string(metadata.UID)
+	label[fission.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
+	label["managed"] = "false"                             // this allows us to easily find pods not managed by the deployment
+	return label
+
 }
 
 func (gp *GenericPool) scheduleDeletePod(name string) {

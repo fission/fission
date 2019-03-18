@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -191,10 +190,6 @@ func (executor *Executor) isValidAddress(fsvc *fscache.FuncSvc) bool {
 	} else {
 		return executor.gpm.IsValid(fsvc)
 	}
-}
-
-func dumpStackTrace() {
-	debug.PrintStack()
 }
 
 func serveMetric(logger *zap.Logger) {
