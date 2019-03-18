@@ -53,20 +53,6 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
-func GetKubeConfigPath() string {
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) == 0 {
-		home := os.Getenv("HOME")
-		kubeConfig = filepath.Join(home, ".kube", "config")
-
-		if _, err := os.Stat(kubeConfig); os.IsNotExist(err) {
-			log.Fatal("Couldn't find kubeconfig file. " +
-				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
-		}
-	}
-	return kubeConfig
-}
-
 func GetServerUrl() string {
 	return GetApplicationUrl("application=fission-api")
 }
@@ -77,8 +63,7 @@ func GetApplicationUrl(selector string) string {
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		kubeConfig := GetKubeConfigPath()
-		localPort := SetupPortForward(kubeConfig, fissionNamespace, "application=fission-api")
+		localPort := SetupPortForward(fissionNamespace, "application=fission-api")
 		serverUrl = "http://127.0.0.1:" + localPort
 	} else {
 		serverUrl = fissionUrl
@@ -128,10 +113,31 @@ func KubifyName(old string) string {
 	return newName
 }
 
-func GetKubernetesClient(kubeConfig string) (*restclient.Config, *kubernetes.Clientset) {
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
+// GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
+// environment variable is empty or doesn't exist, ~/.kube/config is used for
+// the kube config path
+func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if len(kubeConfigPath) == 0 {
+		home := os.Getenv("HOME")
+		kubeConfigPath = filepath.Join(home, ".kube", "config")
+
+		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+			log.Fatal("Couldn't find kubeconfig file. " +
+				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+		}
+		loadingRules.ExplicitPath = kubeConfigPath
+		log.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
+	} else {
+		log.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
+	}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		loadingRules, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
+		log.Fatal(fmt.Sprintf("Failed to build Kubernetes config: %s", err))
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
