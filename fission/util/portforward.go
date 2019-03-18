@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
@@ -39,9 +39,9 @@ import (
 // is found by looking for a service in the same namespace and using
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
-func SetupPortForward(kubeConfig, namespace, labelSelector string) string {
-	log.Verbose(2, "Setting up port forward to %s in namespace %s using the kubeconfig at %s",
-		labelSelector, namespace, kubeConfig)
+func SetupPortForward(namespace, labelSelector string) string {
+	log.Verbose(2, "Setting up port forward to %s in namespace %s",
+		labelSelector, namespace)
 
 	localPort, err := findFreePort()
 	if err != nil {
@@ -62,7 +62,7 @@ func SetupPortForward(kubeConfig, namespace, labelSelector string) string {
 
 	log.Verbose(2, "Starting port forward from local port %v", localPort)
 	go func() {
-		err := runPortForward(kubeConfig, labelSelector, localPort, namespace)
+		err := runPortForward(labelSelector, localPort, namespace)
 		if err != nil {
 			log.Fatal(fmt.Sprintf("Error forwarding to controller port: %s", err.Error()))
 		}
@@ -101,8 +101,8 @@ func findFreePort() (string, error) {
 }
 
 // runPortForward creates a local port forward to the specified pod
-func runPortForward(kubeConfig string, labelSelector string, localPort string, ns string) error {
-	config, clientset := GetKubernetesClient(kubeConfig)
+func runPortForward(labelSelector string, localPort string, ns string) error {
+	config, clientset := GetKubernetesClient()
 
 	log.Verbose(2, "Connected to Kubernetes API")
 
