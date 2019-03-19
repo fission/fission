@@ -47,7 +47,16 @@ type (
 )
 
 func makeNatsMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
-	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url))
+	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url),
+		ns.SetConnectionLostHandler(func(conn ns.Conn, reason error) {
+			// TODO: Better way to handle connection lost problem.
+			// Currently, MessageQueue has no such interface to expose the status of underlying
+			// messaging service, hence MessageQueueTriggerManager has no way to detect and handle
+			// such situation properly. It takes some time to redesign interface of MessageQueue.
+			// For now, we simply fatal here.
+			logger.Fatal("Connection lost", zap.Error(reason))
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}
