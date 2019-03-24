@@ -15,6 +15,14 @@ popd
 
 export TEST_REPORT=""
 
+travis_fold_start() {
+    echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
+}
+
+travis_fold_end() {
+    echo -e "travis_fold:end:$1\r"
+}
+
 report_msg() {
     TEST_REPORT="$TEST_REPORT\n$1"
 }
@@ -56,6 +64,7 @@ gcloud_login() {
 
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
+    travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
     pushd $ROOT/preupgradechecks
     ./build.sh
@@ -65,10 +74,12 @@ build_and_push_pre_upgrade_check_image() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_pre_upgrade_check_image
 }
 
 build_and_push_fission_bundle() {
     image_tag=$1
+    travis_fold_start build_and_push_fission_bundle $image_tag
 
     pushd $ROOT/fission-bundle
     ./build.sh
@@ -78,10 +89,12 @@ build_and_push_fission_bundle() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_fission_bundle
 }
 
 build_and_push_fetcher() {
     image_tag=$1
+    travis_fold_start build_and_push_fetcher $image_tag
 
     pushd $ROOT/environments/fetcher/cmd
     ./build.sh
@@ -91,11 +104,13 @@ build_and_push_fetcher() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_fetcher
 }
 
 
 build_and_push_builder() {
     image_tag=$1
+    travis_fold_start build_and_push_builder $image_tag
 
     pushd $ROOT/builder/cmd
     ./build.sh
@@ -105,11 +120,13 @@ build_and_push_builder() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_builder
 }
 
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
+    travis_fold_start build_and_push_env_runtime.$env $image_tag
 
     pushd $ROOT/environments/$env/
     docker build -q -t $image_tag .
@@ -118,12 +135,14 @@ build_and_push_env_runtime() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_env_runtime.$env
 }
 
 build_and_push_env_builder() {
     env=$1
     image_tag=$2
     builder_image=$3
+    travis_fold_start build_and_push_env_builder.$env $image_tag
 
     pushd $ROOT/environments/$env/builder
 
@@ -133,12 +152,15 @@ build_and_push_env_builder() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_env_builder.$env
 }
 
 build_fission_cli() {
+    travis_fold_start build_fission_cli "fission cli"
     pushd $ROOT/fission
     go build .
     popd
+    travis_fold_end build_fission_cli
 }
 
 clean_crd_resources() {
@@ -191,8 +213,7 @@ helm_install_fission() {
         sleep 5
     done
 
-    # only for tests, mv the prefetched prometheus chart to fission-all so helm install fission will install prometheus too
-    mv $ROOT/test/charts $ROOT/charts/fission-all/
+    helm dependency update $ROOT/charts/fission-all
 
     echo "Installing fission"
     helm install		\
@@ -398,16 +419,17 @@ dump_all_fission_resources() {
 }
 
 dump_system_info() {
-    echo "--- System Info ---"
+    travis_fold_start dump_system_info "System Info"
     go version
     docker version
     kubectl version
     helm version
-    echo "--- End System Info ---"
+    travis_fold_end dump_system_info
 }
 
 dump_logs() {
     id=$1
+    travis_fold_start dump_logs "dump logs $id"
 
     ns=f-$id
     fns=f-func-$id
@@ -425,6 +447,7 @@ dump_logs() {
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
+    travis_fold_end dump_logs
 }
 
 log() {
@@ -442,14 +465,18 @@ run_all_tests() {
 
     test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
 
+    idx=1
     for file in $test_files
     do
-    run_test ${file}
+        run_test ${file} ${idx}
+        idx=$((idx+1))
     done
 }
 
 run_test() {
     file=$1
+    idx=$2
+    travis_fold_start run_test.$idx $file
 
     test_name=${file#${ROOT}/test/tests}
 	test_path=${file}
@@ -472,6 +499,7 @@ run_test() {
 	    fi
 	    popd
 	fi
+    travis_fold_end run_test.$idx
 }
 
 install_and_test() {
