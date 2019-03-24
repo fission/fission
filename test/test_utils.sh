@@ -12,15 +12,16 @@ ROOT_RELPATH=$(dirname $0)/..
 pushd $ROOT_RELPATH
 ROOT=$(pwd)
 popd
+TEST_LOG_DIR=$ROOT/test/logs
 
 export TEST_REPORT=""
 
 travis_fold_start() {
-    echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
+    echo -e "travis_fold:start:$1\n\033[33;1m$2\033[0m"
 }
 
 travis_fold_end() {
-    echo -e "travis_fold:end:$1\r"
+    echo -e "travis_fold:end:$1\n"
 }
 
 report_msg() {
@@ -196,6 +197,7 @@ helm_install_fission() {
     routerServiceType=${10}
     serviceType=${11}
     preUpgradeCheckImage=${12}
+    travis_fold_start helm_install_fission "helm install fission id=$id"
 
     ns=f-$id
     fns=f-func-$id
@@ -225,6 +227,7 @@ helm_install_fission() {
 	 $ROOT/charts/fission-all
 
     helm list
+    travis_fold_end helm_install_fission
 }
 
 dump_kubernetes_events() {
@@ -462,13 +465,27 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
+    mkdir -p ${TEST_LOG_DIR}
 
     test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
 
-    idx=1
     for file in $test_files
     do
-        run_test ${file} ${idx}
+        test_name=${file#${ROOT}/test/tests/}
+        log_path=${TEST_LOG_DIR}/${test_name//\//:}.log
+        run_test ${file} ${idx} > ${log_path} 2>&1
+    done
+}
+
+dump_tests_logs() {
+    idx=1
+    for logfile in ${TEST_LOG_DIR}/*.log; do
+        test_name=${logfile#${TEST_LOG_DIR}/}
+        test_name=${test_name//:/\/}
+        test_name=${test_name%.log}
+        travis_fold_start run_test.$idx $test_name
+        cat ${logfile}
+        travis_fold_end run_test.$idx
         idx=$((idx+1))
     done
 }
@@ -476,7 +493,6 @@ run_all_tests() {
 run_test() {
     file=$1
     idx=$2
-    travis_fold_start run_test.$idx $file
 
     test_name=${file#${ROOT}/test/tests}
 	test_path=${file}
@@ -499,7 +515,6 @@ run_test() {
 	    fi
 	    popd
 	fi
-    travis_fold_end run_test.$idx
 }
 
 install_and_test() {
@@ -533,6 +548,7 @@ install_and_test() {
     wait_for_services $id
     set_environment $id
     run_all_tests $id
+    dump_tests_logs
 
     dump_logs $id
 
