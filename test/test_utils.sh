@@ -468,35 +468,39 @@ run_all_tests() {
     mkdir -p ${TEST_LOG_DIR}
 
     test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
-
-    for file in $test_files
-    do
-        test_name=${file#${ROOT}/test/tests/}
-        log_path=${TEST_LOG_DIR}/${test_name//\//:}.log
-        run_test ${file} > ${log_path} 2>&1
+    test_names=""
+    for test_file in ${test_files}; do
+        test_names="${test_names} ${test_file#${ROOT}/test/tests/}"
     done
-}
 
-dump_tests_logs() {
-    idx=1
-    for logfile in ${TEST_LOG_DIR}/*.log; do
-        test_name=${logfile#${TEST_LOG_DIR}/}
-        test_name=${test_name//:/\/}
-        test_name=${test_name%.log}
-        travis_fold_start run_test.$idx $test_name
-        cat ${logfile}
-        travis_fold_end run_test.$idx
-        idx=$((idx+1))
+    parallel --plus \
+        --joblog ${TEST_LOG_DIR}/recap \
+        --files \
+        --results ${TEST_LOG_DIR}/{2} \
+        --jobs 8 \
+        run_test \
+        ::: $test_files :::+ $test_names
+    cat ${TEST_LOG_DIR}/recap
+
+    # dump test logs
+    for test_name in ${test_names}; do
+        log_path=${TEST_LOG_DIR}/${test_name}
+        idx=$(cat ${log_path}.seq)
+        travis_fold_start run_test.${idx} ${test_name}
+        echo ========== stdout ${test_name}
+        cat ${log_path}
+        echo ========== stderr ${test_name}
+        cat ${log_path}.err
+        echo ========== end ${test_name}
+        travis_fold_end run_test.${idx}
     done
 }
 
 run_test() {
-    file=$1
+    test_path=$1
+    test_name=$2
 
-    test_name=${file#${ROOT}/test/tests}
-	test_path=${file}
-
-	if grep "^#test:disabled" ${file}
+	if grep "^#test:disabled" ${test_path}
 	then
 	    report_test_skipped ${test_name}
 	    echo ------- Skipped ${test_name} -------
@@ -547,7 +551,6 @@ install_and_test() {
     wait_for_services $id
     set_environment $id
     run_all_tests $id
-    dump_tests_logs
 
     dump_logs $id
 

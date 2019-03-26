@@ -22,7 +22,7 @@ services:
 before_install:
   - sudo apt-get update
   - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
-  - sudo apt-get -y install apache2-utils
+  - sudo apt-get -y install apache2-utils parallel
   - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 
 install:
@@ -43,7 +43,7 @@ before_script:
 
 script:
   - cd ${TRAVIS_BUILD_DIR}
-  - travis_wait 40 test/build_and_test.sh
+  - test/build_and_test.sh
   - test/upgrade/fission_upgrade_test.sh
 
 notifications:
