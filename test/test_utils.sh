@@ -17,11 +17,11 @@ TEST_LOG_DIR=$ROOT/test/logs
 export TEST_REPORT=""
 
 travis_fold_start() {
-    echo -e "travis_fold:start:$1\n\033[33;1m$2\033[0m"
+    echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
 }
 
 travis_fold_end() {
-    echo -e "travis_fold:end:$1\n"
+    echo -e "travis_fold:end:$1\r"
 }
 
 report_msg() {
@@ -473,7 +473,7 @@ run_all_tests() {
     do
         test_name=${file#${ROOT}/test/tests/}
         log_path=${TEST_LOG_DIR}/${test_name//\//:}.log
-        run_test ${file} ${idx} > ${log_path} 2>&1
+        run_test ${file} > ${log_path} 2>&1
     done
 }
 
@@ -492,7 +492,6 @@ dump_tests_logs() {
 
 run_test() {
     file=$1
-    idx=$2
 
     test_name=${file#${ROOT}/test/tests}
 	test_path=${file}
