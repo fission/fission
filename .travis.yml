@@ -43,7 +43,7 @@ before_script:
 
 script:
   - cd ${TRAVIS_BUILD_DIR}
-  - test/build_and_test.sh
+  - travis_wait 40 test/build_and_test.sh
   - test/upgrade/fission_upgrade_test.sh
 
 notifications:
