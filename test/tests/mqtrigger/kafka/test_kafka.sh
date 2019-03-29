@@ -85,7 +85,7 @@ fission env create --name ${goenv} --image fission/go-env --builder fission/go-b
 
 log "Creating package for Kafka producer"
 pushd $DIR/kafka_pub
-glide install
+go mod vendor
 zip -qr kafka.zip * 
 pkgName=$(fission package create --env ${goenv} --src kafka.zip|cut -f2 -d' '| tr -d \')
 
