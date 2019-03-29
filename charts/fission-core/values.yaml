@@ -16,7 +16,7 @@ repository: index.docker.io
 image: fission/fission-bundle
 
 ## Fission image version
-imageTag: 0.12.0
+imageTag: 1.1.0
 
 ## Image pull policy
 pullPolicy: IfNotPresent
@@ -25,7 +25,7 @@ pullPolicy: IfNotPresent
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 0.12.0
+fetcherImageTag: 1.1.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -46,7 +46,17 @@ enableIstio: false
 
 ## Persist data to a persistent volume.
 persistence:
+  ## If true, fission will create/use a Persistent Volume Claim
+  ## If false, use emptyDir
+  ##
   enabled: true
+
+  ## A manually managed Persistent Volume Claim name
+  ## Requires persistence.enabled: true
+  ## If defined, PVC must be created manually before volume will be bound
+  ##
+  # existingClaim:
+
   ## If defined, storageClassName: <storageClass>
   ## If set to "-", storageClassName: "", which disables dynamic provisioning
   ## If undefined (the default) or set to null, no storageClassName spec is
@@ -54,6 +64,7 @@ persistence:
   ##   GKE, AWS & OpenStack)
   ##
   # storageClass: "-"
+
   accessMode: ReadWriteOnce
   size: 8Gi
 
@@ -82,3 +93,7 @@ prometheusDeploy: false
 ## set this flag to false if you dont need canary deployment feature
 canaryDeployment:
   enabled: false
+
+# Use these flags to enable opentracing, the variable is endpoint of Jaeger collector in the format shown below
+#traceCollectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
+#traceSamplingRate: 0.75

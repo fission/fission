@@ -73,6 +73,24 @@ type (
 // talk to environments.
 //
 type (
+	FetchRequestType int
+
+	FunctionSpecializeRequest struct {
+		FetchReq FunctionFetchRequest
+		LoadReq  FunctionLoadRequest
+	}
+
+	FunctionFetchRequest struct {
+		FetchType     FetchRequestType     `json:"fetchType"`
+		Package       metav1.ObjectMeta    `json:"package"`
+		Url           string               `json:"url"`
+		StorageSvcUrl string               `json:"storagesvcurl"`
+		Filename      string               `json:"filename"`
+		Secrets       []SecretReference    `json:"secretList"`
+		ConfigMaps    []ConfigMapReference `json:"configMapList"`
+		KeepArchive   bool                 `json:"keeparchive"`
+	}
+
 	FunctionLoadRequest struct {
 		// FilePath is an absolute filesystem path to the
 		// function. What exactly is stored here is
@@ -91,7 +109,30 @@ type (
 
 		// Metatdata
 		FunctionMetadata *metav1.ObjectMeta
+
+		EnvVersion int `json:"envVersion"`
 	}
+
+	// ArchiveUploadRequest send from builder manager describes which
+	// deployment package should be upload to storage service.
+	ArchiveUploadRequest struct {
+		Filename       string `json:"filename"`
+		StorageSvcUrl  string `json:"storagesvcurl"`
+		ArchivePackage bool   `json:"archivepackage"`
+	}
+
+	// ArchiveUploadResponse defines the download url of an archive and
+	// its checksum.
+	ArchiveUploadResponse struct {
+		ArchiveDownloadUrl string   `json:"archiveDownloadUrl"`
+		Checksum           Checksum `json:"checksum"`
+	}
+)
+
+const (
+	FETCH_SOURCE = iota
+	FETCH_DEPLOYMENT
+	FETCH_URL // remove this?
 )
 
 const EXECUTOR_INSTANCEID_LABEL = fv1.EXECUTOR_INSTANCEID_LABEL

@@ -18,46 +18,56 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 )
 
 type Client struct {
+	logger      *zap.Logger
 	executorUrl string
 	tappedByUrl map[string]bool
 	requestChan chan string
+	httpClient  *http.Client
 }
 
-func MakeClient(executorUrl string) *Client {
+func MakeClient(logger *zap.Logger, executorUrl string) *Client {
 	c := &Client{
+		logger:      logger.Named("executor_client"),
 		executorUrl: strings.TrimSuffix(executorUrl, "/"),
 		tappedByUrl: make(map[string]bool),
 		requestChan: make(chan string),
+		httpClient: &http.Client{
+			Transport: &ochttp.Transport{},
+		},
 	}
 	go c.service()
 	return c
 }
 
-func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, error) {
+func (c *Client) GetServiceForFunction(ctx context.Context, metadata *metav1.ObjectMeta) (string, error) {
 	executorUrl := c.executorUrl + "/v2/getServiceForFunction"
 
 	body, err := json.Marshal(metadata)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "could not marshal request body for getting service for function")
 	}
 
-	resp, err := http.Post(executorUrl, "application/json", bytes.NewReader(body))
+	resp, err := ctxhttp.Post(ctx, c.httpClient, executorUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "error posting to getting service for function")
 	}
 	defer resp.Body.Close()
 
@@ -67,8 +77,7 @@ func (c *Client) GetServiceForFunction(metadata *metav1.ObjectMeta) (string, err
 
 	svcName, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Returning from ioutil read body")
-		return "", err
+		return "", errors.Wrap(err, "error reading response body from getting service for function")
 	}
 
 	return string(svcName), nil
@@ -88,10 +97,10 @@ func (c *Client) service() {
 					for u := range urls {
 						err := c._tapService(u)
 						if err != nil {
-							log.Printf("Error tapping function service address %v: %v", u, err)
+							c.logger.Error("error tapping function service address", zap.Error(err), zap.String("address", u))
 						}
 					}
-					log.Printf("Tapped %v services in batch", len(urls))
+					c.logger.Info("tapped services in batch", zap.Int("service_count", len(urls)))
 				}()
 			}
 		}

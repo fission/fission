@@ -19,6 +19,7 @@ cleanup() {
     kubectl delete configmap ${new_cfgmap} -n default || true
     fission spec destroy || true
     rm -rf specs || true
+    rm cfgmap.py || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then

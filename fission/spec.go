@@ -123,7 +123,10 @@ type (
 )
 
 func getSpecDir(c *cli.Context) string {
-	specDir := c.String("specdir")
+	specDir := ""
+	if c != nil {
+		specDir = c.String("specdir")
+	}
 	if len(specDir) == 0 {
 		specDir = "specs"
 	}
@@ -854,7 +857,9 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
-			uploadedAr := createArchive(fclient, ar.URL, "")
+			// ar.URL is actually a local filename at this stage
+			ctx := context.Background()
+			uploadedAr := uploadArchive(ctx, fclient, ar.URL)
 			archiveFiles[name] = *uploadedAr
 		}
 	}
@@ -971,16 +976,17 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	files := make([]string, 0)
 	if len(aus.IncludeGlobs) == 1 && archiver.Zip.Match(aus.IncludeGlobs[0]) {
 		files = append(files, aus.IncludeGlobs[0])
-	}
-	for _, relativeGlob := range aus.IncludeGlobs {
-		absGlob := rootDir + "/" + relativeGlob
-		f, err := filepath.Glob(absGlob)
-		if err != nil {
-			log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
-			return nil, err
+	} else {
+		for _, relativeGlob := range aus.IncludeGlobs {
+			absGlob := rootDir + "/" + relativeGlob
+			f, err := filepath.Glob(absGlob)
+			if err != nil {
+				log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
+				return nil, err
+			}
+			files = append(files, f...)
+			// xxx handle excludeGlobs here
 		}
-		files = append(files, f...)
-		// xxx handle excludeGlobs here
 	}
 
 	if len(files) == 0 {
@@ -1778,4 +1784,41 @@ func specSave(resource interface{}, specFile string) error {
 		return errors.Wrap(err, "couldn't write to spec file")
 	}
 	return nil
+}
+
+// Returns metadata if the given resource exists in the specs, nil
+// otherwise.  compareMetadata and compareSpec control how the
+// equality check is performed.
+func (fr *FissionResources) specExists(resource interface{}, compareMetadata bool, compareSpec bool) *metav1.ObjectMeta {
+	switch typedres := resource.(type) {
+	case *ArchiveUploadSpec:
+		for _, aus := range fr.archiveUploadSpecs {
+			if compareMetadata && aus.Name != typedres.Name {
+				continue
+			}
+			if compareSpec &&
+				!(reflect.DeepEqual(aus.RootDir, typedres.RootDir) &&
+					reflect.DeepEqual(aus.IncludeGlobs, typedres.IncludeGlobs) &&
+					reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
+				continue
+			}
+			return &metav1.ObjectMeta{Name: aus.Name}
+		}
+		return nil
+	case *crd.Package:
+		for _, p := range fr.packages {
+			if compareMetadata && !reflect.DeepEqual(p.Metadata, typedres.Metadata) {
+				continue
+			}
+			if compareSpec && !reflect.DeepEqual(p.Spec, typedres.Spec) {
+				continue
+			}
+			return &p.Metadata
+		}
+		return nil
+
+	default:
+		// XXX not implemented
+		return nil
+	}
 }

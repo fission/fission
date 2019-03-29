@@ -19,16 +19,16 @@ cleanup() {
     kubectl delete secret ${new_secret} -n default || true
     fission spec destroy || true
     rm -rf specs || true
+    rm secret.py || true
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-cp ../test_secret_cfgmap/secret.py.template secret.py
+cp $ROOT/test/tests/test_secret_cfgmap/secret.py.template secret.py
 sed -i "s/{{ FN_SECRET }}/${old_secret}/g" secret.py
 
 log "Creating env $env"

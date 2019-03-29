@@ -18,11 +18,12 @@ package buildermgr
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,6 +74,7 @@ type (
 	}
 
 	environmentWatcher struct {
+		logger                 *zap.Logger
 		cache                  map[string]*builderInfo
 		requestChan            chan envwRequest
 		builderNamespace       string
@@ -80,11 +82,13 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		fetcherImage           string
 		fetcherImagePullPolicy apiv1.PullPolicy
+		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
+		collectorEndpoint      string
 	}
 )
 
-func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
+func makeEnvironmentWatcher(logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, builderNamespace string) *environmentWatcher {
 
 	useIstio := false
@@ -92,7 +96,7 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 	if len(enableIstio) > 0 {
 		istio, err := strconv.ParseBool(enableIstio)
 		if err != nil {
-			log.Println("Failed to parse ENABLE_ISTIO, defaults to false")
+			logger.Info("Failed to parse ENABLE_ISTIO, defaults to false")
 		}
 		useIstio = istio
 	}
@@ -102,30 +106,22 @@ func makeEnvironmentWatcher(fissionClient *crd.FissionClient,
 		fetcherImage = "fission/fetcher"
 	}
 
-	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")
-	if len(fetcherImagePullPolicy) == 0 {
-		fetcherImagePullPolicy = "IfNotPresent"
-	}
-
-	var pullPolicy apiv1.PullPolicy
-	switch fetcherImagePullPolicy {
-	case "Always":
-		pullPolicy = apiv1.PullAlways
-	case "Never":
-		pullPolicy = apiv1.PullNever
-	default:
-		pullPolicy = apiv1.PullIfNotPresent
-	}
+	fetcherImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY"))
+	builderImagePullPolicy := fission.GetImagePullPolicy(os.Getenv("BUILDER_IMAGE_PULL_POLICY"))
+	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
 
 	envWatcher := &environmentWatcher{
+		logger:                 logger.Named("environment_watcher"),
 		cache:                  make(map[string]*builderInfo),
 		requestChan:            make(chan envwRequest),
 		builderNamespace:       builderNamespace,
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
 		fetcherImage:           fetcherImage,
-		fetcherImagePullPolicy: pullPolicy,
+		fetcherImagePullPolicy: fetcherImagePullPolicy,
+		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
+		collectorEndpoint:      collectorEndpoint,
 	}
 
 	go envWatcher.service()
@@ -160,11 +156,11 @@ func (envw *environmentWatcher) watchEnvironments() {
 		})
 		if err != nil {
 			if fission.IsNetworkError(err) {
-				log.Printf("Encounter network error, retrying later: %v", err)
+				envw.logger.Error("encountered network error, retrying later", zap.Error(err))
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			log.Fatalf("Error watching environment list: %v", err)
+			envw.logger.Fatal("error watching environment list", zap.Error(err))
 		}
 
 		for {
@@ -192,11 +188,11 @@ func (envw *environmentWatcher) sync() {
 		envList, err := envw.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if fission.IsNetworkError(err) {
-				log.Printf("Error syncing environment CRD resources due to network error, retrying later: %v", err)
+				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))
 				time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
 				continue
 			}
-			log.Fatalf("Error syncing environment CRD resources: %v", err)
+			envw.logger.Fatal("error syncing environment CRD resources", zap.Error(err))
 		}
 
 		// Create environment builders for all environments
@@ -209,7 +205,7 @@ func (envw *environmentWatcher) sync() {
 			}
 			_, err := envw.getEnvBuilder(&env)
 			if err != nil {
-				log.Printf("Error creating builder for %v: %v", env.Metadata.Name, err)
+				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.Metadata.Name))
 			}
 		}
 
@@ -265,7 +261,7 @@ func (envw *environmentWatcher) service() {
 
 			svcList, err := envw.getBuilderServiceList(envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
 			if err != nil {
-				log.Println(err.Error())
+				envw.logger.Error("error getting the builder service list", zap.Error(err))
 			}
 			for _, svc := range svcList {
 				envName := svc.ObjectMeta.Labels[LABEL_ENV_NAME]
@@ -275,7 +271,9 @@ func (envw *environmentWatcher) service() {
 				if _, ok := latestEnvList[key]; !ok {
 					err := envw.deleteBuilderServiceByName(svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
 					if err != nil {
-						log.Printf("Error removing builder service: %v", err)
+						envw.logger.Error("error removing builder service", zap.Error(err),
+							zap.String("service_name", svc.ObjectMeta.Name),
+							zap.String("service_namespace", svc.ObjectMeta.Namespace))
 					}
 				}
 				delete(envw.cache, key)
@@ -283,7 +281,7 @@ func (envw *environmentWatcher) service() {
 
 			deployList, err := envw.getBuilderDeploymentList(envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
 			if err != nil {
-				log.Printf(err.Error())
+				envw.logger.Error("error getting the builder deployment list", zap.Error(err))
 			}
 			for _, deploy := range deployList {
 				envName := deploy.ObjectMeta.Labels[LABEL_ENV_NAME]
@@ -293,7 +291,9 @@ func (envw *environmentWatcher) service() {
 				if _, ok := latestEnvList[key]; !ok {
 					err := envw.deleteBuilderDeploymentByName(deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
 					if err != nil {
-						log.Printf("Error removing builder deployment: %v", err)
+						envw.logger.Error("error removing builder deployment", zap.Error(err),
+							zap.String("deployment_name", deploy.ObjectMeta.Name),
+							zap.String("deployment_namespace", deploy.ObjectMeta.Namespace))
 					}
 				}
 				delete(envw.cache, key)
@@ -334,12 +334,12 @@ func (envw *environmentWatcher) createBuilder(env *crd.Environment, ns string) (
 	if len(svcList) == 0 {
 		svc, err = envw.createBuilderService(env, ns)
 		if err != nil {
-			return nil, fmt.Errorf("Error creating builder service: %v", err)
+			return nil, errors.Wrap(err, "error creating builder service")
 		}
 	} else if len(svcList) == 1 {
 		svc = &svcList[0]
 	} else {
-		return nil, fmt.Errorf("Found more than one builder service for environment %v", env.Metadata.Name)
+		return nil, fmt.Errorf("found more than one builder service for environment %q", env.Metadata.Name)
 	}
 
 	deployList, err := envw.getBuilderDeploymentList(sel, ns)
@@ -351,18 +351,17 @@ func (envw *environmentWatcher) createBuilder(env *crd.Environment, ns string) (
 		// create builder SA in this ns, if not already created
 		_, err := fission.SetupSA(envw.kubernetesClient, fission.FissionBuilderSA, ns)
 		if err != nil {
-			log.Printf("Error : %v creating %s in ns : %s", err, fission.FissionBuilderSA, ns)
-			return nil, err
+			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fission.FissionBuilderSA, ns)
 		}
 
 		deploy, err = envw.createBuilderDeployment(env, ns)
 		if err != nil {
-			return nil, fmt.Errorf("Error creating builder deployment: %v", err)
+			return nil, errors.Wrap(err, "error creating builder deployment")
 		}
 	} else if len(deployList) == 1 {
 		deploy = &deployList[0]
 	} else {
-		return nil, fmt.Errorf("Found more than one builder deployment for environment %v", env.Metadata.Name)
+		return nil, fmt.Errorf("found more than one builder deployment for environment %q", env.Metadata.Name)
 	}
 
 	return &builderInfo{
@@ -377,7 +376,7 @@ func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace strin
 		Services(namespace).
 		Delete(name, &delOpt)
 	if err != nil {
-		return fmt.Errorf("Error deleting builder service %s.%s: %v", name, namespace, err)
+		return errors.Wrapf(err, "error deleting builder service %s.%s", name, namespace)
 	}
 	return nil
 }
@@ -387,7 +386,7 @@ func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace st
 		Deployments(namespace).
 		Delete(name, &delOpt)
 	if err != nil {
-		return fmt.Errorf("Error deleting builder deployment %s.%s: %v", name, namespace, err)
+		return errors.Wrapf(err, "error deleting builder deployment %s.%s", name, namespace)
 	}
 	return nil
 }
@@ -398,12 +397,12 @@ func (envw *environmentWatcher) deleteBuilderService(sel map[string]string, ns s
 		return err
 	}
 	for _, svc := range svcList {
-		log.Printf("Removing builder service: %v", svc.ObjectMeta.Name)
+		envw.logger.Info("removing builder service", zap.String("service_name", svc.ObjectMeta.Name))
 		err = envw.kubernetesClient.CoreV1().
 			Services(ns).
 			Delete(svc.ObjectMeta.Name, &delOpt)
 		if err != nil {
-			return fmt.Errorf("Error deleting builder service: %v", err)
+			return errors.Wrap(err, "error deleting builder service")
 		}
 	}
 	return nil
@@ -415,12 +414,12 @@ func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string, n
 		return err
 	}
 	for _, deploy := range deployList {
-		log.Printf("Removing builder deployment: %v", deploy.ObjectMeta.Name)
+		envw.logger.Info("removing builder deployment", zap.String("deployment_name", deploy.ObjectMeta.Name))
 		err = envw.kubernetesClient.ExtensionsV1beta1().
 			Deployments(ns).
 			Delete(deploy.ObjectMeta.Name, &delOpt)
 		if err != nil {
-			return fmt.Errorf("Error deleteing builder deployment: %v", err)
+			return errors.Wrap(err, "error deleteing builder deployment")
 		}
 	}
 	return nil
@@ -432,7 +431,7 @@ func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns 
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
-		return nil, fmt.Errorf("Error getting builder service list: %v", err)
+		return nil, errors.Wrap(err, "error getting builder service list")
 	}
 	return svcList.Items, nil
 }
@@ -471,7 +470,7 @@ func (envw *environmentWatcher) createBuilderService(env *crd.Environment, ns st
 			},
 		},
 	}
-	log.Printf("Creating builder service: %v", name)
+	envw.logger.Info("creating builder service", zap.String("service_name", name))
 	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(&service)
 	if err != nil {
 		return nil, err
@@ -485,7 +484,7 @@ func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, 
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
-		return nil, fmt.Errorf("Error getting builder deployment list: %v", err)
+		return nil, errors.Wrap(err, "error getting builder deployment list")
 	}
 	return deployList.Items, nil
 }
@@ -547,7 +546,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 						fission.MergeContainerSpecs(&apiv1.Container{
 							Name:                   "builder",
 							Image:                  env.Spec.Builder.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							ImagePullPolicy:        envw.builderImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
 							VolumeMounts: []apiv1.VolumeMount{
 								{
@@ -600,6 +599,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 							Command: []string{"/fetcher",
 								"-secret-dir", sharedSecretPath,
 								"-cfgmap-dir", sharedCfgMapPath,
+								"-jaeger-collector-endpoint", envw.collectorEndpoint,
 								sharedMountPath},
 							ReadinessProbe: &apiv1.Probe{
 								InitialDelaySeconds: 5,
@@ -621,7 +621,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 			},
 		},
 	}
-	log.Printf("Creating builder deployment: %v", fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion))
+	envw.logger.Info("creating builder deployment", zap.String("deployment", name))
 	_, err := envw.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Create(deployment)
 	if err != nil {
 		return nil, err

@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission/storagesvc"
 )
@@ -51,9 +53,12 @@ func TestStorageService(t *testing.T) {
 	port := 8080
 	enableArchivePruner := false
 
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
 	log.Println("starting storage svc")
 	_ = storagesvc.RunStorageService(
-		storagesvc.StorageTypeLocal, "/tmp", testId, port, enableArchivePruner)
+		logger, storagesvc.StorageTypeLocal, "/tmp", testId, port, enableArchivePruner)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
@@ -64,7 +69,8 @@ func TestStorageService(t *testing.T) {
 
 	// store it
 	metadata := make(map[string]string)
-	fileId, err := client.Upload(tmpfile.Name(), &metadata)
+	ctx := context.Background()
+	fileId, err := client.Upload(ctx, tmpfile.Name(), &metadata)
 	panicIf(err)
 
 	// make a temp file for verification
@@ -73,7 +79,7 @@ func TestStorageService(t *testing.T) {
 	os.Remove(retrievedfile.Name())
 
 	// retrieve uploaded file
-	err = client.Download(fileId, retrievedfile.Name())
+	err = client.Download(ctx, fileId, retrievedfile.Name())
 	panicIf(err)
 	defer os.Remove(retrievedfile.Name())
 
@@ -87,11 +93,11 @@ func TestStorageService(t *testing.T) {
 	}
 
 	// delete uploaded file
-	err = client.Delete(fileId)
+	err = client.Delete(ctx, fileId)
 	panicIf(err)
 
 	// make sure download fails
-	err = client.Download(fileId, "xxx")
+	err = client.Download(ctx, fileId, "xxx")
 	if err == nil {
 		log.Panic("Download succeeded but file isn't supposed to exist")
 	}

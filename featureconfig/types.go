@@ -18,6 +18,7 @@ package featureconfig
 
 const (
 	FeatureConfigFile = "/etc/config/config.yaml"
+	CanaryFeature     = "canary"
 )
 
 type (

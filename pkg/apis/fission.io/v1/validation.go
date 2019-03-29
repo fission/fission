@@ -36,7 +36,8 @@ const (
 
 var (
 	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
-	validKafkaTopicName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-._]*[a-z0-9]$")
+	// Need to use raw string to support escape sequence for - & . chars
+	validKafkaTopicName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\._]*[a-zA-Z0-9]$`)
 )
 
 type (

@@ -17,10 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,6 +36,14 @@ import (
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
 	log.Verbose(2, "Verbosity = 2")
+
+	err := flagValueParser(c.Args())
+	if err != nil {
+		// The cli package wont't print out error, as a workaround we need to
+		// fatal here instead of return it.
+		log.Fatal(err)
+	}
+
 	return nil
 }
 
@@ -60,6 +70,7 @@ func newCliApp() *cli.App {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Value: "", Usage: "Fission server URL"},
 		cli.IntFlag{Name: "verbosity", Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
+		cli.BoolFlag{Name: "plugin", Hidden: true},
 	}
 
 	// all resource create commands accept --spec
@@ -91,7 +102,7 @@ func newCliApp() *cli.App {
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for source code"}
 	fnDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "local path or URL for deployment archive"}
-	fnSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src", Usage: "local path or URL for source archive"}
+	fnSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src, source", Usage: "local path or URL for source archive"}
 	fnPkgNameFlag := cli.StringFlag{Name: "pkgname, pkg", Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
@@ -311,9 +322,34 @@ func newCliApp() *cli.App {
 		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
 	}
+
 	app.Before = cliHook
-	app.CommandNotFound = handleCommandNotFound
+	app.Action = handleNoCommand
 	return app
+}
+
+func handleNoCommand(ctx *cli.Context) error {
+	if ctx.GlobalBool("version") {
+		versionPrinter(ctx)
+		return nil
+	}
+	if ctx.GlobalBool("plugin") {
+		bs, err := json.Marshal(plugin.Metadata{
+			Version: fission.Version,
+			Usage:   ctx.App.Usage,
+		})
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Failed to marshal plugin metadata to JSON: %v", err))
+		}
+		fmt.Println(string(bs))
+		return nil
+	}
+	if len(ctx.Args()) > 0 {
+		handleCommandNotFound(ctx, ctx.Args().First())
+		return nil
+	}
+
+	return cli.ShowAppHelp(ctx)
 }
 
 func handleCommandNotFound(ctx *cli.Context, subCommand string) {
@@ -341,6 +377,9 @@ To install it for your local Fission CLI:
 	// Rebuild global arguments string (urfave/cli does not have an option to get the raw input of the global flags)
 	var globalArgs []string
 	for _, globalFlagName := range ctx.GlobalFlagNames() {
+		if globalFlagName == "plugin" {
+			continue
+		}
 		val := fmt.Sprintf("%v", ctx.GlobalGeneric(globalFlagName))
 		if len(val) > 0 {
 			globalArgs = append(globalArgs, fmt.Sprintf("--%v", globalFlagName), val)
@@ -358,6 +397,48 @@ func versionPrinter(_ *cli.Context) {
 	client := util.GetApiClient(util.GetServerUrl())
 	ver := util.GetVersion(client)
 	fmt.Print(string(ver))
+}
+
+func flagValueParser(args []string) error {
+	// all input value for flags are properly set
+	if len(args) == 0 {
+		return nil
+	}
+
+	var flagIndexes []int
+	var errorFlags []string
+
+	// find out all flag indexes
+	for i, v := range args {
+		// support both flags with "--" and "-"
+		if strings.HasPrefix(v, "-") {
+			flagIndexes = append(flagIndexes, i)
+		}
+	}
+
+	// add total length of args to indicate the end of args
+	flagIndexes = append(flagIndexes, len(args))
+
+	for i := 0; i < len(flagIndexes)-1; i++ {
+		// if the difference between the flag index i and i+1
+		// is bigger then 2 means that CLI receives extra arguments
+		// for one flag. For example,
+		// 1. fission fn create --name e1 --code examples/nodejs/* --env nodejs ...
+		//    The wildcard will be extracted to multiple files and cause the difference between `--code` and `--env` large than 2.
+		// 2. fission fn create --spec --name e1 ...
+		//    The difference between --spec and --name is 1.
+		if flagIndexes[i+1]-flagIndexes[i] > 2 {
+			index := flagIndexes[i]
+			errorFlags = append(errorFlags, args[index])
+		}
+	}
+
+	if len(errorFlags) > 0 {
+		e := fmt.Sprintf("Unable to parse flags: %v\nThe argument should have only one input value. Please quote the input value if it contains wildcard characters(*).", strings.Join(errorFlags[:], ", "))
+		return errors.New(e)
+	}
+
+	return nil
 }
 
 var helpTemplate = `NAME:
