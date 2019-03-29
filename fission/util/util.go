@@ -19,6 +19,7 @@ package util
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -121,8 +122,12 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")
 	if len(kubeConfigPath) == 0 {
-		home := os.Getenv("HOME")
-		kubeConfigPath = filepath.Join(home, ".kube", "config")
+		usr, err := user.Current()
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Could not get the current users directory: %s", err))
+		}
+
+		kubeConfigPath = filepath.Join(usr.HomeDir, ".kube", "config")
 
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
 			log.Fatal("Couldn't find kubeconfig file. " +
