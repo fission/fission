@@ -64,7 +64,7 @@ func SetupPortForward(kubeConfig, namespace, labelSelector string) string {
 	go func() {
 		err := runPortForward(kubeConfig, labelSelector, localPort, namespace)
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Error forwarding to controller port: %s", err.Error()))
+			log.Fatal(fmt.Sprintf("Error forwarding to port %v: %s", localPort, err.Error()))
 		}
 	}()
 
@@ -115,7 +115,7 @@ func runPortForward(kubeConfig string, labelSelector string, localPort string, n
 	podList, err := clientset.CoreV1().Pods(ns).
 		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil || len(podList.Items) == 0 {
-		log.Fatal("Error getting controller pod for port-forwarding")
+		log.Fatal(fmt.Sprintf("Error getting pod for port-forwarding with label selector %v: %v", labelSelector, err))
 	}
 
 	nsList := make([]string, 0)
