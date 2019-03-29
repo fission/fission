@@ -403,6 +403,7 @@ spec:
       containers:
       - name: influxdb
         image: fission/influxdb
+        imagePullPolicy: {{ .Values.pullPolicy }}
         env:
           - name: PRE_CREATE_DB
             value: fissionFunctionLog
@@ -454,6 +455,7 @@ spec:
       containers:
       - name: heapster
         image: gcr.io/google_containers/heapster-amd64:v1.5.0
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: 
         - /heapster
         - --source=kubernetes:https://kubernetes.default
@@ -503,6 +505,7 @@ spec:
 #      containers:
 #      - name: nginx
 #        image: {{ .Values.repository }}/{{ .Values.fissionUiImage }}
+#        imagePullPolicy: {{ .Values.pullPolicy }}
 #      - name: kubectl-proxy
 #        image: {{ .Values.repository }}/lachlanevenson/k8s-kubectl
 #        args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
@@ -526,6 +529,7 @@ spec:
       containers:
       - name: nats-streaming
         image: nats-streaming
+        imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
           "--auth", "{{ .Values.nats.authToken }}",
