@@ -19,6 +19,7 @@ package newdeploy
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -192,22 +193,22 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 		DeleteFunc: func(obj interface{}) {},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*crd.Environment)
-			funcs := deploy.getEnvFunctions(&newEnv.Metadata)
-
-			for _, f := range funcs {
-				function, err := deploy.fissionClient.Functions(f.Metadata.Namespace).Get(f.Metadata.Name)
-				if err != nil {
-					log.Printf("Error getting function  %v: %v", function, err)
+			oldEnv := oldObj.(*crd.Environment)
+			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
+			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
+				deploy.logger.Info("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
+				funcs := deploy.getEnvFunctions(&newEnv.Metadata)
+				for _, f := range funcs {
+					function, err := deploy.fissionClient.Functions(f.Metadata.Namespace).Get(f.Metadata.Name)
+					if err != nil {
+						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
+					}
+					err = deploy.updateFuncDeployment(function, newEnv)
+					if err != nil {
+						deploy.logger.Error("Error updating function", zap.Error(err), zap.Any("function", function))
+					}
 				}
-				function.Spec.Environment.ResourceVersion = newEnv.Metadata.ResourceVersion
-
-				_, err = deploy.fissionClient.Functions(f.Metadata.Namespace).Update(function)
-				if err != nil {
-					log.Printf("Error updating function %v: %v", function, err)
-				}
-
 			}
-
 		},
 	})
 	return store, controller
@@ -220,7 +221,7 @@ func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []crd.Function {
 	}
 	relatedFunctions := make([]crd.Function, 0)
 	for _, f := range funcList.Items {
-		if (f.Spec.Environment.Name == m.Name) && (f.Spec.Environment.Namespace == m.Namespace) && (f.Spec.Environment.ResourceVersion != m.ResourceVersion) {
+		if (f.Spec.Environment.Name == m.Name) && (f.Spec.Environment.Namespace == m.Namespace) {
 			relatedFunctions = append(relatedFunctions, f)
 		}
 	}
@@ -396,13 +397,6 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 		return err
 	}
 
-	fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.Metadata.UID)
-	if err != nil {
-		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
-		return err
-	}
-
-	fnObjName := fsvc.Name
 	deployChanged := false
 
 	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
@@ -414,7 +408,13 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 			ns = newFn.Metadata.Namespace
 		}
 
-		hpa, err := deploy.getHpa(ns, fnObjName)
+		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.Metadata.UID)
+		if err != nil {
+			err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
+			return err
+		}
+
+		hpa, err := deploy.getHpa(ns, fsvc.Name)
 		if err != nil {
 			deploy.updateStatus(oldFn, err, "error getting HPA while updating function")
 			return err
@@ -483,27 +483,41 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 			deploy.updateStatus(oldFn, err, "failed to get environment while updating function")
 			return err
 		}
+		return deploy.updateFuncDeployment(newFn, env)
+	}
 
-		deployLabels := deploy.getDeployLabels(oldFn, env)
-		deploy.logger.Info("updating deployment due to function update", zap.String("deployment", fnObjName), zap.String("function", newFn.Metadata.Name))
-		newDeployment, err := deploy.getDeploymentSpec(newFn, env, fnObjName, deployLabels)
-		if err != nil {
-			deploy.updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
-			return err
-		}
+	return nil
+}
 
-		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
-		// deployment of the function in fission-function ns
-		ns := deploy.namespace
-		if newFn.Metadata.Namespace != metav1.NamespaceDefault {
-			ns = newFn.Metadata.Namespace
-		}
+func (deploy *NewDeploy) updateFuncDeployment(fn *crd.Function, env *crd.Environment) error {
 
-		err = deploy.updateDeployment(newDeployment, ns)
-		if err != nil {
-			deploy.updateStatus(oldFn, err, "failed to update deployment while updating function")
-			return err
-		}
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
+	if err != nil {
+		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", fn)
+		return err
+	}
+	fnObjName := fsvc.Name
+
+	deployLabels := deploy.getDeployLabels(fn, env)
+	deploy.logger.Info("updating deployment due to function update", zap.String("deployment", fnObjName), zap.String("function", fn.Metadata.Name))
+
+	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, deployLabels)
+	if err != nil {
+		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
+		return err
+	}
+
+	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+	// deployment of the function in fission-function ns
+	ns := deploy.namespace
+	if fn.Metadata.Namespace != metav1.NamespaceDefault {
+		ns = fn.Metadata.Namespace
+	}
+
+	err = deploy.updateDeployment(newDeployment, ns)
+	if err != nil {
+		deploy.updateStatus(fn, err, "failed to update deployment while updating function")
+		return err
 	}
 
 	return nil

@@ -218,7 +218,6 @@ func fnCreate(c *cli.Context) error {
 
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
-	var envResourceVersion string
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -228,7 +227,6 @@ func fnCreate(c *cli.Context) error {
 		util.CheckErr(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
 		pkgMetadata = &pkg.Metadata
 		envName = pkg.Spec.Environment.Name
-		envResourceVersion = pkg.Spec.Environment.ResourceVersion
 		if envName != c.String("env") {
 			log.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
 		}
@@ -272,19 +270,8 @@ func fnCreate(c *cli.Context) error {
 
 		buildcmd := c.String("buildcmd")
 
-		env, err := client.EnvironmentGet(&metav1.ObjectMeta{
-			Namespace: envNamespace,
-			Name:      envName,
-		})
-
-		if err != nil {
-			log.Warn("get environment for the function")
-		} else {
-			envResourceVersion = env.Metadata.ResourceVersion
-		}
-
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, envResourceVersion, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 	}
 
 	var secrets []fission.SecretReference
@@ -331,9 +318,8 @@ func fnCreate(c *cli.Context) error {
 		},
 		Spec: fission.FunctionSpec{
 			Environment: fission.EnvironmentReference{
-				Name:            envName,
-				Namespace:       envNamespace,
-				ResourceVersion: envResourceVersion,
+				Name:      envName,
+				Namespace: envNamespace,
 			},
 			Package: fission.FunctionPackageRef{
 				FunctionName: entrypoint,

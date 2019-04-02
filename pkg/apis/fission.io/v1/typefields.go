@@ -62,9 +62,8 @@ type (
 	}
 
 	EnvironmentReference struct {
-		Namespace       string `json:"namespace"`
-		Name            string `json:"name"`
-		ResourceVersion string `json:"resourceversion,omitempty"`
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
 	}
 
 	SecretReference struct {

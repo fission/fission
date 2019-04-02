@@ -94,19 +94,7 @@ func pkgCreate(c *cli.Context) error {
 		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	env, err := client.EnvironmentGet((&metav1.ObjectMeta{
-		Namespace: envNamespace,
-		Name:      envName,
-	}))
-	var envResourceVersion string
-	if err != nil {
-		envResourceVersion = ""
-		log.Warn("Environment not found while creating package")
-	} else {
-		envResourceVersion = env.Metadata.ResourceVersion
-	}
-
-	createPackage(client, pkgNamespace, envName, envNamespace, envResourceVersion, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
+	createPackage(client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
 
 	return nil
 }
@@ -589,13 +577,11 @@ func uploadArchive(ctx context.Context, client *client.Client, fileName string) 
 	return &archive
 }
 
-func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, envResourceVersion string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) *metav1.ObjectMeta {
-
+func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) *metav1.ObjectMeta {
 	pkgSpec := fission.PackageSpec{
 		Environment: fission.EnvironmentReference{
-			Namespace:       envNamespace,
-			Name:            envName,
-			ResourceVersion: envResourceVersion,
+			Namespace: envNamespace,
+			Name:      envName,
 		},
 	}
 	var pkgStatus fission.BuildStatus = fission.BuildStatusSucceeded
