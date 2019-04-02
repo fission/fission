@@ -19,7 +19,6 @@ package newdeploy
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -217,7 +216,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []crd.Function {
 	funcList, err := deploy.fissionClient.Functions(m.Namespace).List(metav1.ListOptions{})
 	if err != nil {
-		log.Printf("Error getting functions for env %v: %v", m, err)
+		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
 	}
 	relatedFunctions := make([]crd.Function, 0)
 	for _, f := range funcList.Items {
@@ -499,7 +498,7 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *crd.Function, env *crd.Environ
 	fnObjName := fsvc.Name
 
 	deployLabels := deploy.getDeployLabels(fn, env)
-	deploy.logger.Info("updating deployment due to function update", zap.String("deployment", fnObjName), zap.String("function", fn.Metadata.Name))
+	deploy.logger.Info("updating deployment due to function/environment update", zap.String("deployment", fnObjName), zap.Any("function", fn.Metadata.Name))
 
 	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, deployLabels)
 	if err != nil {
