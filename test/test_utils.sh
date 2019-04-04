@@ -446,9 +446,19 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:test
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
 
-    JOB=1
+    export JOBS=1
+    export TIMEOUT=300
+    set +e
     $ROOT/test/run_test.sh
+    FAILURES=$?
+    set -e
 
     # dump test logs
     # TODO: the idx does not match seq number in recap.

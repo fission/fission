@@ -6,15 +6,17 @@
 #       ./run_test.sh [test_file ...]       Run specific tests.
 #
 # Environments:
-#       JOBS        The number of concurrent jobs. (default: 1)
 #       LOG_DIR     Log directory path. (default: $ROOT/test/logs)
+#       JOBS        The number of concurrent jobs. (default: 1)
+#       TIMEOUT     Timeout for each job. (default: 0 (no timeout))
 #
 set -euo pipefail
 source $(dirname $BASH_SOURCE)/init_tools.sh
 
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
-JOB=${JOB:-1}
+JOBS=${JOBS:-1}
+TIMEOUT=${TIMEOUT:-0}
 
 main() {
     if [ $# -eq 0 ]; then
@@ -49,12 +51,19 @@ main() {
     done
 
     parallel \
-        --joblog $LOG_DIR/_recap \
-        --jobs $JOB \
+        --joblog - \
+        --jobs $JOBS \
+        --timeout $TIMEOUT \
         bash -c '{1} > {2} 2>&1' \
         ::: $test_files :::+ $log_files \
-        || true
-    cat $LOG_DIR/_recap
+        | tee $LOG_DIR/_recap
+
+    # parallel always returns 0. Get the Exitval in _recap to find if any test failed.
+    failed_test=$(cat $LOG_DIR/_recap | awk 'NR>1 && $7!=0 {print $0}')
+    if [ ! -z "$failed_test" ]; then
+        return 1
+    fi
+    return 0
 }
 
 main "$@"
