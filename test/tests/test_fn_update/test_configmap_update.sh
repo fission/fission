@@ -3,24 +3,28 @@
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 source $(dirname $0)/fnupdate_utils.sh
 
 ROOT=$(dirname $0)/../../..
 
-env=python-$(date +%N)
-fn_name=hellopy-$(date +%N)
+env=python-$TEST_ID
+fn_name=hellopy-$TEST_ID
 
-old_cfgmap=old-cfgmap-$(date +%N)
-new_cfgmap=new-cfgmap-$(date +%N)
+old_cfgmap=old-cfgmap-$TEST_ID
+new_cfgmap=new-cfgmap-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name $env || true
+    clean_resource_by_id $TEST_ID
     kubectl delete configmap ${old_cfgmap} -n default || true
     kubectl delete configmap ${new_cfgmap} -n default || true
-    fission spec destroy || true
-    rm -rf specs || true
-    rm cfgmap.py || true
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -29,22 +33,24 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-cp ../test_secret_cfgmap/cfgmap.py.template cfgmap.py
-sed -i "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" cfgmap.py
+cp $(dirname $0)/../test_secret_cfgmap/cfgmap.py.template $tmp_dir/cfgmap.py
+sed -i "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" $tmp_dir/cfgmap.py
 
 log "Creating env $env"
-fission env create --name $env --image fission/python-env
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE
 
 log "Creating configmap $old_cfgmap"
 kubectl create configmap ${old_cfgmap} --from-literal=TEST_KEY="TESTVALUE" -n default
 
 log "Creating NewDeploy function spec: $fn_name"
+pushd $tmp_dir
 fission spec init
 fission fn create --spec --name $fn_name --env $env --code cfgmap.py --configmap $old_cfgmap --minscale 1 --maxscale 4 --executortype newdeploy
-fission spec apply ./specs/
+fission spec apply
+popd
 
 log "Creating route"
-fission route create --function ${fn_name} --url /${fn_name} --method GET
+fission route create --name ${fn_name} --function ${fn_name} --url /${fn_name} --method GET
 
 log "Waiting for router to catch up"
 sleep 5
@@ -56,14 +62,18 @@ log "Creating a new cfgmap"
 kubectl create configmap ${new_cfgmap} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default
 
 log "Updating cfgmap and code for the function"
-sed -i "s/${old_cfgmap}/${new_cfgmap}/g" cfgmap.py
-sed -i "s/${old_cfgmap}/${new_cfgmap}/g" specs/function-$fn_name.yaml
+sed -i "s/${old_cfgmap}/${new_cfgmap}/g" $tmp_dir/cfgmap.py
+sed -i "s/${old_cfgmap}/${new_cfgmap}/g" $tmp_dir/specs/function-$fn_name.yaml
 
 log "Applying function changes"
-fission spec apply ./specs/
+pushd $tmp_dir
+fission spec apply
+popd
 
 log "Waiting for changes to take effect"
 sleep 5
 
 log "Testing function for cfgmap value"
 timeout 60 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"
+
+log "Test PASSED"

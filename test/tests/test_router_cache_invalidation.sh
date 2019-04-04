@@ -3,11 +3,16 @@
 set -euo pipefail
 source $(dirname $0)/../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name python || true
-    fission fn delete --name $fn || true
-    rm -rf testDir-$fn || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -25,27 +30,21 @@ fi
 #    This ensures that router invalidated its cache, made a request to executor to get service for function and retried
 #    the request against this new address.
 
-PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
-fn=python-func-$(date +%s)
-
-log "Pre-test cleanup"
-fission env delete --name python || true
+env=python-$TEST_ID
+fn=python-func-$TEST_ID
+route=python-ht-$TEST_ID
 
 log "Creating python env"
-fission env create --name python --image $PYTHON_RUNTIME_IMAGE
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE
 
 log "Creating hello.py"
-mkdir testDir-$fn
-printf 'def main():\n    return "Hello, world!"' > testDir-$fn/hello.py
+printf 'def main():\n    return "Hello, world!"' > $tmp_dir/hello.py
 
 log "Creating function " $fn
-fission fn create --name $fn --env python --code testDir-$fn/hello.py
-
-log "rm testDir-$fn"
-rm -rf testDir-$fn
+fission fn create --name $fn --env $env --code $tmp_dir/hello.py
 
 log "Creating route"
-fission route create --function $fn --url /$fn --method GET
+fission route create --name $route --function $fn --url /$fn --method GET
 
 log "Waiting for router to update cache"
 sleep 5
@@ -70,3 +69,5 @@ if [ "$http_status" -ne "200" ]; then
     log "Something went wrong, http status after deleting function pod is $http_status"
     exit 1
 fi
+
+log "Test PASSED"

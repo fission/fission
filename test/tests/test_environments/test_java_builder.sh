@@ -5,18 +5,33 @@ source $(dirname $0)/../../utils.sh
 
 ROOT=$(dirname $0)/../../..
 
-JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-gcr.io/fission-ci/jvm-env:test}
-JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-gcr.io/fission-ci/jvm-env-builder:test}
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
+env=java-$TEST_ID
+fn_p=pbuilderhello-$TEST_ID
+fn_n=nbuilderhello-$TEST_ID
+pkg_list=""
 
 cleanup() {
-    fission fn delete --name pbuilderhello || true
-    fission fn delete --name nbuilderhello || true
-    fission env delete --name java || true
-    rm $ROOT/examples/jvm/java/java-src-pkg.zip || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
+    for pkg in $pkg_list; do
+        fission package delete --name $pkg || true
+    done
 }
 
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
 test_fn() {
-    echo "Checking for valid response"
+    echo "Checking function for valid response"
 
     while true; do
       response0=$(curl http://$FISSION_ROUTER/$1)
@@ -29,7 +44,7 @@ test_fn() {
 }
 
 test_pkg() {
-    echo "Checking for valid response"
+    echo "Checking package for valid response"
 
     while true; do
       response0=$(kubectl get -ndefault package $1 -o=jsonpath='{.status.buildstatus}')
@@ -46,36 +61,37 @@ export -f test_pkg
 
 cd $ROOT/examples/jvm/java
 
-trap cleanup EXIT
-
 log "Creating zip from source code"
-zip -r java-src-pkg.zip *
+zip -r $tmp_dir/java-src-pkg.zip *
 
 log "Creating Java environment with Java Builder"
-fission env create --name java --image $JVM_RUNTIME_IMAGE --version 2 --keeparchive --builder $JVM_BUILDER_IMAGE
+fission env create --name $env --image $JVM_RUNTIME_IMAGE --version 2 --keeparchive --builder $JVM_BUILDER_IMAGE
 
 log "Creating package from the source archive"
-pkg_name=`fission package create --sourcearchive java-src-pkg.zip --env java|cut -d' ' -f 2|cut -d"'" -f 2`
+pkg_name=`fission package create --sourcearchive $tmp_dir/java-src-pkg.zip --env $env|cut -d' ' -f 2|cut -d"'" -f 2`
+pkg_list="$pkg_list $pkg_name"
 log "Created package $pkg_name"
 
 log "Checking the status of package"
-timeout 300 bash -c "test_pkg $pkg_name 'succeeded'"
+timeout 400 bash -c "test_pkg $pkg_name 'succeeded'"
 
 log "Creating pool manager & new deployment function for Java"
-fission fn create --name nbuilderhello --pkg $pkg_name --env java --entrypoint io.fission.HelloWorld --executortype newdeploy --minscale 1 --maxscale 1
-fission fn create --name pbuilderhello --pkg $pkg_name --env java --entrypoint io.fission.HelloWorld
+fission fn create --name $fn_n --pkg $pkg_name --env $env --entrypoint io.fission.HelloWorld --executortype newdeploy --minscale 1 --maxscale 1
+fission fn create --name $fn_p --pkg $pkg_name --env $env --entrypoint io.fission.HelloWorld
 
 log "Creating route for pool manager function"
-fission route create --function pbuilderhello --url /pbuilderhello --method GET
+fission route create --name $fn_p --function $fn_p --url /$fn_p --method GET
 
 log "Creating route for new deployment function"
-fission route create --function nbuilderhello --url /nbuilderhello --method GET
+fission route create --name $fn_n --function $fn_n --url /$fn_n --method GET
 
 log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function"
-timeout 60 bash -c "test_fn pbuilderhello 'Hello'"
+timeout 60 bash -c "test_fn $fn_p 'Hello'"
 
 log "Testing new deployment function"
-timeout 60 bash -c "test_fn nbuilderhello 'Hello'"
+timeout 60 bash -c "test_fn $fn_n 'Hello'"
+
+log "Test PASSED"
