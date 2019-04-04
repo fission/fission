@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euo pipefail
+source $(dirname $0)/../../utils.sh
 
 fn=spec-$(date +%N)
 env=python-$fn

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
 
 # Use package command to create packages of type:
 #     1) Multiple source files from a directory

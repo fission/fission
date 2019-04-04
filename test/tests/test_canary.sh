@@ -3,6 +3,7 @@
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
 
 id=""
 ROOT=$(dirname $0)/../..

@@ -7,6 +7,7 @@
 
 set -euo pipefail
 set +x
+source $(dirname $0)/../../utils.sh
 
 ROOT=$(dirname $0)/../..
 DIR=$(dirname $0)

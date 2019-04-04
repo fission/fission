@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
 
 # Create a function with source package in python 
 # to test builder manger functionality. 

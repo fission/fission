@@ -4,6 +4,7 @@
 # Disabled because CI Fails for invalid function https://github.com/fission/fission/issues/653
 
 set -euo pipefail
+source $(dirname $0)/../../utils.sh
 
 env=nodejs-$(date +%N)
 valid_fn_name=hello-$(date +%N)

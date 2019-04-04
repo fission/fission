@@ -12,9 +12,6 @@ ROOT_RELPATH=$(dirname $0)/..
 pushd $ROOT_RELPATH
 ROOT=$(pwd)
 popd
-TEST_LOG_DIR=$ROOT/test/logs
-
-export TEST_REPORT=""
 
 travis_fold_start() {
     echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
@@ -22,22 +19,6 @@ travis_fold_start() {
 
 travis_fold_end() {
     echo -e "travis_fold:end:$1\r"
-}
-
-report_msg() {
-    TEST_REPORT="$TEST_REPORT\n$1"
-}
-report_test_passed() {
-    report_msg "--- PASSED $1"
-}
-report_test_failed() {
-    report_msg "*** FAILED $1"
-}
-report_test_skipped() {
-    report_msg "### SKIPPED $1"
-}
-show_test_report() {
-    echo -e "------\n$TEST_REPORT\n------"
 }
 
 helm_setup() {
@@ -465,59 +446,23 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    mkdir -p ${TEST_LOG_DIR}
 
-    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
-    test_names=""
-    for test_file in ${test_files}; do
-        test_names="${test_names} ${test_file#${ROOT}/test/tests/}"
-    done
-
-    parallel --plus \
-        --joblog ${TEST_LOG_DIR}/recap \
-        --files \
-        --results ${TEST_LOG_DIR}/{2} \
-        --jobs 8 \
-        run_test \
-        ::: $test_files :::+ $test_names
-    cat ${TEST_LOG_DIR}/recap
+    JOB=1
+    $ROOT/test/run_test.sh
 
     # dump test logs
-    for test_name in ${test_names}; do
-        log_path=${TEST_LOG_DIR}/${test_name}
-        idx=$(cat ${log_path}.seq)
-        travis_fold_start run_test.${idx} ${test_name}
-        echo ========== stdout ${test_name}
-        cat ${log_path}
-        echo ========== stderr ${test_name}
-        cat ${log_path}.err
-        echo ========== end ${test_name}
-        travis_fold_end run_test.${idx}
+    # TODO: the idx does not match seq number in recap.
+    idx=1
+    log_files=$(find $ROOT/test/logs/ -name '*.log')
+    for log_file in $log_files; do
+        test_name=${log_file#$ROOT/test/logs/}
+        travis_fold_start run_test.$idx $test_name
+        echo "========== start $test_name =========="
+        cat $log_file
+        echo "========== end $test_name =========="
+        travis_fold_end run_test.$idx
+        idx=$((idx+1))
     done
-}
-
-run_test() {
-    test_path=$1
-    test_name=$2
-
-	if grep "^#test:disabled" ${test_path}
-	then
-	    report_test_skipped ${test_name}
-	    echo ------- Skipped ${test_name} -------
-	else
-	    echo ------- Running ${test_name} -------
-	    pushd $(dirname ${test_path})
-	    if ${test_path}
-	    then
-		echo [SUCCESS]: ${test_name}
-		report_test_passed ${test_name}
-	    else
-		echo [FAILED]: ${test_name}
-		export FAILURES=$(($FAILURES+1))
-		report_test_failed ${test_name}
-	    fi
-	    popd
-	fi
 }
 
 install_and_test() {
@@ -553,8 +498,6 @@ install_and_test() {
     run_all_tests $id
 
     dump_logs $id
-
-    show_test_report
 
     if [ $FAILURES -ne 0 ]
     then

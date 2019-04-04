@@ -4,6 +4,7 @@
 # Create a function and trigger it using Kafka
 # This test requires Kafka & MQ-Kafka component of Fission installed in the cluster
 set -euo pipefail
+source $(dirname $0)/../../../utils.sh
 set +x
 
 nodeenv="node-kafka"
