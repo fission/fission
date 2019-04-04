@@ -26,6 +26,7 @@ main() {
     fi
 
     num_skip=0
+    mkdir -p $LOG_DIR
     test_files=""
     log_files=""
     for arg in $args; do

@@ -449,19 +449,19 @@ run_all_tests() {
     export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
 
     export JOBS=10
-    export TIMEOUT=300
+    export TIMEOUT=900  # 15 minutes
     set +e
     $ROOT/test/run_test.sh \
-        tests/test_annotations.sh \
-        tests/test_archive_pruner.sh \
-        tests/test_backend_newdeploy.sh \
-        tests/test_backend_poolmgr.sh \
-        tests/test_buildermgr.sh \
-        tests/test_env_vars.sh \
-        tests/test_function_update.sh \
-        tests/test_ingress.sh \
-        tests/test_internal_routes.sh \
-        tests/test_pass.sh
+        $ROOT/test/tests/test_annotations.sh \
+        $ROOT/test/tests/test_archive_pruner.sh \
+        $ROOT/test/tests/test_backend_newdeploy.sh \
+        $ROOT/test/tests/test_backend_poolmgr.sh \
+        $ROOT/test/tests/test_buildermgr.sh \
+        $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_function_update.sh \
+        $ROOT/test/tests/test_ingress.sh \
+        $ROOT/test/tests/test_internal_routes.sh \
+        $ROOT/test/tests/test_pass.sh
     FAILURES=$?
     set -e
 
