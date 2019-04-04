@@ -8,20 +8,23 @@
 set -euo pipefail
 source $(dirname $0)/../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 ROOT=$(dirname $0)/../..
 
-log "Writing functions"
-f1=f1-$(date +%s)
-f2=f2-$(date +%s)
+env=nodejs-$TEST_ID
+f1=f1-$TEST_ID
+f2=f2-$TEST_ID
 log $f1 $f2
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name nodejs || true
-    fission fn delete --name $f1 || true
-    fission fn delete --name $f2 || true
-    rm $f1.js || true
-    rm $f2.js || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -30,23 +33,20 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-log "Pre-test cleanup"
-fission env delete --name nodejs || true
-
 log "Creating nodejs env"
-fission env create --name nodejs --image fission/node-env
+fission env create --name $env --image $NODE_RUNTIME_IMAGE
 
 
 
 for f in $f1 $f2
 do
-    echo "module.exports = function(context, callback) { callback(200, \"$f\n\"); }" > $f.js
+    echo "module.exports = function(context, callback) { callback(200, \"$f\n\"); }" > $tmp_dir/$f.js
 done
 
 log "Creating functions"
 for f in $f1 $f2
 do
-    fission fn create --name $f --env nodejs --code $f.js
+    fission fn create --name $f --env $env --code $tmp_dir/$f.js
 done
 
 log "Waiting for router to catch up"

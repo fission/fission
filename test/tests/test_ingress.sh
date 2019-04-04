@@ -2,19 +2,28 @@
 set -euo pipefail
 source $(dirname $0)/../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
 ROOT=$(dirname $0)/../..
 
-relativeUrl="/itest"
-functionName="hellotest"
-hostName="test.com"
+relativeUrl="/itest-$TEST_ID"
+functionName="hellotest-$TEST_ID"
+hostName="test-$TEST_ID.com"
 
 cleanup() {
+    clean_resource_by_id $TEST_ID
+}
+
+clean_route() {
     fission route delete --name $1
 }
 
+trap cleanup EXIT
+
 log "Creating route for URL $relativeUrl"
 route_name=$(fission route create --url $relativeUrl --function $functionName --createingress| grep trigger| cut -d" " -f 2|cut -d"'" -f 2)
-trap "cleanup $route_name" EXIT
+trap "clean_route $route_name" EXIT
 
 log "Route $route_name created"
 
@@ -44,3 +53,5 @@ then
     log "Provided host and host in ingress don't match"
     exit 1
 fi
+
+log "Test PASSED"

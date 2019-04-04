@@ -26,6 +26,11 @@ if [ $(uname -s) == 'Darwin' ]; then
     }
     export -f readlink
 
+    tr() {
+        gtr "$@"
+    }
+    export -f tr
+
     find_executable() {
         path=$1; shift
         find $path -perm +111 -type f "$@"

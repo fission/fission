@@ -3,12 +3,18 @@
 set -euo pipefail
 source $(dirname $0)/../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
 ROOT=$(dirname $0)/../.. 
+
+env=nodejs-$TEST_ID
+fn=nodejs-hello-$TEST_ID
+route=nodejs-hello-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name nodejs || true
-    fission fn delete --name $fn || true
+    clean_resource_by_id $TEST_ID
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -17,20 +23,16 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-fn=nodejs-hello-$(date +%N)
 
 # Create a hello world function in nodejs, test it with an http trigger
-log "Poolmgr ExecutorType: Pre-test cleanup"
-fission env delete --name nodejs || true
-
 log "Creating nodejs env"
-fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+fission env create --name $env --image $NODE_RUNTIME_IMAGE --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
 log "Creating function"
-fission fn create --name $fn --env nodejs --code $ROOT/examples/nodejs/hello.js --executortype poolmgr
+fission fn create --name $fn --env $env --code $ROOT/examples/nodejs/hello.js --executortype poolmgr
 
 log "Creating route"
-fission route create --function $fn --url /$fn --method GET
+fission route create --name $route --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
 sleep 5
@@ -40,8 +42,5 @@ response=$(curl http://$FISSION_ROUTER/$fn)
 
 log "Checking for valid response"
 echo $response | grep -i hello
-
-# crappy cleanup, improve this later
-kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
 
 log "Poolmgr ExecutorType: All done."

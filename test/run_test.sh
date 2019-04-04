@@ -25,6 +25,7 @@ main() {
         args="$@"
     fi
 
+    num_skip=0
     test_files=""
     log_files=""
     for arg in $args; do
@@ -38,7 +39,8 @@ main() {
         log_path=$LOG_DIR/${relative_path}.log
 
         if grep -q "^#test:disabled" $arg; then
-            echo "WARNING: the test is marked disabled: $relative_path"
+            echo "INFO: the test is marked disabled: $relative_path"
+            num_skip=$((num_skip+1))
             continue
         fi
 
@@ -59,11 +61,13 @@ main() {
         | tee $LOG_DIR/_recap
 
     # parallel always returns 0. Get the Exitval in _recap to find if any test failed.
-    failed_test=$(cat $LOG_DIR/_recap | awk 'NR>1 && $7!=0 {print $0}')
-    if [ ! -z "$failed_test" ]; then
-        return 1
-    fi
-    return 0
+    num_total=$(cat $LOG_DIR/_recap | wc -l)
+    num_total=$((num_total - 1))    # don't count header
+    num_fail=$(cat $LOG_DIR/_recap | awk 'NR>1 && $7!=0 {print $0}' | wc -l | tr -d ' ')
+    num_pass=$((num_total - num_fail))
+    echo ============================================================
+    echo "PASS: $num_pass    SKIP: $num_skip    FAIL: $num_fail"
+    return $num_fail
 }
 
 main "$@"

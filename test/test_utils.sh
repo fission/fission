@@ -434,11 +434,6 @@ dump_logs() {
     travis_fold_end dump_logs
 }
 
-log() {
-    echo `date +%Y/%m/%d:%H:%M:%S`" $1"
-}
-
-export -f log
 export FAILURES=0
 
 run_all_tests() {
@@ -453,10 +448,20 @@ run_all_tests() {
     export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
     export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
 
-    export JOBS=1
+    export JOBS=10
     export TIMEOUT=300
     set +e
-    $ROOT/test/run_test.sh
+    $ROOT/test/run_test.sh \
+        tests/test_annotations.sh \
+        tests/test_archive_pruner.sh \
+        tests/test_backend_newdeploy.sh \
+        tests/test_backend_poolmgr.sh \
+        tests/test_buildermgr.sh \
+        tests/test_env_vars.sh \
+        tests/test_function_update.sh \
+        tests/test_ingress.sh \
+        tests/test_internal_routes.sh \
+        tests/test_pass.sh
     FAILURES=$?
     set -e
 

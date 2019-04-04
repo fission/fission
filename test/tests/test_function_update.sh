@@ -2,16 +2,23 @@
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh
+
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 ROOT=$(dirname $0)/../..
 
-fn=nodejs-hello-$(date +%s)
+env=nodejs-$TEST_ID
+fn=nodejs-hello-$TEST_ID
+route=nodejs-hello-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name nodejs || true
-    fission fn delete --name $fn || true
-    rm foo.js || true
-    rm bar.js || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -24,18 +31,15 @@ fi
 # Update it and check it's output, the output should be 
 # different from the previous one.
 
-log "Pre-test cleanup"
-fission env delete --name nodejs || true
-
 log "Creating nodejs env"
-fission env create --name nodejs --image fission/node-env
+fission env create --name $env --image $NODE_RUNTIME_IMAGE
 
 log "Creating function"
-echo 'module.exports = function(context, callback) { callback(200, "foo!\n"); }' > foo.js
-fission fn create --name $fn --env nodejs --code foo.js
+echo 'module.exports = function(context, callback) { callback(200, "foo!\n"); }' > $tmp_dir/foo.js
+fission fn create --name $fn --env $env --code $tmp_dir/foo.js
 
 log "Creating route"
-fission route create --function $fn --url /$fn --method GET
+fission route create --name $route --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
 sleep 10
@@ -53,8 +57,8 @@ echo $response | grep -i foo
 pid=$!
 
 log "Updating function"
-echo 'module.exports = function(context, callback) { callback(200, "bar!\n"); }' > bar.js
-fission fn update --name $fn --code bar.js
+echo 'module.exports = function(context, callback) { callback(200, "bar!\n"); }' > $tmp_dir/bar.js
+fission fn update --name $fn --code $tmp_dir/bar.js
 
 log "Waiting for router to update cache"
 sleep 10
@@ -66,8 +70,5 @@ log "Checking for valid response again"
 echo $response | grep -i bar
 
 kill -15 $pid
-
-# crappy cleanup, improve this later
-kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
 
 log "All done."

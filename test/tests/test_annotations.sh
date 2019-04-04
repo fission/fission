@@ -5,18 +5,18 @@ source $(dirname $0)/../utils.sh
 
 # test_annotations.sh - tests whether a user is able to add pod annotations to a Fission environment deployment
 
-TEST_ID=$(date +%s)
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
 ENV=python-${TEST_ID}
-FN=foo-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
 BUILDER_NS=fission-builder
 LIST_ANNOTATIONS=go-template='{{range $key,$value := .metadata.annotations}}{{$key}}: {{$value}}{{"\n"}}{{end}}'
 
 # fs
-TEST_DIR=/tmp/${TEST_ID}
+TEST_DIR=/tmp/test-${TEST_ID}
 ENV_SPEC_FILE=${TEST_DIR}/${ENV}.yaml
-FN_FILE=${TEST_DIR}/${FN}.yaml
 
 log_exec() {
     cmd=$@
@@ -26,7 +26,7 @@ log_exec() {
 
 cleanup() {
     log "Cleaning up..."
-    kubectl -n ${RESOURCE_NS} delete environment/${ENV} || true
+    clean_resource_by_id $TEST_ID
     rm -rf ${TEST_DIR}
 
 }
@@ -58,7 +58,7 @@ getPodName() {
 # https://unix.stackexchange.com/questions/82598/how-do-i-write-a-retry-logic-in-script-to-keep-retrying-to-run-it-upto-5-times/82610
 function retry {
   local n=1
-  local max=5
+  local max=10
   local delay=10 # pods take time to get ready
   while true; do
     "$@" && break || {
@@ -89,9 +89,9 @@ metadata:
 spec:
   builder:
     command: build
-    image: gcr.io/fission-ci/python-env-builder:test
+    image: ${PYTHON_BUILDER_IMAGE}
   runtime:
-    image: gcr.io/fission-ci/python-env:test
+    image: ${PYTHON_RUNTIME_IMAGE}
   version: 2
   poolsize: 1
 EOM
