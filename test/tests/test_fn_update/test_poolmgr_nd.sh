@@ -5,15 +5,17 @@ source $(dirname $0)/../../utils.sh
 
 source $(dirname $0)/fnupdate_utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
 ROOT=$(dirname $0)/../../..
 
-env=python-$(date +%N)
-fn=hellopython-$(date +%N)
+env=python-$TEST_ID
+fn=hellopython-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name $env || true
-    fission fn delete --name $fn || true
+    clean_resource_by_id $TEST_ID
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -23,7 +25,7 @@ else
 fi
 
 log "Creating Python env $env"
-fission env create --name $env --image fission/python-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
 log "Creating function $fn"
 fission fn create --name $fn --env $env --code $ROOT/examples/python/hello.py
@@ -51,3 +53,4 @@ log "Waiting for router to catch up"
 sleep 5
 
 timeout 60 bash -c "test_fn $fn 'world'"
+log "Test PASSED"

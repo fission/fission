@@ -10,8 +10,6 @@ echo "TEST_ID = $TEST_ID"
 nodejs_env=nodejs-$TEST_ID
 fn0=nodejs-hello-0-$TEST_ID
 fn1=nodejs-hello-1-$TEST_ID
-ht0=nodejs-hello-0-$TEST_ID
-ht1=nodejs-hello-1-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
@@ -34,7 +32,7 @@ log "Creating function, testing for cold start with MinScale 0"
 fission fn create --name $fn0 --env $nodejs_env --code $ROOT/examples/nodejs/hello.js --minscale 0 --maxscale 4 --executortype newdeploy
 
 log "Creating route"
-fission route create --name $ht0 --function $fn0 --url /$fn0 --method GET
+fission route create --function $fn0 --url /$fn0 --method GET
 
 log "Waiting for router & newdeploy deployment creation"
 sleep 5
@@ -49,7 +47,7 @@ log "Creating function, testing for warm start with MinScale 1"
 fission fn create --name $fn1 --env $nodejs_env --code $ROOT/examples/nodejs/hello.js --minscale 1 --maxscale 4 --executortype newdeploy
 
 log "Creating route"
-fission route create --name $ht1 --function $fn1 --url /$fn1 --method GET
+fission route create --function $fn1 --url /$fn1 --method GET
 
 log "Waiting for router & newdeploy deployment creation"
 sleep 5

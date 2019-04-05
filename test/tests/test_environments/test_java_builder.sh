@@ -14,14 +14,10 @@ mkdir -p $tmp_dir
 env=java-$TEST_ID
 fn_p=pbuilderhello-$TEST_ID
 fn_n=nbuilderhello-$TEST_ID
-pkg_list=""
 
 cleanup() {
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
-    for pkg in $pkg_list; do
-        fission package delete --name $pkg || true
-    done
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -69,7 +65,6 @@ fission env create --name $env --image $JVM_RUNTIME_IMAGE --version 2 --keeparch
 
 log "Creating package from the source archive"
 pkg_name=`fission package create --sourcearchive $tmp_dir/java-src-pkg.zip --env $env|cut -d' ' -f 2|cut -d"'" -f 2`
-pkg_list="$pkg_list $pkg_name"
 log "Created package $pkg_name"
 
 log "Checking the status of package"
@@ -80,10 +75,10 @@ fission fn create --name $fn_n --pkg $pkg_name --env $env --entrypoint io.fissio
 fission fn create --name $fn_p --pkg $pkg_name --env $env --entrypoint io.fission.HelloWorld
 
 log "Creating route for pool manager function"
-fission route create --name $fn_p --function $fn_p --url /$fn_p --method GET
+fission route create --function $fn_p --url /$fn_p --method GET
 
 log "Creating route for new deployment function"
-fission route create --name $fn_n --function $fn_n --url /$fn_n --method GET
+fission route create --function $fn_n --url /$fn_n --method GET
 
 log "Waiting for router & pools to catch up"
 sleep 5

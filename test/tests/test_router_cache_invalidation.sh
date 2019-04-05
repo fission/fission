@@ -32,7 +32,6 @@ fi
 
 env=python-$TEST_ID
 fn=python-func-$TEST_ID
-route=python-ht-$TEST_ID
 
 log "Creating python env"
 fission env create --name $env --image $PYTHON_RUNTIME_IMAGE
@@ -44,7 +43,7 @@ log "Creating function " $fn
 fission fn create --name $fn --env $env --code $tmp_dir/hello.py
 
 log "Creating route"
-fission route create --name $route --function $fn --url /$fn --method GET
+fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to update cache"
 sleep 5

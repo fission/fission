@@ -53,21 +53,25 @@ main() {
         log_files="$log_files ${log_path#$PWD/}"
     done
 
+    start_time=$(date +%s)
     parallel \
         --joblog - \
         --jobs $JOBS \
         --timeout $TIMEOUT \
         bash -c '{1} > {2} 2>&1' \
         ::: $test_files :::+ $log_files \
-        | tee $LOG_DIR/_recap
+        | tee $LOG_DIR/_recap \
+        || true
+    end_time=$(date +%s)
 
-    # parallel always returns 0. Get the Exitval in _recap to find if any test failed.
+    # Get the Exitval in _recap to find if any test failed.
     num_total=$(cat $LOG_DIR/_recap | wc -l)
     num_total=$((num_total - 1))    # don't count header
     num_fail=$(cat $LOG_DIR/_recap | awk 'NR>1 && $7!=0 {print $0}' | wc -l | tr -d ' ')
     num_pass=$((num_total - num_fail))
+    time=$((end_time - start_time))
     echo ============================================================
-    echo "PASS: $num_pass    SKIP: $num_skip    FAIL: $num_fail"
+    echo "PASS: $num_pass    SKIP: $num_skip    FAIL: $num_fail    TIME: ${time}s"
     return $num_fail
 }
 

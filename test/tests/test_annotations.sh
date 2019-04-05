@@ -8,6 +8,9 @@ source $(dirname $0)/../utils.sh
 TEST_ID=$(generate_test_id)
 echo "TEST_ID = $TEST_ID"
 
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 ENV=python-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
@@ -15,8 +18,7 @@ BUILDER_NS=fission-builder
 LIST_ANNOTATIONS=go-template='{{range $key,$value := .metadata.annotations}}{{$key}}: {{$value}}{{"\n"}}{{end}}'
 
 # fs
-TEST_DIR=/tmp/test-${TEST_ID}
-ENV_SPEC_FILE=${TEST_DIR}/${ENV}.yaml
+ENV_SPEC_FILE=$tmp_dir/${ENV}.yaml
 
 log_exec() {
     cmd=$@
@@ -27,19 +29,13 @@ log_exec() {
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
-    rm -rf ${TEST_DIR}
-
+    rm -rf $tmp_dir
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
-fi
-
-if ! stat ${TEST_DIR} >/dev/null 2>&1 ; then
-    mkdir ${TEST_DIR}
 fi
 
 getPodName() {

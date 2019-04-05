@@ -31,8 +31,6 @@ fn2=python-srcbuild2-$TEST_ID
 fn4=python-deploy4-$TEST_ID
 fn5=python-deploy5-$TEST_ID
 
-pkg_list=""
-
 waitBuild() {
     log "Waiting for builder manager to finish the build"
     
@@ -77,9 +75,6 @@ cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
-    for pkg in $pkg_list; do
-        fission package delete --name $pkg || true
-    done
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -96,7 +91,6 @@ timeout 180s bash -c "waitEnvBuilder $env"
 # Currently only * expression implemented as a test
 pushd $ROOT/examples/python/
 pkg1=$(fission package create --src "sourcepkg/*" --env $env --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkg1"
 popd
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkg1"
@@ -104,7 +98,7 @@ log "Creating function " $fn1
 fission fn create --name $fn1 --pkg $pkg1 --entrypoint "user.main"
 
 log "Creating route"
-fission route create --name $fn1 --function $fn1 --url /$fn1 --method GET
+fission route create --function $fn1 --url /$fn1 --method GET
 
 log "Waiting for router to catch up"
 sleep 3
@@ -115,7 +109,6 @@ checkFunctionResponse $fn1 'a: 1 b: {c: 3, d: 4}'
 log "Creating pacakage with source archive"
 zip -jr $tmp_dir/demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 pkg2=$(fission package create --src $tmp_dir/demo-src-pkg.zip --env $env --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkg2"
 
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkg2"
@@ -124,7 +117,7 @@ log "Creating function " $fn2
 fission fn create --name $fn2 --pkg $pkg2 --entrypoint "user.main"
 
 log "Creating route"
-fission route create --name $fn2 --function $fn2 --url /$fn2 --method GET
+fission route create --function $fn2 --url /$fn2 --method GET
 
 log "Waiting for router to catch up"
 sleep 3
@@ -137,13 +130,12 @@ checkFunctionResponse $fn2 'a: 1 b: {c: 3, d: 4}'
 # 4) Deployment files from a directory
 pushd $ROOT/examples/python/
 pkg4=$(fission package create --deploy "multifile/*" --env $env| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkg4"
 popd
 log "Creating function " $fn4
 fission fn create --name $fn4 --pkg $pkg4 --entrypoint "main.main"
 
 log "Creating route"
-fission route create --name $fn4 --function $fn4 --url /$fn4 --method GET
+fission route create --function $fn4 --url /$fn4 --method GET
 
 log "Waiting for router to catch up"
 sleep 3
@@ -158,14 +150,13 @@ touch $tmp_dir/deploypkg/__init__.py
 printf 'def main():\n    return "Hello, world!"' > $tmp_dir/deploypkg/hello.py
 zip -jr $tmp_dir/demo-deploy-pkg.zip $tmp_dir/deploypkg/
 pkg5=$(fission package create --deploy $tmp_dir/demo-deploy-pkg.zip --env $env| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkg5"
 
 
 log "Updating function " $fn5
 fission fn create --name $fn5 --pkg $pkg5 --entrypoint "hello.main"
 
 log "Creating route"
-fission route create --name $fn5 --function $fn5 --url /$fn5 --method GET
+fission route create --function $fn5 --url /$fn5 --method GET
 
 log "Waiting for router to update cache"
 sleep 3

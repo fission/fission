@@ -15,15 +15,14 @@ cleanup() {
     clean_resource_by_id $TEST_ID
 }
 
-clean_route() {
-    fission route delete --name $1
-}
-
-trap cleanup EXIT
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 log "Creating route for URL $relativeUrl"
 route_name=$(fission route create --url $relativeUrl --function $functionName --createingress| grep trigger| cut -d" " -f 2|cut -d"'" -f 2)
-trap "clean_route $route_name" EXIT
 
 log "Route $route_name created"
 

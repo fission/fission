@@ -19,7 +19,6 @@ ROOT=$(dirname $0)/../..
 
 env=python-$TEST_ID
 fn=python-srcbuild-$TEST_ID
-route=python-srcbuild-$TEST_ID
 
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
@@ -84,7 +83,7 @@ log "Creating function " $fn
 fission fn create --name $fn --env $env --src $tmp_dir/demo-src-pkg.zip --entrypoint "user.main" --buildcmd "./build.sh"
 
 log "Creating route"
-fission route create --name $route --function $fn --url /$fn --method GET
+fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
 sleep 3

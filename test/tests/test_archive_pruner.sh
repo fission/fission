@@ -15,8 +15,15 @@ url=""
 
 
 cleanup() {
+    clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
 }
+
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 create_archive() {
     log "Creating an archive"
@@ -58,9 +65,6 @@ get_archive_from_storage() {
 #6. sleep for two minutes
 #7. now verify that both got deleted.
 main() {
-    # trap
-    trap cleanup EXIT
-
     # create a huge archive
     create_archive
     log "created archive test-deploy-pkg.zip"
@@ -118,7 +122,6 @@ main() {
         log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
         exit 1
     fi
-
 
     log "Test archive pruner PASSED"
 }

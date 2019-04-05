@@ -13,7 +13,6 @@ ROOT=$(dirname $0)/../..
 
 env=nodejs-$TEST_ID
 fn=nodejs-hello-$TEST_ID
-route=nodejs-hello-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
@@ -39,7 +38,7 @@ echo 'module.exports = function(context, callback) { callback(200, "foo!\n"); }'
 fission fn create --name $fn --env $env --code $tmp_dir/foo.js
 
 log "Creating route"
-fission route create --name $route --function $fn --url /$fn --method GET
+fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
 sleep 10

@@ -22,8 +22,6 @@ new_cfgmap=new-cfgmap-$TEST_ID
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
-    kubectl delete configmap ${old_cfgmap} -n default || true
-    kubectl delete configmap ${new_cfgmap} -n default || true
     rm -rf $tmp_dir
 }
 
@@ -33,8 +31,9 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-cp $(dirname $0)/../test_secret_cfgmap/cfgmap.py.template $tmp_dir/cfgmap.py
-sed -i "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" $tmp_dir/cfgmap.py
+sed "s/{{ FN_CFGMAP }}/${old_cfgmap}/g" \
+    $(dirname $0)/../test_secret_cfgmap/cfgmap.py.template \
+    > $tmp_dir/cfgmap.py
 
 log "Creating env $env"
 fission env create --name $env --image $PYTHON_RUNTIME_IMAGE

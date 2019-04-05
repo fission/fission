@@ -6,15 +6,20 @@
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
 
-env=nodejs-$(date +%N)
-valid_fn_name=hello-$(date +%N)
-invalid_fn_name=errhello-$(date +%N)
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
+env=nodejs-$TEST_ID
+valid_fn_name=hello-$TEST_ID
+invalid_fn_name=errhello-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name $env || true
-    fission fn delete --name $valid_fn_name || true
-    fission fn delete --name $invalid_fn_name || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -24,18 +29,18 @@ else
 fi
 
 log "Creating env $env"
-fission env create --name $env --image fission/node-env
+fission env create --name $env --image $NODE_RUNTIME_IMAGE
 
 log "Creating valid function $valid_fn_name"
-fission fn create --name $valid_fn_name --env $env --code hello.js
+fission fn create --name $valid_fn_name --env $env --code $(dirname $0)/hello.js
 
 log "Testing valid function $valid_fn_name"
-fission fn test --name $valid_fn_name > /tmp/valid.log
+fission fn test --name $valid_fn_name > $tmp_dir/valid.log
 
 log "---Valid Function logs---"
-cat /tmp/valid.log
+cat $tmp_dir/valid.log
 log "------"
-valid_num=$(grep 'Hello, Fission' /tmp/valid.log | wc -l)
+valid_num=$(grep 'Hello, Fission' $tmp_dir/valid.log | wc -l)
 
 if [ $valid_num -ne 1 ]
 then
@@ -44,26 +49,26 @@ then
 fi
 
 log "Creating function with an error $invalid_fn_name"
-fission fn create --name $invalid_fn_name --env $env --code errhello.js
+fission fn create --name $invalid_fn_name --env $env --code $(dirname $0)/errhello.js
 
 log "Testing invalid function $valid_fn_name"
-fission fn test --name $invalid_fn_name > /tmp/invalid.log
+fission fn test --name $invalid_fn_name > $tmp_dir/invalid.log
 
 for i in {1..10}
 do
-    size=$(wc -c </tmp/invalid.log)
+    size=$(wc -c < $tmp_dir/invalid.log)
     if [ $size == 0 ]
     then
-        fission fn test --name $invalid_fn_name > /tmp/invalid.log
+        fission fn test --name $invalid_fn_name > $tmp_dir/invalid.log
     else
         break
     fi
 done
 
 log "---Invalid Function logs---"
-cat /tmp/invalid.log
+cat $tmp_dir/invalid.log
 log "------"
-invalid_num=$(grep 'SyntaxError' /tmp/invalid.log | wc -l)
+invalid_num=$(grep 'SyntaxError' $tmp_dir/invalid.log | wc -l)
 
 if [ $invalid_num -ne 1 ]
 then

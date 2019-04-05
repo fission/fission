@@ -10,7 +10,6 @@ ROOT=$(dirname $0)/../..
 
 env=nodejs-$TEST_ID
 fn=nodejs-hello-$TEST_ID
-route=nodejs-hello-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
@@ -32,7 +31,7 @@ log "Creating function"
 fission fn create --name $fn --env $env --code $ROOT/examples/nodejs/hello.js --executortype poolmgr
 
 log "Creating route"
-fission route create --name $route --function $fn --url /$fn --method GET
+fission route create --function $fn --url /$fn --method GET
 
 log "Waiting for router to catch up"
 sleep 5

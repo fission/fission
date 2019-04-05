@@ -10,6 +10,7 @@ test_fn() {
     echo "Doing an HTTP GET on the function's route"
     echo "Checking for valid response"
 
+    set +e
     while true; do
       response0=$(curl http://$FISSION_ROUTER/$1)
       echo $response0 | grep -i $2
@@ -18,5 +19,6 @@ test_fn() {
       fi
       sleep 1
     done
+    set -e
 }
 export -f test_fn

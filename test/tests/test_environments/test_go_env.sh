@@ -14,9 +14,6 @@ ROOT=$(dirname $0)/../../..
 cleanup() {
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
-    for pkg in $pkg_list; do
-        fission package delete --name $pkg || true
-    done
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -28,7 +25,6 @@ fi
 env=go-$TEST_ID
 fn_poolmgr=hello-go-poolmgr-$TEST_ID
 fn_nd=hello-go-nd-$TEST_ID
-pkg_list=""
 
 wait_for_builder() {
     env=$1
@@ -81,7 +77,6 @@ fission env create --name $env --image $GO_RUNTIME_IMAGE --builder $GO_BUILDER_I
 timeout 90 bash -c "wait_for_builder $env"
 
 pkgName=$(fission package create --src hello.go --env $env| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkgName"
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"
@@ -91,8 +86,8 @@ fission fn create --name $fn_poolmgr --env $env --pkg $pkgName --entrypoint Hand
 fission fn create --name $fn_nd      --env $env --pkg $pkgName --entrypoint Handler --executortype newdeploy
 
 log "Creating route for new deployment function"
-fission route create --name $fn_poolmgr --function $fn_poolmgr --url /$fn_poolmgr --method GET
-fission route create --name $fn_nd      --function $fn_nd      --url /$fn_nd      --method GET
+fission route create --function $fn_poolmgr --url /$fn_poolmgr --method GET
+fission route create --function $fn_nd      --url /$fn_nd      --method GET
 
 log "Waiting for router & pools to catch up"
 sleep 5
@@ -107,7 +102,6 @@ timeout 60 bash -c "test_fn $fn_nd 'Hello'"
 cd vendor-example && zip -r $tmp_dir/vendor.zip *
 
 pkgName=$(fission package create --src $tmp_dir/vendor.zip --env $env| cut -f2 -d' '| tr -d \')
-pkg_list="$pkg_list $pkgName"
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"

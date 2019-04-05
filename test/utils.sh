@@ -15,13 +15,25 @@ generate_test_id() {
 
 clean_resource_by_id() {
     test_id=$1
-
-    # TODO some automatically generated resources (e.g. package) will not be deleted.
     KUBECTL="kubectl --namespace default"
+    set +e
+
     crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
+    crds="$crds configmaps secrets"
     for crd in $crds; do
-        $KUBECTL get $crd -o name | grep $test_id | xargs $KUBECTL delete || true
+        $KUBECTL get $crd -o name | grep $test_id | xargs $KUBECTL delete
     done
+
+    pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
+    for pkg in $pkg_list; do
+        fission package delete --name $pkg
+    done
+
+    route_list=$(fission route list | grep $test_id | awk '{print $1}')
+    for route in $route_list; do
+        fission route delete --name $route
+    done
+    set -e
 }
 
 ## Common env parameters

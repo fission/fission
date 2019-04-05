@@ -1,24 +1,22 @@
 #!/bin/bash
 
-#test:disabled
-
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
 
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
 source $(dirname $0)/fnupdate_utils.sh
 
-env=python-$(date +%s)
-fn=hellopython-$(date +%s)
+env=python-$TEST_ID
+fn=hellopython-$TEST_ID
 ROOT=$(dirname $0)/../../..
 
 cleanup() {
     log "Cleaning up..."
-    fission fn delete --name ${fn}-nd || true
-    fission fn delete --name ${fn}-gpm || true
-    fission env delete --name $env || true
+    clean_resource_by_id $TEST_ID
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
@@ -26,7 +24,7 @@ else
 fi
 
 log "Creating Python env $env"
-fission env create --name $env --image fission/python-env --period 5
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --period 5
 
 log "Creating function ${fn}-nd, ${fn}-gpm"
 fission fn create --name ${fn}-nd --env $env --code $ROOT/examples/python/hello.py --minscale 0 --maxscale 2 --executortype newdeploy
@@ -81,3 +79,5 @@ then
   log "Failed to reap idle function pod for function ${fn}-gpm"
   exit 1
 fi
+
+log "Test PASSED"
