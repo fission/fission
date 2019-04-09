@@ -105,10 +105,20 @@ build_and_push_builder() {
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
+<<<<<<< HEAD
     travis_fold_start build_and_push_env_runtime.$env $image_tag
+=======
+    variant=$3
+
+    dockerfile="Dockerfile"
+
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+>>>>>>> Build variant version of go env for testing
 
     pushd $ROOT/environments/$env/
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag . -f ${dockerfile}
 
     gcloud_login
 
@@ -121,15 +131,23 @@ build_and_push_env_builder() {
     env=$1
     image_tag=$2
     builder_image=$3
+    variant=$4
+
     travis_fold_start build_and_push_env_builder.$env $image_tag
 
-    pushd $ROOT/environments/$env/builder
+    dockerfile="Dockerfile"
 
-    docker build -q -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+
+    pushd ${ROOT}/environments/${env}/builder
+
+    docker build -q -t ${image_tag} --build-arg BUILDER_IMAGE=${builder_image} . -f ${dockerfile}
 
     gcloud_login
 
-    gcloud docker -- push $image_tag
+    gcloud docker -- push ${image_tag}
     popd
     travis_fold_end build_and_push_env_builder.$env
 }
