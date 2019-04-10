@@ -9,7 +9,7 @@ branches:
 language: go
 
 go:
-  - 1.11.x
+  - 1.11.6
 
 cache:
   directories:
@@ -26,18 +26,17 @@ before_install:
   - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 
 install:
-  - go get github.com/Masterminds/glide
   - hack/travis-kube-setup.sh
 
 env:
-  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH}
+  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:${PATH} GO111MODULE=on
 
 before_script:
   - cd ${TRAVIS_BUILD_DIR}
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
   - helm lint charts/fission-all/ charts/fission-core/
-  - glide install -v
+  - go mod download
   - go build -o fission/fission fission/*.go
   - ./fission-bundle/build.sh
   - hack/runtests.sh
