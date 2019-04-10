@@ -26,22 +26,10 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-test_fn() {
-    echo "Checking function for valid response"
-
-    while true; do
-      response0=$(curl http://$FISSION_ROUTER/$1)
-      echo $response0 | grep -i $2
-      if [[ $? -eq 0 ]]; then
-        break
-      fi
-      sleep 1
-    done
-}
-
 test_pkg() {
     echo "Checking package for valid response"
 
+    set +e
     while true; do
       response0=$(kubectl get -ndefault package $1 -o=jsonpath='{.status.buildstatus}')
       echo $response0 | grep -i $2
@@ -50,9 +38,9 @@ test_pkg() {
       fi
       sleep 1
     done
+    set -e
 }
 
-export -f test_fn
 export -f test_pkg
 
 cd $ROOT/examples/jvm/java

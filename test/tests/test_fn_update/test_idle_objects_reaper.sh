@@ -6,8 +6,6 @@ source $(dirname $0)/../../utils.sh
 TEST_ID=$(generate_test_id)
 echo "TEST_ID = $TEST_ID"
 
-source $(dirname $0)/fnupdate_utils.sh
-
 env=python-$TEST_ID
 fn=hellopython-$TEST_ID
 ROOT=$(dirname $0)/../../..

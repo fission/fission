@@ -6,8 +6,6 @@ source $(dirname $0)/../../utils.sh
 TEST_ID=$(generate_test_id)
 echo "TEST_ID = $TEST_ID"
 
-source $(dirname $0)/fnupdate_utils.sh
-
 ROOT=$(dirname $0)/../../..
 
 env_old=python-old-$TEST_ID

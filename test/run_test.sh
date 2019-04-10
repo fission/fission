@@ -71,7 +71,7 @@ main() {
     num_pass=$((num_total - num_fail))
     time=$((end_time - start_time))
     echo ============================================================
-    echo "PASS: $num_pass    SKIP: $num_skip    FAIL: $num_fail    TIME: ${time}s"
+    echo "PASS: $num_pass    FAIL: $num_fail    SKIP: $num_skip    TIME: ${time}s"
     return $num_fail
 }
 

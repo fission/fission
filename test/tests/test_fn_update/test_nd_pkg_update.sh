@@ -9,8 +9,6 @@ echo "TEST_ID = $TEST_ID"
 tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
 
-source $(dirname $0)/fnupdate_utils.sh
-
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID

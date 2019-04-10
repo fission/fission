@@ -31,6 +31,11 @@ if [ $(uname -s) == 'Darwin' ]; then
     }
     export -f tr
 
+    xargs() {
+        gxargs "$@"
+    }
+    export -f xargs
+
     find_executable() {
         path=$1; shift
         find $path -perm +111 -type f "$@"

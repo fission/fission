@@ -31,6 +31,7 @@ wait_for_builder() {
     JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
 
     # wait for tiller ready
+    set +e
     while true; do
       kubectl --namespace fission-builder get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
       if [[ $? -eq 0 ]]; then
@@ -38,11 +39,13 @@ wait_for_builder() {
       fi
       sleep 1
     done
+    set -e
 }
 
 waitBuild() {
     log "Waiting for builder manager to finish the build"
 
+    set +e
     while true; do
       kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
       if [[ $? -eq 0 ]]; then
@@ -50,24 +53,11 @@ waitBuild() {
       fi
       sleep 1
     done
-}
-
-test_fn() {
-    log "Checking for valid response"
-
-    while true; do
-      response0=$(curl http://$FISSION_ROUTER/$1)
-      log $response0 | grep -i $2
-      if [[ $? -eq 0 ]]; then
-        break
-      fi
-      sleep 1
-    done
+    set -e
 }
 
 export -f wait_for_builder
 export -f waitBuild
-export -f test_fn
 
 cd $ROOT/examples/go
 
@@ -114,9 +104,9 @@ log "Waiting for router & pools to catch up"
 sleep 5
 
 log "Testing pool manager function with new package"
-timeout 60 bash -c "test_fn $fn_poolmgr 'vendor'"
+timeout 60 bash -c "test_fn $fn_poolmgr 'Vendor'"
 
 log "Testing new deployment function with new package"
-timeout 60 bash -c "test_fn $fn_nd 'vendor'"
+timeout 60 bash -c "test_fn $fn_nd 'Vendor'"
 
 log "Test PASSED"

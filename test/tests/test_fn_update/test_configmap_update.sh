@@ -9,8 +9,6 @@ echo "TEST_ID = $TEST_ID"
 tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
 
-source $(dirname $0)/fnupdate_utils.sh
-
 ROOT=$(dirname $0)/../../..
 
 env=python-$TEST_ID
@@ -70,9 +68,9 @@ fission spec apply
 popd
 
 log "Waiting for changes to take effect"
-sleep 5
+sleep 10
 
 log "Testing function for cfgmap value"
-timeout 60 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"
+timeout 90 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"
 
 log "Test PASSED"

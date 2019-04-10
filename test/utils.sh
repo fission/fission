@@ -21,7 +21,7 @@ clean_resource_by_id() {
     crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
     crds="$crds configmaps secrets"
     for crd in $crds; do
-        $KUBECTL get $crd -o name | grep $test_id | xargs $KUBECTL delete
+        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
     done
 
     pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
@@ -35,6 +35,23 @@ clean_resource_by_id() {
     done
     set -e
 }
+
+test_fn() {
+    # Doing an HTTP GET on the function's route
+    # Checking for valid response
+    url="http://$FISSION_ROUTER/$1"
+    expect=$2
+
+    set +e
+    while true; do
+        curl --silent --show-error "$url" | grep $expect > /dev/null
+        [ $? -eq 0 ] && break
+        log "test_fn: curl failed or expected string not found. Retrying ..."
+        sleep 1
+    done
+    set -e
+}
+export -f test_fn
 
 ## Common env parameters
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
