@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 

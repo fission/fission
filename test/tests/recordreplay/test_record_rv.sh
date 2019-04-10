@@ -11,39 +11,53 @@ set -euo pipefail
 set +x
 source $(dirname $0)/../../utils.sh
 
-ROOT=$(dirname $0)/../..
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+cleanup() {
+    log "Cleaning up..."
+    clean_resource_by_id $TEST_ID
+}
+
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
+
+ROOT=$(dirname $0)/../../..
 DIR=$(dirname $0)
 expectedR="We'll meet at 9 on Tuesday."
 
-echo "Pre-test cleanup"
-fission env delete --name python || true
+env=python-$TEST_ID
+fn=rv-$TEST_ID
+recName1=rec1-$TEST_ID
+recName2=rec2-$TEST_ID
 
 echo "Creating python env"
-fission env create --name python --image fission/python-env
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE
 
 echo "Creating function"
-fn=rv-$(date +%s)
-fission fn create --name $fn --env python --code $DIR/rendezvous.py --method GET
+fission fn create --name $fn --env $env --code $DIR/rendezvous.py --method GET
 
 echo "Creating trigger A"
-generatedA=$(fission route create --function $fn --method GET --url rvA | awk '{print $2}'| tr -d "'")
+generatedA=$(fission route create --function $fn --method GET --url /$fn-A | awk '{print $2}'| tr -d "'")
 
 echo "Creating trigger B"
-generatedB=$(fission route create --function $fn --method GET --url rvB | awk '{print $2}'| tr -d "'")
+generatedB=$(fission route create --function $fn --method GET --url /$fn-B | awk '{print $2}'| tr -d "'")
 
 # Wait until triggers are created
 sleep 5
 
 echo "Creating recorder by function"
-recName="regulus"
-fission recorder create --name $recName --function $fn
-fission recorder get --name $recName
+fission recorder create --name $recName1 --function $fn
+fission recorder get --name $recName1
 
 # Wait until recorder is created
 sleep 5
 
 echo "Issuing cURL request to urlA:"
-respA=$(curl -X GET "http://$FISSION_ROUTER/rvA?time=9&date=Tuesday")
+respA=$(curl -X GET "http://$FISSION_ROUTER/$fn-A?time=9&date=Tuesday")
 recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
 expectedSA="200OK"
 
@@ -51,7 +65,7 @@ expectedSA="200OK"
 sleep 5
 
 echo "Issuing cURL request to urlB:"
-respB=$(curl -X GET "http://$FISSION_ROUTER/rvB?time=9&date=Tuesday")
+respB=$(curl -X GET "http://$FISSION_ROUTER/$fn-B?time=9&date=Tuesday")
 recordedStatusB="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
 expectedSB="200OK"
 
@@ -63,17 +77,16 @@ fi
 echo "Test case 1) Passed."
 
 # Delete first recorder
-fission recorder delete --name $recName
+fission recorder delete --name $recName1
 
 sleep 5
 
 echo "Creating recorder by trigger"
-recName2="regulus2"
 fission recorder create --name $recName2 --trigger $generatedB
 fission recorder get --name $recName2
 
 echo "Issuing cURL request to urlA:"
-respA=$(curl -X GET "http://$FISSION_ROUTER/rvA?time=9&date=Tuesday")
+respA=$(curl -X GET "http://$FISSION_ROUTER/$fn-A?time=9&date=Tuesday")
 recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
 expectedSA=""
 
@@ -81,7 +94,7 @@ expectedSA=""
 sleep 5
 
 echo "Issuing cURL request to urlB:"
-respB=$(curl -X GET "http://$FISSION_ROUTER/rvB?time=9&date=Tuesday")
+respB=$(curl -X GET "http://$FISSION_ROUTER/$fn-B?time=9&date=Tuesday")
 recordedStatusB="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
 expectedSB="200OK"
 
@@ -89,8 +102,6 @@ if [ "$respA" != "$expectedR" ] || [ "$recordedStatusA" != "$expectedSA" ] || [ 
     echo "Failed at test case 2."
     exit 1
 fi
-
-trap "fission recorder delete --name $recName2 && fission ht delete --name $generatedA && fission ht delete --name $generatedB && fission fn delete --name $fn && fission env delete --name python" EXIT
 
 echo "All passed."
 exit 0
