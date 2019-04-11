@@ -38,7 +38,7 @@ log "Waiting for router & newdeploy deployment creation"
 sleep 5
 
 log "Doing an HTTP GET on the function's route"
-response0=$(curl http://$FISSION_ROUTER/$fn0)
+response0=$(curl --retry 5 http://$FISSION_ROUTER/$fn0)
 
 log "Checking for valid response"
 echo $response0 | grep -i hello
@@ -53,7 +53,7 @@ log "Waiting for router & newdeploy deployment creation"
 sleep 5
 
 log "Doing an HTTP GET on the function's route"
-response1=$(curl http://$FISSION_ROUTER/$fn1)
+response1=$(curl --retry 5 http://$FISSION_ROUTER/$fn1)
 
 log "Checking for valid response"
 echo $response1 | grep -i hello

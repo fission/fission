@@ -65,6 +65,8 @@ expectedS=""
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
+    echo "$resp | $expectedR"
+    echo "$recordedStatus | $expectedS"
     exit 1
 fi
 
@@ -82,6 +84,8 @@ expectedS="200OK"
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
+    echo "$resp | $expectedR"
+    echo "$recordedStatus | $expectedS"
     exit 1
 fi
 
@@ -103,6 +107,8 @@ expectedS="200OK"
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
+    echo "$resp | $expectedR"
+    echo "$recordedStatus | $expectedS"
     exit 1
 fi
 

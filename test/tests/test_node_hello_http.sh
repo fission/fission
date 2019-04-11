@@ -36,7 +36,7 @@ log "Waiting for router to catch up"
 sleep 3
 
 log "Doing an HTTP GET on the function's route"
-response=$(curl http://$FISSION_ROUTER/$fn)
+response=$(curl --retry 5 http://$FISSION_ROUTER/$fn)
 
 log "Checking for valid response"
 echo $response | grep -i hello

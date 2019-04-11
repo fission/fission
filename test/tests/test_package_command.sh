@@ -35,11 +35,12 @@ waitBuild() {
     log "Waiting for builder manager to finish the build"
     
     while true; do
-      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
-      if [[ $? -eq 0 ]]; then
-          break
+      status=$(kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}')
+      if (echo $status | grep succeeded); then
+        break
+      else
+        log "status=$status  Waiting for build to finish"
       fi
-      log "Waiting for build to finish"
       sleep 1
     done
 }

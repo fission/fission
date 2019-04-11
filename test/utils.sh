@@ -44,10 +44,19 @@ test_fn() {
 
     set +e
     while true; do
-        curl --silent --show-error "$url" | grep $expect > /dev/null
-        [ $? -eq 0 ] && break
-        log "test_fn: curl failed or expected string not found. Retrying ..."
-        sleep 1
+        resp=$(curl --silent --show-error "$url")
+        if [ $? -ne 0 ]; then
+            log "test_fn: curl failed. Retrying ..."
+            sleep 1
+            continue
+        fi
+        if ! (echo $resp | grep $expect > /dev/null); then
+            log "test_fn: resp = $resp    expect = $expect"
+            log "test_fn: expected string not found. Retrying ..."
+            sleep 1
+            continue
+        fi
+        break
     done
     set -e
 }
