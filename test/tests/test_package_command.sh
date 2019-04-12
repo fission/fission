@@ -48,7 +48,7 @@ export -f waitBuild
 
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
-    response=$(curl http://$FISSION_ROUTER/$1)
+    response=$(curl --retry 5 http://$FISSION_ROUTER/$1)
 
     log "Checking for valid response"
     log $response
