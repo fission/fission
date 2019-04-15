@@ -122,7 +122,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 	for i := 0; i < MaxRetries; i++ {
 		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Patch(roleBinding, types.JSONPatchType, patchJson)
 		if err == nil {
-			logger.Error("patched rolebinding",
+			logger.Debug("patched rolebinding",
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
 			return err
