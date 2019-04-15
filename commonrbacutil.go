@@ -122,14 +122,14 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 	for i := 0; i < MaxRetries; i++ {
 		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Patch(roleBinding, types.JSONPatchType, patchJson)
 		if err == nil {
-			logger.Info("patched rolebinding",
+			logger.Error("patched rolebinding",
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
 			return err
 		}
 
 		if k8serrors.IsNotFound(err) {
-			logger.Info("rolebinding not found - will try to create it",
+			logger.Error("rolebinding not found - will try to create it",
 				zap.Error(err),
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
@@ -145,7 +145,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 			}
 
 			if k8serrors.IsAlreadyExists(err) {
-				logger.Info("rolebinding object already exists, retrying patch",
+				logger.Error("rolebinding object already exists, retrying patch",
 					zap.Error(err),
 					zap.String("role_binding", roleBinding),
 					zap.String("role_binding_namespace", roleBindingNs))
@@ -161,7 +161,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 			// but one CI run did show patch errored out on conflict : https://api.travis-ci.org/v3/job/373161490/log.txt, look for :
 			// Error returned by rolebinding patch : <some more text> there is a meaningful conflict (firstResourceVersion: "35482724", currentResourceVersion: "35482849")
 			// so, m guessing retrying patch should help. will watch out for any such conflicts and fix the issue if any
-			logger.Info("conflict reported on patch of rolebinding - retrying patch operation",
+			logger.Error("conflict reported on patch of rolebinding - retrying patch operation",
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
 			continue
