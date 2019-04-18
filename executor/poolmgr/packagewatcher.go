@@ -39,7 +39,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pkg := obj.(*crd.Package)
-				gpm.logger.Info("list watch for package reported a new package addition",
+				gpm.logger.Debug("list watch for package reported a new package addition",
 					zap.String("package_name", pkg.Metadata.Name),
 					zap.String("package_namepsace", pkg.Metadata.Namespace))
 
@@ -61,7 +61,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 					return
 				}
 
-				gpm.logger.Info("successfully set up rolebinding for fetcher service account",
+				gpm.logger.Debug("successfully set up rolebinding for fetcher service account",
 					zap.String("service_account", fission.FissionFetcherSA),
 					zap.String("service_account_namespace", envNs),
 					zap.String("package_name", pkg.Metadata.Name),
@@ -97,7 +97,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 						return
 					}
 
-					gpm.logger.Info("successfully updated rolebinding for fetcher service account",
+					gpm.logger.Debug("successfully updated rolebinding for fetcher service account",
 						zap.String("service_account", fission.FissionFetcherSA),
 						zap.String("service_account_namespace", envNs),
 						zap.String("package_name", newPkg.Metadata.Name),

@@ -345,7 +345,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 			// finally, make a call to RemoveSAFromRoleBindingWithRetries for all the service accounts that need to be removed
 			// for the role-binding in this iteration
 			if len(saToRemove) != 0 {
-				logger.Info("removing service accounts from role binding",
+				logger.Debug("removing service accounts from role binding",
 					zap.Any("service_accounts", saToRemove),
 					zap.String("role_binding_name", roleBinding.Name),
 					zap.String("role_binding_namespace", roleBinding.Namespace))
@@ -355,7 +355,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 				if err != nil {
 					// if there's an error, we just log it and proceed with the next role-binding, hoping that this role-binding
 					// will be processed in next iteration.
-					logger.Info("error removing service account from role binding",
+					logger.Debug("error removing service account from role binding",
 						zap.Error(err),
 						zap.Any("service_accounts", saToRemove),
 						zap.String("role_binding_name", roleBinding.Name),
