@@ -170,6 +170,14 @@ func Start() {
 	}
 	defer zapLogger.Sync()
 
+	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
+		zapLogger.Info("symlink path not exist, create it",
+			zap.String("fissionSymlinkPath", fissionSymlinkPath))
+		err = os.Mkdir(fissionSymlinkPath, 0755)
+		if err != nil {
+			zapLogger.Fatal("error creating fissionSymlinkPath", zap.Error(err))
+		}
+	}
 	go symlinkReaper(zapLogger)
 	_, kubernetesClient, _, err := crd.MakeFissionClient()
 	if err != nil {
