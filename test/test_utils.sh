@@ -448,11 +448,54 @@ run_all_tests() {
     export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
     export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
 
-    export JOBS=10
-    export TIMEOUT=900  # 15 minutes
     set +e
+    export TIMEOUT=900  # 15 minutes per test
+    # run tests without newdeploy in parallel.
+    export JOBS=10
     $ROOT/test/run_test.sh
+        tests/mqtrigger/kafka/test_kafka.sh \
+        tests/mqtrigger/nats/test_mqtrigger.sh \
+        tests/mqtrigger/nats/test_mqtrigger_error.sh \
+        tests/recordreplay/test_record_greetings.sh \
+        tests/recordreplay/test_record_rv.sh \
+        tests/recordreplay/test_recorder_update.sh \
+        tests/test_annotations.sh \
+        tests/test_archive_pruner.sh \
+        tests/test_backend_poolmgr.sh \
+        tests/test_buildermgr.sh \
+        tests/test_canary.sh \
+        tests/test_env_vars.sh \
+        tests/test_function_test/test_fn_test.sh \
+        tests/test_function_update.sh \
+        tests/test_ingress.sh \
+        tests/test_internal_routes.sh \
+        tests/test_logging/test_function_logs.sh \
+        tests/test_node_hello_http.sh \
+        tests/test_package_command.sh \
+        tests/test_pass.sh \
+        tests/test_router_cache_invalidation.sh \
+        tests/test_specs/test_spec.sh \
+        tests/test_specs/test_spec_multifile.sh \
     FAILURES=$?
+
+    # run tests with newdeploy one by one.
+    export JOBS=1
+    ./run_test.sh \
+        tests/test_backend_newdeploy.sh \
+        tests/test_environments/test_go_env.sh \
+        tests/test_environments/test_java_builder.sh \
+        tests/test_environments/test_java_env.sh \
+        tests/test_fn_update/test_configmap_update.sh \
+        tests/test_fn_update/test_env_update.sh \
+        tests/test_fn_update/test_idle_objects_reaper.sh \
+        tests/test_fn_update/test_nd_pkg_update.sh \
+        tests/test_fn_update/test_poolmgr_nd.sh \
+        tests/test_fn_update/test_resource_change.sh \
+        tests/test_fn_update/test_scale_change.sh \
+        tests/test_fn_update/test_secret_update.sh \
+        tests/test_obj_create_in_diff_ns.sh \
+        tests/test_secret_cfgmap/test_secret_cfgmap.sh
+    FAILURES=$((FAILURES+$?))
     set -e
 
     # dump test logs
