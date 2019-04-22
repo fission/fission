@@ -98,7 +98,7 @@ func MakeNewDeploy(
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
 		if err != nil {
-			logger.Info("failed to parse 'ENABLE_ISTIO'")
+			logger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
 		}
 		enableIstio = istio
 	}
