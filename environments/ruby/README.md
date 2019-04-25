@@ -17,6 +17,8 @@ The `Fission::Request` object is a subclass of `Rack::Request` and
 provides access to parameters and headers. See `fission/request.rb`
 for the public api.
 
+Looking for ready-to-run examples? See the [Ruby examples directory](../../examples/ruby).
+
 ## Customizing this image
 
 To add package dependencies, edit Gemfile to add what you
@@ -50,7 +52,3 @@ Or, if you already have an environment, you can update its image:
 
 After this, fission functions that have the env parameter set to the
 same environment name as this command will use this environment.
-
-## Creating functions to use this image
-
-See the [examples README](examples/ruby/README.md).
