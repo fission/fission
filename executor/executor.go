@@ -261,11 +261,11 @@ func StartExecutor(fissionNamespace string, functionNamespace string, envBuilder
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient,
-		functionNamespace, fsCache, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(
 		fissionClient, kubernetesClient, restClient,
-		functionNamespace, fsCache, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, poolID)
 
 	api := MakeExecutor(gpm, ndm, fissionClient, fsCache)
 
