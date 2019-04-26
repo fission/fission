@@ -88,8 +88,7 @@ func MakeGenericPool(
 	fsCache *fscache.FunctionServiceCache,
 	fetcherConfig *fetcherConfig.Config,
 	instanceId string,
-	enableIstio bool,
-	collectorEndpoint string) (*GenericPool, error) {
+	enableIstio bool) (*GenericPool, error) {
 
 	gpLogger := logger.Named("generic_pool")
 

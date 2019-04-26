@@ -234,12 +234,12 @@ func StartExecutor(logger *zap.Logger, fissionNamespace string, functionNamespac
 	gpm := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, fsCache, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, poolID)
 
 	ndm := newdeploy.MakeNewDeploy(
 		logger,
 		fissionClient, kubernetesClient, restClient,
-		functionNamespace, fsCache, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, poolID)
 
 	api := MakeExecutor(logger, gpm, ndm, fissionClient, fsCache)
 
