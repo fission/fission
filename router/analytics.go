@@ -1,23 +1,23 @@
 package router
 
 import (
-	"os"
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
-	"net/http"
-	"encoding/json"
 
 	"github.com/dchest/uniuri"
 )
 
 type (
 	Analytics struct {
-		id string
+		id  string
 		url string
 	}
 	AnalyticsData struct {
-		id string
+		id                string
 		functionCallCount uint64 `json:"functionCallCount"`
 	}
 )
@@ -30,10 +30,10 @@ func MakeAnalytics(url string) *Analytics {
 			return nil
 		}
 	}
-	
+
 	a := &Analytics{
 		url: url,
-		id: uniuri.NewLen(8),
+		id:  uniuri.NewLen(8),
 	}
 	go a.run()
 	return a
@@ -45,17 +45,17 @@ func (a *Analytics) gatherData() *AnalyticsData {
 	}
 }
 
-func (a *Analytics) run() {	
+func (a *Analytics) run() {
 	ticker := time.NewTicker(24 * time.Hour)
-        for _ = range ticker.C {
+	for range ticker.C {
 		msg := a.gatherData()
 		msg.id = a.id
-		
+
 		msgbytes, err := json.Marshal(*msg)
 		if err != nil {
 			continue
 		}
-		
+
 		_, _ = http.Post(a.url, "application/json", bytes.NewReader(msgbytes))
 	}
 }

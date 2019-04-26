@@ -2,9 +2,9 @@ package router
 
 import (
 	"fmt"
-	"time"
 	"sync/atomic"
-	
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -120,7 +120,7 @@ func labelsToStrings(f *functionLabels, h *httpLabels) []string {
 
 func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration time.Duration, respSize int64) {
 	atomic.AddUint64(&globalFunctionCallCount, 1)
-	
+
 	l := labelsToStrings(f, h)
 
 	// overhead: time from request ingress into router upto proxing into function pod
