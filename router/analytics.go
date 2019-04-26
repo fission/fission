@@ -18,7 +18,7 @@ type (
 	}
 	AnalyticsData struct {
 		id                string
-		functionCallCount uint64 `json:"functionCallCount"`
+		FunctionCallCount uint64 `json:"FunctionCallCount"`
 	}
 )
 
@@ -41,7 +41,7 @@ func MakeAnalytics(url string) *Analytics {
 
 func (a *Analytics) gatherData() *AnalyticsData {
 	return &AnalyticsData{
-		functionCallCount: atomic.LoadUint64(&globalFunctionCallCount),
+		FunctionCallCount: atomic.LoadUint64(&globalFunctionCallCount),
 	}
 }
 
