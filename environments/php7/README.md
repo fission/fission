@@ -4,7 +4,7 @@ This is the PHP environment for Fission.
 
 It's a Docker image containing a PHP 7.3 runtime. This image use php:7.3-cli base image with the built-in PHP server
 
-This environment didn't force you to use class or create a main function.
+This environment does not force you to use a specific class or create a main function.
 
 A few common extensions are included :
 - curl
@@ -21,6 +21,8 @@ A few common extensions are included :
 - SimpleXML
 - xmlrpc
 - zip
+
+Looking for ready-to-run examples? See the [PHP examples directory](../../examples/php).
 
 ## Customizing this image
 
