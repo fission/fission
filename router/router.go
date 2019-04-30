@@ -94,6 +94,8 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 	// setup a signal handler for SIGTERM
 	fission.SetupStackTraceHandler()
 
+	_ = MakeAnalytics("")
+
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	frmap := makeFunctionRecorderMap(logger, time.Minute)

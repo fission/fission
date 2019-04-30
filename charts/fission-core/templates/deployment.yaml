@@ -211,6 +211,13 @@ spec:
             value: {{ .Values.routerRoundTripSvcAddressUpdateTimeout | default 30 | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
+{{ if .Values.analytics }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ else if .Values.analyticsNonHelmInstall }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
