@@ -480,7 +480,7 @@ run_all_tests() {
 
     # run tests with newdeploy one by one.
     export JOBS=1
-    ./run_test.sh \
+    $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_environments/test_go_env.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \

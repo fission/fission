@@ -41,10 +41,12 @@ echo "Creating function"
 fission fn create --name $fn --env $env --code $DIR/rendezvous.py --method GET
 
 echo "Creating trigger A"
-generatedA=$(fission route create --function $fn --method GET --url /$fn-A | awk '{print $2}'| tr -d "'")
+triggerA=$(fission route create --function $fn --method GET --url /$fn-A | awk '{print $2}'| tr -d "'")
+log "triggerA = $triggerA"
 
 echo "Creating trigger B"
-generatedB=$(fission route create --function $fn --method GET --url /$fn-B | awk '{print $2}'| tr -d "'")
+triggerB=$(fission route create --function $fn --method GET --url /$fn-B | awk '{print $2}'| tr -d "'")
+log "triggerB = $triggerB"
 
 # Wait until triggers are created
 sleep 5
@@ -58,7 +60,7 @@ sleep 5
 
 echo "Issuing cURL request to urlA:"
 respA=$(curl -X GET "http://$FISSION_ROUTER/$fn-A?time=9&date=Tuesday")
-recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+recordedStatusA="$(fission records view --from 5s --to 0s -v | grep $triggerA | awk '{print $4$5}')"
 expectedSA="200OK"
 
 # Separate records
@@ -66,11 +68,13 @@ sleep 5
 
 echo "Issuing cURL request to urlB:"
 respB=$(curl -X GET "http://$FISSION_ROUTER/$fn-B?time=9&date=Tuesday")
-recordedStatusB="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+recordedStatusB="$(fission records view --from 5s --to 0s -v | grep $triggerB | awk '{print $4$5}')"
 expectedSB="200OK"
 
 if [ "$respA" != "$expectedR" ] || [ "$recordedStatusA" != "$expectedSA" ] || [ "$recordedStatusB" != "$expectedSB" ]; then
     echo "Failed at test case 1."
+    log "expected: statusA = '$expectedSA'  statusB = '$statusB'   respA = '$expectedR'"
+    log "result:   statusA = '$recordedStatusA'  statusB = '$recordedStatusB'   respA = '$respA'"
     exit 1
 fi
 
@@ -82,12 +86,16 @@ fission recorder delete --name $recName1
 sleep 5
 
 echo "Creating recorder by trigger"
-fission recorder create --name $recName2 --trigger $generatedB
+fission recorder create --name $recName2 --trigger $triggerB
 fission recorder get --name $recName2
 
 echo "Issuing cURL request to urlA:"
 respA=$(curl -X GET "http://$FISSION_ROUTER/$fn-A?time=9&date=Tuesday")
-recordedStatusA="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+# We except there is no records here -> grep will exit 1 -> this script exit 1 because 'pipefail' is set
+# Temporary disable 'pipefail' here
+set +o pipefail
+recordedStatusA="$(fission records view --from 5s --to 0s -v | grep $triggerA | awk '{print $4$5}')"
+set -o pipefail
 expectedSA=""
 
 # Separate records
@@ -95,11 +103,13 @@ sleep 5
 
 echo "Issuing cURL request to urlB:"
 respB=$(curl -X GET "http://$FISSION_ROUTER/$fn-B?time=9&date=Tuesday")
-recordedStatusB="$(fission records view --from 5s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+recordedStatusB="$(fission records view --from 5s --to 0s -v | grep $triggerB | awk '{print $4$5}')"
 expectedSB="200OK"
 
 if [ "$respA" != "$expectedR" ] || [ "$recordedStatusA" != "$expectedSA" ] || [ "$recordedStatusB" != "$expectedSB" ]; then
     echo "Failed at test case 2."
+    log "expected: statusA = '$expectedSA'  statusB = '$expectedSB'   respA = '$expectedR'"
+    log "result:   statusA = '$recordedStatusA'  statusB = '$recordedStatusB'   respA = '$respA'"
     exit 1
 fi
 
