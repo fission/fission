@@ -12,4 +12,4 @@ find_files() {
     \) -name '*.go'
 }
 
-find_files | grep -v '.glide/cache' | xargs -I@ bash -c "go tool vet @"
+find_files | xargs -I@ bash -c "go tool vet @"

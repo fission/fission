@@ -196,6 +196,7 @@ build_all_env_builders() {
     build_env_builder_image "$version" "go"       "go-builder"       "1.11.4"
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     build_env_builder_image "$version" "nodejs"   "node-builder"     ""
+    build_env_builder_image "$version" "php7"     "php-builder"      ""
 }
 
 build_charts() {

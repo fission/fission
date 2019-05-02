@@ -6,6 +6,8 @@ It's a Docker image containing a OpenJDK8 runtime, along with a
 dynamic loader.  A few dependencies are included in the
 pom.xml file.
 
+Looking for ready-to-run examples? See the [JVM examples directory](../../examples/jvm).
+
 ## Customizing this image
 
 To add package dependencies, edit pom.xml to add what you

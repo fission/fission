@@ -9,6 +9,8 @@ It is implemented using the lightweight web application framework
 Since Twiggy is implemented with [AnyEvent](https://metacpan.org/pod/AnyEvent),
 you can write async code using AnyEvent in your function.
 
+Looking for ready-to-run examples? See the [Perl examples directory](../../examples/perl).
+
 ## Build this image
    
 ```
