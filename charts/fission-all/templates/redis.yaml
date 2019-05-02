@@ -33,7 +33,7 @@ spec:
       containers:
         - name: redis
           image: redis:3.2-alpine
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.pullPolicy }}
           ports:
           - containerPort: 6379
             name: redis
