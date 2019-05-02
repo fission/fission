@@ -59,14 +59,16 @@ sleep 5
 
 echo "Issuing cURL request that should not be recorded:"
 resp=$(curl -X GET "http://$FISSION_ROUTER/$fn?time=9&date=Tuesday")
-recordedStatus="$(fission records view --from 15s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+set +o pipefail
+recordedStatus="$(fission records view --from 5s --to 0s -v | grep $fn | awk '{print $4$5}')"
+set -o pipefail
 expectedR="We'll meet at 9 on Tuesday."
 expectedS=""
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
-    echo "$resp | $expectedR"
-    echo "$recordedStatus | $expectedS"
+    log "expected: status = '$expectedS'  resp = '$expectedR'"
+    log "result:   status = '$recordedStatus'  resp = '$resp'"
     exit 1
 fi
 
@@ -79,13 +81,15 @@ sleep 5
 echo "Issuing cURL request that should be recorded:"
 resp=$(curl -X GET "http://$FISSION_ROUTER/$fn?time=9&date=Tuesday")
 expectedR="We'll meet at 9 on Tuesday."
-recordedStatus="$(fission records view --from 15s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+set +o pipefail
+recordedStatus="$(fission records view --from 5s --to 0s -v | grep $fn | awk '{print $4$5}')"
+set -o pipefail
 expectedS="200OK"
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
-    echo "$resp | $expectedR"
-    echo "$recordedStatus | $expectedS"
+    log "expected: status = '$expectedS'  resp = '$expectedR'"
+    log "result:   status = '$recordedStatus'  resp = '$resp'"
     exit 1
 fi
 
@@ -102,13 +106,15 @@ fission recorder list
 echo "Issuing cURL request that should be recorded:"
 resp=$(curl -X GET "http://$FISSION_ROUTER/$fn-2?time=9&date=Tuesday")
 expectedR="We'll meet at 9 on Tuesday."
-recordedStatus="$(fission records view --from 15s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+set +o pipefail
+recordedStatus="$(fission records view --from 5s --to 0s -v | grep $generated2 | awk '{print $4$5}')"
+set -o pipefail
 expectedS="200OK"
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
-    echo "$resp | $expectedR"
-    echo "$recordedStatus | $expectedS"
+    log "expected: status = '$expectedS'  resp = '$expectedR'"
+    log "result:   status = '$recordedStatus'  resp = '$resp'"
     exit 1
 fi
 

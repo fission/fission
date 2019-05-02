@@ -52,11 +52,16 @@ sleep 5
 echo "Issuing cURL request:"
 resp=$(curl -X POST "http://$FISSION_ROUTER/$fn" -d "{\"title\":\"Madam\",\"name\":\"Thanh\",\"item\":\"coat\"}")
 expectedR="Greetings, Madam Thanh. May I take your coat?"
-recordedStatus="$(fission records view --from 15s --to 0s -v | awk 'FNR == 2 {print $4$5}')"
+
+set +o pipefail
+recordedStatus="$(fission records view --from 15s --to 0s -v | grep $fn | awk '{print $4$5}')"
+set -o pipefail
 expectedS="200OK"
 
 if [ "$resp" != "$expectedR" ] || [ "$recordedStatus" != "$expectedS" ]; then
     echo "Response is not equal to expected response."
+    log "expected: status = '$expectedS'  resp = '$expectedR'"
+    log "result:   status = '$recordedStatus'  resp = '$resp'"
     exit 1
 fi
 
