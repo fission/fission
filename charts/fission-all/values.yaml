@@ -19,13 +19,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.1.0
+imageTag: 1.2.0
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 1.1.0
+fetcherImageTag: 1.2.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -79,8 +79,8 @@ kafka:
   ## "major.minor.veryMinor.patch" example: 0.8.2.0
   ## For 1.x it must be a string in the format
   ## "major.major.veryMinor" example: 2.0.1
-  ## Should be >= 0.11.1.0 to enable Kafka record headers support
-  # version: "0.11.1.0"
+  ## Should be >= 0.11.2.0 to enable Kafka record headers support
+  # version: "0.11.2.0"
 
 ## Persist data to a persistent volume.
 persistence:
