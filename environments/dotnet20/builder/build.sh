@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euxo pipefail 
 cd ${SRC_PKG}
 #now start execution of custom logic dll in such a way that it should copy everything in ${SRC_PKG}
 #first lets try putting sample file which will prove that this worked

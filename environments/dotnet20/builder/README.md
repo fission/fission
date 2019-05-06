@@ -2,21 +2,21 @@
 
 This is a simple dotnet core 2.0 C# environment builder for Fission.
 
-It's a docker image containing the dotnet 2.0.0 (core) runtime builder. This image read the source package and uses 
+It's a docker image containing the dotnet 2.0.0 (core) run-time builder. This image read the source package and uses 
 *roslyn* to compile the source package code and creates deployment package out of it.
 This enables using  nuget packages as part of function and thus user can use extended functionality in fission functions via nuget.
 
-During build , builder also does a pre-compile to prevent any compilation issues during function envrionment pod specialization.
+During build , builder also does a pre-compile to prevent any compilation issues during function environment pod specialization.
 Thus we get the function compilation issues during builder phase in package info's build logs itself.
 
-**Note** : In future we can further enhance the compiled assembaly to be saved as physical file in deployment package , 
+**Note** : In future we can further enhance the compiled assembly to be saved as physical file in deployment package , 
 as this will save cold start time for function. 
 
 Now , once after the build is finished, the output package (deploy archive) will be uploaded to storagesvc to store.
 Then, during the specialization, the fetcher inside function pod will fetch the package from storagesvc for function loading
- and will call on the  /v2/specialized endpoint of fission envrionment with required parameteres.
+ and will call on the  **/v2/specialized** endpoint of fission environment with required parameters.
 
-There further envrionment will compile it and execute the function.
+There further environment will compile it and execute the function.
 
 
 Example of simplest possible class to be executed:
@@ -41,32 +41,31 @@ put one line per nuget with nugetpackage name:version(optional) format, for exam
 
 ```
 				   RestSharp
+				   CsvHelper
 				   Newtonsoft.json:10.2.1.0
 ```
 
 
-		  	      this should match the following regex as mentioned in builderSetting.json
-
-
+ this should match the following regex as mentioned in builderSetting.json
 ```
-     		      "NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n"
+"NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n"
 ```
 
-	     	      (Note: Please do not forget to add newline /enter in the last line of file else last line will be omitted )
+(**Note**: Please do not forget to add newline /enter in the last line of file else last line will be omitted )
   
  **exclude.txt**--> as nuget.txt will download original package and their dependent packages , thus sometime dependent packages might not be
-that usefull and can break compilation , thus this file contains list of dlls of specific nuget packages which doesnt need to be
+that useful and can break compilation , thus this file contains list of dlls of specific nuget packages which doesn't need to be
  added during compilation if  they  break compilation .Put one line per nuget with dllname:nugetpackagename
  formate ,for example :
  
 ```
 			     Newtonsoft.json.dll:Newtonsoft.json
 ```
-'			     this should match the following regex as mentions in builderSetting.json
+this should match the following regex as mentions in builderSetting.json
 
-'		     	(Note: Please do not forget to add newline /enter in the last line of file else last line will be immited)
+(**Note**: Please do not forget to add newline /enter in the last line of file else last line will be immited)
 ```
-          		"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
+"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
 ```
  From above , builder will create a deployment package with all dlls in a folder and one functionspecification file :
  Deployement Package zip :
@@ -79,6 +78,7 @@ that usefull and can break compilation , thus this file contains list of dlls of
 	|--dll()
 		|--newtonsoft.json.dll
 		|--restsharp.dll
+		|--CsvHelper.dll
 	|--logs()
 		|-->logFileName
 	|--func.meta.json // this is the functionspecific file
@@ -112,13 +112,13 @@ public class FissionFunction
 }
 ```
 
-Here is my nuget.txt
+Here is my *nuget.txt*
 
 ```
 CsvHelper
 ```
 
-As we dont want to exclude any specific dll thus we shall leave exclude.txt as empty.
+As we dont want to exclude any specific dll thus we shall leave *exclude.txt* as empty.
 
 Now check name of existing environments & functions as we want to create a unique environment for this dotnetcore if not already present
 
@@ -131,7 +131,7 @@ fission fn list
  ```
 fission environment create --name dotnetcorewithnuget --image fission/dotnet20-env  --builder  fission/dotnet20-builder
  ```
- Verify fission-builder and fission-function namespace for new pods (pods name beginning with env name which we have given like dotnetcorewithnuget-xxx-xxx)
+ Verify fission-builder and fission-function namespace for new pods (pods name beginning with env name which we have given like *dotnetcorewithnuget-xxx-xxx*)
  ```
 kubectl get pods -n fission-builder
 kubectl get pods -n fission-function
@@ -140,16 +140,16 @@ Create Package from source zip using this environment name , this will output so
  ```
 fission package create --src funccsv.zip --env dotnetcorewithnuget
  ```
- Note down output package name lets say it is funccsv-zip-xyz now check its status using package info command , this will give the status
+ Note down output package name lets say it is *funccsv-zip-xyz* now check its status using package info command , this will give the status
  on what happened with builder and test compilation in builder.
  
  ```
 fission package info --name funccsv-zip-xyz
 ```
 
-#Status of package should be failed / running / succeeded .
+#Status of package should be f*ailed / running / succeeded* .
  Wait if the status is running , until it fails or succeeded.
- For detailed build logs, you can shell into builder pod in fission-builder namespace and verify log location mentioned in above result.
+ For detailed build logs, you can shell into builder pod in fission-builder namespace and verify log location mentioned in above command's result output.
 
 **Note** : Even If the result is succeeded , please have a look at detailed build logs to see compilation success and builder job done.
 
@@ -168,11 +168,12 @@ above would execute the function and will output the enum value as written in dl
 
 rest of the feature are same as normal fission environment.
 
-Benifit of using builder :
+**Benefit of using builder** :
 
 1. Ability to use various nuget packages.
-2. Ability to use many aditional files and functions as part of deployment package.
+2. Ability to use many additional files and functions as part of deployment package.
 3. Ability to know the compilation issue in advance via package logs , instead of environment giving compilation issue.
+4. Reusability of same deployment package.
 
 
 

@@ -37,12 +37,12 @@ namespace Builder
                 try
                 {
                     detailedException= BuilderHelper.Instance.DeepException(ex);
-                    Console.WriteLine($"Exception During Build :{ex.Message} | {ex.StackTrace} | {detailedException}");
+                    Console.WriteLine($"Exception During Build : {Environment.NewLine} {ex.Message} | {ex.StackTrace} | {Environment.NewLine} {detailedException}");
                 }
                 catch(Exception childEx)
                 {
                     //do nothing , just log orignal exception
-                    Console.WriteLine($"Exception During Build :{ex.Message} | {ex.StackTrace} ");
+                    Console.WriteLine($"{Environment.NewLine} Exception During Build :{ex.Message} |{Environment.NewLine}  {ex.StackTrace} {Environment.NewLine} ");
                 }              
 
                 //now throw back exception so that build gets failed via builder 
