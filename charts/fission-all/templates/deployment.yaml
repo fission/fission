@@ -234,6 +234,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 ---
 apiVersion: v1
 kind: Service
@@ -317,6 +318,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -354,6 +356,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -381,6 +384,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 ---
 apiVersion: v1
 kind: Service
@@ -430,6 +434,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 {{- if .Values.heapster }}
 ---
 apiVersion: v1
@@ -496,6 +501,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+
 #
 # This is commented out until fission-ui allows configuring the
 # namespace. Right now it just crashes if Release.Namespace !=
@@ -585,6 +591,7 @@ spec:
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
+{{- end }}
 
 {{- if .Values.kafka.enabled }}
 ---
@@ -620,6 +627,7 @@ spec:
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
 
 {{- if .Values.azureStorageQueue.enabled }}
@@ -659,6 +667,7 @@ spec:
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
 ---
 apiVersion: extensions/v1beta1
