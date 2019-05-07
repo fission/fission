@@ -410,6 +410,16 @@ func (gp *GenericPool) createPool() error {
 		return err
 	}
 
+	err = fission.MergeContainer(&deployment.Spec.Template.Spec.Containers[0], gp.env.Spec.Runtime.Container)
+	if err != nil {
+		return err
+	}
+
+	//err = fission.MergePodSpec(&deployment.Spec.Template.Spec, gp.env.Spec.Runtime.PodSpec)
+	//if err != nil {
+	//	return err
+	//}
+
 	depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Create(deployment)
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
