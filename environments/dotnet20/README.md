@@ -1,5 +1,5 @@
+# Fission: dotnet 2.0 C# Environment
 
-# Fission: dotnet 2.0 C# Environment  
 This is a simple dotnet core 2.0 C# environment for Fission.
 
 It's a Docker image containing the dotnet 2.0.0 runtime. The image 
@@ -31,63 +31,34 @@ public class FissionFunction {
 }
 ```
 
-Please see examples below, or if you are looking for ready-to-run examples, see the [DotNet20 examples directory](https://github.com/fission/fission/blob/master/examples/dotnet20).
+Please see examples below, or if you are looking for ready-to-run examples, see 
+the [DotNet20 examples directory](../../examples/dotnet20).
 
-## Rebuilding and pushing the image  
-To rebuild the image you need either a computer with dotnet core 2.0.0
-installed or else you will have to map the source directory into a
-container containing the dotnet core 2.0.0 environment.
+## Rebuilding and pushing the image
 
-### Locally installed Dotnet core 2.0.0  
-Simply move to the source directory in a terminal and run the ./build.sh script.
+To rebuild the image you will have to install Docker with version higher than 17.05+
+in order to support multi-stage builds feature.  
 
-The script will restore dependencies, compile a release build and
-and build the container. If you need to change the name of the container
-simply change it in the script.
+### Rebuild containers
 
-After the build finishes push the new image to a Docker registry using the 
-standard procedure.
-
-### Build in a container  
-Move to the directory containing the source and start the Docker container
-with dotnet and mount the current directory to a build location:
+Move to the directory containing the source and start the container build process:
 
 ```
-docker run -it --rm -v $PWD:/build microsoft/dotnet
-```
-
-Move to the build directory inside the container and restore the packages:
-
-```
-cd /build 
-dotnet restore fission-dotnet20.csproj
-log  : Restoring packages for /source/project.json...
-log  : Installing System.Net.WebSockets 4.0.0.
-log  : Installing runtime.native.System.IO.Compression 4.1.0.
-...
-```
-
-Compile and publish a release build of the source to the 'out' folder:
-
-```
-dotnet publish -c Release -o out
-Publishing source for .NETCoreApp,Version
-...
-```
-Exit the build container and build the Docker container on the local host:
-
-```
-exit
 docker build -t USER/dotnet20-env .
-``` 
+```
+
 After the build finishes push the new image to a Docker registry using the 
 standard procedure.
 
-## Echo example  
-### Setup fission environment  First you need to setup the fission according to your cluster setup as 
+## Echo example
+
+### Setup fission environment
+First you need to setup the fission according to your cluster setup as 
 specified here: https://github.com/fission/fission
 
-### Create the class to run  
+
+### Create the class to run
+
 Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
@@ -102,7 +73,8 @@ public class FissionFunction
     }
 }
 ``` 
-### Run the example  
+### Run the example
+
 Lastly to run the example:
 
 ```
@@ -116,11 +88,15 @@ $ curl http://$FISSION_ROUTER/echo?text=hello%20world!
   hello world
 ```
 
-## Addition service example  
-### Setup fission environment  First you need to setup the fission according to your cluster setup as 
+## Addition service example
+
+### Setup fission environment
+First you need to setup the fission according to your cluster setup as 
 specified here: https://github.com/fission/fission
 
-### Create the class to run  
+
+### Create the class to run
+
 Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
@@ -136,7 +112,8 @@ public class FissionFunction
     }
 }
 ``` 
-### Run the example  
+### Run the example
+
 Lastly to run the example:
 
 ```
@@ -150,11 +127,15 @@ $ curl "http://$FISSION_ROUTER/add?x=30&y=12"
   42
 ```
 
-## Accessing http request information example  
-### Setup fission environment  First you need to setup the fission according to your cluster setup as 
+## Accessing http request information example
+
+### Setup fission environment
+First you need to setup the fission according to your cluster setup as 
 specified here: https://github.com/fission/fission
 
-### Create the class to run  
+
+### Create the class to run
+
 Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
@@ -177,7 +158,8 @@ public class FissionFunction
 }
 
 ``` 
-### Run the example  
+### Run the example
+
 Lastly to run the example:
 
 ```
@@ -198,11 +180,15 @@ Url: http://fissionserver:8888, method: GET
 
 ```
 
-## Accessing http request body example  
-### Setup fission environment  First you need to setup the fission according to your cluster setup as 
+## Accessing http request body example
+
+### Setup fission environment
+First you need to setup the fission according to your cluster setup as 
 specified here: https://github.com/fission/fission
 
-### Create the class to run  
+
+### Create the class to run
+
 Secondly you need to create a file /tmp/func.cs containing the following code:
 
 ```
@@ -232,7 +218,8 @@ public class Person
 }
 
 ``` 
-### Run the example  
+### Run the example
+
 Lastly to run the example:
 
 ```
@@ -247,7 +234,9 @@ Hello, my name is Arthur and I am 42 years old.
 
 ```
 
-## Developing/debugging the enviroment locally  
+
+## Developing/debugging the enviroment locally
+
 The easiest way to debug the environment is to open the directory in
 Visual Studio Code (VSCode) as that will setup debugger for you the
 first time.
@@ -259,9 +248,11 @@ The class ExecutorModule contain preprocessor directive overriding where
 the input code file should be found:
 
 ```
-#if DEBUG         private const string CODE_PATH = "/tmp/func.cs";
-#else         private const string CODE_PATH = "/userfunc/user";
-#endif  
+#if DEBUG
+        private const string CODE_PATH = "/tmp/func.cs";
+#else
+        private const string CODE_PATH = "/userfunc/user";
+#endif
 ```
 
 So what you need to do is:
