@@ -61,7 +61,7 @@ log "Waiting for response"
 response=$(timeout 120s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $resptopic 2>&1)
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
-    log "$response is not equal to $expectedRespOutput"
+    log "'$response' is not equal to '$expectedRespOutput'"
     exit 1
 fi
 

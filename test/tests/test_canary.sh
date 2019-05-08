@@ -58,7 +58,7 @@ success_scenario() {
     sleep 60
 
     log "verify that version-2 of the function is receiving 100% traffic"
-    weight=`kubectl get httptrigger $route_succ -o jsonpath='{.spec.functionref.functionweights.'$fn_v2'}'`
+    weight=`kubectl -n default get httptrigger $route_succ -o jsonpath='{.spec.functionref.functionweights.'$fn_v2'}'`
 
     if [ "$weight" != "100" ]; then
         log "weight of $fn_v2 at the end of the test is $weight"
@@ -89,7 +89,7 @@ failure_scenario() {
     sleep 60
 
     log "verify that version-3 of the function is receiving 0% traffic because of rollback"
-    weight=`kubectl get httptrigger $route_fail -o jsonpath='{.spec.functionref.functionweights.'$fn_v3'}'`
+    weight=`kubectl -n default get httptrigger $route_fail -o jsonpath='{.spec.functionref.functionweights.'$fn_v3'}'`
 
     if [ "$weight" != "0" ]; then
         log "weight of 3 at the end of the test is $weight"

@@ -68,7 +68,7 @@ response=$(go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clu
 log "Subscriber received response: $response"
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
-    log "$response is not equal to $expectedRespOutput"
+    log "'$response' is not equal to '$expectedRespOutput'"
     exit 1
 else
     log "Responses match."

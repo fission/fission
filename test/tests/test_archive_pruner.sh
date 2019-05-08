@@ -9,6 +9,7 @@ tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
 
 # global variables
+env=python-$TEST_ID
 pkg=""
 http_status=""
 url=""
@@ -35,7 +36,7 @@ create_archive() {
 
 create_package() {
     log "Creating package"
-    pkg=$(fission package create --deploy "$tmp_dir/test-deploy-pkg.zip" --env python| cut -f2 -d' '| tr -d \')
+    pkg=$(fission package create --deploy "$tmp_dir/test-deploy-pkg.zip" --env $env| cut -f2 -d' '| tr -d \')
 }
 
 delete_package() {
@@ -45,7 +46,7 @@ delete_package() {
 
 get_archive_url_from_package() {
     log "Getting archive URL from package: $1"
-    url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
+    url=`kubectl -n default get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
 get_archive_from_storage() {
@@ -65,6 +66,9 @@ get_archive_from_storage() {
 #6. sleep for two minutes
 #7. now verify that both got deleted.
 main() {
+    log "Creating python env"
+    fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
+
     # create a huge archive
     create_archive
     log "created archive test-deploy-pkg.zip"

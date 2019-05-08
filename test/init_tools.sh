@@ -3,38 +3,56 @@
 # Set tools for OS compatibility.
 #
 # Prerequisite on Mac:
-#   brew install coreutils gnu-sed parallel
+#   brew install coreutils findutils gnu-sed parallel
 
 if [ $(uname -s) == 'Darwin' ]; then
-    timeout() {
-        gtimeout "$@"
-    }
-    export -f timeout
+    if command -v gtimeout >/dev/null; then
+        timeout() { gtimeout "$@"; }
+        export -f timeout
+    else
+        echo '"gtimeout" command not found. Try "brew install coreutils".'
+        exit 1
+    fi
 
-    date() {
-        gdate "$@"
-    }
-    export -f date
+    if command -v gdate >/dev/null; then
+        date() { gdate "$@"; }
+        export -f date
+    else
+        echo '"gdate" command not found. Try "brew install coreutils".'
+        exit 1
+    fi
 
-    sed() {
-      gsed "$@"
-    }
-    export -f sed
+    if command -v gsed >/dev/null; then
+        sed() { gsed "$@"; }
+        export -f sed
+    else
+        echo '"gsed" command not found. Try "brew install gnu-sed".'
+        exit 1
+    fi
 
-    readlink() {
-        greadlink "$@"
-    }
-    export -f readlink
+    if command -v greadlink >/dev/null; then
+        readlink() { greadlink "$@"; }
+        export -f readlink
+    else
+        echo '"greadlink" command not found. Try "brew install coreutils".'
+        exit 1
+    fi
 
-    tr() {
-        gtr "$@"
-    }
-    export -f tr
+    if command -v gtr >/dev/null; then
+        tr() { gtr "$@"; }
+        export -f tr
+    else
+        echo '"gtr" command not found. Try "brew install coreutils".'
+        exit 1
+    fi
 
-    xargs() {
-        gxargs "$@"
-    }
-    export -f xargs
+    if command -v gxargs >/dev/null; then
+        xargs() { gxargs "$@"; }
+        export -f xargs
+    else
+        echo '"gxargs" command not found. Try "brew install findutils".'
+        exit 1
+    fi
 
     find_executable() {
         path=$1; shift
