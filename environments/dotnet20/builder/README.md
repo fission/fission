@@ -36,8 +36,7 @@ The source package structure in zip file :
 **func.cs** --> This contains original function body with Executing method name as : Execute
 
  
-**nuget.txt**--> this file contains list of nuget packages required by your function , in this file
-put one line per nuget with nugetpackage name:version(optional) format, for example :
+**nuget.txt**--> this file contains list of nuget packages required by your function , in this file put one line per nuget with nugetpackage name:version(optional) format, for example :
 
 ```
 				   RestSharp
@@ -54,9 +53,7 @@ put one line per nuget with nugetpackage name:version(optional) format, for exam
 (**Note**: Please do not forget to add newline /enter in the last line of file else last line will be omitted )
   
  **exclude.txt**--> as nuget.txt will download original package and their dependent packages , thus sometime dependent packages might not be
-that useful and can break compilation , thus this file contains list of dlls of specific nuget packages which doesn't need to be
- added during compilation if  they  break compilation .Put one line per nuget with dllname:nugetpackagename
- formate ,for example :
+that useful and can break compilation , thus this file contains list of dlls of specific nuget packages which doesn't need to be  added during compilation if  they  break compilation .Put one line per nuget with dllname:nugetpackagename formate ,for example :
  
 ```
 			     Newtonsoft.json.dll:Newtonsoft.json
@@ -78,16 +75,18 @@ this should match the following regex as mentions in builderSetting.json
 	|--dll()
 		|--newtonsoft.json.dll
 		|--restsharp.dll
-		|--CsvHelper.dll
+		|--csvhelper.dll
 	|--logs()
 		|-->logFileName
 	|--func.meta.json // this is the functionspecific file
 	|--....MiscFiles(optional)
 	|--....MiscFiles(optional)
 ```
-Here are commands and detailed example for the same , lets say my source package zip name is *funccsv.zip* :
+Here are commands and detailed example for the same .
 
+lets say my source package zip name is *funccsv.zip* :
 
+**Content of func.cs:**
 ```
 using System;
 using Fission.DotNetCore.Api;
@@ -112,13 +111,12 @@ public class FissionFunction
 }
 ```
 
-Here is my *nuget.txt*
-
+**Content of  *nuget.txt***
 ```
 CsvHelper
 ```
-
-As we dont want to exclude any specific dll thus we shall leave *exclude.txt* as empty.
+**Content of exclude.txt**
+As we dont want to exclude any specific dll thus we shall leave * * as empty.
 
 Now check name of existing environments & functions as we want to create a unique environment for this dotnetcore if not already present
 
@@ -148,8 +146,7 @@ fission package info --name funccsv-zip-xyz
 ```
 
 #Status of package should be f*ailed / running / succeeded* .
- Wait if the status is running , until it fails or succeeded.
- For detailed build logs, you can shell into builder pod in fission-builder namespace and verify log location mentioned in above command's result output.
+ Wait if the status is running , until it fails or succeeded. For detailed build logs, you can shell into builder pod in fission-builder namespace and verify log location mentioned in above command's result output.
 
 **Note** : Even If the result is succeeded , please have a look at detailed build logs to see compilation success and builder job done.
 
@@ -165,7 +162,6 @@ Test the function execution :
  fission fn test --name dotnetcsvtest
 ```
 above would execute the function and will output the enum value as written in dll.
-
 rest of the feature are same as normal fission environment.
 
 **Benefit of using builder** :

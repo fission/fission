@@ -273,9 +273,7 @@ $ curl -XGET http://localhost:8888
 
 **1. NameSpace support :**
 
- Now , You can use namespace for Fission function class and have many other classes 
-				 in same namespace , this is also backward compatible , however main execution class
-				 would always be *FissionFunction* and its method *Execute*
+Now , You can use namespace for Fission function class and have many other classes in same namespace , this is also backward compatible , however main execution class would always be *FissionFunction* and its method *Execute*
 
 ```
 				using System;
