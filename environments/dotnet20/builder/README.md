@@ -116,7 +116,8 @@ public class FissionFunction
 CsvHelper
 ```
 **Content of exclude.txt**
-As we dont want to exclude any specific dll thus we shall leave * * as empty.
+
+As we dont want to exclude any specific dll thus we shall leave it as empty.
 
 Now check name of existing environments & functions as we want to create a unique environment for this dotnetcore if not already present
 
