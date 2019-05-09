@@ -47,14 +47,16 @@ sleep 260
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')
 if [ "$ndDeployReplicas" -ne "0" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-nd"
+  log "Failed to reap idle function pod for function ${fn}-nd. replicas should be 0 but got $ndDeployReplicas"
+  kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -o yaml
   exit 1
 fi
 
 gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
 if [ "$gpmNumberOfPod" -ne "0" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-gpm"
+  log "Failed to reap idle function pod for function ${fn}-gpm. replicas should be 0 but got $gpmNumberOfPod"
+  kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o yaml
   exit 1
 fi
 
@@ -67,14 +69,16 @@ timeout 60 bash -c "test_fn ${fn}-gpm 'world'"
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')
 if [ "$ndDeployReplicas" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-nd"
+  log "Failed to reap idle function pod for function ${fn}-nd. replicas should be 1 but got $ndDeployReplicas"
+  kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -o yaml
   exit 1
 fi
 
 gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
 if [ "$gpmNumberOfPod" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-gpm"
+  log "Failed to reap idle function pod for function ${fn}-gpm. replicas should be 1 but got $gpmNumberOfPod"
+  kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o yaml
   exit 1
 fi
 
