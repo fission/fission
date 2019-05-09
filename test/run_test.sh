@@ -58,7 +58,7 @@ main() {
         --joblog - \
         --jobs $JOBS \
         --timeout $TIMEOUT \
-        bash -c '{1} >> {2} 2>&1' \
+        bash -c '{1} > {2} 2>&1' \
         ::: $test_files :::+ $log_files \
         | tee $LOG_DIR/_recap \
         || true

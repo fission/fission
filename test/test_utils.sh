@@ -436,11 +436,6 @@ dump_logs() {
 
 export FAILURES=0
 
-collect_failed_tests() {
-    recap_path=$ROOT/test/logs/_recap
-    awk 'NR!=1 && $7!=0 {print $11}' $recap_path
-}
-
 run_all_tests() {
     id=$1
 
@@ -456,27 +451,52 @@ run_all_tests() {
     set +e
     export TIMEOUT=900  # 15 minutes per test
 
-    export JOBS=10
-    $ROOT/test/run_test.sh
+    # run tests without newdeploy in parallel.
+    export JOBS=6
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
+        $ROOT/test/tests/recordreplay/test_record_greetings.sh \
+        $ROOT/test/tests/recordreplay/test_record_rv.sh \
+        $ROOT/test/tests/recordreplay/test_recorder_update.sh \
+        $ROOT/test/tests/test_annotations.sh \
+        $ROOT/test/tests/test_archive_pruner.sh \
+        $ROOT/test/tests/test_backend_poolmgr.sh \
+        $ROOT/test/tests/test_buildermgr.sh \
+        $ROOT/test/tests/test_canary.sh \
+        $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_function_test/test_fn_test.sh \
+        $ROOT/test/tests/test_function_update.sh \
+        $ROOT/test/tests/test_ingress.sh \
+        $ROOT/test/tests/test_internal_routes.sh \
+        $ROOT/test/tests/test_logging/test_function_logs.sh \
+        $ROOT/test/tests/test_node_hello_http.sh \
+        $ROOT/test/tests/test_package_command.sh \
+        $ROOT/test/tests/test_pass.sh \
+        $ROOT/test/tests/test_router_cache_invalidation.sh \
+        $ROOT/test/tests/test_specs/test_spec.sh \
+        $ROOT/test/tests/test_specs/test_spec_multifile.sh
     FAILURES=$?
-    failed_tests=$(collect_failed_tests)
 
-    # FIXME: some of the tests will pass if we simply run it again. not sure why.
-    retry=0
-    while [ $FAILURES -ne 0 ]; do
-        retry=$((retry+1))
-        # max retry 2 times.
-        if [ $retry -eq 2 ]; then
-            break
-        fi
-
-        echo "Rerun the failed tests again. retry=$retry"
-        # for those failed tests, run them in sequential.
-        export JOBS=1
-        $ROOT/test/run_test.sh $failed_tests
-        FAILURES=$?
-        failed_tests=$(collect_failed_tests)
-    done
+    # FIXME: run tests with newdeploy one by one.
+    export JOBS=1
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_backend_newdeploy.sh \
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/test_environments/test_java_builder.sh \
+        $ROOT/test/tests/test_environments/test_java_env.sh \
+        $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
+        $ROOT/test/tests/test_fn_update/test_env_update.sh \
+        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
+        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
+        $ROOT/test/tests/test_fn_update/test_resource_change.sh \
+        $ROOT/test/tests/test_fn_update/test_scale_change.sh \
+        $ROOT/test/tests/test_fn_update/test_secret_update.sh \
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
+    FAILURES=$((FAILURES+$?))
     set -e
 
     # dump test logs
