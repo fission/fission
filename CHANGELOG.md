@@ -1,26 +1,33 @@
-# 1.2.0
-[Documentation](https://docs.fission.io)
-## Downloads for 1.2.0
+# 1.2.1
+[Documentation](https://docs.fission.io/)
+## Downloads for 1.2.1
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-core-1.2.0.yaml](https://github.com/fission/fission/releases/download/1.2.0/fission-core-1.2.0.yaml) | `5254b06f82fad3e1cdf31bc062d568fb1b1e6f280b5d8f377d29d75f7e970b4d`
-[fission-core-1.2.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.0/fission-core-1.2.0-minikube.yaml) | `f46ef58e8367dc0b5c95e25851bf8fbaae00b39f6ac5e4d64d2a39f7444d5150`
-[fission-all-1.2.0.yaml](https://github.com/fission/fission/releases/download/1.2.0/fission-all-1.2.0.yaml) | `078b63484c9c373b363db7a4ae4057cbc61ee83d9b0107615fc02a0db87315af`
-[fission-all-1.2.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.0/fission-all-1.2.0-minikube.yaml) | `9aa230a14b0c64fb84d2f89dbdf555154da3458e3d714b439c4844053406fac0`
-[fission-core-1.2.0.tgz](https://github.com/fission/fission/releases/download/1.2.0/fission-core-1.2.0.tgz) | `0f315c8a8938ee69ebb79c5b0ab94d0948bc8a89667002925385822e7601923b`
-[fission-all-1.2.0.tgz](https://github.com/fission/fission/releases/download/1.2.0/fission-all-1.2.0.tgz) | `fd3095538a40748205e83892a0e11dc26d93c5cdbb4490cbf7c5b40d7bc3d5cb`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.2.0/fission-cli-osx) | `1a8d9aff52221fc7a9631ce5354b0e92758defb1846ea65911d9f6220649ef5e`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.2.0/fission-cli-linux) | `2d38f2e571ea001d7bb66cace5790e4aff011a5cb82d45475f2e6744c47cfc2a`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.2.0/fission-cli-windows.exe) | `aaf9689f27a9341f6ccf2860a9a3021093427cd22361aa9e19ee1fce8d6a83c1`
+[fission-all-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1-minikube.yaml) | `f645d4741c6396d71addcd1af0cdbf6791bb7b9f6dda3f0b3fea0359f70fe233`
+[fission-core-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.yaml) | `aa0c50cd38cdde805c7fac62d18875ca72b0f420ccc17b179c067561eaa7249a`
+[fission-all-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.yaml) | `f814b0e194b137235d8860336f488f51c93dea59cf3f8a15ff3e740a6c2972c1`
+[fission-core-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1-minikube.yaml) | `a12cc0037916c9ea5afb894d666533eaf66a543efb11f1bf4e0492e320039890`
+[fission-core-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.tgz) | `09f573bd2cefa5106b0f67bc741ffa8440d9d65c9d87a27cde9a00513dd503d6`
+[fission-all-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.tgz) | `9dce2e7bc1e59e4ef2746046751389ebcf8919cbe49829d614cad38449fbf7e1`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-osx) | `b171448a109ea8e3813a60068579d601da5b85584e106f52e790d3220a104bda`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-linux) | `29de834928464a4389decaaffa89854aa4533d2a914adfcf8844a8a2356e9cf0`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-windows.exe) | `279a732cbeadd6eadbdce096d54f0ba242738ab2b5f0e710fc04bc2eb3459878`
 
 # Change Log
 
+## [1.2.1](https://github.com/fission/fission/tree/1.2.1) (2019-05-09)
+[Full Changelog](https://github.com/fission/fission/compare/1.2.0...1.2.1)
+
+**Merged pull requests:**
+
+- Fix dotnet example [\#1175](https://github.com/fission/fission/pull/1175) ([CanerPatir](https://github.com/CanerPatir))
+- V1.2.0 [\#1171](https://github.com/fission/fission/pull/1171) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fixes broken config path for functions [\#1177](https://github.com/fission/fission/pull/1177) ([vishal-biyani](https://github.com/vishal-biyani))
+
 ## [1.2.0](https://github.com/fission/fission/tree/1.2.0) (2019-05-03)
 [Full Changelog](https://github.com/fission/fission/compare/1.1.0...1.2.0)
-
-This release adds once a day anonymous reporting of number of function calls made which can be disabled by analytics=false in helm charts or YAML files.
 
 **Merged pull requests:**
 
