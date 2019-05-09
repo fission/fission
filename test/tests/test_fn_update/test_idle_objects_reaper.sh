@@ -52,7 +52,9 @@ then
   exit 1
 fi
 
-gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
+set +o pipefail
+gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm | grep Running | wc -l)
+set -o pipefail
 if [ "$gpmNumberOfPod" -ne "0" ]
 then
   log "Failed to reap idle function pod for function ${fn}-gpm. replicas should be 0 but got $gpmNumberOfPod"
@@ -69,15 +71,17 @@ timeout 60 bash -c "test_fn ${fn}-gpm 'world'"
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')
 if [ "$ndDeployReplicas" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-nd. replicas should be 1 but got $ndDeployReplicas"
+  log "Failed to scale function pod for function ${fn}-nd. replicas should be 1 but got $ndDeployReplicas"
   kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -o yaml
   exit 1
 fi
 
-gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
+set +o pipefail
+gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm | grep Running | wc -l)
+set -o pipefail
 if [ "$gpmNumberOfPod" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-gpm. replicas should be 1 but got $gpmNumberOfPod"
+  log "Failed to scale function pod for function ${fn}-gpm. replicas should be 1 but got $gpmNumberOfPod"
   kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o yaml
   exit 1
 fi
