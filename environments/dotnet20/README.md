@@ -340,7 +340,7 @@ here is what ***func.cs*** looks like :
 								var settings =context.GetSettings<SendGridSettings>("mysetting.json");
 								context.Logger.WriteInfo($"SendGridEndPoint port : {settings.SendGridEndPoints[0].port} ..... ");
 								respo=settings.SendGridEndPoints[0].port;           
-								context.Logger.WriteError("Done!!");
+								context.Logger.WriteInfo("Done!!");
 						return respo;
 					}
 				}
