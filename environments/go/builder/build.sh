@@ -29,6 +29,9 @@ if [ -f "go.mod" ]; then
         echo "Please update fission/go-builder image to latest version to support go module"
         exit 1
     fi
+else
+    # still need to do this; otherwise, go will complain "cannot find main module".
+    go mod init
 fi
 
 go build -buildmode=plugin -i -o ${DEPLOY_PKG} .
