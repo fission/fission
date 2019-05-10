@@ -44,7 +44,6 @@ func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*Prometheus
 
 	apiQueryClient := promClient.NewQueryAPI(promApiClient)
 
-	logger.Info("successfully made prometheus client with service", zap.String("service", prometheusSvc))
 	return &PrometheusApiClient{
 		logger: logger.Named("prometheus_api_client"),
 		client: apiQueryClient,
