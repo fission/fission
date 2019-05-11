@@ -3,8 +3,8 @@
   "DllExcludeFile": "exclude.txt",
   "BuildLogDirectory": "logs",
   "DllDirectory": "Dlls",
-  "NugetPackageRegEx": "\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n",
-  "ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
+  "NugetPackageRegEx": "\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?",
+  "ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?",
   "RunningOnwindows": false,
   "functionBodyFileName": "func.cs",
   "functionSpecFileName": "func.meta.json"

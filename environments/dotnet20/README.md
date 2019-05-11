@@ -327,35 +327,36 @@ here is what ***mysetting.json*** looks like :
 here is what ***func.cs*** looks like :
 
 ``` 
-			using System;
-			using Fission.DotNetCore.Api;
+using System;
+using Fission.DotNetCore.Api;
 			
-			namespace FuncNameSpace
-				{
-				public class FissionFunction
-				{
-					public string Execute(FissionContext context){
-					string respo="initial value";
-					context.Logger.WriteInfo("Staring..... ");
-					var settings =context.GetSettings<SendGridSettings>("mysetting.json");
-					context.Logger.WriteInfo($"SendGridEndPoint port : {settings.SendGridEndPoints[0].port} ..... ");
-					respo=settings.SendGridEndPoints[0].port;           
-					context.Logger.WriteInfo("Done!!");
-					return respo;
-					}
-				}
- 
-				 public class SendGridSettings
-					{
-						public string name { get; set; }
-						public System.Collections.Generic.List<SendGridEndPoint> SendGridEndPoints { get; set; }
-					}
- 
-				  public  class SendGridEndPoint
-					{
-						public string port { get; set; }
-					}
-				}
+namespace FuncNameSpace
+    {
+        public class FissionFunction
+            {
+                public string Execute(FissionContext context){
+                    string respo="initial value";
+                    context.Logger.WriteInfo("Staring..... ");
+                    var settings =context.GetSettings<SendGridSettings>("mysetting.json");
+                    context.Logger.WriteInfo($"SendGridEndPoint port : {settings.SendGridEndPoints[0].port} ..... ");
+                    respo=settings.SendGridEndPoints[0].port;           
+                    context.Logger.WriteInfo("Done!!");
+                    return respo;
+                }
+            }
+
+        public class SendGridSettings
+            {
+                public string name { get; set; }
+                public System.Collections.Generic.List<SendGridEndPoint> SendGridEndPoints { get; set; }
+            }
+
+        public  class SendGridEndPoint
+            {
+                 public string port { get; set; }
+            }
+    }
+    			
 ```
 **3. Nuget support :**
 

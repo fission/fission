@@ -39,30 +39,29 @@ The source package structure in zip file :
 **nuget.txt**--> this file contains list of nuget packages required by your function , in this file put one line per nuget with nugetpackage name:version(optional) format, for example :
 
 ```
-				   RestSharp
-				   CsvHelper
-				   Newtonsoft.json:10.2.1.0
+RestSharp
+CsvHelper
+Newtonsoft.json:10.2.1.0
 ```
 
 
  this should match the following regex as mentioned in builderSetting.json
 ```
-"NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n"
+"NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?"
 ```
 
-(**Note**: Please do not forget to add newline /enter in the last line of file else last line will be omitted )
   
  **exclude.txt**--> as nuget.txt will download original package and their dependent packages , thus sometime dependent packages might not be
 that useful and can break compilation , thus this file contains list of dlls of specific nuget packages which doesn't need to be  added during compilation if  they  break compilation .Put one line per nuget with dllname:nugetpackagename formate ,for example :
  
 ```
-			     Newtonsoft.json.dll:Newtonsoft.json
+Newtonsoft.json:Newtonsoft.json.dll
 ```
 this should match the following regex as mentions in builderSetting.json
 
-(**Note**: Please do not forget to add newline /enter in the last line of file else last line will be immited)
+
 ```
-"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
+"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?",
 ```
  From above , builder will create a deployment package with all dlls in a folder and one functionspecification file :
  Deployement Package zip :
@@ -94,7 +93,7 @@ using Fission.DotNetCore.Api;
 public class FissionFunction 
 {
     public string Execute(FissionContext context){
-		 string respo="initial value";
+		string respo="initial value";
 	        try
             {
 				context.Logger.WriteInfo("Staring..... ");

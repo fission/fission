@@ -80,16 +80,21 @@ namespace Builder.Utility
 
                 foreach (Match match in _pkgMatchCollection)
                 {
-                    string package = match.Groups["package"]?.Value?.Trim();
-                    string version = match.Groups["version"]?.Value?.Trim();
-                    this.logger.Log($"adding  {package} | {version} to includeNugets collection");
+                    if(!string.IsNullOrWhiteSpace(match.Value))
+                    {
+                        string package = match.Groups["package"]?.Value?.Trim();
+                        string version = match.Groups["version"]?.Value?.Trim();
+                        this.logger.Log($"adding  {package} | {version} to includeNugets collection");
 
-                    includeNugets.Add(new IncludeNuget()
-                                {
-                                    packageName = package,
-                                    version = version
-                                }
-                            );
+                        includeNugets.Add(
+                                           new IncludeNuget()
+                                                {
+                                                    packageName = package,
+                                                    version = version
+                                                }
+                                         );
+                    }
+                   
                 }
             }
 
@@ -110,16 +115,20 @@ namespace Builder.Utility
 
                 foreach (Match match in _excludeMatchCollection)
                 {
-                    string _package = match.Groups["package"]?.Value?.Trim();
-                    string _dllName = match.Groups["dll"]?.Value?.Trim();
-                    this.logger.Log($"adding  {_package} | {_dllName} to excludeDlls collection");
+                    if (!string.IsNullOrWhiteSpace(match.Value))
+                    {
+                        string _package = match.Groups["package"]?.Value?.Trim();
+                        string _dllName = match.Groups["dll"]?.Value?.Trim();
+                        this.logger.Log($"adding  {_package} | {_dllName} to excludeDlls collection");
 
-                    excludeDlls.Add(new ExcludeDll()
+                        excludeDlls.Add(
+                                new ExcludeDll()
                                     {
                                         packageName = _package,
-                                        dllName=_dllName
+                                        dllName = _dllName
                                     }
-                       );
+                                );
+                    }
                 }
             }
 
