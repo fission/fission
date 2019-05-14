@@ -32,6 +32,14 @@ spec:
       labels:
         svc: logger
     spec:
+      initContainers:
+        - name: init
+          image: busybox
+          command: ['mkdir', '-p', '/var/log/fission']
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/
+              readOnly: false
       containers:
         - name: logger
           image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
@@ -78,7 +86,7 @@ spec:
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
-              readOnly: true
+              readOnly: false
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true

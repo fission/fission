@@ -1,21 +1,51 @@
-# 1.1.0
-[Documentation](https://docs.fission.io/1.1.0/)
-## Downloads for 1.1.0
+# 1.2.1
+[Documentation](https://docs.fission.io/)
+## Downloads for 1.2.1
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-1.1.0.tgz](https://github.com/fission/fission/releases/download/1.1.0/fission-all-1.1.0.tgz) | `02e8d7999ff70677fec16733ca53b90ece18ae0423e7091e8f2891c23b39b94e`
-[fission-core-1.1.0.tgz](https://github.com/fission/fission/releases/download/1.1.0/fission-core-1.1.0.tgz) | `ecf96121dc2f208c2045196651f00282c2fc1e836d1945cc68d740822773df81`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.1.0/fission-cli-linux) | `8eda0bddb66fe3577c4f0489011a824579e353447a4d4e86ce751c1d1cd45a25`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.1.0/fission-cli-osx) | `b79401a7a9b9eb9f610da232db0a853f9765ffd2b518b4a4057ac5177e8856e5`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.1.0/fission-cli-windows.exe) | `89fcb496ad7f2126f0ab87c2b93ef39fb640c6b1537bc82ac5ce57d20f66c896`
-[fission-all-1.1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.1.0/fission-all-1.1.0-minikube.yaml) | `ec5f7e81785ff90f7b756f4805099b7d0abeddcf135c5631bbb06e759f8f639f`
-[fission-all-1.1.0.yaml](https://github.com/fission/fission/releases/download/1.1.0/fission-all-1.1.0.yaml) | `bdd423120d9512d2c47eba0f435deb8c6cb2852580813f0e0fb4a7a315d41e84`
-[fission-core-1.1.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.1.0/fission-core-1.1.0-minikube.yaml) | `5bb492656cbc1b79c63896edf0864c3c29e00df7b27e633ee7c1881bf3b0f312`
-[fission-core-1.1.0.yaml](https://github.com/fission/fission/releases/download/1.1.0/fission-core-1.1.0.yaml) | `4614975e69aaadd4c086105aee9afda49a19d781c0c271a2705cc0018cf210da`
+[fission-all-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1-minikube.yaml) | `f645d4741c6396d71addcd1af0cdbf6791bb7b9f6dda3f0b3fea0359f70fe233`
+[fission-core-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.yaml) | `aa0c50cd38cdde805c7fac62d18875ca72b0f420ccc17b179c067561eaa7249a`
+[fission-all-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.yaml) | `f814b0e194b137235d8860336f488f51c93dea59cf3f8a15ff3e740a6c2972c1`
+[fission-core-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1-minikube.yaml) | `a12cc0037916c9ea5afb894d666533eaf66a543efb11f1bf4e0492e320039890`
+[fission-core-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.tgz) | `09f573bd2cefa5106b0f67bc741ffa8440d9d65c9d87a27cde9a00513dd503d6`
+[fission-all-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.tgz) | `9dce2e7bc1e59e4ef2746046751389ebcf8919cbe49829d614cad38449fbf7e1`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-osx) | `b171448a109ea8e3813a60068579d601da5b85584e106f52e790d3220a104bda`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-linux) | `29de834928464a4389decaaffa89854aa4533d2a914adfcf8844a8a2356e9cf0`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-windows.exe) | `279a732cbeadd6eadbdce096d54f0ba242738ab2b5f0e710fc04bc2eb3459878`
 
 # Change Log
+
+## [1.2.1](https://github.com/fission/fission/tree/1.2.1) (2019-05-09)
+[Full Changelog](https://github.com/fission/fission/compare/1.2.0...1.2.1)
+
+**Merged pull requests:**
+
+- Fix dotnet example [\#1175](https://github.com/fission/fission/pull/1175) ([CanerPatir](https://github.com/CanerPatir))
+- V1.2.0 [\#1171](https://github.com/fission/fission/pull/1171) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fixes broken config path for functions [\#1177](https://github.com/fission/fission/pull/1177) ([vishal-biyani](https://github.com/vishal-biyani))
+
+## [1.2.0](https://github.com/fission/fission/tree/1.2.0) (2019-05-03)
+[Full Changelog](https://github.com/fission/fission/compare/1.1.0...1.2.0)
+
+**Merged pull requests:**
+
+- DRY up fetcher configuration [\#1168](https://github.com/fission/fission/pull/1168) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add simple anonymous usage metrics [\#1167](https://github.com/fission/fission/pull/1167) ([soamvasani](https://github.com/soamvasani))
+- Fix the logger not working [\#1166](https://github.com/fission/fission/pull/1166) ([darkgerm](https://github.com/darkgerm))
+- Change log level in executor for better log reading/troubleshooting [\#1163](https://github.com/fission/fission/pull/1163) ([life1347](https://github.com/life1347))
+- Fix TravisCI go environment version to avoid go bugs [\#1154](https://github.com/fission/fission/pull/1154) ([life1347](https://github.com/life1347))
+- \#1132 nodejs environment, increase body size [\#1149](https://github.com/fission/fission/pull/1149) ([JannikZed](https://github.com/JannikZed))
+- Added php builder to release script fixes \#1140 [\#1145](https://github.com/fission/fission/pull/1145) ([vishal-biyani](https://github.com/vishal-biyani))
+- Using templated imagePullPolicy for containers in deployment.yaml [\#1137](https://github.com/fission/fission/pull/1137) ([msshroff](https://github.com/msshroff))
+- Migrate from glide to official dependencies management tool: Go Module [\#1136](https://github.com/fission/fission/pull/1136) ([life1347](https://github.com/life1347))
+- Fix misleading log when setup portforward [\#1134](https://github.com/fission/fission/pull/1134) ([life1347](https://github.com/life1347))
+- V1.1.0 [\#1129](https://github.com/fission/fission/pull/1129) ([vishal-biyani](https://github.com/vishal-biyani))
+- support KUBECONFIG with multiple kube config files [\#1126](https://github.com/fission/fission/pull/1126) ([grounded042](https://github.com/grounded042))
+- Function update after change in env [\#1116](https://github.com/fission/fission/pull/1116) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add configurable timeout to fission function test [\#1091](https://github.com/fission/fission/pull/1091) ([erwinvaneyk](https://github.com/erwinvaneyk))
+- Add links to examples for each Fission environment [\#1090](https://github.com/fission/fission/pull/1090) ([erwinvaneyk](https://github.com/erwinvaneyk))
 
 ## [1.1.0](https://github.com/fission/fission/tree/1.1.0) (2019-03-25)
 [Full Changelog](https://github.com/fission/fission/compare/1.0.0...1.1.0)
@@ -39,7 +69,14 @@ filename | sha256 hash
 - Bump base image version of Go environment to 1.11.4 [\#1026](https://github.com/fission/fission/pull/1026) ([life1347](https://github.com/life1347))
 
 ## [1.0.0](https://github.com/fission/fission/tree/1.0.0) (2019-02-13)
-[Full Changelog](https://github.com/fission/fission/compare/1.0-rc2...1.0.0)
+[Full Changelog](https://github.com/fission/fission/compare/1.0...1.0.0)
+
+**Merged pull requests:**
+
+- V1.0 [\#1094](https://github.com/fission/fission/pull/1094) ([vishal-biyani](https://github.com/vishal-biyani))
+
+## [1.0](https://github.com/fission/fission/tree/1.0) (2019-02-08)
+[Full Changelog](https://github.com/fission/fission/compare/1.0-rc2...1.0)
 
 **Merged pull requests:**
 

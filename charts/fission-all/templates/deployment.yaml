@@ -212,6 +212,13 @@ spec:
             value: {{ .Values.debugEnv | quote }}
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+{{ if .Values.analytics }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ else if .Values.analyticsNonHelmInstall }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
@@ -352,6 +359,14 @@ spec:
           value: "{{ .Values.enableIstio }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: FETCHER_MINCPU
+          value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
+        - name: FETCHER_MINMEM
+          value: {{ .Values.fetcherMinMem | default "16Mi" | quote }}
+        - name: FETCHER_MAXCPU
+          value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
+        - name: FETCHER_MAXMEM
+          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -418,6 +433,7 @@ spec:
       containers:
       - name: influxdb
         image: fission/influxdb
+        imagePullPolicy: {{ .Values.pullPolicy }}
         env:
           - name: PRE_CREATE_DB
             value: fissionFunctionLog
@@ -472,6 +488,7 @@ spec:
       containers:
       - name: heapster
         image: gcr.io/google_containers/heapster-amd64:v1.5.0
+        imagePullPolicy: {{ .Values.pullPolicy }}
         command: 
         - /heapster
         - --source=kubernetes:https://kubernetes.default
@@ -524,6 +541,7 @@ spec:
 #      containers:
 #      - name: nginx
 #        image: {{ .Values.repository }}/{{ .Values.fissionUiImage }}
+#        imagePullPolicy: {{ .Values.pullPolicy }}
 #      - name: kubectl-proxy
 #        image: {{ .Values.repository }}/lachlanevenson/k8s-kubectl
 #        args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
@@ -547,6 +565,7 @@ spec:
       containers:
       - name: nats-streaming
         image: nats-streaming
+        imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
           "--auth", "{{ .Values.nats.authToken }}",

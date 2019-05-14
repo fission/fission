@@ -214,6 +214,13 @@ spec:
             value: {{ .Values.routerRoundTripSvcAddressUpdateTimeout | default 30 | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
+{{ if .Values.analytics }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ else if .Values.analyticsNonHelmInstall }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
@@ -342,6 +349,14 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: FETCHER_MINCPU
+          value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
+        - name: FETCHER_MINMEM
+          value: {{ .Values.fetcherMinMem | default "16Mi" | quote }}
+        - name: FETCHER_MAXCPU
+          value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
+        - name: FETCHER_MAXMEM
+          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}

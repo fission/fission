@@ -41,6 +41,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	fetcherConfig "github.com/fission/fission/environments/fetcher/config"
 	"github.com/fission/fission/executor/fscache"
 )
 
@@ -52,14 +53,10 @@ type (
 		fissionClient    *crd.FissionClient
 		crdClient        *rest.RESTClient
 		instanceID       string
+		fetcherConfig    *fetcherConfig.Config
 
-		fetcherImg             string
-		fetcherImagePullPolicy apiv1.PullPolicy
 		runtimeImagePullPolicy apiv1.PullPolicy
 		namespace              string
-		sharedMountPath        string
-		sharedSecretPath       string
-		sharedCfgMapPath       string
 		useIstio               bool
 		collectorEndpoint      string
 
@@ -68,6 +65,9 @@ type (
 		throttler      *throttler.Throttler
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
+
+		envStore      k8sCache.Store
+		envController k8sCache.Controller
 
 		idlePodReapTime time.Duration
 	}
@@ -79,23 +79,17 @@ func MakeNewDeploy(
 	kubernetesClient *kubernetes.Clientset,
 	crdClient *rest.RESTClient,
 	namespace string,
+	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 ) *NewDeploy {
 
 	logger.Info("creating NewDeploy ExecutorType")
 
-	fetcherImg := os.Getenv("FETCHER_IMAGE")
-	if len(fetcherImg) == 0 {
-		fetcherImg = "fission/fetcher"
-	}
-
-	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
-
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
 		if err != nil {
-			logger.Info("failed to parse 'ENABLE_ISTIO'")
+			logger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
 		}
 		enableIstio = istio
 	}
@@ -112,13 +106,8 @@ func MakeNewDeploy(
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
-		fetcherImg:             fetcherImg,
-		fetcherImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("FETCHER_IMAGE_PULL_POLICY")),
+		fetcherConfig:          fetcherConfig,
 		runtimeImagePullPolicy: fission.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
-		sharedMountPath:        "/userfunc",
-		sharedSecretPath:       "/secrets",
-		sharedCfgMapPath:       "/configs",
-		collectorEndpoint:      collectorEndpoint,
 		useIstio:               enableIstio,
 
 		idlePodReapTime: 2 * time.Minute,
@@ -128,6 +117,10 @@ func MakeNewDeploy(
 		fnStore, fnController := nd.initFuncController()
 		nd.funcStore = fnStore
 		nd.funcController = fnController
+
+		envStore, envController := nd.initEnvController()
+		nd.envStore = envStore
+		nd.envController = envController
 	}
 
 	return nd
@@ -136,6 +129,7 @@ func MakeNewDeploy(
 func (deploy *NewDeploy) Run(ctx context.Context) {
 	//go deploy.service()
 	go deploy.funcController.Run(ctx.Done())
+	go deploy.envController.Run(ctx.Done())
 	go deploy.idleObjectReaper()
 }
 
@@ -174,6 +168,49 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 		},
 	})
 	return store, controller
+}
+
+func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controller) {
+	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "environments", metav1.NamespaceAll, fields.Everything())
+	store, controller := k8sCache.NewInformer(listWatch, &crd.Environment{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) {},
+		DeleteFunc: func(obj interface{}) {},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			newEnv := newObj.(*crd.Environment)
+			oldEnv := oldObj.(*crd.Environment)
+			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
+			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
+				deploy.logger.Info("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
+				funcs := deploy.getEnvFunctions(&newEnv.Metadata)
+				for _, f := range funcs {
+					function, err := deploy.fissionClient.Functions(f.Metadata.Namespace).Get(f.Metadata.Name)
+					if err != nil {
+						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
+					}
+					err = deploy.updateFuncDeployment(function, newEnv)
+					if err != nil {
+						deploy.logger.Error("Error updating function", zap.Error(err), zap.Any("function", function))
+					}
+				}
+			}
+		},
+	})
+	return store, controller
+}
+
+func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []crd.Function {
+	funcList, err := deploy.fissionClient.Functions(m.Namespace).List(metav1.ListOptions{})
+	if err != nil {
+		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
+	}
+	relatedFunctions := make([]crd.Function, 0)
+	for _, f := range funcList.Items {
+		if (f.Spec.Environment.Name == m.Name) && (f.Spec.Environment.Namespace == m.Namespace) {
+			relatedFunctions = append(relatedFunctions, f)
+		}
+	}
+	return relatedFunctions
 }
 
 func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
@@ -345,13 +382,6 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 		return err
 	}
 
-	fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.Metadata.UID)
-	if err != nil {
-		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
-		return err
-	}
-
-	fnObjName := fsvc.Name
 	deployChanged := false
 
 	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
@@ -363,7 +393,13 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 			ns = newFn.Metadata.Namespace
 		}
 
-		hpa, err := deploy.getHpa(ns, fnObjName)
+		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.Metadata.UID)
+		if err != nil {
+			err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
+			return err
+		}
+
+		hpa, err := deploy.getHpa(ns, fsvc.Name)
 		if err != nil {
 			deploy.updateStatus(oldFn, err, "error getting HPA while updating function")
 			return err
@@ -432,27 +468,41 @@ func (deploy *NewDeploy) updateFunction(oldFn *crd.Function, newFn *crd.Function
 			deploy.updateStatus(oldFn, err, "failed to get environment while updating function")
 			return err
 		}
+		return deploy.updateFuncDeployment(newFn, env)
+	}
 
-		deployLabels := deploy.getDeployLabels(oldFn, env)
-		deploy.logger.Info("updating deployment due to function update", zap.String("deployment", fnObjName), zap.String("function", newFn.Metadata.Name))
-		newDeployment, err := deploy.getDeploymentSpec(newFn, env, fnObjName, deployLabels)
-		if err != nil {
-			deploy.updateStatus(oldFn, err, "failed to get new deployment spec while updating function")
-			return err
-		}
+	return nil
+}
 
-		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
-		// deployment of the function in fission-function ns
-		ns := deploy.namespace
-		if newFn.Metadata.Namespace != metav1.NamespaceDefault {
-			ns = newFn.Metadata.Namespace
-		}
+func (deploy *NewDeploy) updateFuncDeployment(fn *crd.Function, env *crd.Environment) error {
 
-		err = deploy.updateDeployment(newDeployment, ns)
-		if err != nil {
-			deploy.updateStatus(oldFn, err, "failed to update deployment while updating function")
-			return err
-		}
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
+	if err != nil {
+		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", fn)
+		return err
+	}
+	fnObjName := fsvc.Name
+
+	deployLabels := deploy.getDeployLabels(fn, env)
+	deploy.logger.Info("updating deployment due to function/environment update", zap.String("deployment", fnObjName), zap.Any("function", fn.Metadata.Name))
+
+	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, deployLabels)
+	if err != nil {
+		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
+		return err
+	}
+
+	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+	// deployment of the function in fission-function ns
+	ns := deploy.namespace
+	if fn.Metadata.Namespace != metav1.NamespaceDefault {
+		ns = fn.Metadata.Namespace
+	}
+
+	err = deploy.updateDeployment(newDeployment, ns)
+	if err != nil {
+		deploy.updateStatus(fn, err, "failed to update deployment while updating function")
+		return err
 	}
 
 	return nil
