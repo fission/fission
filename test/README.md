@@ -12,11 +12,21 @@ With Homebrew, you can get them by:
 
 ## Run a single test
 
-Example: Run `test_node_hello_http.sh`.
 
 ```bash
-    cd $REPO/test
-    ./tests/test_node_hello_http.sh
+cd $REPO/test
+
+# run 'tests/test_node_hello_http.sh'
+./tests/test_node_hello_http.sh
+
+# if you want to preserve the resources that created by test for debug
+export TEST_NOCLEANUP=yes
+./tests/test_node_hello_http.sh
+
+# run 'tests/test_environments/test_go_env.sh' with custom images
+export GO_RUNTIME_IMAGE=my.docker.repo/go-env:test
+./tests/test_environments/test_go_env.sh
+
 ```
 
 
@@ -37,5 +47,8 @@ export JOBS=4
 
 # The test output will be available in logs/
 cat logs/test_backend_poolmgr.sh.log
+
+# The summary report will be saved to logs/_recap
+cat logs/_recap
 ```
 
