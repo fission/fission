@@ -52,7 +52,7 @@ build_fission_bundle_image() {
 
     local tag=fission/fission-bundle:$version
 
-    docker build -t $tag -f Dockerfile.fission-bundle --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $ROOT/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
     docker tag $tag fission/fission-bundle:latest   
 }
 
@@ -64,7 +64,7 @@ build_fetcher_image() {
 
     pushd $DIR/environments/fetcher/cmd
 
-    docker build -t $tag -f Dockerfile.fission-fetcher --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $ROOT/environments/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
     docker tag $tag fission/fetcher:latest
 
     popd    
@@ -83,7 +83,7 @@ build_builder_image() {
 
     pushd $DIR/builder/cmd
 
-    docker build -t $tag -f Dockerfile.fission-builder --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $ROOT/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
     docker tag $tag fission/builder:latest
 
     popd
@@ -128,7 +128,7 @@ build_pre_upgrade_checks_image() {
 
     pushd $DIR/preupgradechecks
     
-    docker build -t $tag -f Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $ROOT/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
     docker tag $tag fission/pre-upgrade-checks:latest
 
     popd
