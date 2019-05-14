@@ -69,13 +69,11 @@ getGitCommit() {
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
 
-    #pushd $ROOT/preupgradechecks
     docker build -t $image_tag -f $ROOT/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    #popd
 }
 
 build_and_push_fission_bundle() {
