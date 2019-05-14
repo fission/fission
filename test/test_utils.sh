@@ -466,6 +466,7 @@ run_all_tests() {
         $ROOT/test/tests/test_buildermgr.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_function_update.sh \
         $ROOT/test/tests/test_ingress.sh \
@@ -488,7 +489,6 @@ run_all_tests() {
         $ROOT/test/tests/test_environments/test_java_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
-        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
         $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh \
