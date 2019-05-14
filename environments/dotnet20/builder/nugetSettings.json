@@ -2,8 +2,6 @@
   "NugetFolder": "Nugetdownload",
   "DisableCache": false,
   "CSVDirectory": "logs",
-  //"NugetPackageRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<version>.*)?\\n",
-  //"ExcludeDllRegEx": "\\:?\\s*(?<package>[^:\\n]*)(?:\\:)?(?<dll>.*)?\\n",
   "RunningOnwindows": false,
   "NugetRepositories": [
     {
