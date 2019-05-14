@@ -36,7 +36,8 @@ const (
 
 var (
 	validAzureQueueName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-]*[a-z0-9]$")
-	validKafkaTopicName = regexp.MustCompile("^[a-z0-9][a-z0-9\\-._]*[a-z0-9]$")
+	// Need to use raw string to support escape sequence for - & . chars
+	validKafkaTopicName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\._]*[a-zA-Z0-9]$`)
 )
 
 type (
@@ -329,16 +330,22 @@ func (es ExecutionStrategy) Validate() error {
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
 	}
 
-	if es.MinScale < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater or equal to 0"))
-	}
+	if es.ExecutorType == ExecutorTypeNewdeploy {
+		if es.MinScale < 0 {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater or equal to 0"))
+		}
 
-	if es.MaxScale < es.MinScale {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater or equal to minimum scale"))
-	}
+		if es.MaxScale <= 0 {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than 0"))
+		}
 
-	if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
+		if es.MaxScale < es.MinScale {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater or equal to minimum scale"))
+		}
+
+		if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
+		}
 	}
 
 	return result.ErrorOrNil()

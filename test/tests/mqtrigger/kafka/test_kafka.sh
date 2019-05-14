@@ -10,6 +10,7 @@ nodeenv="node-kafka"
 goenv="go-kafka"
 producerfunc="producer-func"
 consumerfunc="consumer-func"
+consumerfunc2="consumer-func2"
 
 log() {
     echo $1
@@ -29,6 +30,23 @@ test_mqmessage() {
     done
 }
 export -f test_mqmessage 
+
+test_fnmessage() {
+    # $1: functionName
+    # $2: container name
+    # $3: string to look for
+    echo "Checking for valid function log"
+
+    while true; do
+	response0=$(kubectl -nfission-function logs -l=functionName=$1 -c $2)
+	echo $response0 | grep -i "$3"
+	if [[ $? -eq 0 ]]; then
+	    break
+	fi
+	sleep 1
+    done
+}
+export -f test_fnmessage
 
 waitBuild() {
     log "Waiting for builder manager to finish the build"
@@ -50,6 +68,9 @@ cleanup() {
     fission env delete --name ${nodeenv} || true
     fission fn delete --name ${producerfunc} || true
     fission fn delete --name ${consumerfunc} || true
+    fission fn delete --name ${consumerfunc2} || true
+    fission mqt delete --name kafkatest || true
+    fission mqt delete --name kafkatest2 || true
 }
 export -f cleanup
 
@@ -64,25 +85,40 @@ fission env create --name ${goenv} --image fission/go-env --builder fission/go-b
 
 log "Creating package for Kafka producer"
 pushd $DIR/kafka_pub
+go mod vendor
 zip -qr kafka.zip * 
 pkgName=$(fission package create --env ${goenv} --src kafka.zip|cut -f2 -d' '| tr -d \')
 
 log "pkgName=${pkgName}"
 popd
 
-gtimeout 60s bash -c "waitBuild $pkgName"
+timeout 120s bash -c "waitBuild $pkgName"
 log "Package ${pkgName} created"
 
 log "Creating function ${consumerfunc}"
 fission fn create --name ${consumerfunc} --env ${nodeenv} --code hellokafka.js 
 
+log "Creating function ${consumerfunc2}"
+fission fn create --name ${consumerfunc2} --env ${nodeenv} --code hellokafka.js
+
 log "Creating function ${producerfunc}"
 fission fn create --name ${producerfunc} --env ${goenv} --pkg ${pkgName} --entrypoint Handler
 
-log "Creating "
+log "Creating trigger kafkatest"
 fission mqt create --name kafkatest --function ${consumerfunc} --mqtype kafka --topic testtopic --resptopic resptopic
+
+log "Creating trigger kafkatest2"
+fission mqt create --name kafkatest2 --function ${consumerfunc2} --mqtype kafka --topic resptopic
 
 fission fn test --name ${producerfunc}
 
 log "Testing pool manager function"
-gtimeout 60 bash -c "test_mqmessage 'testvalue'"
+timeout 60 bash -c "test_mqmessage 'testvalue'"
+
+log "Testing the headers values in ${consumerfunc}"
+timeout 60 bash -c "test_fnmessage '${consumerfunc}' '${nodeenv}' 'z-custom-name: Kafka-Header-test'"
+
+log "Testing the header value in ${consumerfunc2}"
+timeout 60 bash -c "test_fnmessage '${consumerfunc2}' '${nodeenv}' 'z-custom-name: Kafka-Header-test'"
+# test if the Fission specific headers are overwritten
+timeout 60 bash -c "test_fnmessage '${consumerfunc2}' '${nodeenv}' 'x-fission-function-name: consumer-func2'"

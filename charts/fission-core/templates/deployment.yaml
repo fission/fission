@@ -62,7 +62,7 @@ metadata:
 
 ---
 kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-admin
   namespace: {{ .Release.Namespace }}
@@ -77,7 +77,7 @@ roleRef:
 
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-crd
 subjects:
@@ -132,8 +132,10 @@ spec:
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888"]
+        args: ["--controllerPort", "8888", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
+          - name: TRACING_SAMPLING_RATE
+            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
           - name: FISSION_FUNCTION_NAMESPACE
             value: "{{ .Values.functionNamespace }}"
           - name: POD_NAMESPACE
@@ -177,18 +179,24 @@ spec:
       labels:
         application: fission-router
         svc: router
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: router
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
+        args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
           - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+          - name: TRACING_SAMPLING_RATE
+            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
           - name: ROUTER_ROUND_TRIP_TIMEOUT
             value: {{ .Values.routerRoundTripTimeout | default "50ms" | quote }}
           - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
@@ -203,6 +211,13 @@ spec:
             value: {{ .Values.routerRoundTripSvcAddressUpdateTimeout | default 30 | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
+{{ if .Values.analytics }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ else if .Values.analyticsNonHelmInstall }}
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
+{{ end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
@@ -247,26 +262,34 @@ spec:
     metadata:
       labels:
         svc: executor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: executor
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}"]
+        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
         - name: FETCHER_MINMEM
           value: {{ .Values.fetcherMinMem | default "16Mi" | quote }}
         - name: FETCHER_MAXCPU
-          value: {{ .Values.fetcherMaxCpu | default "40m" | quote }}
+          value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
         readinessProbe:
@@ -303,14 +326,28 @@ spec:
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: BUILDER_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: FETCHER_MINCPU
+          value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
+        - name: FETCHER_MINMEM
+          value: {{ .Values.fetcherMinMem | default "16Mi" | quote }}
+        - name: FETCHER_MAXCPU
+          value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
+        - name: FETCHER_MAXMEM
+          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
 
 ---
@@ -332,7 +369,10 @@ spec:
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        env:
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
 
 ---
@@ -354,7 +394,10 @@ spec:
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        env:
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
 
 ---
@@ -377,10 +420,12 @@ spec:
         image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+        args: ["--storageServicePort", "8000", "--filePath", "/fission", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
         volumeMounts:
         - name: fission-storage
           mountPath: /fission

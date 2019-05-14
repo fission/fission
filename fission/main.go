@@ -17,10 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,10 +37,22 @@ import (
 func cliHook(c *cli.Context) error {
 	log.Verbosity = c.Int("verbosity")
 	log.Verbose(2, "Verbosity = 2")
+
+	err := flagValueParser(c.Args())
+	if err != nil {
+		// The cli package wont't print out error, as a workaround we need to
+		// fatal here instead of return it.
+		log.Fatal(err)
+	}
+
 	return nil
 }
 
 func main() {
+	newCliApp().Run(os.Args)
+}
+
+func newCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
@@ -56,6 +71,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "server", Value: "", Usage: "Fission server URL"},
 		cli.IntFlag{Name: "verbosity", Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
+		cli.BoolFlag{Name: "plugin", Hidden: true},
 	}
 
 	// all resource create commands accept --spec
@@ -74,20 +90,20 @@ func main() {
 	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
 
 	// Resource & scale related flags (Used in env and function)
-	minCpu := cli.StringFlag{Name: "mincpu", Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
-	maxCpu := cli.StringFlag{Name: "maxcpu", Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
-	minMem := cli.StringFlag{Name: "minmemory", Usage: "Minimum memory to be assigned to pod (In megabyte)"}
-	maxMem := cli.StringFlag{Name: "maxmemory", Usage: "Maximum memory to be assigned to pod (In megabyte)"}
-	minScale := cli.StringFlag{Name: "minscale", Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
-	maxScale := cli.StringFlag{Name: "maxscale", Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
-	targetcpu := cli.IntFlag{Name: "targetcpu", Value: 80, Usage: "Target average CPU usage percentage across pods for scaling"}
+	minCpu := cli.IntFlag{Name: "mincpu", Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
+	maxCpu := cli.IntFlag{Name: "maxcpu", Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
+	minMem := cli.IntFlag{Name: "minmemory", Usage: "Minimum memory to be assigned to pod (In megabyte)"}
+	maxMem := cli.IntFlag{Name: "maxmemory", Usage: "Maximum memory to be assigned to pod (In megabyte)"}
+	minScale := cli.IntFlag{Name: "minscale", Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
+	maxScale := cli.IntFlag{Name: "maxscale", Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
+	targetcpu := cli.IntFlag{Name: "targetcpu", Usage: "Target average CPU usage percentage across pods for scaling"}
 
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for source code"}
-	fnDeployArchiveFlag := cli.StringFlag{Name: "deployarchive, deploy", Usage: "local path or URL for deployment archive"}
-	fnSrcArchiveFlag := cli.StringFlag{Name: "sourcearchive, src", Usage: "local path or URL for source archive"}
+	fnDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "local path or URL for deployment archive"}
+	fnSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src, source", Usage: "local path or URL for source archive"}
 	fnPkgNameFlag := cli.StringFlag{Name: "pkgname, pkg", Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
@@ -102,7 +118,8 @@ func main() {
 	fnCfgMapFlag := cli.StringFlag{Name: "configmap", Usage: "function access to configmap, should be present in the same namespace as the function"}
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
-	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
+	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Value: fission.ExecutorTypePoolmgr, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
+	fnTimeoutFlag := cli.DurationFlag{Name: "timeout, t", Value: 30 * time.Second, Usage: "The length of time to wait for the response. If set to zero or negative number, no timeout is set."}
 
 	fnSubcommands := []cli.Command{
 		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag}, Action: fnCreate},
@@ -114,7 +131,9 @@ func main() {
 		// so, in the future, if we end up using kubeconfig in fission cli and enforcing rolebindings to be created for users by admins etc, we can add this option at the time.
 		{Name: "list", Usage: "List all functions in a namespace if specified, else, list functions across all namespaces", Flags: []cli.Flag{fnNamespaceFlag}, Action: fnList},
 		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogCountFlag}, Action: fnLogs},
-		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, fnCodeFlag, fnSrcArchiveFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag, fnQueryFlag}, Action: fnTest},
+		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag,
+			fnCodeFlag, fnSrcArchiveFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag, fnQueryFlag, fnTimeoutFlag},
+			Action: fnTest},
 	}
 
 	// httptriggers
@@ -230,8 +249,8 @@ func main() {
 	pkgNameFlag := cli.StringFlag{Name: "name", Usage: "Package name"}
 	pkgForceFlag := cli.BoolFlag{Name: "force, f", Usage: "Force update a package even if it is used by one or more functions"}
 	pkgEnvironmentFlag := cli.StringFlag{Name: "env", Usage: "Environment name"}
-	pkgSrcArchiveFlag := cli.StringFlag{Name: "sourcearchive, src", Usage: "Local path or URL for source archive"}
-	pkgDeployArchiveFlag := cli.StringFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
+	pkgSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src", Usage: "Local path or URL for source archive"}
+	pkgDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
 	pkgBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for builder to run with"}
 	pkgOutputFlag := cli.StringFlag{Name: "output, o", Usage: "Output filename to save archive content"}
 	pkgOrphanFlag := cli.BoolFlag{Name: "orphan", Usage: "orphan packages that are not referenced by any function"}
@@ -277,13 +296,13 @@ func main() {
 	// canary configs
 	canaryConfigNameFlag := cli.StringFlag{Name: "name", Usage: "Name for the canary config"}
 	triggerNameFlag := cli.StringFlag{Name: "httptrigger", Usage: "Http trigger that this config references"}
-	funcNFlag := cli.StringFlag{Name: "funcN", Usage: "New version of the function"}
-	funcNminus1Flag := cli.StringFlag{Name: "funcN-1", Usage: "Old stable version of the function"}
+	newFunc := cli.StringFlag{Name: "newfunction", Usage: "New version of the function"}
+	oldFunc := cli.StringFlag{Name: "oldfunction", Usage: "Old stable version of the function"}
 	weightIncrementFlag := cli.IntFlag{Name: "increment-step", Value: 20, Usage: "Weight increment step for function"}
 	incrementIntervalFlag := cli.StringFlag{Name: "increment-interval", Value: "2m", Usage: "Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d"}
 	failureThresholdFlag := cli.IntFlag{Name: "failure-threshold", Value: 10, Usage: "Threshold in percentage beyond which the new version of the function is considered unstable"}
 	canarySubCommands := []cli.Command{
-		{Name: "create", Usage: "Create a canary config", Flags: []cli.Flag{canaryConfigNameFlag, triggerNameFlag, funcNFlag, funcNminus1Flag, fnNamespaceFlag, weightIncrementFlag, incrementIntervalFlag, failureThresholdFlag}, Action: canaryConfigCreate},
+		{Name: "create", Usage: "Create a canary config", Flags: []cli.Flag{canaryConfigNameFlag, triggerNameFlag, newFunc, oldFunc, fnNamespaceFlag, weightIncrementFlag, incrementIntervalFlag, failureThresholdFlag}, Action: canaryConfigCreate},
 		{Name: "get", Usage: "View parameters in a canary config", Flags: []cli.Flag{canaryConfigNameFlag, canaryNamespaceFlag}, Action: canaryConfigGet},
 		{Name: "update", Usage: "Update parameters of a canary config", Flags: []cli.Flag{canaryConfigNameFlag, canaryNamespaceFlag, incrementIntervalFlag, weightIncrementFlag, failureThresholdFlag}, Action: canaryConfigUpdate},
 		{Name: "delete", Usage: "Delete a canary config", Flags: []cli.Flag{canaryConfigNameFlag, canaryNamespaceFlag}, Action: canaryConfigDelete},
@@ -307,9 +326,34 @@ func main() {
 		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
 	}
+
 	app.Before = cliHook
-	app.CommandNotFound = handleCommandNotFound
-	app.Run(os.Args)
+	app.Action = handleNoCommand
+	return app
+}
+
+func handleNoCommand(ctx *cli.Context) error {
+	if ctx.GlobalBool("version") {
+		versionPrinter(ctx)
+		return nil
+	}
+	if ctx.GlobalBool("plugin") {
+		bs, err := json.Marshal(plugin.Metadata{
+			Version: fission.Version,
+			Usage:   ctx.App.Usage,
+		})
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Failed to marshal plugin metadata to JSON: %v", err))
+		}
+		fmt.Println(string(bs))
+		return nil
+	}
+	if len(ctx.Args()) > 0 {
+		handleCommandNotFound(ctx, ctx.Args().First())
+		return nil
+	}
+
+	return cli.ShowAppHelp(ctx)
 }
 
 func handleCommandNotFound(ctx *cli.Context, subCommand string) {
@@ -337,6 +381,9 @@ To install it for your local Fission CLI:
 	// Rebuild global arguments string (urfave/cli does not have an option to get the raw input of the global flags)
 	var globalArgs []string
 	for _, globalFlagName := range ctx.GlobalFlagNames() {
+		if globalFlagName == "plugin" {
+			continue
+		}
 		val := fmt.Sprintf("%v", ctx.GlobalGeneric(globalFlagName))
 		if len(val) > 0 {
 			globalArgs = append(globalArgs, fmt.Sprintf("--%v", globalFlagName), val)
@@ -354,6 +401,48 @@ func versionPrinter(_ *cli.Context) {
 	client := util.GetApiClient(util.GetServerUrl())
 	ver := util.GetVersion(client)
 	fmt.Print(string(ver))
+}
+
+func flagValueParser(args []string) error {
+	// all input value for flags are properly set
+	if len(args) == 0 {
+		return nil
+	}
+
+	var flagIndexes []int
+	var errorFlags []string
+
+	// find out all flag indexes
+	for i, v := range args {
+		// support both flags with "--" and "-"
+		if strings.HasPrefix(v, "-") {
+			flagIndexes = append(flagIndexes, i)
+		}
+	}
+
+	// add total length of args to indicate the end of args
+	flagIndexes = append(flagIndexes, len(args))
+
+	for i := 0; i < len(flagIndexes)-1; i++ {
+		// if the difference between the flag index i and i+1
+		// is bigger then 2 means that CLI receives extra arguments
+		// for one flag. For example,
+		// 1. fission fn create --name e1 --code examples/nodejs/* --env nodejs ...
+		//    The wildcard will be extracted to multiple files and cause the difference between `--code` and `--env` large than 2.
+		// 2. fission fn create --spec --name e1 ...
+		//    The difference between --spec and --name is 1.
+		if flagIndexes[i+1]-flagIndexes[i] > 2 {
+			index := flagIndexes[i]
+			errorFlags = append(errorFlags, args[index])
+		}
+	}
+
+	if len(errorFlags) > 0 {
+		e := fmt.Sprintf("Unable to parse flags: %v\nThe argument should have only one input value. Please quote the input value if it contains wildcard characters(*).", strings.Join(errorFlags[:], ", "))
+		return errors.New(e)
+	}
+
+	return nil
 }
 
 var helpTemplate = `NAME:

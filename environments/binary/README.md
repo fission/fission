@@ -7,6 +7,7 @@ Use Cases
 - Execute arbitrary binaries (such as common sysadmin tools)
 - Get support in _any_ programming language by executing the generated executable.
 
+
 ⚠️ **Words of Caution** ⚠️
 
 The environment runs on an alpine image with some additional utility commandline tools installed, such as 'grep'. 
@@ -15,6 +16,8 @@ Dockerfile and build a new binary environment. See 'Compiling' for instructions.
 
 When executing functions using binaries, **ensure that the executable is built for the right architecture**. 
 Using the default binary environment this means that the binary should be build for Linux.
+
+Looking for ready-to-run examples? See the [binary examples directory](../../examples/binary).
 
 ## Usage
 To get started with the latest binary environment:
@@ -42,8 +45,6 @@ HTTP_CONTENT-TYPE
 
 The body of HTTP piped over the STDIN to the executable. 
 All output that is provided to the server over the STDOUT will be transformed into the HTTP response.
-
-See the [README](../../examples/binary/README.md) in the binary examples directory for additional usage instructions.
 
 ## Compiling
 

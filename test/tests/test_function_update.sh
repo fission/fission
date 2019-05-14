@@ -9,6 +9,8 @@ cleanup() {
     log "Cleaning up..."
     fission env delete --name nodejs || true
     fission fn delete --name $fn || true
+    rm foo.js || true
+    rm bar.js || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then

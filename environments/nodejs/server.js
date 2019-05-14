@@ -93,10 +93,10 @@ function specialize(req, res) {
 // Request logger
 app.use(morgan('combined'))
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
-app.use(bodyParser.raw());
-app.use(bodyParser.text({ type : "text/*" }));
+app.use(bodyParser.urlencoded({ extended: false, limit: '1mb' }));
+app.use(bodyParser.json({limit: '1mb'}));
+app.use(bodyParser.raw({limit: '1mb'}));
+app.use(bodyParser.text({ type : "text/*", limit: '1mb' }));
 
 app.post('/specialize', withEnsureGeneric(specialize));
 app.post('/v2/specialize', withEnsureGeneric(specializeV2));

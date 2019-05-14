@@ -1,45 +1,58 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"os/signal"
-	"runtime/debug"
-	"strconv"
-	"syscall"
-	"time"
+
+	"go.opencensus.io/exporter/jaeger"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/trace"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/environments/fetcher"
 )
 
-func dumpStackTrace() {
-	debug.PrintStack()
+func registerTraceExporter(collectorEndpoint string) error {
+	if collectorEndpoint == "" {
+		return nil
+	}
+
+	serviceName := "Fission-Fetcher"
+	exporter, err := jaeger.NewExporter(jaeger.Options{
+		CollectorEndpoint: collectorEndpoint,
+		Process: jaeger.Process{
+			ServiceName: serviceName,
+			Tags: []jaeger.Tag{
+				jaeger.BoolTag("fission", true),
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	trace.RegisterExporter(exporter)
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	return nil
 }
 
 // Usage: fetcher <shared volume path>
 func main() {
-	// register signal handler for dumping stack trace.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Received SIGTERM : Dumping stack trace")
-		dumpStackTrace()
-		os.Exit(1)
-	}()
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("can't initialize zap logger: %v", err)
+	}
+	defer logger.Sync()
 
 	flag.Usage = fetcherUsage
+	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
-	fetchPayload := flag.String("fetch-request", "", "JSON Payload for fetch request")
-	loadPayload := flag.String("load-request", "", "JSON payload for Load request")
+	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
 	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
 	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")
 
@@ -54,102 +67,64 @@ func main() {
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(dir, os.ModeDir|0700)
 			if err != nil {
-				log.Fatalf("Error creating directory: %v", err)
+				logger.Fatal("error creating directory", zap.Error(err), zap.String("directory", dir))
 			}
 		}
 	}
 
-	fetcher, err := fetcher.MakeFetcher(dir, *secretDir, *configDir)
-	if err != nil {
-		log.Fatalf("Error making fetcher: %v", err)
+	if err := registerTraceExporter(*collectorEndpoint); err != nil {
+		logger.Fatal("could not register trace exporter", zap.Error(err), zap.String("collector_endpoint", *collectorEndpoint))
 	}
 
-	if *specializeOnStart {
-		specializePod(fetcher, fetchPayload, loadPayload)
+	f, err := fetcher.MakeFetcher(logger, dir, *secretDir, *configDir)
+	if err != nil {
+		logger.Fatal("error making fetcher", zap.Error(err))
 	}
+
+	readyToServe := false
+
+	// do specialization in other goroutine to prevent blocking in newdeploy
+	go func() {
+		if *specializeOnStart {
+			var specializeReq fission.FunctionSpecializeRequest
+
+			err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
+			if err != nil {
+				logger.Fatal("error decoding specialize request", zap.Error(err))
+			}
+
+			ctx := context.Background()
+			err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+			if err != nil {
+				logger.Fatal("error specializing function pod", zap.Error(err))
+			}
+
+			readyToServe = true
+		}
+	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", fetcher.FetchHandler)
-	mux.HandleFunc("/upload", fetcher.UploadHandler)
-	mux.HandleFunc("/version", fetcher.VersionHandler)
+	mux.HandleFunc("/fetch", f.FetchHandler)
+	mux.HandleFunc("/specialize", f.SpecializeHandler)
+	mux.HandleFunc("/upload", f.UploadHandler)
+	mux.HandleFunc("/version", f.VersionHandler)
+	mux.HandleFunc("/readniess-healthz", func(w http.ResponseWriter, r *http.Request) {
+		if !*specializeOnStart || readyToServe {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	log.Println("Fetcher ready to receive requests")
-	http.ListenAndServe(":8000", mux)
+	logger.Info("fetcher ready to receive requests")
+	http.ListenAndServe(":8000", &ochttp.Handler{
+		Handler: mux,
+	})
 }
 
 func fetcherUsage() {
-	fmt.Printf("Usage: fetcher [-specialize-on-startup] [-fetch-request <json>] [-load-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path> \n")
-}
-
-func specializePod(f *fetcher.Fetcher, fetchPayload *string, loadPayload *string) {
-	// Fetch code
-	var fetchReq fetcher.FetchRequest
-	err := json.Unmarshal([]byte(*fetchPayload), &fetchReq)
-	if err != nil {
-		log.Fatalf("Error parsing fetch request: %v", err)
-	}
-	_, err = f.Fetch(fetchReq)
-	if err != nil {
-		log.Fatalf("Error fetching: %v", err)
-	}
-
-	_, err = f.FetchSecretsAndCfgMaps(fetchReq.Secrets, fetchReq.ConfigMaps)
-	if err != nil {
-		log.Fatalf("Error fetching secrets/configmaps: %v", err)
-		return
-	}
-
-	// Specialize the pod
-
-	envVersion, err := strconv.Atoi(os.Getenv("ENV_VERSION"))
-	if err != nil {
-		log.Fatalf("Error parsing environment version %v, error: %v", os.Getenv("ENV_VERSION"), err)
-	}
-
-	maxRetries := 30
-	var contentType string
-	var specializeURL string
-	var reader *bytes.Reader
-
-	if envVersion >= 2 {
-		contentType = "application/json"
-		specializeURL = "http://localhost:8888/v2/specialize"
-		reader = bytes.NewReader([]byte(*loadPayload))
-	} else {
-		contentType = "text/plain"
-		specializeURL = "http://localhost:8888/specialize"
-		reader = bytes.NewReader([]byte{})
-	}
-
-	for i := 0; i < maxRetries; i++ {
-		resp, err := http.Post(specializeURL, contentType, reader)
-		if err == nil && resp.StatusCode < 300 {
-			// Success
-			resp.Body.Close()
-			break
-		}
-
-		// Only retry for the specific case of a connection error.
-		if urlErr, ok := err.(*url.Error); ok {
-			if netErr, ok := urlErr.Err.(*net.OpError); ok {
-				if netErr.Op == "dial" {
-					if i < maxRetries-1 {
-						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-						log.Printf("Error connecting to pod (%v), retrying", netErr)
-						continue
-					}
-				}
-			}
-		}
-
-		if err == nil {
-			err = fission.MakeErrorFromHTTP(resp)
-		}
-		log.Printf("Failed to specialize pod: %v", err)
-		return
-	}
-
+	fmt.Println("Usage: fetcher [-specialize-on-startup] [-specialize-request <json>] [-secret-dir <string>] [-cfgmap-dir <string>] <shared volume path>")
 }

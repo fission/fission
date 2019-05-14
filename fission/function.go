@@ -41,6 +41,11 @@ import (
 	"github.com/fission/fission/fission/util"
 )
 
+const (
+	DEFAULT_MIN_SCALE             = 1
+	DEFAULT_TARGET_CPU_PERCENTAGE = 80
+)
+
 func printPodLogs(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
@@ -69,40 +74,91 @@ func printPodLogs(c *cli.Context) error {
 	return nil
 }
 
-func getInvokeStrategy(minScale int, maxScale int, executorType string, targetcpu int) fission.InvokeStrategy {
+func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fission.InvokeStrategy) (strategy *fission.InvokeStrategy, err error) {
 
-	if maxScale == 0 {
-		maxScale = 1
-	}
+	var fnExecutor, newFnExecutor fission.ExecutorType
 
-	if minScale > maxScale {
-		log.Fatal("Maxscale must be higher than or equal to minscale")
-	}
-
-	var fnExecutor fission.ExecutorType
-	switch executorType {
+	switch c.String("executortype") {
 	case "":
-		fnExecutor = fission.ExecutorTypePoolmgr
+		fallthrough
 	case fission.ExecutorTypePoolmgr:
-		fnExecutor = fission.ExecutorTypePoolmgr
+		newFnExecutor = fission.ExecutorTypePoolmgr
 	case fission.ExecutorTypeNewdeploy:
-		fnExecutor = fission.ExecutorTypeNewdeploy
+		newFnExecutor = fission.ExecutorTypeNewdeploy
 	default:
-		log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+		return nil, errors.New("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 	}
 
-	// Right now a simple single case strategy implementation
-	// This will potentially get more sophisticated once we have more strategies in place
-	strategy := fission.InvokeStrategy{
-		StrategyType: fission.StrategyTypeExecution,
-		ExecutionStrategy: fission.ExecutionStrategy{
-			ExecutorType:     fnExecutor,
-			MinScale:         minScale,
-			MaxScale:         maxScale,
-			TargetCPUPercent: targetcpu,
-		},
+	if existingInvokeStrategy != nil {
+		fnExecutor = existingInvokeStrategy.ExecutionStrategy.ExecutorType
+
+		// override the executor type if user specified a new executor type
+		if c.IsSet("executortype") {
+			fnExecutor = newFnExecutor
+		}
+	} else {
+		fnExecutor = newFnExecutor
 	}
-	return strategy
+
+	if fnExecutor == fission.ExecutorTypePoolmgr {
+		if c.IsSet("targetcpu") || c.IsSet("minscale") || c.IsSet("maxscale") {
+			log.Fatal("To set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
+		}
+
+		if c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory") {
+			log.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
+		}
+		strategy = &fission.InvokeStrategy{
+			StrategyType: fission.StrategyTypeExecution,
+			ExecutionStrategy: fission.ExecutionStrategy{
+				ExecutorType: fission.ExecutorTypePoolmgr,
+			},
+		}
+	} else {
+		// set default value
+		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
+		minScale := DEFAULT_MIN_SCALE
+		maxScale := minScale
+
+		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypeNewdeploy {
+			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
+			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
+			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
+		}
+
+		if c.IsSet("targetcpu") {
+			targetCPU = getTargetCPU(c)
+		}
+
+		if c.IsSet("minscale") {
+			minScale = c.Int("minscale")
+		}
+
+		if c.IsSet("maxscale") {
+			maxScale = c.Int("maxscale")
+			if maxScale <= 0 {
+				return nil, errors.New("Maxscale must be greater than 0")
+			}
+		}
+
+		if minScale > maxScale {
+			return nil, errors.New(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale))
+		}
+
+		// Right now a simple single case strategy implementation
+		// This will potentially get more sophisticated once we have more strategies in place
+		strategy = &fission.InvokeStrategy{
+			StrategyType: fission.StrategyTypeExecution,
+			ExecutionStrategy: fission.ExecutionStrategy{
+				ExecutorType:     fnExecutor,
+				MinScale:         minScale,
+				MaxScale:         maxScale,
+				TargetCPUPercent: targetCPU,
+			},
+		}
+	}
+
+	return strategy, nil
 }
 
 func getTargetCPU(c *cli.Context) int {
@@ -113,7 +169,7 @@ func getTargetCPU(c *cli.Context) int {
 			log.Fatal("TargetCPU must be a value between 1 - 100")
 		}
 	} else {
-		targetCPU = 80
+		targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
 	}
 	return targetCPU
 }
@@ -137,6 +193,7 @@ func fnCreate(c *cli.Context) error {
 		spec = true
 		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
+	specDir := getSpecDir(c)
 
 	// check for unique function names within a namespace
 	fnList, err := client.FunctionList(fnNamespace)
@@ -150,12 +207,17 @@ func fnCreate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
 
-	var pkgMetadata *metav1.ObjectMeta
-	var envName string
-
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 
+	invokeStrategy, err := getInvokeStrategy(c, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
+
+	var pkgMetadata *metav1.ObjectMeta
+	var envName string
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
@@ -191,29 +253,25 @@ func fnCreate(c *cli.Context) error {
 			}
 		}
 
-		srcArchiveName := c.String("src")
-		deployArchiveName := c.String("code")
-		if len(deployArchiveName) == 0 {
-			deployArchiveName = c.String("deploy")
+		srcArchiveFiles := c.StringSlice("src")
+		var deployArchiveFiles []string
+		noZip := false
+		code := c.String("code")
+		if len(code) == 0 {
+			deployArchiveFiles = c.StringSlice("deploy")
+		} else {
+			deployArchiveFiles = append(deployArchiveFiles, c.String("code"))
+			noZip = true
 		}
 		// fatal when both src & deploy archive are empty
-		if len(srcArchiveName) == 0 && len(deployArchiveName) == 0 {
+		if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
 			log.Fatal("Need --deploy or --src argument.")
 		}
 
 		buildcmd := c.String("buildcmd")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, specFile)
-
-		fmt.Printf("package '%v' created\n", pkgMetadata.Name)
-	}
-
-	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
-	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
-	if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
-		invokeStrategy.ExecutionStrategy.ExecutorType == fission.ExecutorTypePoolmgr {
-		log.Warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
+		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 	}
 
 	var secrets []fission.SecretReference
@@ -274,7 +332,7 @@ func fnCreate(c *cli.Context) error {
 			Secrets:        secrets,
 			ConfigMaps:     cfgmaps,
 			Resources:      resourceReq,
-			InvokeStrategy: invokeStrategy,
+			InvokeStrategy: *invokeStrategy,
 		},
 	}
 
@@ -412,11 +470,17 @@ func fnUpdate(c *cli.Context) error {
 		envNamespace = ""
 	}
 
-	deployArchiveName := c.String("code")
-	if len(deployArchiveName) == 0 {
-		deployArchiveName = c.String("deploy")
+	var deployArchiveFiles []string
+	codeFlag := false
+	code := c.String("code")
+	if len(code) == 0 {
+		deployArchiveFiles = c.StringSlice("deploy")
+	} else {
+		deployArchiveFiles = append(deployArchiveFiles, c.String("code"))
+		codeFlag = true
 	}
-	srcArchiveName := c.String("src")
+
+	srcArchiveFiles := c.StringSlice("src")
 	pkgName := c.String("pkg")
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
@@ -425,7 +489,7 @@ func fnUpdate(c *cli.Context) error {
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 
-	if len(srcArchiveName) > 0 && len(deployArchiveName) > 0 {
+	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
 	}
 
@@ -486,6 +550,13 @@ func fnUpdate(c *cli.Context) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
+	strategy, err := getInvokeStrategy(c, &function.Spec.InvokeStrategy)
+	if err != nil {
+		log.Fatal(err)
+	}
+	function.Spec.InvokeStrategy = *strategy
+	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
+
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: fnNamespace,
 		Name:      pkgName,
@@ -494,7 +565,7 @@ func fnUpdate(c *cli.Context) error {
 
 	pkgMetadata := &pkg.Metadata
 
-	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
+	if len(deployArchiveFiles) != 0 || len(srcArchiveFiles) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
 		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		util.CheckErr(err, "get function list")
 
@@ -502,7 +573,7 @@ func fnUpdate(c *cli.Context) error {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata, err = updatePackage(client, pkg, pkg.Spec.Environment.Name, pkg.Spec.Environment.Namespace, srcArchiveName, deployArchiveName, buildcmd, false)
+		pkgMetadata, err = updatePackage(client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag)
 		util.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
@@ -532,54 +603,6 @@ func fnUpdate(c *cli.Context) error {
 		log.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
 		function.Spec.Environment.Name = pkg.Spec.Environment.Name
 		function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
-	}
-
-	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
-
-	if c.IsSet("targetcpu") {
-		function.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent = getTargetCPU(c)
-	}
-
-	if c.IsSet("minscale") {
-		minscale := c.Int("minscale")
-		maxscale := c.Int("maxscale")
-		if c.IsSet("maxscale") && minscale > c.Int("maxscale") {
-			log.Fatal(fmt.Sprintf("Minscale's value %v can not be greater than maxscale value %v", minscale, maxscale))
-		}
-		if function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fission.ExecutorTypePoolmgr &&
-			minscale > function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			log.Fatal(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale of existing function: %v", minscale,
-				function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale))
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minscale
-	}
-
-	if c.IsSet("maxscale") {
-		maxscale := c.Int("maxscale")
-		if maxscale < function.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			log.Fatal(fmt.Sprintf("Function's minscale: %v can not be greater than maxscale provided: %v",
-				function.Spec.InvokeStrategy.ExecutionStrategy.MinScale, maxscale))
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.MaxScale = maxscale
-	}
-
-	if c.IsSet("executortype") {
-		var fnExecutor fission.ExecutorType
-		switch c.String("executortype") {
-		case "":
-			fnExecutor = fission.ExecutorTypePoolmgr
-		case fission.ExecutorTypePoolmgr:
-			fnExecutor = fission.ExecutorTypePoolmgr
-		case fission.ExecutorTypeNewdeploy:
-			fnExecutor = fission.ExecutorTypeNewdeploy
-		default:
-			log.Fatal("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
-		}
-		if (c.IsSet("mincpu") || c.IsSet("maxcpu") || c.IsSet("minmemory") || c.IsSet("maxmemory")) &&
-			fnExecutor == fission.ExecutorTypePoolmgr {
-			log.Warn("CPU/Memory specified for function with pool manager executor will be ignored in favor of resources specified at environment")
-		}
-		function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fnExecutor
 	}
 
 	_, err = client.FunctionUpdate(function)
@@ -731,8 +754,8 @@ func fnTest(c *cli.Context) error {
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
 		// Portforward to the fission router
-		localRouterPort := util.SetupPortForward(util.GetKubeConfigPath(),
-			util.GetFissionNamespace(), "application=fission-router")
+		localRouterPort := util.SetupPortForward(util.GetFissionNamespace(),
+			"application=fission-router")
 		routerURL = "127.0.0.1:" + localRouterPort
 	} else {
 		routerURL = strings.TrimPrefix(routerURL, "http://")
@@ -767,9 +790,16 @@ func fnTest(c *cli.Context) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
+	ctx := context.Background()
+	if deadline := c.Duration("timeout"); deadline > 0 {
+		var closeCtx func()
+		ctx, closeCtx = context.WithTimeout(ctx, deadline)
+		defer closeCtx()
+	}
+
 	headers := c.StringSlice("header")
 
-	resp := httpRequest(c.String("method"), functionUrl.String(), c.String("body"), headers)
+	resp := doHTTPRequest(ctx, c.String("method"), functionUrl.String(), c.String("body"), headers)
 	if resp.StatusCode < 400 {
 		body, err := ioutil.ReadAll(resp.Body)
 		util.CheckErr(err, "Function test")
@@ -780,7 +810,7 @@ func fnTest(c *cli.Context) error {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	util.CheckErr(err, "read log response from pod")
-	fmt.Printf("Error calling function %s: %d %s", fnName, resp.StatusCode, string(body))
+	fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", fnName, resp.StatusCode, string(body))
 	defer resp.Body.Close()
 	err = printPodLogs(c)
 	if err != nil {
@@ -790,9 +820,9 @@ func fnTest(c *cli.Context) error {
 	return nil
 }
 
-func httpRequest(method, url, body string, headers []string) *http.Response {
+func doHTTPRequest(ctx context.Context, method, url, body string, headers []string) *http.Response {
 	if method == "" {
-		method = "GET"
+		method = http.MethodGet
 	}
 
 	if method != http.MethodGet &&
@@ -813,9 +843,7 @@ func httpRequest(method, url, body string, headers []string) *http.Response {
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	util.CheckErr(err, "execute HTTP request")
 
 	return resp

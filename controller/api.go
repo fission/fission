@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,6 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	config "github.com/fission/fission/featureconfig"
 	"github.com/fission/fission/fission/logdb"
 )
 
@@ -47,6 +46,7 @@ func init() {
 
 type (
 	API struct {
+		logger            *zap.Logger
 		fissionClient     *crd.FissionClient
 		kubernetesClient  *kubernetes.Clientset
 		storageServiceUrl string
@@ -54,7 +54,7 @@ type (
 		workflowApiUrl    string
 		functionNamespace string
 		useIstio          bool
-		featureConfig     *config.FeatureConfig
+		featureStatus     map[string]string
 	}
 
 	logDBConfig struct {
@@ -64,8 +64,8 @@ type (
 	}
 )
 
-func MakeAPI(featureConfig *config.FeatureConfig) (*API, error) {
-	api, err := makeCRDBackedAPI()
+func MakeAPI(logger *zap.Logger, featureStatus map[string]string) (*API, error) {
+	api, err := makeCRDBackedAPI(logger)
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
 	if len(u) > 0 {
@@ -95,7 +95,7 @@ func MakeAPI(featureConfig *config.FeatureConfig) (*API, error) {
 		api.functionNamespace = "fission-function"
 	}
 
-	api.featureConfig = featureConfig
+	api.featureStatus = featureStatus
 
 	return api, err
 }
@@ -120,7 +120,7 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	}
 
 	code, msg := fission.GetHTTPError(err)
-	log.Errorf("Error: %v: %v", code, msg)
+	api.logger.Error(msg, zap.Int("code", code))
 	http.Error(w, msg, code)
 }
 
@@ -271,7 +271,8 @@ func (api *API) Serve(port int) {
 
 	address := fmt.Sprintf(":%v", port)
 
-	log.WithFields(log.Fields{"port": port}).Info("Server started")
-	r.Use(fission.LoggingMiddleware)
-	log.Fatal(http.ListenAndServe(address, r))
+	api.logger.Info("server started", zap.Int("port", port))
+	r.Use(fission.LoggingMiddleware(api.logger))
+	err := http.ListenAndServe(address, r)
+	api.logger.Fatal("done listening", zap.Error(err))
 }

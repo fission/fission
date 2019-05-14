@@ -17,14 +17,11 @@ limitations under the License.
 package newdeploy
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"path/filepath"
-	"strconv"
 	"time"
 
+	"go.uber.org/zap"
 	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -35,8 +32,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
-	"github.com/fission/fission/environments/fetcher"
-	"github.com/fission/fission/executor/util"
+	multierror "github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -44,29 +40,31 @@ const (
 	DeploymentVersion = "extensions/v1beta1"
 )
 
-const (
-	envVersion = "ENV_VERSION"
-)
-
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if minScale == 0 {
+
+	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
+	// in such cases we need set minscale to 1 for router to serve requests.
+	if !firstcreate && minScale <= 0 {
 		minScale = 1
 	}
 
+	waitForDeploy := minScale > 0
+
 	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		err = scaleDeployment(deploy.kubernetesClient,
-			existingDepl.Namespace, existingDepl.Name, minScale)
-		if err != nil {
-			log.Printf("Error scaling up deployment for function %v: %v", fn.Metadata.Name, err)
-			return nil, err
-		}
+		if waitForDeploy {
+			err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
+			if err != nil {
+				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Metadata.Name))
+				return nil, err
+			}
 
-		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+			if existingDepl.Status.AvailableReplicas < minScale {
+				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+			}
 		}
 		return existingDepl, err
 	}
@@ -84,11 +82,19 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 
 		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Create(deployment)
 		if err != nil {
-			log.Printf("Error while creating deployment: %v", err)
+			deploy.logger.Error("error while creating function deployment",
+				zap.Error(err),
+				zap.String("function", fn.Metadata.Name),
+				zap.String("deployment_name", deployName),
+				zap.String("deployment_namespace", deployNamespace))
 			return nil, err
 		}
 
-		return deploy.waitForDeploy(depl, minScale)
+		if waitForDeploy {
+			depl, err = deploy.waitForDeploy(depl, minScale)
+		}
+
+		return depl, err
 	}
 
 	return nil, err
@@ -97,33 +103,47 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 
 func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *crd.Function) error {
 	// create fetcher SA in this ns, if not already created
-	_, err := fission.SetupSA(deploy.kubernetesClient, fission.FissionFetcherSA, deployNamespace)
+	err := deploy.fetcherConfig.SetupServiceAccount(deploy.kubernetesClient, deployNamespace, fn.Metadata)
 	if err != nil {
-		log.Printf("Error : %v creating %s in ns : %s for function: %s.%s", err, fission.FissionFetcherSA, deployNamespace, fn.Metadata.Name, fn.Metadata.Namespace)
+		deploy.logger.Error("error creating fission fetcher service account for function",
+			zap.Error(err),
+			zap.String("service_account_name", fission.FissionFetcherSA),
+			zap.String("service_account_namespace", deployNamespace),
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
 		return err
 	}
 
 	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
-	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
+	err = fission.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fission.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fission.PackageGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
 	if err != nil {
-		log.Printf("Error : %v creating %s RoleBinding for function: %s.%s", err, fission.PackageGetterRB, fn.Metadata.Name, fn.Metadata.Namespace)
+		deploy.logger.Error("error creating role binding for function",
+			zap.Error(err),
+			zap.String("role_binding", fission.PackageGetterRB),
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
 		return err
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = fission.SetupRoleBinding(deploy.kubernetesClient, fission.SecretConfigMapGetterRB, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
+	err = fission.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fission.SecretConfigMapGetterRB, fn.Metadata.Namespace, fission.SecretConfigMapGetterCR, fission.ClusterRole, fission.FissionFetcherSA, deployNamespace)
 	if err != nil {
-		log.Printf("Error : %v creating %s RoleBinding for function %s.%s", err, fission.SecretConfigMapGetterRB, fn.Metadata.Name, fn.Metadata.Namespace)
+		deploy.logger.Error("error creating role binding for function",
+			zap.Error(err),
+			zap.String("role_binding", fission.SecretConfigMapGetterRB),
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
 		return err
 	}
 
-	log.Printf("Set up all RBAC objects for function : %s.%s", fn.Metadata.Name, fn.Metadata.Namespace)
+	deploy.logger.Info("set up all RBAC objects for function",
+		zap.String("function_name", fn.Metadata.Name),
+		zap.String("function_namespace", fn.Metadata.Namespace))
 	return nil
 }
 
-func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, error) {
-	deployName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(fn.Metadata.Namespace).Get(deployName, metav1.GetOptions{})
+func (deploy *NewDeploy) getDeployment(ns, name string) (*v1beta1.Deployment, error) {
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Get(name, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment, ns string) error {
@@ -148,48 +168,10 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-	if replicas == 0 {
-		replicas = 1
-	}
-
-	targetFilename := "user"
 
 	gracePeriodSeconds := int64(6 * 60)
 	if env.Spec.TerminationGracePeriod > 0 {
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
-	}
-
-	fetchReq := &fetcher.FetchRequest{
-		FetchType: fetcher.FETCH_DEPLOYMENT,
-		Package: metav1.ObjectMeta{
-			Namespace: fn.Spec.Package.PackageRef.Namespace,
-			Name:      fn.Spec.Package.PackageRef.Name,
-		},
-		Filename:    targetFilename,
-		Secrets:     fn.Spec.Secrets,
-		ConfigMaps:  fn.Spec.ConfigMaps,
-		KeepArchive: env.Spec.KeepArchive,
-	}
-
-	loadReq := fission.FunctionLoadRequest{
-		FilePath:         filepath.Join(deploy.sharedMountPath, targetFilename),
-		FunctionName:     fn.Spec.Package.FunctionName,
-		FunctionMetadata: &fn.Metadata,
-	}
-
-	fetchPayload, err := json.Marshal(fetchReq)
-	if err != nil {
-		return nil, err
-	}
-	loadPayload, err := json.Marshal(loadReq)
-	if err != nil {
-		return nil, err
-	}
-
-	fetcherResources, err := util.GetFetcherResources()
-	if err != nil {
-		log.Printf("Error while parsing fetcher resources: %v", err)
-		return nil, err
 	}
 
 	podAnnotations := env.Metadata.Annotations
@@ -217,46 +199,12 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
-					Volumes: []apiv1.Volume{
-						{
-							Name: fission.SharedVolumeUserfunc,
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: fission.SharedVolumeSecrets,
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: fission.SharedVolumeConfigmaps,
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-					},
 					Containers: []apiv1.Container{
 						fission.MergeContainerSpecs(&apiv1.Container{
 							Name:                   fn.Metadata.Name,
 							Image:                  env.Spec.Runtime.Image,
-							ImagePullPolicy:        apiv1.PullIfNotPresent,
+							ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      fission.SharedVolumeUserfunc,
-									MountPath: deploy.sharedMountPath,
-								},
-								{
-									Name:      fission.SharedVolumeSecrets,
-									MountPath: deploy.sharedSecretPath,
-								},
-								{
-									Name:      fission.SharedVolumeConfigmaps,
-									MountPath: deploy.sharedCfgMapPath,
-								},
-							},
 							Lifecycle: &apiv1.Lifecycle{
 								PreStop: &apiv1.Handler{
 									Exec: &apiv1.ExecAction{
@@ -269,76 +217,6 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 							},
 							Resources: resources,
 						}, env.Spec.Runtime.Container),
-						{
-							Name:                   "fetcher",
-							Image:                  deploy.fetcherImg,
-							ImagePullPolicy:        deploy.fetcherImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      fission.SharedVolumeUserfunc,
-									MountPath: deploy.sharedMountPath,
-								},
-								{
-									Name:      fission.SharedVolumeSecrets,
-									MountPath: deploy.sharedSecretPath,
-								},
-								{
-									Name:      fission.SharedVolumeConfigmaps,
-									MountPath: deploy.sharedCfgMapPath,
-								},
-							},
-							Command: []string{"/fetcher", "-specialize-on-startup",
-								"-fetch-request", string(fetchPayload),
-								"-load-request", string(loadPayload),
-								"-secret-dir", deploy.sharedSecretPath,
-								"-cfgmap-dir", deploy.sharedCfgMapPath,
-								deploy.sharedMountPath},
-							Lifecycle: &apiv1.Lifecycle{
-								PreStop: &apiv1.Handler{
-									Exec: &apiv1.ExecAction{
-										Command: []string{
-											"sleep",
-											fmt.Sprintf("%v", gracePeriodSeconds),
-										},
-									},
-								},
-							},
-							Env: []apiv1.EnvVar{
-								{
-									Name:  envVersion,
-									Value: strconv.Itoa(env.Spec.Version),
-								},
-							},
-							Resources: fetcherResources,
-							ReadinessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 1,
-								PeriodSeconds:       1,
-								FailureThreshold:    30,
-								Handler: apiv1.Handler{
-									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8000,
-										},
-									},
-								},
-							},
-							LivenessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 35,
-								PeriodSeconds:       5,
-								Handler: apiv1.Handler{
-									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8000,
-										},
-									},
-								},
-							},
-						},
 					},
 					ServiceAccountName:            "fission-fetcher",
 					TerminationGracePeriodSeconds: &gracePeriodSeconds,
@@ -346,6 +224,13 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 			},
 		},
 	}
+
+	deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+		&deployment.Spec.Template.Spec,
+		fn.Metadata.Name,
+		fn,
+		env,
+	)
 
 	return deployment, nil
 }
@@ -361,23 +246,23 @@ func (deploy *NewDeploy) getResources(env *crd.Environment, fn *crd.Function) ap
 		resources.Limits = make(map[apiv1.ResourceName]resource.Quantity)
 	}
 	// Only override the once specified at function, rest default to values from env.
-	_, ok := fn.Spec.Resources.Requests[apiv1.ResourceCPU]
-	if ok {
+	val, ok := fn.Spec.Resources.Requests[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
 		resources.Requests[apiv1.ResourceCPU] = fn.Spec.Resources.Requests[apiv1.ResourceCPU]
 	}
 
-	_, ok = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
-	if ok {
+	val, ok = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
 		resources.Requests[apiv1.ResourceMemory] = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
 	}
 
-	_, ok = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
-	if ok {
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
 		resources.Limits[apiv1.ResourceCPU] = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
 	}
 
-	_, ok = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
-	if ok {
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
 		resources.Limits[apiv1.ResourceMemory] = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
 	}
 
@@ -391,6 +276,9 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		minRepl = 1
 	}
 	maxRepl := int32(execStrategy.MaxScale)
+	if maxRepl == 0 {
+		maxRepl = minRepl
+	}
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
@@ -431,9 +319,8 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 }
 
-func (deploy *NewDeploy) getHpa(ns string, fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
-	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(hpaName, metav1.GetOptions{})
+func (deploy *NewDeploy) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(name, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
@@ -511,4 +398,37 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 		time.Sleep(time.Second)
 	}
 	return nil, errors.New("failed to create deployment within timeout window")
+}
+
+// cleanupNewdeploy cleans all kubernetes objects related to function
+func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
+	var multierr *multierror.Error
+
+	err := deploy.deleteSvc(ns, name)
+	if err != nil {
+		deploy.logger.Error("error deleting service for newdeploy function",
+			zap.Error(err),
+			zap.String("function_name", name),
+			zap.String("function_namespace", ns))
+		multierror.Append(multierr, err)
+	}
+
+	err = deploy.deleteHpa(ns, name)
+	if err != nil {
+		deploy.logger.Error("error deleting service for newdeploy function",
+			zap.Error(err),
+			zap.String("function_name", name),
+			zap.String("function_namespace", ns))
+		multierror.Append(multierr, err)
+	}
+
+	err = deploy.deleteDeployment(ns, name)
+	if err != nil {
+		deploy.logger.Error("error deleting deployment for newdeploy function",
+			zap.Error(err),
+			zap.String("function_name", name),
+			zap.String("function_namespace", ns))
+		multierror.Append(multierr, err)
+	}
+	return multierr.ErrorOrNil()
 }
