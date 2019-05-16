@@ -4,7 +4,7 @@
 #
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
-# Change <DOCKERHUB_REPO> -> to your Dockerhub username
+# Change vishalbiyani -> to your Dockerhub username
 # Run `go mod vendor` so that all dependencies are downloaded
 # Run `skaffold run` to build and deploy with helm. 
 # Run`skaffold build` to only build and push images
@@ -18,14 +18,14 @@ apiVersion: skaffold/v1beta9
 kind: Config
 build:
   artifacts:
-    - image: <DOCKERHUB_REPO>/fission
+    - image: vishalbiyani/fission
       context: .
       docker:
         dockerfile: fission-bundle/Dockerfile.fission-bundle
-    - image: <DOCKERHUB_REPO>/fetcher
+    - image: vishalbiyani/fetcher
       docker:
         dockerfile: environments/fetcher/cmd/Dockerfile.fission-fetcher
-    - image: <DOCKERHUB_REPO>/preupgradechecks
+    - image: vishalbiyani/preupgradechecks
       docker:
         dockerfile: preupgradechecks/Dockerfile.fission-preupgradechecks                
   tagPolicy:
@@ -41,11 +41,12 @@ deploy:
           - ./charts/fission-all/values.yaml
         namespace: "fission"
         setValues:
-          fetcherImage: <DOCKERHUB_REPO>/fetcher
-          image: <DOCKERHUB_REPO>/fission
+          image: vishalbiyani/fission
           imageTag: skaffold-test
+          fetcherImage: vishalbiyani/fetcher
+          fetcherImageTag: skaffold-test
           namespace: fission
-          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
+          preUpgradeChecksImage: vishalbiyani/preupgradechecks
           repository: index.docker.io
         setValueTemplates: {}
         wait: true
