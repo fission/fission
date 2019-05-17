@@ -3,7 +3,6 @@ package router
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"sync/atomic"
@@ -58,10 +57,8 @@ func (a *Analytics) run() {
 		}
 
 		resp, err := http.Post(a.url, "application/json", bytes.NewReader(msgbytes))
-		if err != nil && resp != nil && resp.Body != nil {
-			// read body to end and close it; otherwise we
-			// leak some resources in the http transport
-			_, _ = ioutil.ReadAll(resp.Body)
+		if err == nil && resp != nil && resp.Body != nil {
+			// close response body to prevent resources leak
 			resp.Body.Close()
 		}
 	}
