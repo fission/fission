@@ -372,7 +372,7 @@ func (gp *GenericPool) createPool() error {
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
-						fission.MergeContainerSpecs(&apiv1.Container{
+						util.MergeContainerSpecs(&apiv1.Container{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.Spec.Runtime.Image,
 							ImagePullPolicy:        gp.runtimeImagePullPolicy,
@@ -410,12 +410,6 @@ func (gp *GenericPool) createPool() error {
 	err := gp.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, gp.env.Metadata.Name)
 	if err != nil {
 		return err
-	}
-	if gp.env.Spec.Runtime.Container != nil {
-		err = util.MergeContainer(&deployment.Spec.Template.Spec.Containers[0], *gp.env.Spec.Runtime.Container)
-		if err != nil {
-			return err
-		}
 	}
 
 	if gp.env.Spec.Runtime.PodSpec != nil {
