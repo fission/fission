@@ -25,6 +25,6 @@ RUN apk update
 # Install some utility libraries for builders extending image
 RUN apk add coreutils binutils findutils grep
 COPY --from=builder /go/bin/builder /
-
+RUN chmod +x /builder
 ENTRYPOINT ["/builder"]
 EXPOSE 8001
