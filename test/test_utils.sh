@@ -442,7 +442,8 @@ run_all_tests() {
 
     test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
 
-    for file in $test_files
+    for file in "/test_environments/test_java_builder.sh" "/test_environments/test_go_env.sh" "/test_env_vars.sh"
+    #for file in $test_files
     do
     run_test ${file}
     done
