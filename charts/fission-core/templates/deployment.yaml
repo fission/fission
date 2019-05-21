@@ -164,9 +164,9 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -235,9 +235,9 @@ spec:
           initialDelaySeconds: 35
           periodSeconds: 5
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: v1
@@ -312,9 +312,9 @@ spec:
           initialDelaySeconds: 35
           periodSeconds: 5
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -358,9 +358,9 @@ spec:
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -386,9 +386,9 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -414,9 +414,9 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
-{{- end }}
+      {{- if .Values.extraCoreComponmentPodConfig }}
+        {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+      {{- end }}
 
 ---
 apiVersion: extensions/v1beta1
