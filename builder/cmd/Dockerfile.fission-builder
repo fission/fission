@@ -1,4 +1,4 @@
-FROM golang:1.11-alpine as builder
+FROM golang:1.11-alpine as fission-builder
 RUN apk add bash ca-certificates git gcc g++ libc-dev
 
 ARG GITCOMMIT=unknown
@@ -12,19 +12,15 @@ ARG BUILDDATE=unknown
 
 ARG GOPKG=github.com/fission/fission
 COPY . /go/src/${GOPKG}
-WORKDIR /go/src/${GOPKG}/builder
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a \
+WORKDIR /go/src/${GOPKG}/builder/cmd
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /go/bin/builder \
     -gcflags=-trimpath=$GOPATH \
     -asmflags=-trimpath=$GOPATH \
     -ldflags "-X github.com/fission/fission.GitCommit=${GITCOMMIT} -X github.com/fission/fission.BuildDate=${BUILDDATE} -X github.com/fission/fission.Version=${BUILDVERSION}"
 
-FROM alpine:3.5
-RUN apk add --update ca-certificates
-RUN apk update
-# Install some utility libraries for builders extending image
-RUN apk add coreutils binutils findutils grep
-COPY --from=builder /go/bin/builder /
-RUN chmod +x /builder
-ENTRYPOINT ["/builder"]
+FROM alpine:3.4
+COPY --from=fission-builder /go/bin/builder /
 EXPOSE 8001
+
+ENTRYPOINT ["/builder"]
