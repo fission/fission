@@ -163,6 +163,9 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -235,6 +238,9 @@ spec:
         - containerPort: 8888
           name: http
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 ---
 apiVersion: v1
@@ -316,6 +322,9 @@ spec:
         - containerPort: 8888
           name: http
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -359,6 +368,9 @@ spec:
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 ---
 apiVersion: extensions/v1beta1
@@ -384,6 +396,9 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 ---
 apiVersion: v1
@@ -432,6 +447,9 @@ spec:
               secretKeyRef:
                 name: influxdb
                 key: password
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 {{- if .Values.heapster }}
 ---
@@ -497,6 +515,9 @@ spec:
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 
 #
 # This is commented out until fission-ui allows configuring the
@@ -554,6 +575,9 @@ spec:
         - containerPort: 4222
           hostPort: 4222
           protocol: TCP
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -583,6 +607,9 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
 
 {{- if .Values.kafka.enabled }}
@@ -617,6 +644,9 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
 
 {{- if .Values.azureStorageQueue.enabled }}
@@ -654,6 +684,9 @@ spec:
               name: azure-storage-account-key
               key: key
       serviceAccount: fission-svc
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
 ---
 apiVersion: extensions/v1beta1
@@ -705,4 +738,7 @@ spec:
           claimName: {{ .Values.persistence.existingClaim | default "fission-storage-pvc" }}
       {{- else }}
         emptyDir: {}
-      {{- end -}}
+      {{- end }}
+{{- if .Values.extraCoreComponmentPodConfig }}
+{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- end }}

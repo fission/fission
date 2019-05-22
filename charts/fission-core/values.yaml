@@ -68,6 +68,24 @@ persistence:
   accessMode: ReadWriteOnce
   size: 8Gi
 
+## Extend the container specs for the core fission pods. 
+## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
+## For example:
+## extraCoreComponmentPodConfig:
+##   affinity:
+##     nodeAffinity:
+##       requiredDuringSchedulingIgnoredDuringExecution:
+##         nodeSelectorTerms:
+##           - matchExpressions:
+##             - key: capability
+##               operator: In
+##               values:
+##                 - app
+extraCoreComponmentPodConfig:
+#  affinity:
+#  tolerations:
+#  nodeSelector:
+
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
 analytics: true
