@@ -19,13 +19,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.2.0
+imageTag: 1.2.1
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 1.2.0
+fetcherImageTag: 1.2.1
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -105,6 +105,24 @@ persistence:
 
   accessMode: ReadWriteOnce
   size: 8Gi
+
+## Extend the container specs for the core fission pods. 
+## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
+## For example:
+## extraCoreComponmentPodConfig:
+##   affinity:
+##     nodeAffinity:
+##       requiredDuringSchedulingIgnoredDuringExecution:
+##         nodeSelectorTerms:
+##           - matchExpressions:
+##             - key: capability
+##               operator: In
+##               values:
+##                 - app
+extraCoreComponmentPodConfig:
+#  affinity:
+#  tolerations:
+#  nodeSelector:
 
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.

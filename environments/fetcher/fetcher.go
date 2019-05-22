@@ -597,7 +597,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq fission.Func
 
 	_, err = fetcher.FetchSecretsAndCfgMaps(fetchReq.Secrets, fetchReq.ConfigMaps)
 	if err != nil {
-		return errors.Wrap(err, "error fetching secrets/configmaps")
+		return errors.Wrap(err, "error fetching secrets/configs")
 	}
 
 	// Specialize the pod

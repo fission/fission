@@ -43,10 +43,10 @@ Parameter | Description | Default
 `routerServiceType` | Type of Fission Router service to use. For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP. | `LoadBalancer`
 `repository` | Image base repository | `index.docker.io`
 `image` | Fission image repository | `fission/fission-bundle`
-`imageTag` | Fission image tag | `1.2.0`
+`imageTag` | Fission image tag | `1.2.1`
 `pullPolicy` | Image pull policy | `IfNotPresent`
 `fetcherImage` | Fission fetcher repository | `fission/fetcher`
-`fetcherImageTag` | Fission fetcher image tag | `1.2.0`
+`fetcherImageTag` | Fission fetcher image tag | `1.2.1`
 `controllerPort` | Fission Controller service port | `31313`
 `routerPort` | Fission Router service port | ` 31314`
 `functionNamespace` | Namespace in which to run fission functions (this is different from the release namespace) | `fission-function`
@@ -64,6 +64,7 @@ Parameter | Description | Default
 `debugEnv` | If there are any pod specialization errors when a function is triggered and this flag is set to true, the error summary is returned as part of http response | `true`
 `prometheusDeploy` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
 `canaryDeployment.enabled` | Set to true if you need canary deployment feature | `true` in `fission-all`, `false` in `fission-core`
+`extraCoreComponmentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 
 ### Extra configuration for `fission-all`
 

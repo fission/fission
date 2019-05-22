@@ -93,7 +93,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		fetcherImagePullPolicy:  fission.GetImagePullPolicy(fetcherImagePullPolicy),
 		sharedMountPath:         sharedMountPath,
 		sharedSecretPath:        "/secrets",
-		sharedCfgMapPath:        "/configmaps",
+		sharedCfgMapPath:        "/configs",
 		jaegerCollectorEndpoint: os.Getenv("OPENCENSUS_TRACE_JAEGER_COLLECTOR_ENDPOINT"),
 		serviceAccount:          fission.FissionFetcherSA,
 	}, nil
