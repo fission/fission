@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.12
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "fission-dotnet20", "dotnet20\fission-dotnet20.csproj", "{3F044DE1-74E5-48F7-8D23-233C24AAA45C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "fission-dotnet20", "fission-dotnet20.csproj", "{3F044DE1-74E5-48F7-8D23-233C24AAA45C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

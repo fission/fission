@@ -268,3 +268,97 @@ $ curl -XPOST http://localhost:8888/specialize
 ```
 $ curl -XGET http://localhost:8888
 ``` 
+
+## Few Aditional Features  
+
+**1. NameSpace support :**
+
+Now , You can use namespace for Fission function class and have many other classes in same namespace , this is also backward compatible , however main execution class would always be *FissionFunction* and its method *Execute*
+
+```
+				using System;
+				using Fission.DotNetCore.Api;
+
+
+				public class FissionFunction 
+				{
+					public string Execute(FissionContext context){
+						   //orignal logic
+					}
+					 public string AnotherClass(string myval){
+						 //do something
+					}
+				}
+```
+**2. Aditional **setting/configuration file** support :**  	
+			
+Now , with Fission V2 end point with builder , in source package you can have aditional setting
+files which can be read by fission function .
+Lets say you are writing a function and you need some configurable option and setting to be available in function and thus you want to use some additional configuration file , then you can also achieve the same by having a JSON based configuration file and a corresponding POCO Class for the same.
+
+Please use https://csharp2json.io/ & http://json2csharp.com/ to create correct POCO class for you JSON configuration file.
+
+Here is an example of a such file  which we want to use in function , lets say your package.zip contains  :
+
+```
+ Source Package zip :
+ --soruce.zip
+	|--Func.cs
+	|--nuget.txt
+	|--exclude.txt
+	|--mysetting.json
+	|--....MiscFiles(optional)
+	|--....MiscFiles(optional)
+```
+
+here is what ***mysetting.json*** looks like :
+
+```
+				{ 
+				"name": "Alpha",
+				"sendGridEndPoints": 
+					[
+						{ "port": 1002 },
+						{ "port": 3004 } 
+					]
+				}
+```
+
+here is what ***func.cs*** looks like :
+
+``` 
+using System;
+using Fission.DotNetCore.Api;
+			
+namespace FuncNameSpace
+    {
+        public class FissionFunction
+            {
+                public string Execute(FissionContext context){
+                    string respo="initial value";
+                    context.Logger.WriteInfo("Staring..... ");
+                    var settings =context.GetSettings<SendGridSettings>("mysetting.json");
+                    context.Logger.WriteInfo($"SendGridEndPoint port : {settings.SendGridEndPoints[0].port} ..... ");
+                    respo=settings.SendGridEndPoints[0].port;           
+                    context.Logger.WriteInfo("Done!!");
+                    return respo;
+                }
+            }
+
+        public class SendGridSettings
+            {
+                public string name { get; set; }
+                public System.Collections.Generic.List<SendGridEndPoint> SendGridEndPoints { get; set; }
+            }
+
+        public  class SendGridEndPoint
+            {
+                 public string port { get; set; }
+            }
+    }
+    			
+```
+**3. Nuget support :**
+
+with use of fission builder we can now add various compatible nugets with our deployment package so that it can be leverage via our function  code. Please go through detailed documentation of [fission builder for dotnet 2.0 environment](https://github.com/fission/fission/tree/master/environments/dotnet20/builder).
+ 

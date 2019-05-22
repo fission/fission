@@ -11,7 +11,6 @@ namespace Fission.DotNetCore.Api
 {
     public class FissionContext
     {
-        public string PackagePath { get; set; }
         public FissionContext(Dictionary<string, object> args, Logger logger, FissionHttpRequest request)
         {
             if (args == null) throw new ArgumentNullException(nameof(args));
@@ -34,18 +33,25 @@ namespace Fission.DotNetCore.Api
                                         logger,
                                         new FissionHttpRequest(request));
         }
-        //this is to support aditional setting file read from source/deployment package via function
+
+        //this are curruntly dummy , not being implemented, just to pass compilation
+        //actual execution is written in environment to use the app settings as there we need it
         public T GetSettings<T>(string relativePath)
         {
-            var filePath = Path.Combine(this.PackagePath, relativePath);
-            Console.WriteLine($"Going to Get Setting from :{filePath}");
-            string json = GetSettingsJson(filePath);
-            return JsonConvert.DeserializeObject<T>(json);
+            //intentionaly doing it as these are just dummy methods not being called
+            //but if tomorrow if we decide to give implementation for execution in build then we 
+            //need to implement it
+            throw new NotImplementedException();
         }
 
+        //this are curruntly dummy , not being implemented, just to pass compilation
+        //actual execution is written in environment to use the app settings as there we need it
         private string GetSettingsJson(string relativePath)
         {
-            return File.ReadAllText(Path.Combine(this.PackagePath, relativePath));
+            //intentionaly doing it as these are just dummy methods not being called
+            //but if tomorrow if we decide to give implementation for execution in build then we 
+            //need to implement it
+            throw new NotImplementedException();
         }
 
     }
