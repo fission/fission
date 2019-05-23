@@ -5,21 +5,29 @@
 # 
 
 set -euo pipefail
+source $(dirname $0)/../../../utils.sh
 set +x
+
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
 
 ROOT=$(dirname $0)/../../..
 DIR=$(dirname $0)
 
 clusterID="fissionMQTrigger"
-topic="foo.bar"
-resptopic="foo.foo"
-expectedRespOutput="[foo.foo]: 'Hello, World!'"
+pubClientID="clientPub-$TEST_ID"
+subClientID="clientSub-$TEST_ID"
+topic="foo.bar$TEST_ID"
+resptopic="foo.foo$TEST_ID"
+expectedRespOutput="[foo.foo$TEST_ID]: 'Hello, World!'"
+
+env=nodejs-$TEST_ID
+fn=hello-$TEST_ID
+mqt=mqt-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name nodejs || true
-    fission fn delete --name $fn || true
-    fission mqtrigger delete --name $mqt || true
+    clean_resource_by_id $TEST_ID
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -28,18 +36,13 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-log "Pre-test cleanup"
-fission env delete --name nodejs || true
-
 log "Creating nodejs env"
-fission env create --name nodejs --image fission/node-env
+fission env create --name $env --image $NODE_RUNTIME_IMAGE
 
 log "Creating function"
-fn=hello-$(date +%s)
-fission fn create --name $fn --env nodejs --code $DIR/main.js --method GET
+fission fn create --name $fn --env $env --code $DIR/main.js --method GET
 
 log "Creating message queue trigger"
-mqt=mqt-$(date +%s)
 fission mqtrigger create --name $mqt --function $fn --mqtype "nats-streaming" --topic $topic --resptopic $resptopic
 
 # wait until nats trigger is created
@@ -49,23 +52,18 @@ sleep 5
 # Send a message
 #
 log "Sending message"
-go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientPub $topic ""
+go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $pubClientID $topic ""
 
 #
 # Wait for message on response topic 
 #
 log "Waiting for response"
-TIMEOUT=timeout
-if [ $(uname -s) == 'Darwin' ]
-then
-    # If this fails on mac os, do "brew install coreutils".
-    TIMEOUT=gtimeout 
-fi
-response=$($TIMEOUT 120s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id clientSub $resptopic 2>&1)
+response=$(timeout 120s go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $resptopic 2>&1)
 
 if [[ "$response" != "$expectedRespOutput" ]]; then
-    log "$response is not equal to $expectedRespOutput"
+    log "'$response' is not equal to '$expectedRespOutput'"
     exit 1
 fi
 
 log "Subscriber received expected response: $response"
+log "Test PASSED"
