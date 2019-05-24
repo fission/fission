@@ -13,22 +13,12 @@ pushd $ROOT_RELPATH
 ROOT=$(pwd)
 popd
 
-export TEST_REPORT=""
+travis_fold_start() {
+    echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
+}
 
-report_msg() {
-    TEST_REPORT="$TEST_REPORT\n$1"
-}
-report_test_passed() {
-    report_msg "--- PASSED $1"
-}
-report_test_failed() {
-    report_msg "*** FAILED $1"
-}
-report_test_skipped() {
-    report_msg "### SKIPPED $1"
-}
-show_test_report() {
-    echo -e "------\n$TEST_REPORT\n------"
+travis_fold_end() {
+    echo -e "travis_fold:end:$1\r"
 }
 
 helm_setup() {
@@ -68,48 +58,57 @@ getGitCommit() {
 
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
+    travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
     docker build -t $image_tag -f $ROOT/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
+    travis_fold_end build_and_push_pre_upgrade_check_image
 }
 
 build_and_push_fission_bundle() {
     image_tag=$1
+    travis_fold_start build_and_push_fission_bundle $image_tag
 
     docker build -q -t $image_tag -f $ROOT/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
+    travis_fold_end build_and_push_fission_bundle
 }
 
 build_and_push_fetcher() {
     image_tag=$1
+    travis_fold_start build_and_push_fetcher $image_tag
 
     docker build -q -t $image_tag -f $ROOT/environments/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
+    travis_fold_end build_and_push_fetcher
 }
 
 
 build_and_push_builder() {
     image_tag=$1
+    travis_fold_start build_and_push_builder $image_tag
 
     docker build -q -t $image_tag -f $ROOT/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
+    travis_fold_end build_and_push_builder
 }
 
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
+    travis_fold_start build_and_push_env_runtime.$env $image_tag
 
     pushd $ROOT/environments/$env/
     docker build -q -t $image_tag .
@@ -118,12 +117,14 @@ build_and_push_env_runtime() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_env_runtime.$env
 }
 
 build_and_push_env_builder() {
     env=$1
     image_tag=$2
     builder_image=$3
+    travis_fold_start build_and_push_env_builder.$env $image_tag
 
     pushd $ROOT/environments/$env/builder
 
@@ -133,12 +134,15 @@ build_and_push_env_builder() {
 
     gcloud docker -- push $image_tag
     popd
+    travis_fold_end build_and_push_env_builder.$env
 }
 
 build_fission_cli() {
+    travis_fold_start build_fission_cli "fission cli"
     pushd $ROOT/fission
     go build .
     popd
+    travis_fold_end build_fission_cli
 }
 
 clean_crd_resources() {
@@ -174,6 +178,7 @@ helm_install_fission() {
     routerServiceType=${10}
     serviceType=${11}
     preUpgradeCheckImage=${12}
+    travis_fold_start helm_install_fission "helm install fission id=$id"
 
     ns=f-$id
     fns=f-func-$id
@@ -191,8 +196,7 @@ helm_install_fission() {
         sleep 5
     done
 
-    # only for tests, mv the prefetched prometheus chart to fission-all so helm install fission will install prometheus too
-    mv $ROOT/test/charts $ROOT/charts/fission-all/
+    helm dependency update $ROOT/charts/fission-all
 
     echo "Installing fission"
     helm install		\
@@ -204,6 +208,7 @@ helm_install_fission() {
 	 $ROOT/charts/fission-all
 
     helm list
+    travis_fold_end helm_install_fission
 }
 
 dump_kubernetes_events() {
@@ -398,16 +403,17 @@ dump_all_fission_resources() {
 }
 
 dump_system_info() {
-    echo "--- System Info ---"
+    travis_fold_start dump_system_info "System Info"
     go version
     docker version
     kubectl version
     helm version
-    echo "--- End System Info ---"
+    travis_fold_end dump_system_info
 }
 
 dump_logs() {
     id=$1
+    travis_fold_start dump_logs "dump logs $id"
 
     ns=f-$id
     fns=f-func-$id
@@ -425,13 +431,9 @@ dump_logs() {
     dump_function_pod_logs $ns $fns
     dump_builder_pod_logs $bns
     dump_fission_crds
+    travis_fold_end dump_logs
 }
 
-log() {
-    echo `date +%Y/%m/%d:%H:%M:%S`" $1"
-}
-
-export -f log
 export FAILURES=0
 
 run_all_tests() {
@@ -439,39 +441,77 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:test
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
 
-    test_files=$(find $ROOT/test/tests -iname 'test_*.sh')
+    set +e
+    export TIMEOUT=900  # 15 minutes per test
 
-    for file in $test_files
-    do
-    run_test ${file}
+    # run tests without newdeploy in parallel.
+    export JOBS=6
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
+        $ROOT/test/tests/recordreplay/test_record_greetings.sh \
+        $ROOT/test/tests/recordreplay/test_record_rv.sh \
+        $ROOT/test/tests/recordreplay/test_recorder_update.sh \
+        $ROOT/test/tests/test_annotations.sh \
+        $ROOT/test/tests/test_archive_pruner.sh \
+        $ROOT/test/tests/test_backend_poolmgr.sh \
+        $ROOT/test/tests/test_buildermgr.sh \
+        $ROOT/test/tests/test_canary.sh \
+        $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
+        $ROOT/test/tests/test_function_test/test_fn_test.sh \
+        $ROOT/test/tests/test_function_update.sh \
+        $ROOT/test/tests/test_ingress.sh \
+        $ROOT/test/tests/test_internal_routes.sh \
+        $ROOT/test/tests/test_logging/test_function_logs.sh \
+        $ROOT/test/tests/test_node_hello_http.sh \
+        $ROOT/test/tests/test_package_command.sh \
+        $ROOT/test/tests/test_pass.sh \
+        $ROOT/test/tests/test_router_cache_invalidation.sh \
+        $ROOT/test/tests/test_specs/test_spec.sh \
+        $ROOT/test/tests/test_specs/test_spec_multifile.sh
+    FAILURES=$?
+
+    # FIXME: run tests with newdeploy one by one.
+    export JOBS=1
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_backend_newdeploy.sh \
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/test_environments/test_java_builder.sh \
+        $ROOT/test/tests/test_environments/test_java_env.sh \
+        $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
+        $ROOT/test/tests/test_fn_update/test_env_update.sh \
+        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
+        $ROOT/test/tests/test_fn_update/test_resource_change.sh \
+        $ROOT/test/tests/test_fn_update/test_scale_change.sh \
+        $ROOT/test/tests/test_fn_update/test_secret_update.sh \
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
+    FAILURES=$((FAILURES+$?))
+    set -e
+
+    # dump test logs
+    # TODO: the idx does not match seq number in recap.
+    idx=1
+    log_files=$(find $ROOT/test/logs/ -name '*.log')
+    for log_file in $log_files; do
+        test_name=${log_file#$ROOT/test/logs/}
+        travis_fold_start run_test.$idx $test_name
+        echo "========== start $test_name =========="
+        cat $log_file
+        echo "========== end $test_name =========="
+        travis_fold_end run_test.$idx
+        idx=$((idx+1))
     done
-}
-
-run_test() {
-    file=$1
-
-    test_name=${file#${ROOT}/test/tests}
-	test_path=${file}
-
-	if grep "^#test:disabled" ${file}
-	then
-	    report_test_skipped ${test_name}
-	    echo ------- Skipped ${test_name} -------
-	else
-	    echo ------- Running ${test_name} -------
-	    pushd $(dirname ${test_path})
-	    if ${test_path}
-	    then
-		echo [SUCCESS]: ${test_name}
-		report_test_passed ${test_name}
-	    else
-		echo [FAILED]: ${test_name}
-		export FAILURES=$(($FAILURES+1))
-		report_test_failed ${test_name}
-	    fi
-	    popd
-	fi
 }
 
 install_and_test() {
@@ -507,8 +547,6 @@ install_and_test() {
     run_all_tests $id
 
     dump_logs $id
-
-    show_test_report
 
     if [ $FAILURES -ne 0 ]
     then

@@ -1,6 +1,13 @@
 #!/bin/bash
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
+
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
 
 # Create a function with source package in python 
 # to test builder manger functionality. 
@@ -9,10 +16,9 @@ set -euo pipefail
 # 2. package watcher triggers the build if any changes to packages
 
 ROOT=$(dirname $0)/../..
-PYTHON_RUNTIME_IMAGE=${PYTHON_RUNTIME_IMAGE:-gcr.io/fission-ci/python-env:test}
-PYTHON_BUILDER_IMAGE=${PYTHON_BUILDER_IMAGE:-gcr.io/fission-ci/python-env-builder:test}
 
-fn=python-srcbuild-$(date +%s)
+env=python-$TEST_ID
+fn=python-srcbuild-$TEST_ID
 
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
@@ -31,6 +37,7 @@ waitBuild() {
       if [[ $? -eq 0 ]]; then
           break
       fi
+      sleep 1
     done
 }
 export -f waitBuild
@@ -47,15 +54,15 @@ waitEnvBuilder() {
       if [[ $? -eq 0 ]]; then
           break
       fi
+      sleep 1
     done
 }
 export -f waitEnvBuilder
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name python || true
-    fission fn delete --name $fn || true
-    rm demo-src-pkg.zip || true
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -64,20 +71,16 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-log "Pre-test cleanup"
-fission env delete --name python || true
-kubectl --namespace default get packages|grep -v NAME|awk '{print $1}'|xargs -I@ bash -c 'kubectl --namespace default delete packages @' || true
-
 log "Creating python env"
-fission env create --name python --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 
-timeout 180s bash -c "waitEnvBuilder python"
+timeout 180s bash -c "waitEnvBuilder $env"
 
 log "Creating source pacakage"
-zip -jr demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
+zip -jr $tmp_dir/demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
 
 log "Creating function " $fn
-fission fn create --name $fn --env python --src demo-src-pkg.zip --entrypoint "user.main" --buildcmd "./build.sh"
+fission fn create --name $fn --env $env --src $tmp_dir/demo-src-pkg.zip --entrypoint "user.main" --buildcmd "./build.sh"
 
 log "Creating route"
 fission route create --function $fn --url /$fn --method GET
@@ -93,7 +96,7 @@ timeout 60s bash -c "waitBuild $pkg"
 checkFunctionResponse $fn
 
 log "Updating function " $fn
-fission fn update --name $fn --src demo-src-pkg.zip
+fission fn update --name $fn --src $tmp_dir/demo-src-pkg.zip
 
 pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.packageref.name}')
 
@@ -101,8 +104,5 @@ pkg=$(kubectl --namespace default get functions $fn -o jsonpath='{.spec.package.
 timeout 60s bash -c "waitBuild $pkg"
 
 checkFunctionResponse $fn
-
-# crappy cleanup, improve this later
-kubectl get httptrigger -o name | tail -1 | cut -f2 -d'/' | xargs kubectl delete httptrigger
 
 log "All done."

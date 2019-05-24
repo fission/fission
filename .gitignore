@@ -1,6 +1,12 @@
+# Binaries
 fission-bundle/fission-bundle
 fission/fission
 environments/fetcher/cmd/fetcher
+builder/cmd/builder
+preupgradechecks/pre-upgrade-checks
+
+# Logs
+test/logs/
 
 # Pycharm IDE
 .idea
