@@ -1,17 +1,22 @@
 #!/bin/bash
+#test:disabled
 
+# TODO: This test takes too long to run. It should be split into multiple little tests.
 
 # we may not need this to run as a pre-check-in test for every PR. but only once in a while to ensure nothing's broken.
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
 
 id=""
 ROOT=$(dirname $0)/../..
 
 final_cleanup() {
-    rm -rf testDir1 || true
+    rm -rf testDir1/ || true
     kubectl delete ns "ns1-$id" "ns2-$id" &
 }
+
+trap final_cleanup EXIT
 
 cleanup() {
     [[ -n "${1+x}"  && -n "${2+x}" ]]; fission env delete --name $1 --envns $2 || true

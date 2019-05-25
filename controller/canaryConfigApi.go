@@ -18,20 +18,23 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	config "github.com/fission/fission/featureconfig"
 )
 
 func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
-	if !a.featureConfig.CanaryConfig.IsEnabled {
-		a.respondWithError(w, fission.MakeError(http.StatusBadRequest, "Please enable canary feature while installing fission"))
+	featureErr := a.featureStatus[config.CanaryFeature]
+	if len(featureErr) > 0 {
+		a.respondWithError(w, fission.MakeError(http.StatusInternalServerError, fmt.Sprintf("Error enabling canary feature: %v", featureErr)))
 		return
 	}
 
@@ -44,7 +47,7 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 	var canaryCfg crd.CanaryConfig
 	err = json.Unmarshal(body, &canaryCfg)
 	if err != nil {
-		log.Printf("Failed to unmarshal request body: [%v]", body)
+		a.logger.Error("failed to unmarshal request body", zap.Error(err), zap.Binary("body", body))
 		a.respondWithError(w, err)
 		return
 	}
@@ -66,8 +69,9 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) CanaryConfigApiGet(w http.ResponseWriter, r *http.Request) {
-	if !a.featureConfig.CanaryConfig.IsEnabled {
-		a.respondWithError(w, fission.MakeError(http.StatusBadRequest, "Please enable canary feature while installing fission"))
+	featureErr := a.featureStatus[config.CanaryFeature]
+	if len(featureErr) > 0 {
+		a.respondWithError(w, fission.MakeError(http.StatusInternalServerError, fmt.Sprintf("Error enabling canary feature: %v", featureErr)))
 		return
 	}
 
@@ -95,8 +99,9 @@ func (a *API) CanaryConfigApiGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) CanaryConfigApiList(w http.ResponseWriter, r *http.Request) {
-	if !a.featureConfig.CanaryConfig.IsEnabled {
-		a.respondWithError(w, fission.MakeError(http.StatusBadRequest, "Please enable canary feature while installing fission"))
+	featureErr := a.featureStatus[config.CanaryFeature]
+	if len(featureErr) > 0 {
+		a.respondWithError(w, fission.MakeError(http.StatusInternalServerError, fmt.Sprintf("Error enabling canary feature: %v", featureErr)))
 		return
 	}
 
@@ -121,8 +126,9 @@ func (a *API) CanaryConfigApiList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
-	if !a.featureConfig.CanaryConfig.IsEnabled {
-		a.respondWithError(w, fission.MakeError(http.StatusBadRequest, "Please enable canary feature while installing fission"))
+	featureErr := a.featureStatus[config.CanaryFeature]
+	if len(featureErr) > 0 {
+		a.respondWithError(w, fission.MakeError(http.StatusInternalServerError, fmt.Sprintf("Error enabling canary feature: %v", featureErr)))
 		return
 	}
 
@@ -155,8 +161,9 @@ func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) CanaryConfigApiDelete(w http.ResponseWriter, r *http.Request) {
-	if !a.featureConfig.CanaryConfig.IsEnabled {
-		a.respondWithError(w, fission.MakeError(http.StatusBadRequest, "Please enable canary feature while installing fission"))
+	featureErr := a.featureStatus[config.CanaryFeature]
+	if len(featureErr) > 0 {
+		a.respondWithError(w, fission.MakeError(http.StatusInternalServerError, fmt.Sprintf("Error enabling canary feature: %v", featureErr)))
 		return
 	}
 

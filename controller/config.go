@@ -18,9 +18,9 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission/canaryconfigmgr"
@@ -28,38 +28,40 @@ import (
 	config "github.com/fission/fission/featureconfig"
 )
 
-func ConfigCanaryFeature(context context.Context, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig) error {
+func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
 	// start the appropriate controller
 	if featureConfig.CanaryConfig.IsEnabled {
-		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(fissionClient, kubeClient, fissionClient.GetCrdClient(),
+		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(logger, fissionClient, kubeClient, fissionClient.GetCrdClient(),
 			featureConfig.CanaryConfig.PrometheusSvc)
 		if err != nil {
-			return fmt.Errorf("failed to start canary config manager: %v", err)
+			featureStatus[config.CanaryFeature] = err.Error()
+			return errors.Wrap(err, "failed to start canary config manager")
 		}
 		canaryCfgMgr.Run(context)
-		log.Printf("Started canary config manager")
+		logger.Info("started canary config manager")
 	}
 
 	return nil
 }
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(context context.Context, unitTestMode bool, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset) (*config.FeatureConfig, error) {
+func ConfigureFeatures(context context.Context, logger *zap.Logger, unitTestMode bool, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset) (map[string]string, error) {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
-		featureConfig := &config.FeatureConfig{}
-		return featureConfig, nil
+		return nil, nil
 	}
 
 	// get the featureConfig from config map mounted onto the file system
 	featureConfig, err := config.GetFeatureConfig()
 	if err != nil {
-		log.Printf("Error getting feature config : %v", err)
-		return featureConfig, err
+		logger.Error("error getting feature config", zap.Error(err))
+		return nil, err
 	}
+
+	featureStatus := make(map[string]string)
 
 	// configure respective features
 	// in the future when new optional features are added, we need to add corresponding feature handlers and invoke them here
-	err = ConfigCanaryFeature(context, fissionClient, kubeClient, featureConfig)
-	return featureConfig, err
+	err = ConfigCanaryFeature(context, logger, fissionClient, kubeClient, featureConfig, featureStatus)
+	return featureStatus, err
 }

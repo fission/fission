@@ -1,11 +1,13 @@
 #!/bin/bash
 
 set -euo pipefail
+source $(dirname $0)/../../utils.sh
 
-source $(dirname $0)/fnupdate_utils.sh
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
 
-env=python-$(date +%N)
-fn=hellopython-$(date +%N)
+env=python-$TEST_ID
+fn=hellopython-$TEST_ID
 ROOT=$(dirname $0)/../../..
 
 targetMinScale=2
@@ -14,11 +16,9 @@ targetCpuPercent=60
 
 cleanup() {
     log "Cleaning up..."
-    fission env delete --name $env || true
-    fission fn delete --name $fn || true
+    clean_resource_by_id $TEST_ID
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
@@ -26,7 +26,7 @@ else
 fi
 
 log "Creating Python env $env"
-fission env create --name $env --image fission/python-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
 log "Creating function $fn"
 fission fn create --name $fn --env $env --code $ROOT/examples/python/hello.py --minscale 1 --maxscale 4 --executortype newdeploy --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
@@ -70,3 +70,4 @@ then
 fi
 
 timeout 60 bash -c "test_fn $fn 'world'"
+log "Test PASSED"

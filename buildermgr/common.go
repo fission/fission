@@ -17,12 +17,15 @@ limitations under the License.
 package buildermgr
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/dchest/uniuri"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/fission/fission"
 	"github.com/fission/fission/builder"
 	builderClient "github.com/fission/fission/builder/client"
@@ -37,20 +40,21 @@ import (
 // 3. Send upload request to fetcher to upload deployment package.
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
-func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
+func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, envBuilderNamespace string,
 	storageSvcUrl string, pkg *crd.Package) (uploadResp *fission.ArchiveUploadResponse, buildLogs string, err error) {
 
 	env, err := fissionClient.Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name)
 	if err != nil {
-		e := fmt.Sprintf("Error getting environment CRD info: %v", err)
-		log.Println(e)
+		e := "error getting environment CRD info"
+		logger.Error(e, zap.Error(err))
+		e = fmt.Sprintf("%s: %v", e, err)
 		return nil, e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
 	svcName := fmt.Sprintf("%v-%v.%v", env.Metadata.Name, env.Metadata.ResourceVersion, envBuilderNamespace)
 	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.Metadata.Name, strings.ToLower(uniuri.NewLen(6)))
-	fetcherC := fetcherClient.MakeClient(fmt.Sprintf("http://%v:8000", svcName))
-	builderC := builderClient.MakeClient(fmt.Sprintf("http://%v:8001", svcName))
+	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%v:8000", svcName))
+	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%v:8001", svcName))
 
 	fetchReq := &fission.FunctionFetchRequest{
 		FetchType:   fission.FETCH_SOURCE,
@@ -60,10 +64,11 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 	}
 
 	// send fetch request to fetcher
-	err = fetcherC.Fetch(fetchReq)
+	err = fetcherC.Fetch(ctx, fetchReq)
 	if err != nil {
-		e := fmt.Sprintf("Error fetching source package: %v", err)
-		log.Println(e)
+		e := "error fetching source package"
+		logger.Error(e, zap.Error(err))
+		e = fmt.Sprintf("%s: %v", e, err)
 		return nil, e, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
@@ -77,12 +82,11 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 		BuildCommand:   buildCmd,
 	}
 
-	log.Printf("Start building with source package: %v", srcPkgFilename)
+	logger.Info("started building with source package", zap.String("source_package", srcPkgFilename))
 	// send build request to builder
 	buildResp, err := builderC.Build(pkgBuildReq)
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
-		log.Println(e)
 		var buildLogs string
 		if buildResp != nil {
 			buildLogs = buildResp.BuildLogs
@@ -91,7 +95,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 		return nil, buildLogs, fission.MakeError(http.StatusInternalServerError, e)
 	}
 
-	log.Printf("Build succeed, source package: %v, deployment package: %v", srcPkgFilename, buildResp.ArtifactFilename)
+	logger.Info("build succeed", zap.String("source_package", srcPkgFilename), zap.String("deployment_package", buildResp.ArtifactFilename))
 
 	archivePackage := !env.Spec.KeepArchive
 
@@ -101,12 +105,11 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 		ArchivePackage: archivePackage,
 	}
 
-	log.Printf("Start uploading deployment package: %v", buildResp.ArtifactFilename)
+	logger.Info("started uploading deployment package", zap.String("deployment_package", buildResp.ArtifactFilename))
 	// ask fetcher to upload the deployment package
-	uploadResp, err = fetcherC.Upload(uploadReq)
+	uploadResp, err = fetcherC.Upload(ctx, uploadReq)
 	if err != nil {
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
-		log.Println(e)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		return nil, buildResp.BuildLogs, fission.MakeError(http.StatusInternalServerError, e)
 	}
@@ -114,7 +117,7 @@ func buildPackage(fissionClient *crd.FissionClient, envBuilderNamespace string,
 	return uploadResp, buildResp.BuildLogs, nil
 }
 
-func updatePackage(fissionClient *crd.FissionClient,
+func updatePackage(logger *zap.Logger, fissionClient *crd.FissionClient,
 	pkg *crd.Package, status fission.BuildStatus, buildLogs string,
 	uploadResp *fission.ArchiveUploadResponse) (*crd.Package, error) {
 
@@ -134,8 +137,9 @@ func updatePackage(fissionClient *crd.FissionClient,
 	// update package spec
 	pkg, err := fissionClient.Packages(pkg.Metadata.Namespace).Update(pkg)
 	if err != nil {
-		log.Printf("Error updating package: %v", err)
-		return nil, err
+		e := "error updating package"
+		logger.Error(e, zap.Error(err))
+		return nil, errors.Wrap(err, e)
 	}
 
 	// return resource version for function to update function package ref

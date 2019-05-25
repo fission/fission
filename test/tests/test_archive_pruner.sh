@@ -1,32 +1,42 @@
 #!/bin/bash
 set -euo pipefail
+source $(dirname $0)/../utils.sh
+
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
 
 # global variables
+env=python-$TEST_ID
 pkg=""
 http_status=""
 url=""
 
 
 cleanup() {
-    if [ -e "test-deploy-pkg.zip" ]; then
-        rm -rf test-deploy-pkg.zip test_dir
-    fi
-    if [ -e "/tmp/file" ]; then
-        rm -rf /tmp/file
-    fi
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
+
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 create_archive() {
     log "Creating an archive"
-    mkdir test_dir
-    dd if=/dev/urandom of=test_dir/dynamically_generated_file bs=256k count=1
-    printf 'def main():\n    return "Hello, world!"' > test_dir/hello.py
-    zip -jr test-deploy-pkg.zip test_dir/
+    mkdir -p $tmp_dir/archive
+    dd if=/dev/urandom of=$tmp_dir/archive/dynamically_generated_file bs=256k count=1
+    printf 'def main():\n    return "Hello, world!"' > $tmp_dir/archive/hello.py
+    zip -jr $tmp_dir/test-deploy-pkg.zip $tmp_dir/archive/
 }
 
 create_package() {
     log "Creating package"
-    pkg=$(fission package create --deploy "test-deploy-pkg.zip" --env python| cut -f2 -d' '| tr -d \')
+    pkg=$(fission package create --deploy "$tmp_dir/test-deploy-pkg.zip" --env $env| cut -f2 -d' '| tr -d \')
 }
 
 delete_package() {
@@ -36,7 +46,7 @@ delete_package() {
 
 get_archive_url_from_package() {
     log "Getting archive URL from package: $1"
-    url=`kubectl get package $1 -ojsonpath='{.spec.deployment.url}'`
+    url=`kubectl -n default get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
 get_archive_from_storage() {
@@ -44,7 +54,7 @@ get_archive_from_storage() {
     controller_ip=$(kubectl -n $FISSION_NAMESPACE get svc controller -o jsonpath='{...ip}')
     controller_proxy_url=`echo $storage_service_url | sed -e "s/storagesvc.$FISSION_NAMESPACE/$controller_ip\/proxy\/storage/"`
     log "controller_proxy_url=$controller_proxy_url"
-    http_status=`curl -sw "%{http_code}" $controller_proxy_url -o /tmp/file`
+    http_status=`curl --retry 5 -sw "%{http_code}" $controller_proxy_url -o /dev/null`
     echo "http_status: $http_status"
 }
 
@@ -56,8 +66,8 @@ get_archive_from_storage() {
 #6. sleep for two minutes
 #7. now verify that both got deleted.
 main() {
-    # trap
-    trap cleanup EXIT
+    log "Creating python env"
+    fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 
     # create a huge archive
     create_archive
@@ -116,7 +126,6 @@ main() {
         log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
         exit 1
     fi
-
 
     log "Test archive pruner PASSED"
 }

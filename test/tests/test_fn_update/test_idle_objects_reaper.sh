@@ -1,23 +1,20 @@
 #!/bin/bash
 
-#test:disabled
-
 set -euo pipefail
+source $(dirname $0)/../../utils.sh
 
-source $(dirname $0)/fnupdate_utils.sh
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
 
-env=python-$(date +%s)
-fn=hellopython-$(date +%s)
+env=python-$TEST_ID
+fn=hellopython-$TEST_ID
 ROOT=$(dirname $0)/../../..
 
 cleanup() {
     log "Cleaning up..."
-    fission fn delete --name ${fn}-nd || true
-    fission fn delete --name ${fn}-gpm || true
-    fission env delete --name $env || true
+    clean_resource_by_id $TEST_ID
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
@@ -25,7 +22,7 @@ else
 fi
 
 log "Creating Python env $env"
-fission env create --name $env --image fission/python-env --period 5
+fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --period 5
 
 log "Creating function ${fn}-nd, ${fn}-gpm"
 fission fn create --name ${fn}-nd --env $env --code $ROOT/examples/python/hello.py --minscale 0 --maxscale 2 --executortype newdeploy
@@ -50,14 +47,18 @@ sleep 260
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')
 if [ "$ndDeployReplicas" -ne "0" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-nd"
+  log "Failed to reap idle function pod for function ${fn}-nd. replicas should be 0 but got $ndDeployReplicas"
+  kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -o yaml
   exit 1
 fi
 
-gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
+set +o pipefail
+gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm | grep Running | wc -l)
+set -o pipefail
 if [ "$gpmNumberOfPod" -ne "0" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-gpm"
+  log "Failed to reap idle function pod for function ${fn}-gpm. replicas should be 0 but got $gpmNumberOfPod"
+  kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o yaml
   exit 1
 fi
 
@@ -70,13 +71,19 @@ timeout 60 bash -c "test_fn ${fn}-gpm 'world'"
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')
 if [ "$ndDeployReplicas" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-nd"
+  log "Failed to scale function pod for function ${fn}-nd. replicas should be 1 but got $ndDeployReplicas"
+  kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -o yaml
   exit 1
 fi
 
-gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o name|wc -l)
+set +o pipefail
+gpmNumberOfPod=$(kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm | grep Running | wc -l)
+set -o pipefail
 if [ "$gpmNumberOfPod" -ne "1" ]
 then
-  log "Failed to reap idle function pod for function ${fn}-gpm"
+  log "Failed to scale function pod for function ${fn}-gpm. replicas should be 1 but got $gpmNumberOfPod"
+  kubectl -n $FUNCTION_NAMESPACE get pod -l functionName=${fn}-gpm -o yaml
   exit 1
 fi
+
+log "Test PASSED"

@@ -18,6 +18,7 @@ package fission
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -27,6 +28,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
+
+	"go.uber.org/zap"
 
 	"github.com/gorilla/handlers"
 	"github.com/imdario/mergo"
@@ -67,14 +70,31 @@ func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 	return fmt.Sprintf("istio-%v-%v", fnName, fnNamespace)
 }
 
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestURI := r.RequestURI
-		if !strings.Contains(requestURI, "healthz") {
-			// Call the next handler, which can be another middleware in the chain, or the final handler.
-			handlers.LoggingHandler(os.Stdout, next).ServeHTTP(w, r)
-		}
-	})
+func LoggingMiddleware(logger *zap.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestURI := r.RequestURI
+			if !strings.Contains(requestURI, "healthz") {
+				// Call the next handler, which can be another middleware in the chain, or the final handler.
+				handlers.CustomLoggingHandler(os.Stdout, next, func(writer io.Writer, params handlers.LogFormatterParams) {
+					host, _, err := net.SplitHostPort(params.Request.RemoteAddr)
+
+					if err != nil {
+						host = params.Request.RemoteAddr
+					}
+
+					logger.Info("handled",
+						zap.String("host", host),
+						zap.String("method", params.Request.Method),
+						zap.String("uri", params.Request.RequestURI),
+						zap.String("proto", params.Request.Proto),
+						zap.Int("status_code", params.StatusCode),
+						zap.Int("size", params.Size))
+
+				}).ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 // MergeContainerSpecs merges container specs using a predefined order.
@@ -120,9 +140,23 @@ func IsReadyPod(pod *apiv1.Pod) bool {
 		return false
 	}
 
+	// pod is not in Running Phase. It can be in Pending,
+	// Succeeded, Failed, Unknown. In some cases the pod can be in
+	// different sate than Running, for example Kubernetes sets a
+	// pod to Termination while k8s waits for the grace period of
+	// the pod, even if all the containers are in Ready state.
+	if pod.Status.Phase != apiv1.PodRunning {
+		return false
+	}
+
 	// pod is in "Terminating" status if deletionTimestamp is not nil
 	// https://github.com/kubernetes/kubernetes/issues/61376
 	if pod.ObjectMeta.DeletionTimestamp != nil {
+		return false
+	}
+
+	// pod does not have an IP address allocated to it yet
+	if pod.Status.PodIP == "" {
 		return false
 	}
 

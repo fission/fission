@@ -1,19 +1,28 @@
 #!/bin/bash
 set -euo pipefail
+source $(dirname $0)/../utils.sh
+
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
 
 ROOT=$(dirname $0)/../..
 
-relativeUrl="/itest"
-functionName="hellotest"
-hostName="test.com"
+relativeUrl="/itest-$TEST_ID"
+functionName="hellotest-$TEST_ID"
+hostName="test-$TEST_ID.com"
 
 cleanup() {
-    fission route delete --name $1
+    clean_resource_by_id $TEST_ID
 }
+
+if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    trap cleanup EXIT
+else
+    log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
+fi
 
 log "Creating route for URL $relativeUrl"
 route_name=$(fission route create --url $relativeUrl --function $functionName --createingress| grep trigger| cut -d" " -f 2|cut -d"'" -f 2)
-trap "cleanup $route_name" EXIT
 
 log "Route $route_name created"
 
@@ -43,3 +52,5 @@ then
     log "Provided host and host in ingress don't match"
     exit 1
 fi
+
+log "Test PASSED"

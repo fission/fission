@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source $(dirname $0)/../utils.sh
 
 # test_env_vars.sh - tests whether a user is able to add environment variables to a Fission environment deployment
 
-TEST_ID=$(date +%s)
+TEST_ID=$(generate_test_id)
+echo "TEST_ID = $TEST_ID"
+
+tmp_dir="/tmp/test-$TEST_ID"
+mkdir -p $tmp_dir
+
 ENV=python-${TEST_ID}
 FN=foo-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
@@ -12,9 +18,8 @@ FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
 BUILDER_NS=fission-builder
 
 # fs
-TEST_DIR=/tmp/${TEST_ID}
-ENV_SPEC_FILE=${TEST_DIR}/${ENV}.yaml
-FN_FILE=${TEST_DIR}/${FN}.yaml
+ENV_SPEC_FILE=${tmp_dir}/${ENV}.yaml
+FN_FILE=${tmp_dir}/${FN}.yaml
 
 log_exec() {
     cmd=$@
@@ -24,20 +29,14 @@ log_exec() {
 
 cleanup() {
     log "Cleaning up..."
-    kubectl -n ${RESOURCE_NS} delete environment/${ENV} || true
-    rm -rf ${TEST_DIR}
-
+    clean_resource_by_id $TEST_ID
+    rm -rf $tmp_dir
 }
 
-cleanup
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
-fi
-
-if ! stat ${TEST_DIR} >/dev/null 2>&1 ; then
-    mkdir ${TEST_DIR}
 fi
 
 getPodName() {
@@ -56,7 +55,7 @@ getPodName() {
 # https://unix.stackexchange.com/questions/82598/how-do-i-write-a-retry-logic-in-script-to-keep-retrying-to-run-it-upto-5-times/82610
 function retry {
   local n=1
-  local max=5
+  local max=10
   local delay=10 # pods take time to get ready
   while true; do
     "$@" && break || {
@@ -83,14 +82,14 @@ metadata:
 spec:
   builder:
     command: build
-    image: gcr.io/fission-ci/python-env-builder:test
+    image: ${PYTHON_BUILDER_IMAGE}
     container:
       env:
       - name: TEST_BUILDER_ENV_KEY
         value: "TEST_BUILDER_ENV_VAR"
 
   runtime:
-    image: gcr.io/fission-ci/python-env:test
+    image: ${PYTHON_RUNTIME_IMAGE}
     container:
       env:
       - name: TEST_RUNTIME_ENV_KEY

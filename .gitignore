@@ -1,6 +1,12 @@
+# Binaries
 fission-bundle/fission-bundle
 fission/fission
 environments/fetcher/cmd/fetcher
+builder/cmd/builder
+preupgradechecks/pre-upgrade-checks
+
+# Logs
+test/logs/
 
 # Pycharm IDE
 .idea
@@ -11,7 +17,12 @@ environments/php7/vendor/
 *.bak
 *.tmp
 *~
+*.tgz
 
 .DS_Store
 vendor/
 local/
+environments/dotnet20/Builder/.vs/
+environments/dotnet20/.vs/
+environments/dotnet20/obj/
+environments/dotnet20/bin/

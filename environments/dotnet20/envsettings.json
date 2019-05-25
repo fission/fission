@@ -1,0 +1,7 @@
+{
+  "LogDirectory": "logs",
+  "RunningOnwindows": false,
+  "DllDirectory": "Dlls",
+  "functionBodyFileName": "func.cs",
+  "functionSpecFileName": "func.meta.json"
+}

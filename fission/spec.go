@@ -858,7 +858,8 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
-			uploadedAr := uploadArchive(fclient, ar.URL)
+			ctx := context.Background()
+			uploadedAr := uploadArchive(ctx, fclient, ar.URL)
 			archiveFiles[name] = *uploadedAr
 		}
 	}
@@ -975,16 +976,17 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fission.Arch
 	files := make([]string, 0)
 	if len(aus.IncludeGlobs) == 1 && archiver.Zip.Match(aus.IncludeGlobs[0]) {
 		files = append(files, aus.IncludeGlobs[0])
-	}
-	for _, relativeGlob := range aus.IncludeGlobs {
-		absGlob := rootDir + "/" + relativeGlob
-		f, err := filepath.Glob(absGlob)
-		if err != nil {
-			log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
-			return nil, err
+	} else {
+		for _, relativeGlob := range aus.IncludeGlobs {
+			absGlob := rootDir + "/" + relativeGlob
+			f, err := filepath.Glob(absGlob)
+			if err != nil {
+				log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
+				return nil, err
+			}
+			files = append(files, f...)
+			// xxx handle excludeGlobs here
 		}
-		files = append(files, f...)
-		// xxx handle excludeGlobs here
 	}
 
 	if len(files) == 0 {
