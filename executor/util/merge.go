@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
@@ -43,8 +44,8 @@ func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
 	return *result
 }
 
-// MergeContainer is a specialized implementation of MergeContainerSpecs
-func MergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Container) error {
+// mergeContainer is a specialized implementation of MergeContainerSpecs
+func mergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Container) error {
 
 	if &containerSpec == nil {
 		return nil
@@ -58,7 +59,7 @@ func MergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Contai
 		for _, specVol := range containerSpec.VolumeMounts {
 			_, ok := volMap[specVol.Name]
 			if ok {
-				// Error or Warning?
+				return errors.New("Duplicate volume name found in the spec")
 
 			} else {
 				deployContainer.VolumeMounts = append(deployContainer.VolumeMounts, specVol)
@@ -71,127 +72,136 @@ func MergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Contai
 	return nil
 }
 
-func MergePodSpec(deploySpec *apiv1.PodSpec, podSpec *apiv1.PodSpec) error {
-	if &podSpec == nil {
+func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
+	if &targetPodSpec == nil {
 		return nil
 	}
 
 	// Get X from spec, if they exist in deployment - merge/ignore, else append
 	// Same pattern for all lists (Mergo can not handle lists)
 	// At some point this is better done with generics/reflection!
-	mergeContainerLists(deploySpec, podSpec)
-	mergeInitContainerList(deploySpec, podSpec)
-	mergeVolumeLists(deploySpec, podSpec)
+	mergeContainerLists(srcPodSpec, targetPodSpec)
+	mergeInitContainerList(srcPodSpec, targetPodSpec)
+	mergeVolumeLists(srcPodSpec, targetPodSpec)
 
-	if podSpec.NodeName != "" {
-		deploySpec.NodeName = podSpec.NodeName
+	if targetPodSpec.NodeName != "" {
+		srcPodSpec.NodeName = targetPodSpec.NodeName
 	}
 
-	if podSpec.Subdomain != "" {
-		deploySpec.Subdomain = podSpec.Subdomain
+	if targetPodSpec.Subdomain != "" {
+		srcPodSpec.Subdomain = targetPodSpec.Subdomain
 	}
 
-	if podSpec.SchedulerName != "" {
-		deploySpec.SchedulerName = podSpec.SchedulerName
+	if targetPodSpec.SchedulerName != "" {
+		srcPodSpec.SchedulerName = targetPodSpec.SchedulerName
 	}
 
-	if podSpec.PriorityClassName != "" {
-		deploySpec.PriorityClassName = podSpec.PriorityClassName
+	if targetPodSpec.PriorityClassName != "" {
+		srcPodSpec.PriorityClassName = targetPodSpec.PriorityClassName
 	}
 
-	if podSpec.TerminationGracePeriodSeconds != nil {
-		deploySpec.TerminationGracePeriodSeconds = podSpec.TerminationGracePeriodSeconds
+	if targetPodSpec.TerminationGracePeriodSeconds != nil {
+		srcPodSpec.TerminationGracePeriodSeconds = targetPodSpec.TerminationGracePeriodSeconds
 	}
 
-	for _, obj := range podSpec.ImagePullSecrets {
-		deploySpec.ImagePullSecrets = append(deploySpec.ImagePullSecrets, obj)
+	for _, obj := range targetPodSpec.ImagePullSecrets {
+		srcPodSpec.ImagePullSecrets = append(srcPodSpec.ImagePullSecrets, obj)
 	}
 
-	for _, obj := range podSpec.Tolerations {
-		deploySpec.Tolerations = append(deploySpec.Tolerations, obj)
+	for _, obj := range targetPodSpec.Tolerations {
+		srcPodSpec.Tolerations = append(srcPodSpec.Tolerations, obj)
 	}
 
-	for _, obj := range podSpec.HostAliases {
-		deploySpec.HostAliases = append(deploySpec.HostAliases, obj)
+	for _, obj := range targetPodSpec.HostAliases {
+		srcPodSpec.HostAliases = append(srcPodSpec.HostAliases, obj)
 	}
 
 	var multierr *multierror.Error
 
-	err := mergo.Merge(&deploySpec.NodeSelector, podSpec.NodeSelector)
+	err := mergo.Merge(&srcPodSpec.NodeSelector, targetPodSpec.NodeSelector)
 	if err != nil {
-		multierror.Append(multierr, err)
+		multierr = multierror.Append(multierr, err)
 	}
 
-	err = mergo.Merge(&deploySpec.SecurityContext, podSpec.SecurityContext)
+	err = mergo.Merge(&srcPodSpec.SecurityContext, targetPodSpec.SecurityContext)
 	if err != nil {
-		multierror.Append(multierr, err)
+		multierr = multierror.Append(multierr, err)
 	}
 
-	err = mergo.Merge(&deploySpec.Affinity, podSpec.Affinity)
+	err = mergo.Merge(&srcPodSpec.Affinity, targetPodSpec.Affinity)
 	if err != nil {
-		multierror.Append(multierr, err)
+		multierr = multierror.Append(multierr, err)
 	}
 
 	return multierr.ErrorOrNil()
 }
 
-func mergeContainerLists(deploySpec *apiv1.PodSpec, podSpec *apiv1.PodSpec) {
-	specList := podSpec.Containers
+func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
+	specList := targetPodSpec.Containers
 	specContainers := make(map[string]apiv1.Container)
 	for _, c := range specList {
 		specContainers[c.Name] = c
 	}
 
-	for _, c := range deploySpec.Containers {
+	var multierr *multierror.Error
+	for _, c := range srcPodSpec.Containers {
 		container, ok := specContainers[c.Name]
 		if ok {
-			MergeContainer(&c, container)
+			err := mergeContainer(&c, container)
+			multierr = multierror.Append(multierr, err)
 			delete(specContainers, c.Name)
 		}
 	}
 
 	for _, container := range specContainers {
-		deploySpec.Containers = append(deploySpec.Containers, container)
+		srcPodSpec.Containers = append(srcPodSpec.Containers, container)
 	}
+
+	return multierr.ErrorOrNil()
 }
 
-func mergeInitContainerList(deploySpec *apiv1.PodSpec, podSpec *apiv1.PodSpec) {
-	specList := podSpec.InitContainers
+func mergeInitContainerList(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
+	specList := targetPodSpec.InitContainers
 	specContainers := make(map[string]apiv1.Container)
 	for _, c := range specList {
 		specContainers[c.Name] = c
 	}
 
-	for _, c := range deploySpec.InitContainers {
+	var multierr *multierror.Error
+	for _, c := range srcPodSpec.InitContainers {
 		container, ok := specContainers[c.Name]
 		if ok {
-			MergeContainer(&c, container)
+			err := mergeContainer(&c, container)
+			multierr = multierror.Append(multierr, err)
 			delete(specContainers, c.Name)
 		}
 	}
 
 	for _, container := range specContainers {
-		deploySpec.InitContainers = append(deploySpec.InitContainers, container)
+		srcPodSpec.InitContainers = append(srcPodSpec.InitContainers, container)
 	}
+	return multierr.ErrorOrNil()
 }
 
-func mergeVolumeLists(deploySpec *apiv1.PodSpec, podSpec *apiv1.PodSpec) {
-	volumeList := podSpec.Volumes
+func mergeVolumeLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
+	volumeList := targetPodSpec.Volumes
 	specVolumes := make(map[string]apiv1.Volume)
 	for _, vol := range volumeList {
 		specVolumes[vol.Name] = vol
 	}
 
-	for _, vol := range deploySpec.Volumes {
+	var multierr *multierror.Error
+	for _, vol := range srcPodSpec.Volumes {
 		_, ok := specVolumes[vol.Name]
 		if ok {
-			fmt.Println("Can't append a volume with same name")
+			multierr = multierror.Append(multierr, errors.New("Duplicate volume name found in the spec"))
 		} else {
 			delete(specVolumes, vol.Name)
 		}
 	}
 
 	for _, volume := range specVolumes {
-		deploySpec.Volumes = append(deploySpec.Volumes, volume)
+		srcPodSpec.Volumes = append(srcPodSpec.Volumes, volume)
 	}
+	return multierr.ErrorOrNil()
 }

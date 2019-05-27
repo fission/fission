@@ -227,12 +227,15 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+	err := deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
 		fn.Metadata.Name,
 		fn,
 		env,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	if env.Spec.Runtime.PodSpec != nil {
 		err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
