@@ -44,18 +44,27 @@ gcloud_login() {
     gcloud auth activate-service-account --key-file $KEY
 }
 
+getVersion() {
+    echo $(git rev-parse HEAD)
+}
+
+getDate() {
+    echo $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+}
+
+getGitCommit() {
+    echo $(git rev-parse HEAD)
+}
+
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
-    pushd $ROOT/preupgradechecks
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -t $image_tag -f $ROOT/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_pre_upgrade_check_image
 }
 
@@ -63,14 +72,11 @@ build_and_push_fission_bundle() {
     image_tag=$1
     travis_fold_start build_and_push_fission_bundle $image_tag
 
-    pushd $ROOT/fission-bundle
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_fission_bundle
 }
 
@@ -78,14 +84,11 @@ build_and_push_fetcher() {
     image_tag=$1
     travis_fold_start build_and_push_fetcher $image_tag
 
-    pushd $ROOT/environments/fetcher/cmd
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/environments/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_fetcher
 }
 
@@ -94,14 +97,11 @@ build_and_push_builder() {
     image_tag=$1
     travis_fold_start build_and_push_builder $image_tag
 
-    pushd $ROOT/builder/cmd
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_builder
 }
 

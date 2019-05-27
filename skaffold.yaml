@@ -1,0 +1,58 @@
+####################################
+# This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
+# build and deploy Fission to Kubernetes cluster.
+#
+############## Usage ##############
+# Skaffold CLI should be installed on your machine. 
+# Change <DOCKERHUB_REPO> -> to your Dockerhub username
+# Run `go mod vendor` so that all dependencies are downloaded
+# Run `skaffold run` to build and deploy with helm. 
+# Run`skaffold build` to only build and push images
+############## Current Limitations ##############
+# 1) You can not refer to dynamically generated tag from build section in Helm values
+# - hence you have to use "latest" tag
+############### Possible enhancements ##############
+# 1) Add profiles to suit various deployment needs
+####################################
+apiVersion: skaffold/v1beta9
+kind: Config
+build:
+  artifacts:
+    - image: <DOCKERHUB_REPO>/fission
+      context: .
+      docker:
+        dockerfile: fission-bundle/Dockerfile.fission-bundle
+    - image: <DOCKERHUB_REPO>/fetcher
+      docker:
+        dockerfile: environments/fetcher/cmd/Dockerfile.fission-fetcher
+    - image: <DOCKERHUB_REPO>/preupgradechecks
+      docker:
+        dockerfile: preupgradechecks/Dockerfile.fission-preupgradechecks                
+  tagPolicy:
+    envTemplate:
+      template: "{{.IMAGE_NAME}}:skaffold-test"
+
+deploy:
+  helm:
+    releases:
+      - name: fission
+        chartPath: ./charts/fission-all
+        valuesFiles:
+          - ./charts/fission-all/values.yaml
+        namespace: "fission"
+        setValues:
+          image: <DOCKERHUB_REPO>/fission
+          imageTag: skaffold-test
+          fetcherImage: <DOCKERHUB_REPO>/fetcher
+          fetcherImageTag: skaffold-test
+          namespace: fission
+          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
+          repository: index.docker.io
+        setValueTemplates: {}
+        wait: true
+        recreatePods: false
+        overrides: {}
+        packaged: null
+        imageStrategy:
+          fqn: null
+          helm: null
