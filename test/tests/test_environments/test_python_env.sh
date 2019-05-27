@@ -28,6 +28,7 @@ fn1=test-python-env-1-$TEST_ID
 fn2=test-python-env-2-$TEST_ID
 fn3=test-python-env-3-$TEST_ID
 fn4=test-python-env-4-$TEST_ID
+fn5=test-python-env-5-$TEST_ID
 pkg=
 
 
@@ -58,25 +59,32 @@ sleep 3     # Waiting for router to catch up
 timeout 60 bash -c "test_fn $fn1 'Hello, world!'"
 
 
-log "===== 2. test entrypoint = user ====="
-fission fn create --name $fn2 --env $env_v2api --pkg $pkg --entrypoint user
+log "===== 2. test entrypoint = '' ====="
+fission fn create --name $fn2 --env $env_v2api --pkg $pkg
 fission route create --function $fn2 --url /$fn2 --method GET
 sleep 3     # Waiting for router to catch up
-timeout 60 bash -c "test_fn $fn2 'THIS_IS_USER_MAIN'"
+timeout 60 bash -c "test_fn $fn2 'THIS_IS_MAIN_MAIN'"
 
 
-log "===== 3. test entrypoint = user.func ====="
-fission fn create --name $fn3 --env $env_v2api --pkg $pkg --entrypoint user.func
+log "===== 3. test entrypoint = func ====="
+fission fn create --name $fn3 --env $env_v2api --pkg $pkg --entrypoint func
 fission route create --function $fn3 --url /$fn3 --method GET
 sleep 3     # Waiting for router to catch up
-timeout 60 bash -c "test_fn $fn3 'THIS_IS_USER_FUNC'"
+timeout 60 bash -c "test_fn $fn3 'THIS_IS_MAIN_FUNC'"
 
 
-log "===== 4. test entrypoint = sub_mod.altmain.entrypoint ====="
-fission fn create --name $fn4 --env $env_v2api --pkg $pkg --entrypoint sub_mod.altmain.entrypoint
+log "===== 4. test entrypoint = foo.bar ====="
+fission fn create --name $fn4 --env $env_v2api --pkg $pkg --entrypoint foo.bar
 fission route create --function $fn4 --url /$fn4 --method GET
 sleep 3     # Waiting for router to catch up
-timeout 60 bash -c "test_fn $fn4 'THIS_IS_ALTMAIN_ENTRYPOINT'"
+timeout 60 bash -c "test_fn $fn4 'THIS_IS_FOO_BAR'"
+
+
+log "===== 5. test entrypoint = sub_mod.altmain.entrypoint ====="
+fission fn create --name $fn5 --env $env_v2api --pkg $pkg --entrypoint sub_mod.altmain.entrypoint
+fission route create --function $fn5 --url /$fn5 --method GET
+sleep 3     # Waiting for router to catch up
+timeout 60 bash -c "test_fn $fn5 'THIS_IS_ALTMAIN_ENTRYPOINT'"
 
 
 log "Test PASSED"

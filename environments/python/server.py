@@ -65,8 +65,8 @@ class FuncApp(Flask):
                 moduleName = 'main'
                 funcName = 'main'
             elif len(parts) == 1:
-                moduleName = parts[0]
-                funcName = 'main'
+                moduleName = 'main'
+                funcName = parts[0]
             else:
                 moduleName = parts[0]
                 funcName = parts[1]
