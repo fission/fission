@@ -8,7 +8,7 @@ spec:
   TerminationGracePeriod: 360
   builder: {}
   keeparchive: false
-  poolsize: 3
+  poolsize: 0
   resources: {}
   runtime:
     functionendpointport: 0
@@ -22,6 +22,7 @@ spec:
           mountPath: /etc/cvoldata
           readOnly: true
     podspec:
+      hostname: foo-bar
       # A container which will be merged with for pool manager
       Containers:
       - name: nodehellond

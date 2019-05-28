@@ -18,7 +18,6 @@ package util
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/imdario/mergo"
@@ -65,8 +64,6 @@ func mergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Contai
 			}
 		}
 		deployContainer.Env = append(deployContainer.Env, containerSpec.Env...)
-	} else {
-		fmt.Println("Container name does not match - please use podspec to add additional containers")
 	}
 	return nil
 }
@@ -91,6 +88,7 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error
 		return err
 	}
 
+	// For volumes - if duplicate exist, throw error
 	err = mergeVolumeLists(srcPodSpec, targetPodSpec)
 	if err != nil {
 		return err
@@ -116,6 +114,20 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error
 		srcPodSpec.TerminationGracePeriodSeconds = targetPodSpec.TerminationGracePeriodSeconds
 	}
 
+	//TODO - Security context should be merged instead of overriding.
+	if targetPodSpec.SecurityContext != nil {
+		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
+	}
+
+	//TODO - Affinity should be merged instead of overriding.
+	if targetPodSpec.Affinity != nil {
+		srcPodSpec.Affinity = targetPodSpec.Affinity
+	}
+
+	if targetPodSpec.Hostname != "" {
+		srcPodSpec.Hostname = targetPodSpec.Hostname
+	}
+
 	for _, obj := range targetPodSpec.ImagePullSecrets {
 		srcPodSpec.ImagePullSecrets = append(srcPodSpec.ImagePullSecrets, obj)
 	}
@@ -129,16 +141,6 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error
 	}
 
 	err = mergo.Merge(&srcPodSpec.NodeSelector, targetPodSpec.NodeSelector)
-	if err != nil {
-		multierr = multierror.Append(multierr, err)
-	}
-
-	err = mergo.Merge(&srcPodSpec.SecurityContext, targetPodSpec.SecurityContext)
-	if err != nil {
-		multierr = multierror.Append(multierr, err)
-	}
-
-	err = mergo.Merge(&srcPodSpec.Affinity, targetPodSpec.Affinity)
 	if err != nil {
 		multierr = multierror.Append(multierr, err)
 	}

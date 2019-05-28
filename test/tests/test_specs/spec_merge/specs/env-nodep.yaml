@@ -22,6 +22,7 @@ spec:
           mountPath: /etc/cvoldata
           readOnly: true
     podspec:
+      hostname: foo-bar
       # A container which will be merged with for pool manager
       Containers:
       - name: nodep
