@@ -8,7 +8,7 @@ env_n=nodend
 fn_nd=nodehellond
 
 cleanup() {
-    log "Cleaning up..."
+    echo "Cleaning up..."
     popd
     fission spec destroy || true
 }
