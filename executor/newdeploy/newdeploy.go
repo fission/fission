@@ -32,6 +32,7 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/executor/util"
 	multierror "github.com/hashicorp/go-multierror"
 )
 
@@ -200,7 +201,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
-						fission.MergeContainerSpecs(&apiv1.Container{
+						util.MergeContainerSpecs(&apiv1.Container{
 							Name:                   fn.Metadata.Name,
 							Image:                  env.Spec.Runtime.Image,
 							ImagePullPolicy:        deploy.runtimeImagePullPolicy,
@@ -225,12 +226,23 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *crd.Function, env *crd.Environmen
 		},
 	}
 
-	deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+	// Order of merging is important here - first fetcher, then containers and lastly pod spec
+	err := deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
 		fn.Metadata.Name,
 		fn,
 		env,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if env.Spec.Runtime.PodSpec != nil {
+		err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return deployment, nil
 }

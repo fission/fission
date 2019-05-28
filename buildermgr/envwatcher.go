@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
 	fetcherConfig "github.com/fission/fission/environments/fetcher/config"
+	"github.com/fission/fission/executor/util"
 )
 
 type requestType int
@@ -515,7 +516,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *crd.Environment, ns
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
-						fission.MergeContainerSpecs(&apiv1.Container{
+						util.MergeContainerSpecs(&apiv1.Container{
 							Name:                   "builder",
 							Image:                  env.Spec.Builder.Image,
 							ImagePullPolicy:        envw.builderImagePullPolicy,

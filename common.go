@@ -29,12 +29,10 @@ import (
 	"strings"
 	"syscall"
 
-	"go.uber.org/zap"
-
 	"github.com/gorilla/handlers"
-	"github.com/imdario/mergo"
 	"github.com/mholt/archiver"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -95,25 +93,6 @@ func LoggingMiddleware(logger *zap.Logger) func(next http.Handler) http.Handler 
 			}
 		})
 	}
-}
-
-// MergeContainerSpecs merges container specs using a predefined order.
-//
-// The order of the arguments indicates which spec has precedence (lower index takes precedence over higher indexes).
-// Slices and maps are merged; other fields are set only if they are a zero value.
-func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
-	result := &apiv1.Container{}
-	for _, spec := range specs {
-		if spec == nil {
-			continue
-		}
-
-		err := mergo.Merge(result, spec)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return *result
 }
 
 // IsNetworkDialError returns true if its a network dial error

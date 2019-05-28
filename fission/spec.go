@@ -32,7 +32,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -395,6 +395,9 @@ func (fr *FissionResources) validate() error {
 	environments := make(map[string]struct{})
 	for _, e := range fr.environments {
 		environments[fmt.Sprintf("%s:%s", e.Metadata.Name, e.Metadata.Namespace)] = struct{}{}
+		if (e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil) {
+			log.Warn("You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
+		}
 	}
 
 	for _, f := range fr.functions {

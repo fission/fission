@@ -41,6 +41,7 @@ import (
 	fetcherClient "github.com/fission/fission/environments/fetcher/client"
 	fetcherConfig "github.com/fission/fission/environments/fetcher/config"
 	"github.com/fission/fission/executor/fscache"
+	"github.com/fission/fission/executor/util"
 )
 
 type (
@@ -371,7 +372,7 @@ func (gp *GenericPool) createPool() error {
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
-						fission.MergeContainerSpecs(&apiv1.Container{
+						util.MergeContainerSpecs(&apiv1.Container{
 							Name:                   gp.env.Metadata.Name,
 							Image:                  gp.env.Spec.Runtime.Image,
 							ImagePullPolicy:        gp.runtimeImagePullPolicy,
@@ -405,9 +406,17 @@ func (gp *GenericPool) createPool() error {
 		},
 	}
 
+	// Order of merging is important here - first fetcher, then containers and lastly pod spec
 	err := gp.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, gp.env.Metadata.Name)
 	if err != nil {
 		return err
+	}
+
+	if gp.env.Spec.Runtime.PodSpec != nil {
+		err = util.MergePodSpec(&deployment.Spec.Template.Spec, gp.env.Spec.Runtime.PodSpec)
+		if err != nil {
+			return err
+		}
 	}
 
 	depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Create(deployment)
