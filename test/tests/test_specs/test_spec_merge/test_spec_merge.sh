@@ -27,12 +27,12 @@ hnd=$(kubectl -n $FUNCTION_NAMESPACE get deployment -l=functionName=$fn_nd -ojso
 
 if [[ "${hnd}" == "foo-bar" ]]
     then
-        log "Hostname matches for newdeployment function, podspec test 1/2 passsed"
+        echo "Hostname matches for newdeployment function, podspec test 1/2 passsed"
     fi
 
 hnp=$(kubectl -n $FUNCTION_NAMESPACE get deployment -l=environmentName=$env_p -ojsonpath='{.items[0].spec.template.spec.hostname}')
 
 if [[ "${hnp}" == "foo-bar" ]]
     then
-        log "Hostname matches for poolmgr function, podspec test 2/2 passsed"
+        echo "Hostname matches for poolmgr function, podspec test 2/2 passsed"
     fi    
