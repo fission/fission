@@ -12,12 +12,12 @@ ARG BUILDDATE=unknown
 
 ARG GOPKG=github.com/fission/fission
 COPY . /go/src/${GOPKG}
-WORKDIR /go/src/${GOPKG}/builder/cmd
+WORKDIR /go/src/${GOPKG}/cmd/builder
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /go/bin/builder \
     -gcflags=-trimpath=$GOPATH \
     -asmflags=-trimpath=$GOPATH \
-    -ldflags "-X github.com/fission/fission.GitCommit=${GITCOMMIT} -X github.com/fission/fission.BuildDate=${BUILDDATE} -X github.com/fission/fission.Version=${BUILDVERSION}"
+    -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=${GITCOMMIT} -X github.com/fission/fission/pkg/info.BuildDate=${BUILDDATE} -X github.com/fission/fission/pkg/info.Version=${BUILDVERSION}"
 
 FROM alpine:3.5
 COPY --from=fission-builder /go/bin/builder /

@@ -60,7 +60,7 @@ build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
-    docker build -t $image_tag -f $ROOT/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -72,7 +72,7 @@ build_and_push_fission_bundle() {
     image_tag=$1
     travis_fold_start build_and_push_fission_bundle $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -84,7 +84,7 @@ build_and_push_fetcher() {
     image_tag=$1
     travis_fold_start build_and_push_fetcher $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/environments/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -97,7 +97,7 @@ build_and_push_builder() {
     image_tag=$1
     travis_fold_start build_and_push_builder $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -139,7 +139,7 @@ build_and_push_env_builder() {
 
 build_fission_cli() {
     travis_fold_start build_fission_cli "fission cli"
-    pushd $ROOT/fission
+    pushd $ROOT/cmd/fission-cli
     go build .
     popd
     travis_fold_end build_fission_cli
@@ -158,7 +158,7 @@ set_environment() {
     export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
 
     # set path to include cli
-    export PATH=$ROOT/fission:$PATH
+    export PATH=$ROOT/cmd/fission-cli:$PATH
 }
 
 generate_test_id() {
