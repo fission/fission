@@ -40,7 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission"
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/client"
 )
@@ -53,7 +53,7 @@ func panicIf(err error) {
 
 // return the number of pods in the given namespace matching the given labels
 func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]string) int {
-	pods, err := kubeClient.Pods(ns).List(metav1.ListOptions{
+	pods, err := kubeClient.CoreV1().Pods(ns).List(metav1.ListOptions{
 		LabelSelector: labels.Set(labelz).AsSelector().String(),
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]st
 }
 
 func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
-	_, err := kubeClient.Namespaces().Create(&apiv1.Namespace{
+	_, err := kubeClient.CoreV1().Namespaces().Create(&apiv1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
@@ -76,7 +76,7 @@ func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
 
 // create a nodeport service
 func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *apiv1.Service {
-	svc, err := kubeClient.Services(ns).Create(&apiv1.Service{
+	svc, err := kubeClient.CoreV1().Services(ns).Create(&apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -136,10 +136,10 @@ func TestExecutor(t *testing.T) {
 
 	// create the test's namespaces
 	createTestNamespace(kubeClient, fissionNs)
-	defer kubeClient.Namespaces().Delete(fissionNs, nil)
+	defer kubeClient.CoreV1().Namespaces().Delete(fissionNs, nil)
 
 	createTestNamespace(kubeClient, functionNs)
-	defer kubeClient.Namespaces().Delete(functionNs, nil)
+	defer kubeClient.CoreV1().Namespaces().Delete(functionNs, nil)
 
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
@@ -156,17 +156,17 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create an env on the cluster
-	env, err := fissionClient.Environments(fissionNs).Create(&crd.Environment{
+	env, err := fissionClient.Environments(fissionNs).Create(&fv1.Environment{
 		Metadata: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
 		},
-		Spec: fission.EnvironmentSpec{
+		Spec: fv1.EnvironmentSpec{
 			Version: 1,
-			Runtime: fission.Runtime{
+			Runtime: fv1.Runtime{
 				Image: "fission/node-env",
 			},
-			Builder: fission.Builder{},
+			Builder: fv1.Builder{},
 		},
 	})
 	if err != nil {
@@ -188,23 +188,23 @@ func TestExecutor(t *testing.T) {
 	// waitForPool(functionNs, "nodejs")
 	time.Sleep(6 * time.Second)
 
-	envRef := fission.EnvironmentReference{
+	envRef := fv1.EnvironmentReference{
 		Namespace: env.Metadata.Namespace,
 		Name:      env.Metadata.Name,
 	}
 
-	deployment := fission.Archive{
-		Type:    fission.ArchiveTypeLiteral,
+	deployment := fv1.Archive{
+		Type:    fv1.ArchiveTypeLiteral,
 		Literal: []byte(`module.exports = async function(context) { return { status: 200, body: "Hello, world!\n" }; }`),
 	}
 
 	// create a package
-	p := &crd.Package{
+	p := &fv1.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
-		Spec: fission.PackageSpec{
+		Spec: fv1.PackageSpec{
 			Environment: envRef,
 			Deployment:  deployment,
 		},
@@ -215,15 +215,15 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create a function
-	f := &crd.Function{
+	f := &fv1.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
-		Spec: fission.FunctionSpec{
+		Spec: fv1.FunctionSpec{
 			Environment: envRef,
-			Package: fission.FunctionPackageRef{
-				PackageRef: fission.PackageRef{
+			Package: fv1.FunctionPackageRef{
+				PackageRef: fv1.PackageRef{
 					Namespace:       p.Metadata.Namespace,
 					Name:            p.Metadata.Name,
 					ResourceVersion: p.Metadata.ResourceVersion,
@@ -240,11 +240,11 @@ func TestExecutor(t *testing.T) {
 	labels := map[string]string{"functionName": f.Metadata.Name}
 	var fetcherPort int32 = 30001
 	fetcherSvc := createSvc(kubeClient, functionNs, fmt.Sprintf("%v-%v", f.Metadata.Name, "fetcher"), 8000, fetcherPort, labels)
-	defer kubeClient.Services(functionNs).Delete(fetcherSvc.ObjectMeta.Name, nil)
+	defer kubeClient.CoreV1().Services(functionNs).Delete(fetcherSvc.ObjectMeta.Name, nil)
 
 	var funcSvcPort int32 = 30002
 	functionSvc := createSvc(kubeClient, functionNs, f.Metadata.Name, 8888, funcSvcPort, labels)
-	defer kubeClient.Services(functionNs).Delete(functionSvc.ObjectMeta.Name, nil)
+	defer kubeClient.CoreV1().Services(functionNs).Delete(functionSvc.ObjectMeta.Name, nil)
 
 	// the main test: get a service for a given function
 	t1 := time.Now()

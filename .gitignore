@@ -1,9 +1,9 @@
 # Binaries
-fission-bundle/fission-bundle
-fission/fission
-environments/fetcher/cmd/fetcher
-builder/cmd/builder
-preupgradechecks/pre-upgrade-checks
+cmd/fission-bundle/fission-bundle
+cmd/fission/fission
+cmd/fetcher/fetcher
+cmd/builder/builder
+cmd/preupgradechecks/pre-upgrade-checks
 
 # Logs
 test/logs/

@@ -34,7 +34,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -77,7 +76,7 @@ func assertCronSpecFails(err error) {
 }
 
 func TestFunctionApi(t *testing.T) {
-	testFunc := &crd.Function{
+	testFunc := &fv1.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
@@ -144,7 +143,7 @@ func TestFunctionApi(t *testing.T) {
 }
 
 func TestHTTPTriggerApi(t *testing.T) {
-	testTrigger := &crd.HTTPTrigger{
+	testTrigger := &fv1.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
@@ -200,7 +199,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 func TestEnvironmentApi(t *testing.T) {
 
-	testEnv := &crd.Environment{
+	testEnv := &fv1.Environment{
 		Metadata: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
@@ -246,7 +245,7 @@ func TestEnvironmentApi(t *testing.T) {
 }
 
 func TestWatchApi(t *testing.T) {
-	testWatch := &crd.KubernetesWatchTrigger{
+	testWatch := &fv1.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,
@@ -291,7 +290,7 @@ func TestWatchApi(t *testing.T) {
 }
 
 func TestTimeTriggerApi(t *testing.T) {
-	testTrigger := &crd.TimeTrigger{
+	testTrigger := &fv1.TimeTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,
