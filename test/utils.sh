@@ -18,14 +18,9 @@ clean_resource_by_id() {
     KUBECTL="kubectl --namespace default"
     set +e
 
-    crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
-    crds="$crds configmaps secrets"
-    for crd in $crds; do
-        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
-    done
-
     pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
     for pkg in $pkg_list; do
+        fission pkg info --name $pkg
         fission package delete --name $pkg
     done
 
@@ -33,6 +28,13 @@ clean_resource_by_id() {
     for route in $route_list; do
         fission route delete --name $route
     done
+
+    crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
+    crds="$crds configmaps secrets"
+    for crd in $crds; do
+        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
+    done
+
     set -e
 }
 

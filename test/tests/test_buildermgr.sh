@@ -29,36 +29,6 @@ checkFunctionResponse() {
     echo $response | grep -i "a: 1 b: {c: 3, d: 4}"
 }
 
-waitBuild() {
-    log "Waiting for builder manager to finish the build"
-    
-    while true; do
-      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-}
-export -f waitBuild
-
-waitEnvBuilder() {
-    env=$1
-    envRV=$(kubectl -n default get environments ${env} -o jsonpath='{.metadata.resourceVersion}')
-
-    log "Waiting for env builder to catch up"
-
-    while true; do
-      kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} \
-        -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' | grep "Ready=True" | grep -i "$1"
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-}
-export -f waitEnvBuilder
-
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
@@ -74,7 +44,7 @@ fi
 log "Creating python env"
 fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 
-timeout 180s bash -c "waitEnvBuilder $env"
+timeout 180s bash -c "wait_for_builder $env"
 
 log "Creating source pacakage"
 zip -jr $tmp_dir/demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
