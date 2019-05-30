@@ -8,10 +8,7 @@
 
 set -euo pipefail
 
-ROOT_RELPATH=$(dirname $0)/..
-pushd $ROOT_RELPATH
-ROOT=$(pwd)
-popd
+ROOT=`realpath $(dirname $0)/..`
 
 travis_fold_start() {
     echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
@@ -84,7 +81,7 @@ build_and_push_fetcher() {
     image_tag=$1
     travis_fold_start build_and_push_fetcher $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/cmd/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -97,7 +94,7 @@ build_and_push_builder() {
     image_tag=$1
     travis_fold_start build_and_push_builder $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
