@@ -3,7 +3,7 @@
 set -e
 #set -x
 
-DIR=$(realpath $(dirname $0))/../
+DIR=`realpath $(dirname $0)/../`
 BUILDDIR=$(realpath $DIR)/build
 
 # Build CLI binaries for mac/linux/windows
@@ -35,7 +35,8 @@ build_cli() {
 	binary=fission-cli-${osName}
     fi
 
-    GOOS=$os GOARCH=$arch go build -gcflags=-trimpath=$GOPATH -asmflags=-trimpath=$GOPATH -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$gitcommit -X github.com/fission/fission/pkg/info.BuildDate=$date -X github.com/fission/fission/pkg/info.Version=$version" -o $binary .
+    GOOS=$os GOARCH=$arch go build -gcflags=-trimpath=$GOPATH -asmflags=-trimpath=$GOPATH \
+        -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$gitcommit -X github.com/fission/fission/pkg/info.BuildDate=$date -X github.com/fission/fission/pkg/info.Version=$version" -o $binary .
 
     outdir=$BUILDDIR/cli/$osName/
     mkdir -p $outdir
@@ -52,7 +53,8 @@ build_fission_bundle_image() {
 
     local tag=fission/fission-bundle:$version
 
-    docker build -t $tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $DIR/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$gitcommit \
+        --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version $DIR
     docker tag $tag fission/fission-bundle:latest
 }
 
@@ -62,7 +64,8 @@ build_fetcher_image() {
     local gitcommit=$3
     local tag=fission/fetcher:$version
 
-    docker build -t $tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $DIR/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$gitcommit \
+        --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version $DIR
     docker tag $tag fission/fetcher:latest
 }
 
@@ -77,7 +80,8 @@ build_builder_image() {
     local gitcommit=$3
     local tag=fission/builder:$version
 
-    docker build -t $tag -f $ROOT/builder/cmd/Dockerfile.fission-builder --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+    docker build -t $tag -f $DIR/cmd/builder/Dockerfile.fission-builder --build-arg GITCOMMIT=$gitcommit \
+        --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version $DIR
     docker tag $tag fission/builder:latest
 }
 
@@ -117,8 +121,9 @@ build_pre_upgrade_checks_image() {
     local gitcommit=$3
 
     local tag=fission/pre-upgrade-checks:$version
-    
-    docker build -t $tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version .
+
+    docker build -t $tag -f $DIR/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks \
+        --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version $DIR
     docker tag $tag fission/pre-upgrade-checks:latest
 }
 
