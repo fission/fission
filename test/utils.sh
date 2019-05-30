@@ -64,6 +64,39 @@ test_fn() {
 }
 export -f test_fn
 
+wait_for_builder() {
+    env=$1
+    JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+
+    # wait for tiller ready
+    set +e
+    while true; do
+      kubectl --namespace fission-builder get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
+    set -e
+}
+export -f wait_for_builder
+
+waitBuild() {
+    log "Waiting for builder manager to finish the build"
+
+    set +e
+    while true; do
+      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
+    set -e
+}
+export -f waitBuild
+
+
 ## Common env parameters
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
 export FUNCTION_NAMESPACE=${FUNCTION_NAMESPACE:-fission-function}

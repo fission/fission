@@ -26,39 +26,6 @@ env=go-$TEST_ID
 fn_poolmgr=hello-go-poolmgr-$TEST_ID
 fn_nd=hello-go-nd-$TEST_ID
 
-wait_for_builder() {
-    env=$1
-    JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
-
-    # wait for tiller ready
-    set +e
-    while true; do
-      kubectl --namespace fission-builder get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-    set -e
-}
-
-waitBuild() {
-    log "Waiting for builder manager to finish the build"
-
-    set +e
-    while true; do
-      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-    set -e
-}
-
-export -f wait_for_builder
-export -f waitBuild
-
 cd $ROOT/examples/go
 
 log "Creating environment for Golang"

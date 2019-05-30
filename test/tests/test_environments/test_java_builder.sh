@@ -26,23 +26,6 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-test_pkg() {
-    echo "Checking package for valid response"
-
-    set +e
-    while true; do
-      response0=$(kubectl get -ndefault package $1 -o=jsonpath='{.status.buildstatus}')
-      echo $response0 | grep -i $2
-      if [[ $? -eq 0 ]]; then
-        break
-      fi
-      sleep 1
-    done
-    set -e
-}
-
-export -f test_pkg
-
 cd $ROOT/examples/jvm/java
 
 log "Creating zip from source code"
@@ -51,12 +34,14 @@ zip -r $tmp_dir/java-src-pkg.zip *
 log "Creating Java environment with Java Builder"
 fission env create --name $env --image $JVM_RUNTIME_IMAGE --version 2 --keeparchive --builder $JVM_BUILDER_IMAGE
 
+timeout 90 bash -c "wait_for_builder $env"
+
 log "Creating package from the source archive"
 pkg_name=`fission package create --sourcearchive $tmp_dir/java-src-pkg.zip --env $env|cut -d' ' -f 2|cut -d"'" -f 2`
 log "Created package $pkg_name"
 
 log "Checking the status of package"
-timeout 400 bash -c "test_pkg $pkg_name 'succeeded'"
+timeout 400 bash -c "waitBuild $pkgName"
 
 log "Creating pool manager & new deployment function for Java"
 fission fn create --name $fn_n --pkg $pkg_name --env $env --entrypoint io.fission.HelloWorld --executortype newdeploy --minscale 1 --maxscale 1
