@@ -8,7 +8,7 @@ require (
 	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
 	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
-	github.com/blend/go-sdk v1.1.1
+	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
 	github.com/dchest/uniuri v0.0.0-20160212164326-8902c56451e9

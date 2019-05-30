@@ -21,13 +21,13 @@ build:
     - image: <DOCKERHUB_REPO>/fission
       context: .
       docker:
-        dockerfile: fission-bundle/Dockerfile.fission-bundle
+        dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
     - image: <DOCKERHUB_REPO>/fetcher
       docker:
-        dockerfile: environments/fetcher/cmd/Dockerfile.fission-fetcher
+        dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
     - image: <DOCKERHUB_REPO>/preupgradechecks
       docker:
-        dockerfile: preupgradechecks/Dockerfile.fission-preupgradechecks                
+        dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
   tagPolicy:
     envTemplate:
       template: "{{.IMAGE_NAME}}:skaffold-test"
