@@ -398,6 +398,11 @@ func (fr *FissionResources) validate() error {
 		if (e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil) {
 			log.Warn("You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 		}
+		// Unlike CLI can change the environment version silently,
+		// we have to warn the user to modify spec file when this takes place.
+		if e.Spec.Version < 3 && e.Spec.Poolsize != 0 {
+			log.Warn("Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool.")
+		}
 	}
 
 	for _, f := range fr.functions {
