@@ -41,7 +41,7 @@ pkg_name=`fission package create --sourcearchive $tmp_dir/java-src-pkg.zip --env
 log "Created package $pkg_name"
 
 log "Checking the status of package"
-timeout 400 bash -c "waitBuild $pkgName"
+timeout 400 bash -c "waitBuild $pkg_name"
 
 log "Creating pool manager & new deployment function for Java"
 fission fn create --name $fn_n --pkg $pkg_name --env $env --entrypoint io.fission.HelloWorld --executortype newdeploy --minscale 1 --maxscale 1
