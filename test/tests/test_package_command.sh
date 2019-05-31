@@ -31,21 +31,6 @@ fn2=python-srcbuild2-$TEST_ID
 fn4=python-deploy4-$TEST_ID
 fn5=python-deploy5-$TEST_ID
 
-waitBuild() {
-    log "Waiting for builder manager to finish the build"
-    
-    while true; do
-      status=$(kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}')
-      if (echo $status | grep succeeded); then
-        break
-      else
-        log "status=$status  Waiting for build to finish"
-      fi
-      sleep 1
-    done
-}
-export -f waitBuild
-
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
     response=$(curl --retry 5 http://$FISSION_ROUTER/$1)
@@ -54,23 +39,6 @@ checkFunctionResponse() {
     log $response
     echo $response | grep -i "$2"
 }
-
-waitEnvBuilder() {
-    env=$1
-    envRV=$(kubectl -n default get environments ${env} -o jsonpath='{.metadata.resourceVersion}')
-
-    log "Waiting for env builder to catch up"
-
-    while true; do
-      kubectl -n fission-builder get pod -l envName=${env},envResourceVersion=${envRV} \
-        -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}' | grep "Ready=True" | grep -i "$env"
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-}
-export -f waitEnvBuilder
 
 cleanup() {
     log "Cleaning up..."
@@ -87,7 +55,7 @@ fi
 log "Creating python env"
 fission env create --name $env --image $PYTHON_RUNTIME_IMAGE --builder $PYTHON_BUILDER_IMAGE
 
-timeout 180s bash -c "waitEnvBuilder $env"
+timeout 180s bash -c "wait_for_builder $env"
 # 1) Multiple source files (multiple inputs, Using * expression, from a directory)
 # Currently only * expression implemented as a test
 pushd $ROOT/examples/python/

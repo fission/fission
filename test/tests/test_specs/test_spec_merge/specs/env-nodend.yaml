@@ -69,4 +69,4 @@ spec:
               - path: "labels"
                 fieldRef:
                   fieldPath: metadata.labels                  
-  version: 1
+  version: 3
