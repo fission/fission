@@ -14,9 +14,10 @@ then
 fi
 
 # Get helm
-if [ ! -f $K8SCLI_DIR/helm ]
+HELM_VERSION=2.14.0
+if [ ! -f $K8SCLI_DIR/helm ] || (helm version --client | grep -v $HELM_VERSION)
 then
-    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.7.2-linux-amd64.tar.gz
+    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v${HELM_VERSION}-linux-amd64.tar.gz
     tar xzvf helm-*.tar.gz
     mv linux-amd64/helm $K8SCLI_DIR/helm
 fi
