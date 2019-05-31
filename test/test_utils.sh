@@ -8,10 +8,7 @@
 
 set -euo pipefail
 
-ROOT_RELPATH=$(dirname $0)/..
-pushd $ROOT_RELPATH
-ROOT=$(pwd)
-popd
+ROOT=`realpath $(dirname $0)/..`
 
 travis_fold_start() {
     echo -e "travis_fold:start:$1\r\033[33;1m$2\033[0m"
@@ -44,18 +41,27 @@ gcloud_login() {
     gcloud auth activate-service-account --key-file $KEY
 }
 
+getVersion() {
+    echo $(git rev-parse HEAD)
+}
+
+getDate() {
+    echo $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+}
+
+getGitCommit() {
+    echo $(git rev-parse HEAD)
+}
+
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
-    pushd $ROOT/preupgradechecks
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_pre_upgrade_check_image
 }
 
@@ -63,14 +69,11 @@ build_and_push_fission_bundle() {
     image_tag=$1
     travis_fold_start build_and_push_fission_bundle $image_tag
 
-    pushd $ROOT/fission-bundle
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_fission_bundle
 }
 
@@ -78,14 +81,11 @@ build_and_push_fetcher() {
     image_tag=$1
     travis_fold_start build_and_push_fetcher $image_tag
 
-    pushd $ROOT/environments/fetcher/cmd
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_fetcher
 }
 
@@ -94,14 +94,11 @@ build_and_push_builder() {
     image_tag=$1
     travis_fold_start build_and_push_builder $image_tag
 
-    pushd $ROOT/builder/cmd
-    ./build.sh
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
     gcloud docker -- push $image_tag
-    popd
     travis_fold_end build_and_push_builder
 }
 
@@ -139,7 +136,7 @@ build_and_push_env_builder() {
 
 build_fission_cli() {
     travis_fold_start build_fission_cli "fission cli"
-    pushd $ROOT/fission
+    pushd $ROOT/cmd/fission-cli
     go build .
     popd
     travis_fold_end build_fission_cli
@@ -158,7 +155,7 @@ set_environment() {
     export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
 
     # set path to include cli
-    export PATH=$ROOT/fission:$PATH
+    export PATH=$ROOT/cmd/fission-cli:$PATH
 }
 
 generate_test_id() {
@@ -478,7 +475,8 @@ run_all_tests() {
         $ROOT/test/tests/test_pass.sh \
         $ROOT/test/tests/test_router_cache_invalidation.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
-        $ROOT/test/tests/test_specs/test_spec_multifile.sh
+        $ROOT/test/tests/test_specs/test_spec_multifile.sh \
+        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.

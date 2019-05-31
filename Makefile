@@ -20,21 +20,21 @@ ARCH ?= amd64
 OS ?= linux
 
 test:
-	go test -v $(shell go list ./... | grep -v /examples/ | grep -v /environments/)
+	go test -v $(go list ./... | grep -v /examples/ | grep -v /environments/)
 
 build: build-bundle build-client
 
 build-client:
-	go build -o fission/fission ./fission/*.go
+	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
 
 build-bundle:
-	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o fission-bundle/fission-bundle ./fission-bundle/*.go
+	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o cmd/fission-bundle/fission-bundle ./cmd/fission-bundle/
 
 build-image:
-	docker build --rm --tag "$(IMAGE):$(VERSION)" fission-bundle
+	docker build --rm --tag "$(IMAGE):$(VERSION)" cmd/fission-bundle/
 
 install:
-	go install ./fission
+	go install ./cmd/fission-cli/
 
 image: build-bundle build-image
 

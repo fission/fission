@@ -18,14 +18,9 @@ clean_resource_by_id() {
     KUBECTL="kubectl --namespace default"
     set +e
 
-    crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
-    crds="$crds configmaps secrets"
-    for crd in $crds; do
-        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
-    done
-
     pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
     for pkg in $pkg_list; do
+        fission pkg info --name $pkg
         fission package delete --name $pkg
     done
 
@@ -33,6 +28,13 @@ clean_resource_by_id() {
     for route in $route_list; do
         fission route delete --name $route
     done
+
+    crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
+    crds="$crds configmaps secrets"
+    for crd in $crds; do
+        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
+    done
+
     set -e
 }
 
@@ -63,6 +65,39 @@ test_fn() {
     set -e
 }
 export -f test_fn
+
+wait_for_builder() {
+    env=$1
+    JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+
+    # wait for tiller ready
+    set +e
+    while true; do
+      kubectl --namespace fission-builder get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
+    set -e
+}
+export -f wait_for_builder
+
+waitBuild() {
+    log "Waiting for builder manager to finish the build"
+
+    set +e
+    while true; do
+      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
+    set -e
+}
+export -f waitBuild
+
 
 ## Common env parameters
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}

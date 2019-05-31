@@ -1,9 +1,9 @@
 # Binaries
-fission-bundle/fission-bundle
-fission/fission
-environments/fetcher/cmd/fetcher
-builder/cmd/builder
-preupgradechecks/pre-upgrade-checks
+cmd/fission-bundle/fission-bundle
+cmd/fission-cli/fission
+cmd/fetcher/fetcher
+cmd/builder/builder
+cmd/preupgradechecks/pre-upgrade-checks
 
 # Logs
 test/logs/
@@ -11,6 +11,11 @@ test/logs/
 # Pycharm IDE
 .idea
 environments/php7/vendor/
+
+# terraform files
+.terraform/
+*.tfstate
+*.backup
 
 # Common backup files
 *.swp

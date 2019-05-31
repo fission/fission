@@ -22,7 +22,7 @@ services:
 before_install:
   - sudo apt-get update
   - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
-  - sudo apt-get -y install apache2-utils parallel
+  - sudo apt-get -y install apache2-utils parallel realpath
   - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 
 install:
@@ -37,8 +37,8 @@ before_script:
   - hack/verify-govet.sh
   - helm lint charts/fission-all/ charts/fission-core/
   - go mod download
-  - go build -o fission/fission fission/*.go
-  - ./fission-bundle/build.sh
+  - go mod vendor
+  - go build -o cmd/fission-cli/fission ./cmd/fission-cli/
   - hack/runtests.sh
 
 script:

@@ -8,6 +8,7 @@ else
     K="kubectl --kubeconfig $KUBECONFIG --namespace default"
     if $K get configmap ok-to-destroy
     then
+    set +e  # do not break if crd not found
     $K delete functions --all
     $K delete environments --all
     $K delete httptriggers --all
@@ -15,6 +16,7 @@ else
     $K delete messagequeuetriggers --all
     $K delete packages --all
     $K delete timetriggers --all
+    set -e
     fi
 fi
 

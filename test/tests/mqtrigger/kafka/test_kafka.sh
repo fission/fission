@@ -58,22 +58,6 @@ test_fnmessage() {
 }
 export -f test_fnmessage
 
-waitBuild() {
-    log "Waiting for builder manager to finish the build"
-    
-    set +e
-    while true; do
-      kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      log "Waiting for build to finish"
-      sleep 1
-    done
-    set -e
-}
-export -f waitBuild
-
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
