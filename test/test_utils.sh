@@ -479,7 +479,7 @@ run_all_tests() {
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.
-    export JOBS=1
+    export JOBS=3
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_environments/test_go_env.sh \

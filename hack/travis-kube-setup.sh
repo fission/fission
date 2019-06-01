@@ -6,20 +6,27 @@
 
 set -e 
 
+TOOL_DIR=$HOME/tool
+
+if [ ! -d $TOOL_DIR ]
+then
+    mkdir -p $TOOL_DIR
+fi
+
+# Get staticcheck
+STATICCHECK_VERSION=2019.1.1
+if [ ! -f $TOOL_DIR/staticcheck ]
+then
+    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64
+    chmod +x staticcheck_linux_amd64
+    mv staticcheck_linux_amd64 $TOOL_DIR/staticcheck
+fi
+
 K8SCLI_DIR=$HOME/k8scli
 
 if [ ! -d $K8SCLI_DIR ]
 then
     mkdir -p $K8SCLI_DIR
-fi
-
-# Get staticcheck
-STATICCHECK_VERSION=2019.1.1
-if [ ! -f /usr/local/bin/staticcheck ]
-then
-    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64
-    chmod +x staticcheck
-    mv staticcheck_linux_amd64 /usr/local/bin/staticcheck
 fi
 
 # Get helm
@@ -60,9 +67,6 @@ then
     export CLOUDSDK_CORE_DISABLE_PROMPTS=1
     curl https://sdk.cloud.google.com | bash
 fi
-
-# gcloud command
-export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
 
 # ensure we have the gcloud binary
 gcloud version

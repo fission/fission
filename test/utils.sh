@@ -18,10 +18,15 @@ clean_resource_by_id() {
     KUBECTL="kubectl --namespace default"
     set +e
 
+    fn_list=$(fission function list | grep $test_id | awk '{print $1}')
+    for fn in $fn_list; do
+        fission fn delete --name $fn
+    done
+
     pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
     for pkg in $pkg_list; do
         fission pkg info --name $pkg
-        fission package delete --name $pkg
+        fission pkg delete -f --name $pkg
     done
 
     route_list=$(fission route list | grep $test_id | awk '{print $1}')
