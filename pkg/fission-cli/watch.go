@@ -100,12 +100,6 @@ func wGet(c *cli.Context) error {
 	return nil
 }
 
-func wUpdate(c *cli.Context) error {
-	// TODO
-	log.Fatal("Not implemented")
-	return nil
-}
-
 func wDelete(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 

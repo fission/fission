@@ -244,6 +244,4 @@ func (res KubernetesPodLogDumper) Dump(dumpDir string) {
 	}
 
 	wg.Wait()
-
-	return
 }

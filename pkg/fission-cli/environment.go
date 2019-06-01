@@ -28,24 +28,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
-
-func getFunctionsByEnvironment(client *client.Client, envName, envNamespace string) ([]fv1.Function, error) {
-	fnList, err := client.FunctionList(metav1.NamespaceAll)
-	if err != nil {
-		return nil, err
-	}
-	fns := []fv1.Function{}
-	for _, fn := range fnList {
-		if fn.Spec.Environment.Name == envName && fn.Spec.Environment.Namespace == envNamespace {
-			fns = append(fns, fn)
-		}
-	}
-	return fns, nil
-}
 
 func envCreate(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))

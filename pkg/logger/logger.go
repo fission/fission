@@ -145,21 +145,19 @@ func getLogPath(pathPrefix, podName, podNamespace, containerName, containerID st
 
 // symlinkReaper periodically checks and removes symlink file if it's target container log file is no longer exists.
 func symlinkReaper(zapLogger *zap.Logger) {
-	for {
-		select {
-		case <-time.After(5 * time.Minute):
-			err := filepath.Walk(fissionSymlinkPath, func(path string, info os.FileInfo, err error) error {
-				if target, e := os.Readlink(path); e == nil {
-					if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
-						zapLogger.Debug("remove symlink file", zap.String("filepath", path))
-						os.Remove(path)
-					}
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		err := filepath.Walk(fissionSymlinkPath, func(path string, info os.FileInfo, err error) error {
+			if target, e := os.Readlink(path); e == nil {
+				if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
+					zapLogger.Debug("remove symlink file", zap.String("filepath", path))
+					os.Remove(path)
 				}
-				return nil
-			})
-			if err != nil {
-				zapLogger.Error("error reaping symlink", zap.Error(err))
 			}
+			return nil
+		})
+		if err != nil {
+			zapLogger.Error("error reaping symlink", zap.Error(err))
 		}
 	}
 }

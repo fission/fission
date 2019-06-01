@@ -74,7 +74,7 @@ func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.Fu
 			log.Fatal("The function weights should add up to 100")
 		}
 
-		functionWeights := make(map[string]int, 0)
+		functionWeights := make(map[string]int)
 		for index := range functionList {
 			functionWeights[functionList[index]] = functionWeightsList[index]
 		}
@@ -113,6 +113,9 @@ func htCreate(c *cli.Context) error {
 	}
 
 	htTrigger, err := client.HTTPTriggerGet(m)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 	if htTrigger != nil {
 		util.CheckErr(fmt.Errorf("duplicate trigger exists"), "choose a different name or leave it empty for fission to auto-generate it")
 	}

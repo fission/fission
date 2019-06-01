@@ -13,6 +13,15 @@ then
     mkdir -p $K8SCLI_DIR
 fi
 
+# Get staticcheck
+STATICCHECK_VERSION=2019.1.1
+if [ ! -f /usr/local/bin/staticcheck ]
+then
+    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64
+    chmod +x staticcheck
+    mv staticcheck_linux_amd64 /usr/local/bin/staticcheck
+fi
+
 # Get helm
 HELM_VERSION=2.14.0
 if [ ! -f $K8SCLI_DIR/helm ] || (helm version --client | grep -v $HELM_VERSION)

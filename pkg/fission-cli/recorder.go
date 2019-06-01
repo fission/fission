@@ -55,7 +55,9 @@ func recorderCreate(c *cli.Context) error {
 	if len(triggersOriginal) != 0 {
 		ts := strings.Split(triggersOriginal[0], ",")
 		for _, name := range ts {
-			triggers = append(triggers, name)
+			if len(name) > 0 {
+				triggers = append(triggers, name)
+			}
 		}
 	}
 	// TODO: Define appropriate set of policies and defaults
@@ -147,6 +149,9 @@ func recorderUpdate(c *cli.Context) error {
 		Name:      recName,
 		Namespace: "default",
 	})
+	if err != nil {
+		util.CheckErr(err, "get recorder")
+	}
 
 	updated := false
 
@@ -174,7 +179,9 @@ func recorderUpdate(c *cli.Context) error {
 		var newTriggers []string
 		triggs := strings.Split(triggers[0], ",")
 		for _, name := range triggs {
-			newTriggers = append(newTriggers, name)
+			if len(name) > 0 {
+				newTriggers = append(newTriggers, name)
+			}
 		}
 		recorder.Spec.Triggers = newTriggers
 		updated = true
