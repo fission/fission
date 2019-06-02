@@ -44,12 +44,14 @@ fission env create \
     --name $env_v2api \
     --image $PYTHON_RUNTIME_IMAGE \
     --builder $PYTHON_BUILDER_IMAGE
+timeout 180s bash -c "wait_for_builder $env_v2api"
 
 log "Creating package ..."
 pushd $ROOT/test/tests/test_environments/python_src/
 zip -r $tmp_dir/src-pkg.zip *
 popd
 pkg=$(fission package create --src $tmp_dir/src-pkg.zip --env $env_v2api | cut -f2 -d' '| tr -d \')
+timeout 60s bash -c "waitBuild $pkg"
 
 
 log "===== 1. test env with v1 api ====="
