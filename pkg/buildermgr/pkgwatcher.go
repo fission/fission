@@ -227,8 +227,6 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 
 	pkgw.logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready",
 		zap.String("package", fmt.Sprintf("%s.%s", pkg.Metadata.Name, pkg.Metadata.Namespace)))
-
-	return
 }
 
 func (pkgw *packageWatcher) watchPackages(fissionClient *crd.FissionClient,

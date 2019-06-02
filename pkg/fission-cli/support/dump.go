@@ -115,8 +115,8 @@ func DumpInfo(c *cli.Context) error {
 				panic(err)
 			}
 		}
+		wg.Add(1)
 		go func(res resources.Resource, dir string) {
-			wg.Add(1)
 			defer wg.Done()
 			res.Dump(dir)
 		}(res, dir)

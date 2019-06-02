@@ -449,6 +449,10 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 	// unmarshal again into the "real" struct once we know the type.
 	var tm TypeMeta
 	err := yaml.Unmarshal(b, &tm)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("Failed to decode yaml %v", string(b)))
+	}
+
 	switch tm.Kind {
 	case "Package":
 		var v fv1.Package
@@ -578,6 +582,10 @@ func readSpecs(specDir string) (*FissionResources, error) {
 
 	// Users can organize the specdir into subdirs if they want to.
 	err := filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
 		// For now just read YAML files. We'll add jsonnet at some point. Skip
 		// unsupported files.
 		if !(strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
@@ -615,7 +623,7 @@ func readSpecs(specDir string) (*FissionResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := result.ErrorOrNil(); err != nil {
+	if err = result.ErrorOrNil(); err != nil {
 		return nil, err
 	}
 
@@ -634,7 +642,7 @@ func waitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
 	time.Sleep(500 * time.Millisecond)
 	for {
 		select {
-		case _ = <-watcher.Events:
+		case <-watcher.Events:
 			time.Sleep(200 * time.Millisecond)
 			continue
 		case err := <-watcher.Errors:
@@ -878,7 +886,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 			if strings.HasPrefix(ar.URL, ARCHIVE_URL_PREFIX) {
 				availableAr, ok := archiveFiles[ar.URL]
 				if !ok {
-					return fmt.Errorf("Unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
+					return fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
 				ar.Literal = availableAr.Literal
@@ -927,7 +935,7 @@ func applyResources(fclient *client.Client, specDir string, fr *FissionResources
 			// spec. It may exist outside the spec, but we're going to treat
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
-			return nil, nil, fmt.Errorf("Function %v/%v references package %v/%v, which doesn't exist in the specs",
+			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
 				f.Metadata.Namespace, f.Metadata.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
@@ -998,7 +1006,7 @@ func localArchiveFromSpec(specDir string, aus *ArchiveUploadSpec) (*fv1.Archive,
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("Archive '%v' is empty", aus.Name)
+		return nil, fmt.Errorf("archive '%v' is empty", aus.Name)
 	}
 
 	// if it's just one file, use its path directly
@@ -1092,7 +1100,7 @@ func waitForPackageBuild(fclient *client.Client, pkg *fv1.Package) (*fv1.Package
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, fmt.Errorf("Package %v has been building for a while.  Giving up on waiting for it.", pkg.Metadata.Name)
+			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.Metadata.Name)
 		}
 
 		// TODO watch instead

@@ -25,8 +25,7 @@ import (
 )
 
 type FissionVersion struct {
-	client    *client.Client
-	namespace string
+	client *client.Client
 }
 
 func NewFissionVersion(client *client.Client) Resource {
