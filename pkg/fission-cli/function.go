@@ -87,7 +87,7 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 	case types.ExecutorTypeNewdeploy:
 		newFnExecutor = types.ExecutorTypeNewdeploy
 	default:
-		return nil, errors.New("Executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+		return nil, errors.New("executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
 	}
 
 	if existingInvokeStrategy != nil {
@@ -138,12 +138,12 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		if c.IsSet("maxscale") {
 			maxScale = c.Int("maxscale")
 			if maxScale <= 0 {
-				return nil, errors.New("Maxscale must be greater than 0")
+				return nil, errors.New("maxscale must be greater than 0")
 			}
 		}
 
 		if minScale > maxScale {
-			return nil, errors.New(fmt.Sprintf("Minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale))
+			return nil, fmt.Errorf("minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale)
 		}
 
 		// Right now a simple single case strategy implementation

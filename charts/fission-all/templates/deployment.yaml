@@ -569,12 +569,29 @@ spec:
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
           "--auth", "{{ .Values.nats.authToken }}",
-          "--max_channels", "0"
+          "--max_channels", "0",
+          "--http_port", "4223"
         ]
         ports:
         - containerPort: 4222
           hostPort: 4222
           protocol: TCP
+        - containerPort: 4223
+          hostPort: 4223
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: "/streaming/serverz"
+            port: 4223
+          initialDelaySeconds: 30
+          periodSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: "/streaming/serverz"
+            port: 4223
+          initialDelaySeconds: 30
+          periodSeconds: 5
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}

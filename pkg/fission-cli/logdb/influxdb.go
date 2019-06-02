@@ -178,7 +178,7 @@ func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Respon
 	decoder := json.NewDecoder(resp.Body)
 	decoder.UseNumber()
 	if decoder.Decode(&response) != nil {
-		return nil, fmt.Errorf("Failed to decode influxdb response: %v", err)
+		return nil, fmt.Errorf("failed to decode influxdb response: %v", err)
 	}
 	return &response, nil
 }

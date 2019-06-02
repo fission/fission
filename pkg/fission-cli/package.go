@@ -403,6 +403,9 @@ func pkgDelete(c *cli.Context) error {
 		util.CheckErr(err, "find package")
 
 		fnList, err := getFunctionsByPackage(client, pkgName, pkgNamespace)
+		if err != nil {
+			return err
+		}
 
 		if !force && len(fnList) > 0 {
 			log.Fatal("Package is used by at least one function, use -f to force delete")
@@ -680,8 +683,8 @@ func writeArchiveToFile(fileName string, reader io.Reader) error {
 // and write it to temp file for further usage
 func downloadToTempFile(fileUrl string) string {
 	reader, err := downloadURL(fileUrl)
-	defer reader.Close()
 	util.CheckErr(err, fmt.Sprintf("download from url: %v", fileUrl))
+	defer reader.Close()
 
 	tmpDir, err := utils.GetTempDir()
 	util.CheckErr(err, "create temp directory")

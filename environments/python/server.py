@@ -1,12 +1,24 @@
 #!/usr/bin/env python
-
+import importlib
 import logging
-import sys
-import imp
 import os
-import bjoern
-from gevent.pywsgi import WSGIServer
+import sys
+
 from flask import Flask, request, abort, g
+from gevent.pywsgi import WSGIServer
+import bjoern
+
+
+IS_PY2 = (sys.version_info.major == 2)
+
+
+def import_src(path):
+    if IS_PY2:
+        import imp
+        return imp.load_source('mod', path)
+    else:
+        # the imp module is deprecated in Python3. use importlib instead.
+        return importlib.machinery.SourceFileLoader('mod', path).load_module()
 
 
 class FuncApp(Flask):
@@ -34,9 +46,9 @@ class FuncApp(Flask):
         #
         @self.route('/specialize', methods=['POST'])
         def load():
+            self.logger.info('/specialize called')
             # load user function from codepath
-            codepath = '/userfunc/user'
-            self.userfunc = (imp.load_source('user', codepath)).main
+            self.userfunc = import_src('/userfunc/user').main
             return ""
 
         @self.route('/v2/specialize', methods=['POST'])
@@ -44,38 +56,36 @@ class FuncApp(Flask):
             body = request.get_json()
             filepath = body['filepath']
             handler = body['functionName']
+            self.logger.info('/v2/specialize called with  filepath = "{}"   handler = "{}"'.format(filepath, handler))
 
-            # The value of "functionName" is consist of
-            # `<module-name>.<function-name>`.
-            moduleName, funcName = handler.split(".")
-
+            # handler looks like `path.to.module.function`
+            parts = handler.rsplit(".", 1)
+            if len(handler) == 0:
+                # default to main.main if entrypoint wasn't provided
+                moduleName = 'main'
+                funcName = 'main'
+            elif len(parts) == 1:
+                moduleName = 'main'
+                funcName = parts[0]
+            else:
+                moduleName = parts[0]
+                funcName = parts[1]
+            self.logger.debug('moduleName = "{}"    funcName = "{}"'.format(moduleName, funcName))
+            
             # check whether the destination is a directory or a file
             if os.path.isdir(filepath):
                 # add package directory path into module search path
                 sys.path.append(filepath)
 
-                # find module from package path we append previously.
-                # Python will try to find module from the same name
-                # file under the package directory. If search is
-                # successful, the return value is a 3-element tuple;
-                # otherwise, an exception "ImportError" is raised.
-                # Second parameter of find_module enforces python to
-                # find same name module from the given list of
-                # directories to prevent name confliction with
-                # built-in modules.
-                f, path, desc = imp.find_module(moduleName, [filepath])
+                self.logger.debug('__package__ = "{}"'.format(__package__))
+                if __package__:
+                    mod = importlib.import_module(moduleName, __package__)
+                else:
+                    mod = importlib.import_module(moduleName)
 
-                # load module
-                # Return module object is the load is successful;
-                # otherwise, an exception is raised.
-                try:
-                    mod = imp.load_module(moduleName, f, path, desc)
-                finally:
-                    if f:
-                        f.close()
             else:
                 # load source from destination python file
-                mod = imp.load_source(moduleName, filepath)
+                mod = import_src(filepath)
 
             # load user function from module
             self.userfunc = getattr(mod, funcName)
