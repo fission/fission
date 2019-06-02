@@ -463,6 +463,7 @@ run_all_tests() {
         $ROOT/test/tests/test_buildermgr.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_function_update.sh \
