@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -74,7 +75,7 @@ func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.Fu
 			log.Fatal("The function weights should add up to 100")
 		}
 
-		functionWeights := make(map[string]int, 0)
+		functionWeights := make(map[string]int)
 		for index := range functionList {
 			functionWeights[functionList[index]] = functionWeightsList[index]
 		}
@@ -113,6 +114,9 @@ func htCreate(c *cli.Context) error {
 	}
 
 	htTrigger, err := client.HTTPTriggerGet(m)
+	if err != nil && !ferror.IsNotFound(err) {
+		log.Fatal(err.Error())
+	}
 	if htTrigger != nil {
 		util.CheckErr(fmt.Errorf("duplicate trigger exists"), "choose a different name or leave it empty for fission to auto-generate it")
 	}

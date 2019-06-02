@@ -87,7 +87,6 @@ type (
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
-		collectorEndpoint      string
 	}
 )
 
@@ -385,40 +384,6 @@ func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace st
 		Delete(name, &delOpt)
 	if err != nil {
 		return errors.Wrapf(err, "error deleting builder deployment %s.%s", name, namespace)
-	}
-	return nil
-}
-
-func (envw *environmentWatcher) deleteBuilderService(sel map[string]string, ns string) error {
-	svcList, err := envw.getBuilderServiceList(sel, ns)
-	if err != nil {
-		return err
-	}
-	for _, svc := range svcList {
-		envw.logger.Info("removing builder service", zap.String("service_name", svc.ObjectMeta.Name))
-		err = envw.kubernetesClient.CoreV1().
-			Services(ns).
-			Delete(svc.ObjectMeta.Name, &delOpt)
-		if err != nil {
-			return errors.Wrap(err, "error deleting builder service")
-		}
-	}
-	return nil
-}
-
-func (envw *environmentWatcher) deleteBuilderDeployment(sel map[string]string, ns string) error {
-	deployList, err := envw.getBuilderDeploymentList(sel, ns)
-	if err != nil {
-		return err
-	}
-	for _, deploy := range deployList {
-		envw.logger.Info("removing builder deployment", zap.String("deployment_name", deploy.ObjectMeta.Name))
-		err = envw.kubernetesClient.ExtensionsV1beta1().
-			Deployments(ns).
-			Delete(deploy.ObjectMeta.Name, &delOpt)
-		if err != nil {
-			return errors.Wrap(err, "error deleteing builder deployment")
-		}
 	}
 	return nil
 }

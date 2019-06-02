@@ -87,6 +87,14 @@ func (err Error) HTTPStatus() int {
 	return code
 }
 
+func (err Error) Description() string {
+	idx := int(err.Code)
+	if idx < 0 || idx > len(errorDescriptions)-1 {
+		return ""
+	}
+	return errorDescriptions[idx]
+}
+
 func GetHTTPError(err error) (int, string) {
 	var msg string
 	var code int
@@ -101,12 +109,12 @@ func GetHTTPError(err error) (int, string) {
 	return code, msg
 }
 
-func (err Error) Description() string {
-	idx := int(err.Code)
-	if idx < 0 || idx > len(errorDescriptions)-1 {
-		return ""
+func IsNotFound(err error) bool {
+	fe, ok := err.(Error)
+	if !ok {
+		return false
 	}
-	return errorDescriptions[idx]
+	return fe.Code == ErrorNotFound
 }
 
 const (
