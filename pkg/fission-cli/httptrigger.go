@@ -25,10 +25,10 @@ import (
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -114,7 +114,7 @@ func htCreate(c *cli.Context) error {
 	}
 
 	htTrigger, err := client.HTTPTriggerGet(m)
-	if err != nil && !k8serrors.IsNotFound(err) {
+	if err != nil && !ferror.IsNotFound(err) {
 		log.Fatal(err.Error())
 	}
 	if htTrigger != nil {
