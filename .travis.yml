@@ -34,12 +34,12 @@ env:
 
 before_script:
   - cd ${TRAVIS_BUILD_DIR}
-  - hack/verify-gofmt.sh
-  - hack/verify-govet.sh
-  - hack/verify-staticcheck.sh
-  - helm lint charts/fission-all/ charts/fission-core/
   - go mod download
   - go mod vendor
+  - hack/verify-staticcheck.sh
+  - hack/verify-gofmt.sh
+  - hack/verify-govet.sh
+  - helm lint charts/fission-all/ charts/fission-core/
   - go build -o cmd/fission-cli/fission ./cmd/fission-cli/
   - hack/runtests.sh
 
