@@ -56,7 +56,7 @@ func (a *Analytics) run() {
 			continue
 		}
 
-		resp, err := http.Post(a.url, "application/json", bytes.NewReader(msgbytes))
+		resp, _ := http.Post(a.url, "application/json", bytes.NewReader(msgbytes))
 		if resp != nil {
 			// close response body to prevent resources leak
 			resp.Body.Close()
