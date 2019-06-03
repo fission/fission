@@ -182,6 +182,8 @@ build_all_env_builders() {
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     build_env_builder_image "$version" "nodejs"   "node-builder"     ""
     build_env_builder_image "$version" "php7"     "php-builder"      ""
+    build_env_builder_image "$version" "ruby"     "ruby-env"         ""
+    build_env_builder_image "$version" "dotnet20" "dotnet20-env"     ""
 }
 
 build_charts() {
