@@ -40,7 +40,6 @@ before_script:
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
   - helm lint charts/fission-all/ charts/fission-core/
-  - go build -o cmd/fission-cli/fission ./cmd/fission-cli/
   - hack/runtests.sh
 
 script:
