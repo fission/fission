@@ -137,7 +137,7 @@ build_and_push_env_builder() {
 build_fission_cli() {
     travis_fold_start build_fission_cli "fission cli"
     pushd $ROOT/cmd/fission-cli
-    go build .
+    go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) -X github.com/fission/fission/pkg/info.Version=$(getVersion)" -o $HOME/tool/fission .
     popd
     travis_fold_end build_fission_cli
 }
@@ -153,9 +153,6 @@ set_environment() {
     export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
     export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
     export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
-
-    # set path to include cli
-    export PATH=$ROOT/cmd/fission-cli:$PATH
 }
 
 generate_test_id() {
@@ -543,6 +540,10 @@ install_and_test() {
 
     wait_for_services $id
     set_environment $id
+
+    # ensure we run tests against with the same git commit version of CLI & server
+    fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit"
+
     run_all_tests $id
 
     dump_logs $id

@@ -1,6 +1,7 @@
 # Binaries
 cmd/fission-bundle/fission-bundle
 cmd/fission-cli/fission
+cmd/fission-cli/fission-cli
 cmd/fetcher/fetcher
 cmd/builder/builder
 cmd/preupgradechecks/pre-upgrade-checks
