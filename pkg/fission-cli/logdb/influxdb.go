@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,8 +145,8 @@ func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Respon
 	}
 	// connect to controller first, then controller will redirect our query command
 	// to influxdb and proxy back the db response.
-	queryURL.Path = fmt.Sprintf("/proxy/%s", INFLUXDB)
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	queryURL.Path = path.Clean(fmt.Sprintf("%s/proxy/%s", queryURL.Path, INFLUXDB))
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
