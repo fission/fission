@@ -122,12 +122,18 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")
 	if len(kubeConfigPath) == 0 {
+		var homeDir string
 		usr, err := user.Current()
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Could not get the current users directory: %s", err))
+			// In case that user.Current() may be unable to work under some circumstances and return errors like
+			// "user: Current not implemented on darwin/amd64" due to cross-compilation problem. (https://github.com/golang/go/issues/6376).
+			// Instead of doing fatal here, we fallback to get home directory from the environment $HOME.
+			log.Warn(fmt.Sprintf("Could not get the current user's directory (%s), fallback to get it from env $HOME", err))
+			homeDir = os.Getenv("HOME")
+		} else {
+			homeDir = usr.HomeDir
 		}
-
-		kubeConfigPath = filepath.Join(usr.HomeDir, ".kube", "config")
+		kubeConfigPath = filepath.Join(homeDir, ".kube", "config")
 
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
 			log.Fatal("Couldn't find kubeconfig file. " +

@@ -1,21 +1,44 @@
-# 1.2.1
+# 1.3.0
 [Documentation](https://docs.fission.io/)
-## Downloads for 1.2.1
+## Downloads for 1.3.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1-minikube.yaml) | `f645d4741c6396d71addcd1af0cdbf6791bb7b9f6dda3f0b3fea0359f70fe233`
-[fission-core-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.yaml) | `aa0c50cd38cdde805c7fac62d18875ca72b0f420ccc17b179c067561eaa7249a`
-[fission-all-1.2.1.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.yaml) | `f814b0e194b137235d8860336f488f51c93dea59cf3f8a15ff3e740a6c2972c1`
-[fission-core-1.2.1-minikube.yaml](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1-minikube.yaml) | `a12cc0037916c9ea5afb894d666533eaf66a543efb11f1bf4e0492e320039890`
-[fission-core-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-core-1.2.1.tgz) | `09f573bd2cefa5106b0f67bc741ffa8440d9d65c9d87a27cde9a00513dd503d6`
-[fission-all-1.2.1.tgz](https://github.com/fission/fission/releases/download/1.2.1/fission-all-1.2.1.tgz) | `9dce2e7bc1e59e4ef2746046751389ebcf8919cbe49829d614cad38449fbf7e1`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-osx) | `b171448a109ea8e3813a60068579d601da5b85584e106f52e790d3220a104bda`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-linux) | `29de834928464a4389decaaffa89854aa4533d2a914adfcf8844a8a2356e9cf0`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.2.1/fission-cli-windows.exe) | `279a732cbeadd6eadbdce096d54f0ba242738ab2b5f0e710fc04bc2eb3459878`
+[fission-core-1.3.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0-minikube.yaml) | `5e65d844b6f545a2368cc2ea7df549c53a859d4621f62489a62afa540b5d3fe2`
+[fission-all-1.3.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0-minikube.yaml) | `9ec1f4b30d73cb5fa3a68f4c804b65b31fdb3c96c4c75ca9963cab8a0c75c24e`
+[fission-core-1.3.0.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0.yaml) | `5daf079ee473a6167da893d58dad964a62b8b4d70724686dbac64243c0553498`
+[fission-all-1.3.0.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0.yaml) | `adf8c3ea584074afad1455c5fa0876b64fc15ed933f5a1570fda15e852060a67`
+[fission-core-1.3.0.tgz](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0.tgz) | `76715e0c557790824b857882224511e5b4eda6ffd5c7874dcd51bcf0e26efcae`
+[fission-all-1.3.0.tgz](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0.tgz) | `e5abef76f9605a3dd4920e6054810a4368d11c050b83adbd92ccb05b98a2163a`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-osx) | `b0f536e484e53ba0c6eaef270be38102cf8085470507d7713393a8af48a9dec7`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-linux) | `e75ee64d4ab2ce752dca1186a88439ae9db5aa9e575436161b9232aa5147c622`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-windows.exe) | `d1bfb95b2795b102a603eb5d70bc1a61ee8341a8aee2d5a6f0f753de91664aaf`
 
 # Change Log
+
+## [1.3.0](https://github.com/fission/fission/tree/1.3.0) (2019-06-03)
+[Full Changelog](https://github.com/fission/fission/compare/1.2.1...1.3.0)
+
+**Merged pull requests:**
+
+- Check fission CLI & server git commit SHA before test [\#1200](https://github.com/fission/fission/pull/1200) ([life1347](https://github.com/life1347))
+- Add readiness/liveness probes to nat-streaming [\#1199](https://github.com/fission/fission/pull/1199) ([life1347](https://github.com/life1347))
+- Update bug issue templates [\#1198](https://github.com/fission/fission/pull/1198) ([life1347](https://github.com/life1347))
+- Add static code analysis to CI test [\#1197](https://github.com/fission/fission/pull/1197) ([life1347](https://github.com/life1347))
+- Analytics bugfix [\#1195](https://github.com/fission/fission/pull/1195) ([soamvasani](https://github.com/soamvasani))
+- Add Terraform configuration and upgrade helm version [\#1194](https://github.com/fission/fission/pull/1194) ([darkgerm](https://github.com/darkgerm))
+- Show warning message if spec alters poolsize while env version \< 3 [\#1193](https://github.com/fission/fission/pull/1193) ([life1347](https://github.com/life1347))
+- Move packages to proejct/pkg to follow go project folder structure convention  [\#1190](https://github.com/fission/fission/pull/1190) ([life1347](https://github.com/life1347))
+- router analytics -- close http response body [\#1180](https://github.com/fission/fission/pull/1180) ([soamvasani](https://github.com/soamvasani))
+- Remove prometheus server connectivity test during controller initialization [\#1179](https://github.com/fission/fission/pull/1179) ([life1347](https://github.com/life1347))
+- V1.2.1 [\#1178](https://github.com/fission/fission/pull/1178) ([vishal-biyani](https://github.com/vishal-biyani))
+- Skaffold for Fission [\#1172](https://github.com/fission/fission/pull/1172) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add affinity support [\#1170](https://github.com/fission/fission/pull/1170) ([laurence-hudson-mindfoundry](https://github.com/laurence-hudson-mindfoundry))
+- Refactor test framework [\#1128](https://github.com/fission/fission/pull/1128) ([darkgerm](https://github.com/darkgerm))
+- Pod specs [\#1106](https://github.com/fission/fission/pull/1106) ([vishal-biyani](https://github.com/vishal-biyani))
+- Allow non-toplevel modules in python environment [\#1042](https://github.com/fission/fission/pull/1042) ([soamvasani](https://github.com/soamvasani))
+- Created dotnet2.0 Builder Image and Added /v2/specialized Endpoint to dotnet2.0 Envrionment  [\#1001](https://github.com/fission/fission/pull/1001) ([paraspatidar](https://github.com/paraspatidar))
 
 ## [1.2.1](https://github.com/fission/fission/tree/1.2.1) (2019-05-09)
 [Full Changelog](https://github.com/fission/fission/compare/1.2.0...1.2.1)
