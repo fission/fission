@@ -1,7 +1,13 @@
 FROM maven:3.5-jdk-8 as BUILD
-COPY src /usr/src/myapp/src
-COPY pom.xml /usr/src/myapp
-RUN mvn -f /usr/src/myapp/pom.xml clean package
+WORKDIR /usr/src/myapp/
+
+# To reuse the build cache, here we split maven dependency
+# download and package into two RUN commands to avoid cache invalidation.
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
+COPY src /usr/src/myapp/src/
+RUN mvn package
 
 FROM openjdk:8-jdk-alpine
 VOLUME /tmp
