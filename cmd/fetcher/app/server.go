@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/plugin/ochttp"
@@ -86,12 +87,25 @@ func Run(logger *zap.Logger) {
 			}
 
 			ctx := context.Background()
-			err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
-			if err != nil {
-				logger.Fatal("error specializing function pod", zap.Error(err))
+
+			interval := 50 * time.Millisecond
+			for i := 0; i < 5; i++ {
+				err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+				if err == nil {
+					readyToServe = true
+					return
+				}
+
+				// sleep & retry
+				if i < 4 {
+					logger.Error("error specializing function pod, retrying", zap.Error(err))
+					time.Sleep(interval)
+					interval = interval * 2
+				}
 			}
 
-			readyToServe = true
+			// error out
+			logger.Fatal("error specializing function pod", zap.Error(err))
 		}
 	}()
 
@@ -100,16 +114,23 @@ func Run(logger *zap.Logger) {
 	mux.HandleFunc("/specialize", f.SpecializeHandler)
 	mux.HandleFunc("/upload", f.UploadHandler)
 	mux.HandleFunc("/version", f.VersionHandler)
-	mux.HandleFunc("/readniess-healthz", func(w http.ResponseWriter, r *http.Request) {
+
+	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
 		if !*specializeOnStart || readyToServe {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
-	})
+	}
+
+	mux.HandleFunc("/readiness-healthz", readinessHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	// For backward compatibility
+	// TODO: remove this path in future
+	mux.HandleFunc("/readniess-healthz", readinessHandler)
 
 	logger.Info("fetcher ready to receive requests")
 	http.ListenAndServe(":8000", &ochttp.Handler{

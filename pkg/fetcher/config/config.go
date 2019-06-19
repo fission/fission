@@ -232,7 +232,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			FailureThreshold:    30,
 			Handler: apiv1.Handler{
 				HTTPGet: &apiv1.HTTPGetAction{
-					Path: "/readniess-healthz",
+					Path: "/readiness-healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
 						IntVal: 8000,
