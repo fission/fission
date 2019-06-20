@@ -1,12 +1,9 @@
 /*
 Copyright 2017 The Fission Authors.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -82,7 +79,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	url := p.baseUrl + "/" + strings.TrimPrefix(r.target, "/")
 
 	msg := "making HTTP request"
-	level := zap.InfoLevel
+	level := zap.ErrorLevel
 	fields := []zap.Field{zap.String("url", url), zap.String("type", "publish_request")}
 
 	// log once for this request
@@ -96,37 +93,37 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	buf.WriteString(r.body)
 
 	// Create request
-	req, err := http.NewRequest("POST", url, &buf)
+	req, err := http.NewRequest(http.MethodPost, url, &buf)
 	if err != nil {
-		level = zap.ErrorLevel
 		fields = append(fields, zap.Error(err))
 		return
 	}
 	for k, v := range r.headers {
 		req.Header.Set(k, v)
 	}
-
 	// Make the request
 	resp, err := http.DefaultClient.Do(req)
 	var body []byte
-	if err == nil {
+	if err != nil {
+		fields = append(fields, zap.Error(err), zap.Any("request", r))
+	} else {
 		body, err = ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-	}
-	if err == nil {
-		fields = append(fields, zap.Int("status_code", resp.StatusCode), zap.String("body", string(body)))
-		if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if err != nil {
+			fields = append(fields, zap.Error(err), zap.Any("request", r))
+			msg = "read response body error"
+		} else {
+			fields = append(fields, zap.Int("status_code", resp.StatusCode), zap.String("body", string(body)))
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				level = zap.InfoLevel
+			} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 				msg = "request returned bad request status code"
 				level = zap.WarnLevel
+			} else {
+				msg = "request returned failure status code"
 			}
 			return
 		}
-	} else {
-		fields = append(fields, zap.Error(err), zap.Any("request", r))
 	}
-	msg = "request returned failure status code"
-	level = zap.ErrorLevel
 
 	// Schedule a retry, or give up if out of retries
 	r.retries--
