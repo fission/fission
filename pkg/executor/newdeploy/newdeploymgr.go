@@ -235,6 +235,15 @@ func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fs
 		return deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	})
 
+	if err != nil {
+		e := "error updating service address entry for function"
+		deploy.logger.Error(e,
+			zap.Error(err),
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
+		return nil, errors.Wrapf(err, "%s %s_%s", e, fn.Metadata.Name, fn.Metadata.Namespace)
+	}
+
 	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
 	if !ok {
 		deploy.logger.Panic("receive unknown object while creating function - expected pointer of function service object")
