@@ -22,7 +22,7 @@ docker build -t USER/tensorflow-serving . && docker push USER/tensorflow-serving
 You can add this customized image to fission with "fission env create":
 
 ```
-fission env create --name go --image USER/tensorflow-serving --version 2
+fission env create --name tensorflow --image USER/tensorflow-serving --version 2
 ```
 
 After this, fission functions that have the env parameter set to the
