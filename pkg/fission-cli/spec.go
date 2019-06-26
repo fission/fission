@@ -233,7 +233,7 @@ func specValidate(c *cli.Context) error {
 	util.CheckErr(err, "read specs")
 
 	// this does the rest of the checks, like dangling refs
-	err = fr.validate()
+	err = fr.validate(c)
 	if err != nil {
 		fmt.Printf("Error validating specs: %v", err)
 	}
@@ -241,7 +241,7 @@ func specValidate(c *cli.Context) error {
 	return nil
 }
 
-func (fr *FissionResources) validate() error {
+func (fr *FissionResources) validate(c *cli.Context) error {
 	var result *multierror.Error
 
 	// check references: both dangling refs + garbage
@@ -341,6 +341,27 @@ func (fr *FissionResources) validate() error {
 				pkgMeta.Name))
 		} else {
 			packages[mapKey(pkgMeta)] = true
+		}
+
+		client := util.GetApiClient(c.GlobalString("server"))
+		for _, cm := range f.Spec.ConfigMaps {
+			c, err := client.ConfigMapGet(&metav1.ObjectMeta{
+				Name:      cm.Name,
+				Namespace: cm.Namespace,
+			})
+			if c == nil && err != nil {
+				log.Warn(fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
+			}
+		}
+
+		for _, s := range f.Spec.Secrets {
+			c, err := client.SecretGet(&metav1.ObjectMeta{
+				Name:      s.Name,
+				Namespace: s.Namespace,
+			})
+			if c == nil && err != nil {
+				log.Warn(fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
+			}
 		}
 
 		result = multierror.Append(result, f.Validate())
@@ -704,7 +725,7 @@ func specApply(c *cli.Context) error {
 		util.CheckErr(err, "read specs")
 
 		// validate
-		err = fr.validate()
+		err = fr.validate(c)
 		util.CheckErr(err, "validate specs")
 
 		// make changes to the cluster based on the specs
