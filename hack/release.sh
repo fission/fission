@@ -84,7 +84,7 @@ push_all_envs() {
     push_env_image "$version" "python"               "python-env"          "2.7"
     push_env_image "$version" "ruby"                 "ruby-env"            ""
     push_env_image "$version" "jvm"                  "jvm-env"             ""
-    push_env_image "$version" "tensorflow-serving"   "tensorflow-serving"  ""
+    push_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
 }
 
 push_env_builder_image() {

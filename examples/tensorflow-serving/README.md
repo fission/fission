@@ -15,7 +15,7 @@ $ fission pkg create --env tensorflow --deploy half_plus_two.zip
 
 ## Create Function
 
-Here, the `--entrypoint` means the top directory name contains trained model.
+Here, the `--entrypoint` represents the name of top directory contains trained model.
 
 ```bash
 $ fission fn create --name t1 --pkg <pkg name> --env tensorflow --entrypoint "half_plus_two"
