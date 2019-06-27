@@ -34,6 +34,7 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
@@ -345,21 +346,21 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 
 		client := util.GetApiClient(c.GlobalString("server"))
 		for _, cm := range f.Spec.ConfigMaps {
-			c, err := client.ConfigMapGet(&metav1.ObjectMeta{
+			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
 				Name:      cm.Name,
 				Namespace: cm.Namespace,
 			})
-			if c == nil && err != nil {
+			if k8serrors.IsNotFound(err) {
 				log.Warn(fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
 			}
 		}
 
 		for _, s := range f.Spec.Secrets {
-			c, err := client.SecretGet(&metav1.ObjectMeta{
+			_, err := client.SecretGet(&metav1.ObjectMeta{
 				Name:      s.Name,
 				Namespace: s.Namespace,
 			})
-			if c == nil && err != nil {
+			if k8serrors.IsNotFound(err) { {
 				log.Warn(fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
 			}
 		}
