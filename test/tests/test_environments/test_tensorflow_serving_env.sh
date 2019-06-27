@@ -53,9 +53,9 @@ body='{\"instances\": [1.0, 2.0, 5.0]}'
 expect='\"predictions\": \[2.5, 3.0, 4.5'
 
 log "Testing pool manager function"
-timeout 5 bash -c "test_post_route $fn_poolmgr \"$body\" \"$expect\""
+timeout 60 bash -c "test_post_route $fn_poolmgr \"$body\" \"$expect\""
 
 log "Testing new deployment function"
-timeout 5 bash -c "test_post_route $fn_nd \"$body\" \"$expect\""
+timeout 60 bash -c "test_post_route $fn_nd \"$body\" \"$expect\""
 
 log "Test PASSED"
