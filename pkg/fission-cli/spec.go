@@ -360,9 +360,10 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 				Name:      s.Name,
 				Namespace: s.Namespace,
 			})
-			if k8serrors.IsNotFound(err) { {
+			if k8serrors.IsNotFound(err) {
 				log.Warn(fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
 			}
+
 		}
 
 		result = multierror.Append(result, f.Validate())
