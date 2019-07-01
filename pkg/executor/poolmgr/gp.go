@@ -276,8 +276,8 @@ func IsIPv6(podIP string) bool {
 	return ip != nil && strings.Contains(podIP, ":")
 }
 
-func (gp *GenericPool) getSpecializeUrl(podIP string) string {
-	testUrl := os.Getenv("TEST_SPECIALIZE_URL")
+func (gp *GenericPool) getFetcherUrl(podIP string) string {
+	testUrl := os.Getenv("TEST_FETCHER_URL")
 	if len(testUrl) != 0 {
 		// it takes a second or so for the test service to
 		// become routable once a pod is relabeled. This is
@@ -312,7 +312,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metada
 	}
 
 	// tell fetcher to get the function.
-	fetcherUrl := gp.getSpecializeUrl(podIP)
+	fetcherUrl := gp.getFetcherUrl(podIP)
 	gp.logger.Info("calling fetcher to copy function", zap.String("function", metadata.Name), zap.String("url", fetcherUrl))
 
 	fn, err := gp.fissionClient.
@@ -326,6 +326,8 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metada
 
 	gp.logger.Info("specializing pod", zap.String("function", metadata.Name))
 
+	// Fetcher will download user function to share volume of pod, and
+	// invoke environment specialize api for pod specialization.
 	err = fetcherClient.MakeClient(gp.logger, fetcherUrl).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
@@ -394,6 +396,17 @@ func (gp *GenericPool) createPool() error {
 											fmt.Sprintf("%v", gracePeriodSeconds),
 										},
 									},
+								},
+							},
+							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "http-fetcher",
+									ContainerPort: int32(8000),
+								},
+								{
+									Name:          "http-env",
+									ContainerPort: int32(8888),
 								},
 							},
 						}, gp.env.Spec.Runtime.Container),
