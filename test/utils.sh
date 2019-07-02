@@ -71,6 +71,35 @@ test_fn() {
 }
 export -f test_fn
 
+test_post_route() {
+    # Doing an HTTP POST on the function's route
+    # Checking for valid response
+    url="http://$FISSION_ROUTER/$1"
+    body=$2
+    expect=$3
+
+    set +e
+    while true; do
+        log "test_post_route: call curl"
+        resp=$(curl --silent --show-error -d "$body" -X POST "$url")
+        status_code=$?
+        if [ $status_code -ne 0 ]; then
+            log "test_post_route: curl failed ($status_code). Retrying ..."
+            sleep 1
+            continue
+        fi
+        if ! (echo $resp | grep "$expect" > /dev/null); then
+            log "test_post_route: resp = '$resp'    expect = '$expect'"
+            log "test_post_route: expected string not found. Retrying ..."
+            sleep 1
+            continue
+        fi
+        break
+    done
+    set -e
+}
+export -f test_post_route
+
 wait_for_builder() {
     env=$1
     JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
@@ -108,7 +137,9 @@ export -f waitBuild
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
 export FUNCTION_NAMESPACE=${FUNCTION_NAMESPACE:-fission-function}
 
-export FISSION_ROUTER=$(kubectl -n $FISSION_NAMESPACE get svc router -o jsonpath='{...ip}')
+router=$(kubectl -n $FISSION_NAMESPACE get svc router -o jsonpath='{...ip}')
+
+export FISSION_ROUTER=${FISSION_ROUTER:-$router}
 export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $FISSION_NAMESPACE get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
 
 ## Parameters used by some specific test cases
@@ -119,4 +150,5 @@ export GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-fission/go-builder}
 export JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-fission/jvm-env}
 export JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-fission/jvm-builder}
 export NODE_RUNTIME_IMAGE=${NODE_RUNTIME_IMAGE:-fission/node-env}
+export TS_RUNTIME_IMAGE=${TS_RUNTIME_IMAGE:-fission/tensorflow-serving-env}
 

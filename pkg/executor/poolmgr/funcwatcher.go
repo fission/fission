@@ -106,20 +106,15 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 							Type: apiv1.ServiceTypeClusterIP,
 							Ports: []apiv1.ServicePort{
 								// Service port name should begin with a recognized prefix, or the traffic will be
-								// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/sidecar-injection.html)
-								// Originally the ports' name are similar to "http-fetch" and "http-specialize".
-								// But for istio 0.5.1, istio-proxy return unexpected 431 error with such naming.
-								// https://github.com/istio/istio/issues/928
-								// Workaround: remove prefix
-								// TODO: prepend prefix once the bug fixed
+								// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/additional-setup/requirements/)
 								{
-									Name:       "fetch",
+									Name:       "http-fetcher",
 									Protocol:   apiv1.ProtocolTCP,
 									Port:       8000,
 									TargetPort: intstr.FromInt(8000),
 								},
 								{
-									Name:       "specialize",
+									Name:       "http-env",
 									Protocol:   apiv1.ProtocolTCP,
 									Port:       8888,
 									TargetPort: intstr.FromInt(8888),

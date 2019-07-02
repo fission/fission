@@ -217,6 +217,13 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 									},
 								},
 							},
+							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "http-env",
+									ContainerPort: int32(8888),
+								},
+							},
 							Resources: resources,
 						}, env.Spec.Runtime.Container),
 					},
@@ -362,14 +369,9 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 			Spec: apiv1.ServiceSpec{
 				Ports: []apiv1.ServicePort{
 					{
-						Name:       "runtime-env-port",
+						Name:       "http-env",
 						Port:       int32(80),
 						TargetPort: intstr.FromInt(8888),
-					},
-					{
-						Name:       "fetcher-port",
-						Port:       int32(8000),
-						TargetPort: intstr.FromInt(8000),
 					},
 				},
 				Selector: deployLabels,
