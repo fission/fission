@@ -441,6 +441,7 @@ run_all_tests() {
     export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
     export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
     export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
+    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:test
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
@@ -448,6 +449,7 @@ run_all_tests() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
@@ -458,7 +460,6 @@ run_all_tests() {
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_buildermgr.sh \
-        $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
@@ -473,14 +474,15 @@ run_all_tests() {
         $ROOT/test/tests/test_router_cache_invalidation.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
-        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh
+        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
+        $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
+        $ROOT/test/tests/test_environments/test_go_env.sh
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.
     export JOBS=1
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
-        $ROOT/test/tests/test_environments/test_go_env.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
