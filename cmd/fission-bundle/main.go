@@ -208,7 +208,16 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
-	logger, err := zap.NewProduction()
+
+	var logger *zap.Logger
+	var err error
+
+	isDebugEnv, _ := strconv.ParseBool(os.Getenv("DEBUG_ENV"))
+	if isDebugEnv {
+		logger, err = zap.NewDevelopment()
+	} else {
+		logger, err = zap.NewProduction()
+	}
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
