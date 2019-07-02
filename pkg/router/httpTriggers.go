@@ -253,7 +253,6 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 					ts.logger.Error("unable to lookup function in functionRecorderMap", zap.Error(err))
 				} else {
 					ts.logger.Error("unable to lookup function in functionRecorderMap")
-
 				}
 			},
 			DeleteFunc: func(obj interface{}) {

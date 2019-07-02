@@ -342,32 +342,30 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 			return resp, err
 		}
 
-		// Check whether an error belongs to "dial tcp i/o timeout".
-		// It it's an timeout error, we just sleep a while and retry again.
-		// If it's not, we may need to invalidate the cache.
-		if !isNetTimeoutErr {
-			if retryCounter < roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
-				roundTripper.logger.Debug("request errored out - backing off before retrying",
+		// Check whether an error is an timeout error ("dial tcp i/o timeout").
+		// If it's not a timeout error or retryCounter exceeded pre-defined threshold,
+		// we assume the entry in router cache is stale, invalidate it.
+		if !isNetTimeoutErr || retryCounter >= roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
+			if serviceUrlFromCache {
+				// if transport.RoundTrip returns a network dial error and serviceUrl was from cache,
+				// it means, the entry in router cache is stale, so invalidate it.
+				roundTripper.logger.Debug("request errored out - removing function from router's cache and requesting a new service for function",
 					zap.String("url", req.URL.Host),
-					zap.Duration("backoff_timeout", executingTimeout),
+					zap.String("function_name", fnMeta.Name),
 					zap.Error(err))
-				retryCounter++
-			} else {
-				if serviceUrlFromCache {
-					// if transport.RoundTrip returns a network dial error and serviceUrl was from cache,
-					// it means, the entry in router cache is stale, so invalidate it.
-					roundTripper.logger.Debug("request errored out - removing function from router's cache and requesting a new service for function",
-						zap.String("url", req.URL.Host),
-						zap.String("function_name", fnMeta.Name),
-						zap.Error(err))
 
-					roundTripper.funcHandler.fmap.remove(fnMeta)
-				}
-				retryCounter = 0
+				roundTripper.funcHandler.fmap.remove(fnMeta)
 			}
+			retryCounter = 0
+		} else {
+			roundTripper.logger.Debug("request errored out - backing off before retrying",
+				zap.String("url", req.URL.Host),
+				zap.Duration("backoff_time", executingTimeout),
+				zap.Error(err))
+			retryCounter++
 		}
 
-		roundTripper.logger.Debug("Backing off before retrying", zap.Any("wait_interval", executingTimeout))
+		roundTripper.logger.Debug("Backing off before retrying", zap.Any("backoff_time", executingTimeout), zap.Error(err))
 		time.Sleep(executingTimeout)
 		executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 
