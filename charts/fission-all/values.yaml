@@ -131,8 +131,12 @@ analytics: true
 ## Internally used for generating an analytics job for non-helm installs
 analyticsNonHelmInstall: false
 
-## Enable Heapster only in clusters where heapster does not exist already
-heapster: false
+## Enable Metric server, for backward compatibility the flag `heapster: false/true` also works
+## For overriding additional values from Metric Server chart, use Helm's child parent format (https://helm.sh/docs/developing_charts/#using-the-child-parent-format)
+metricServer: 
+  enabled: true
+
+
 
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.

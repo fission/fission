@@ -2,5 +2,8 @@ dependencies:
 - name: prometheus
   repository: https://kubernetes-charts.storage.googleapis.com
   version: 7.1.0
-digest: sha256:867c8666d4dee6ae36b0e418f132f3187fd189bcbb36875f2c06e3fbe2402cfe
-generated: 2019-01-03T16:29:53.158684+01:00
+- name: metrics-server
+  repository: https://kubernetes-charts.storage.googleapis.com
+  version: 2.8.2
+digest: sha256:3e42abb66122a9ae4ce8222222d7b6bb8a0943d1eb0f72c2f73cbe3965c08ebf
+generated: 2019-07-03T15:32:44.621446+05:30
