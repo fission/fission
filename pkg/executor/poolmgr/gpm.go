@@ -300,9 +300,16 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
 		if obj.Kind == "pod" {
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && strings.Contains(fsvc.Address, pod.Status.PodIP) && utils.IsReadyPod(pod) {
-				gpm.logger.Info("valid pod address", zap.String("address", fsvc.Address))
-				return true
+			if err == nil && utils.IsReadyPod(pod) {
+				// Normally, the address format is http://[pod-ip]:[port], however, if the
+				// Istio is enabled the address format changes to http://[svc-name]:[port].
+				// So if the Istio is enabled and pod is in ready state, we return true directly;
+				// Otherwise, we need to ensure that the address contains pod ip.
+				if gpm.enableIstio ||
+					(!gpm.enableIstio && strings.Contains(fsvc.Address, pod.Status.PodIP)) {
+					gpm.logger.Debug("valid address", zap.String("address", fsvc.Address))
+					return true
+				}
 			}
 		}
 	}
