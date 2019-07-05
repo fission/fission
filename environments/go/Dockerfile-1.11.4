@@ -10,11 +10,11 @@ ENV GOPATH /usr
 ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/go
 
 WORKDIR ${APP}
-RUN go get
 
 ADD context	    ${APP}/context
 ADD server.go   ${APP}
 
+RUN go get
 RUN go build -a -o /server server.go
 
 FROM base
