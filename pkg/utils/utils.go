@@ -95,22 +95,6 @@ func LoggingMiddleware(logger *zap.Logger) func(next http.Handler) http.Handler 
 	}
 }
 
-// IsNetworkDialError returns true if its a network dial error
-func IsNetworkDialError(err error) bool {
-	netErr, ok := err.(net.Error)
-	if !ok {
-		return false
-	}
-	netOpErr, ok := netErr.(*net.OpError)
-	if !ok {
-		return false
-	}
-	if netOpErr.Op == "dial" {
-		return true
-	}
-	return false
-}
-
 // IsReadyPod checks both all containers in a pod are ready and whether
 // the .metadata.DeletionTimestamp is nil.
 func IsReadyPod(pod *apiv1.Pod) bool {

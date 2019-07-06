@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
@@ -42,6 +41,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/redis"
 	"github.com/fission/fission/pkg/throttler"
@@ -309,7 +309,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		}
 
 		// if transport.RoundTrip returns a non-network dial error, then relay it back to user
-		if !utils.IsNetworkDialError(err) {
+		netErr := network.Adapter(err)
+		if netErr != nil && !netErr.IsDialError() {
 			err = errors.Wrapf(err, "error sending request to function %v", fnMeta.Name)
 			return resp, err
 		}

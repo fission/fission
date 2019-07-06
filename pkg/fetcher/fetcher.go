@@ -1,3 +1,19 @@
+/*
+Copyright 2019 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package fetcher
 
 import (
@@ -9,9 +25,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -29,6 +43,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/types"
@@ -188,7 +203,14 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := fetcher.Fetch(r.Context(), req)
+	pkg, err := fetcher.getPkgInformation(req)
+	if err != nil {
+		fetcher.logger.Error("error getting package information", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	code, err := fetcher.Fetch(r.Context(), pkg, req)
 	if err != nil {
 		fetcher.logger.Error("error fetching", zap.Error(err))
 		http.Error(w, err.Error(), code)
@@ -242,7 +264,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 
 // Fetch takes FetchRequest and makes the fetch call
 // It returns the HTTP code and error if any
-func (fetcher *Fetcher) Fetch(ctx context.Context, req types.FunctionFetchRequest) (int, error) {
+func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.FunctionFetchRequest) (int, error) {
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
 		e := "fetch request received for an empty file name"
@@ -270,16 +292,6 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, req types.FunctionFetchReques
 			return http.StatusBadRequest, errors.Wrapf(err, "%s: %s", e, req.Url)
 		}
 	} else {
-		// get pkg
-		pkg, err := fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name)
-		if err != nil {
-			e := "failed to get package"
-			fetcher.logger.Error(e,
-				zap.String("package_name", req.Package.Name),
-				zap.String("package_namespace", req.Package.Namespace))
-			return http.StatusInternalServerError, errors.Wrap(err, e)
-		}
-
 		var archive *fv1.Archive
 		if req.FetchType == types.FETCH_SOURCE {
 			archive = &pkg.Spec.Source
@@ -301,7 +313,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, req types.FunctionFetchReques
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
-			err = ioutil.WriteFile(tmpPath, archive.Literal, 0600)
+			err := ioutil.WriteFile(tmpPath, archive.Literal, 0600)
 			if err != nil {
 				e := "failed to write file"
 				fetcher.logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
@@ -586,6 +598,28 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 	return nil
 }
 
+// getPkgInformation gets package information from k8s api server.
+func (fetcher *Fetcher) getPkgInformation(req types.FunctionFetchRequest) (pkg *fv1.Package, err error) {
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		pkg, err = fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name)
+		if err == nil {
+			return pkg, nil
+		}
+		if i < maxRetries-1 {
+			// All outbound requests are blocked if istio is enabled at the first seconds.
+			// So if an error is a "connection refused" or "dial" error, wait for a while
+			// before retrying so that envoy proxy will start to serve requests.
+			// For details, see https://github.com/istio/istio/issues/12187
+			netErr := network.Adapter(err)
+			if netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) {
+				time.Sleep(500 * time.Duration(i+1) * time.Millisecond)
+			}
+		}
+	}
+	return nil, err
+}
+
 func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq types.FunctionFetchRequest, loadReq types.FunctionLoadRequest) error {
 	startTime := time.Now()
 	defer func() {
@@ -593,7 +627,12 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq types.Functi
 		fetcher.logger.Info("specialize request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
-	_, err := fetcher.Fetch(ctx, fetchReq)
+	pkg, err := fetcher.getPkgInformation(fetchReq)
+	if err != nil {
+		return errors.Wrap(err, "error getting package information")
+	}
+
+	_, err = fetcher.Fetch(ctx, pkg, fetchReq)
 	if err != nil {
 		return errors.Wrap(err, "error fetching deploy package")
 	}
@@ -635,19 +674,17 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq types.Functi
 			return nil
 		}
 
+		netErr := network.Adapter(err)
 		// Only retry for the specific case of a connection error.
-		if urlErr, ok := err.(*url.Error); ok {
-			if netErr, ok := urlErr.Err.(*net.OpError); ok {
-				if netErr.Op == "dial" {
-					if i < maxRetries-1 {
-						time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-						fetcher.logger.Error("error connecting to function environment pod for specialization request, retrying", zap.Error(netErr))
-						continue
-					}
-				}
+		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError()) {
+			if i < maxRetries-1 {
+				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
+				fetcher.logger.Error("error connecting to function environment pod for specialization request, retrying", zap.Error(netErr))
+				continue
 			}
 		}
 
+		// for 4xx, 5xx
 		if err == nil {
 			err = ferror.MakeErrorFromHTTP(resp)
 		}
