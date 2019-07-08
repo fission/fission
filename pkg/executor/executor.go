@@ -32,6 +32,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/cms"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/newdeploy"
 	"github.com/fission/fission/pkg/executor/poolmgr"
@@ -45,6 +46,7 @@ type (
 
 		gpm *poolmgr.GenericPoolManager
 		ndm *newdeploy.NewDeploy
+		cms *cms.ConfigSecretController
 
 		fissionClient *crd.FissionClient
 		fsCache       *fscache.FunctionServiceCache
@@ -64,11 +66,12 @@ type (
 	}
 )
 
-func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
+func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, cms *cms.ConfigSecretController, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		logger:        logger.Named("executor"),
 		gpm:           gpm,
 		ndm:           ndm,
+		cms:           cms,
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
 
@@ -238,7 +241,9 @@ func StartExecutor(logger *zap.Logger, fissionNamespace string, functionNamespac
 		fissionClient, kubernetesClient, restClient,
 		functionNamespace, fetcherConfig, poolID)
 
-	api := MakeExecutor(logger, gpm, ndm, fissionClient, fsCache)
+	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, ndm, gpm)
+
+	api := MakeExecutor(logger, gpm, ndm, cms, fissionClient, fsCache)
 
 	go api.Serve(port)
 	go serveMetric(logger)

@@ -137,6 +137,7 @@ func (executor *Executor) Serve(port int) {
 	defer cancel()
 	executor.ndm.Run(ctx)
 	executor.gpm.Run(ctx)
+	executor.cms.Run(ctx)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
@@ -144,6 +145,7 @@ func (executor *Executor) Serve(port int) {
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
 
 	address := fmt.Sprintf(":%v", port)
+
 	err := http.ListenAndServe(address, &ochttp.Handler{
 		Handler: r,
 	})
