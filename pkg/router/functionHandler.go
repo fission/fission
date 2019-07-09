@@ -70,9 +70,10 @@ type (
 	}
 
 	tsRoundTripperParams struct {
-		timeout         time.Duration
-		timeoutExponent int
-		keepAlive       time.Duration
+		timeout          time.Duration
+		timeoutExponent  int
+		disableKeepAlive bool
+		keepAliveTime    time.Duration
 
 		// maxRetires is the max times for RetryingRoundTripper to retry a request.
 		// Default maxRetries is 10, which means router will retry for
@@ -273,7 +274,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		// over-riding default settings.
 		transport.DialContext = (&net.Dialer{
 			Timeout:   executingTimeout,
-			KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAlive,
+			KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAliveTime,
 		}).DialContext
 
 		overhead := time.Since(startTime)
@@ -430,14 +431,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 					Proxy: http.ProxyFromEnvironment,
 					DialContext: (&net.Dialer{
 						Timeout:   fh.tsRoundTripperParams.timeout,
-						KeepAlive: fh.tsRoundTripperParams.keepAlive,
+						KeepAlive: fh.tsRoundTripperParams.keepAliveTime,
 					}).DialContext,
 					MaxIdleConns:          100,
 					IdleConnTimeout:       90 * time.Second,
 					TLSHandshakeTimeout:   10 * time.Second,
 					ExpectContinueTimeout: 1 * time.Second,
-					// Disables caching, Please refer to issue and specifically comment: https://github.com/fission/fission/issues/723#issuecomment-398781995
-					DisableKeepAlives: true,
+					// Default disables caching, Please refer to issue and specifically comment:
+					// https://github.com/fission/fission/issues/723#issuecomment-398781995
+					// You can change it by setting environment variable "ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE"
+					// of router or helm variable "disableKeepAlive" before installation to false.
+					DisableKeepAlives: fh.tsRoundTripperParams.disableKeepAlive,
 				},
 			},
 		},

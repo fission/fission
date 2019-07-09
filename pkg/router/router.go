@@ -132,12 +132,21 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 			zap.String("value", timeoutExponentStr))
 	}
 
-	keepAliveStr := os.Getenv("ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME")
-	keepAlive, err := time.ParseDuration(keepAliveStr)
+	keepAliveTimeStr := os.Getenv("ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME")
+	keepAliveTime, err := time.ParseDuration(keepAliveTimeStr)
 	if err != nil {
 		logger.Fatal("failed to parse keep alive duration from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME'",
 			zap.Error(err),
-			zap.String("value", keepAliveStr))
+			zap.String("value", keepAliveTimeStr))
+	}
+
+	disableKeepAliveStr := os.Getenv("ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE")
+	disableKeepAlive, err := strconv.ParseBool(disableKeepAliveStr)
+	if err != nil {
+		disableKeepAlive = true
+		logger.Fatal("failed to parse enable keep alive from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE'",
+			zap.Error(err),
+			zap.String("value", disableKeepAliveStr))
 	}
 
 	maxRetriesStr := os.Getenv("ROUTER_ROUND_TRIP_MAX_RETRIES")
@@ -157,11 +166,11 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 	}
 
 	// svcAddrRetryCount is the max times for RetryingRoundTripper to retry with a specific service address
-	svcAddrRetryCountStr := os.Getenv("ROUTER_ROUND_TRIP_SVC_ADDRESS_MAX_RETRIES")
+	svcAddrRetryCountStr := os.Getenv("ROUTER_SVC_ADDRESS_MAX_RETRIES")
 	svcAddrRetryCount, err := strconv.Atoi(svcAddrRetryCountStr)
 	if err != nil {
 		svcAddrRetryCount = 5
-		logger.Info("failed to parse service address retry count from 'ROUTER_ROUND_TRIP_SVC_ADDRESS_MAX_RETRIES' - set to the default value",
+		logger.Info("failed to parse service address retry count from 'ROUTER_SVC_ADDRESS_MAX_RETRIES' - set to the default value",
 			zap.Error(err),
 			zap.String("value", svcAddrRetryCountStr),
 			zap.Int("default", svcAddrRetryCount))
@@ -169,8 +178,8 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 
 	// svcAddrUpdateTimeout is the timeout setting for a goroutine to wait for the update of a service entry.
 	// If the update process cannot be done within the timeout window, consider it failed.
-	svcAddrUpdateTimeoutStr := os.Getenv("ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT")
-	svcAddrUpdateTimeout, err := time.ParseDuration(os.Getenv("ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT"))
+	svcAddrUpdateTimeoutStr := os.Getenv("ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT")
+	svcAddrUpdateTimeout, err := time.ParseDuration(os.Getenv("ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT"))
 	if err != nil {
 		svcAddrUpdateTimeout = 30 * time.Second
 		logger.Info("failed to parse service address update timeout duration from 'ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT' - set to the default value",
@@ -182,7 +191,8 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, frmap, trmap, fissionClient, kubeClient, executor, restClient, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
-		keepAlive:         keepAlive,
+		disableKeepAlive:  disableKeepAlive,
+		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, throttler.MakeThrottler(svcAddrUpdateTimeout))

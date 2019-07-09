@@ -65,6 +65,13 @@ Parameter | Description | Default
 `prometheusDeploy` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
 `canaryDeployment.enabled` | Set to true if you need canary deployment feature | `true` in `fission-all`, `false` in `fission-core`
 `extraCoreComponmentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
+`router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
+`router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
+`router.roundTrip.disableKeepAlive` | Disable transport keep-alive for fast switching function version | `true`
+`router.roundTrip.keepAliveTime` | The keep-alive period for an active network connection to function pod | `30s`
+`router.roundTrip.timeout` | HTTP transport request timeout | `50ms`
+`router.roundTrip.timeoutExponent` | The length of request timeout will multiply with timeoutExponent after each retry | `2` 
+`router.roundTrip.maxRetries` | Max retries times of a failed request | `10`
 
 ### Extra configuration for `fission-all`
 
