@@ -105,17 +105,15 @@ build_and_push_builder() {
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
-<<<<<<< HEAD
-    travis_fold_start build_and_push_env_runtime.$env $image_tag
-=======
     variant=$3
+
+    travis_fold_start build_and_push_env_runtime.$env $image_tag
 
     dockerfile="Dockerfile"
 
     if [ ! -z ${variant} ]; then
         dockerfile=${dockerfile}-${variant}
     fi
->>>>>>> Build variant version of go env for testing
 
     pushd $ROOT/environments/$env/
     docker build -q -t $image_tag . -f ${dockerfile}
