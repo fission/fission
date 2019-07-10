@@ -120,8 +120,8 @@ push_all_env_builders() {
     push_env_builder_image "$version" "go"       "go-builder"       "1.12"
     push_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     push_env_builder_image "$version" "nodejs"   "node-builder"     ""
-    push_env_builder_image "$version" "ruby"     "ruby-env"         ""
-    push_env_builder_image "$version" "dotnet20" "dotnet20-env"     ""
+    push_env_builder_image "$version" "ruby"     "ruby-builder"         ""
+    push_env_builder_image "$version" "dotnet20" "dotnet20-builder"     ""
 }
 
 # Push pre-upgrade-checks image
