@@ -111,7 +111,7 @@ func MakeGenericPoolManager(
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
 		if err != nil {
-			gpmLogger.Info("failed to parse ENABLE_ISTIO")
+			gpmLogger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
 		}
 		gpm.enableIstio = istio
 	}
@@ -204,7 +204,7 @@ func (gpm *GenericPoolManager) CleanupPools(envs []fv1.Environment) {
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	// from Func -> get Env
-	gpm.logger.Info("getting environment for function", zap.String("function", metadata.Name))
+	gpm.logger.Debug("getting environment for function", zap.String("function", metadata.Name))
 	env, err := gpm.getFunctionEnv(metadata)
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.
 	}
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Info("getting function service from pool", zap.String("function", metadata.Name))
+	gpm.logger.Debug("getting function service from pool", zap.String("function", metadata.Name))
 	return pool.GetFuncSvc(ctx, metadata)
 }
 
@@ -237,7 +237,6 @@ func (gpm *GenericPoolManager) getFunctionEnv(m *metav1.ObjectMeta) (*fv1.Enviro
 	}
 
 	// Get env from metadata
-	gpm.logger.Info("getting env", zap.Any("function", m))
 	env, err = gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
@@ -347,7 +346,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			// For function with the environment that no longer exists, executor
 			// cleanups the idle pod as usual and prints log to notify user.
 			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
-				gpm.logger.Info("function environment no longer exists",
+				gpm.logger.Warn("function environment no longer exists",
 					zap.String("environment", fsvc.Environment.Metadata.Name),
 					zap.String("function", fsvc.Name))
 			}
