@@ -81,7 +81,6 @@ func TestFunctionProxying(t *testing.T) {
 		tsRoundTripperParams: &tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
 			timeoutExponent: 2,
-			keepAlive:       30 * time.Second,
 			maxRetries:      10,
 		},
 		httpTrigger: httpTrigger,
