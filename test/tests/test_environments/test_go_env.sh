@@ -55,10 +55,10 @@ timeout 60 bash -c "test_fn $fn_poolmgr 'Hello'"
 log "Testing new deployment function"
 timeout 60 bash -c "test_fn $fn_nd 'Hello'"
 
-# Create zip file without top level directory (vendor-example)
-cd vendor-example && zip -r $tmp_dir/vendor.zip *
+# Create zip file without top level directory (module-example)
+cd module-example && zip -r $tmp_dir/module.zip *
 
-pkgName=$(fission package create --src $tmp_dir/vendor.zip --env $env| cut -f2 -d' '| tr -d \')
+pkgName=$(fission package create --src $tmp_dir/module.zip --env $env| cut -f2 -d' '| tr -d \')
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"
