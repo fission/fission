@@ -18,27 +18,30 @@ type Versions struct {
 }
 
 func GetVersion(client *client.Client) []byte {
-	serverInfo, err := client.ServerInfo()
-	if err != nil {
-		log.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
-	}
-
 	// Fetch client versions
 	versions := Versions{
 		Client: map[string]info.BuildMeta{
 			"fission/core": info.BuildInfo(),
 		},
 	}
+
 	for _, pmd := range plugin.FindAll() {
 		versions.Client[pmd.Name] = info.BuildMeta{
 			Version: pmd.Version,
 		}
 	}
 
+	serverInfo, err := client.ServerInfo()
+	if err != nil {
+		log.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+		serverInfo = &info.ServerInfo{}
+	}
+
 	// Fetch server versions
 	versions.Server = map[string]info.BuildMeta{
 		"fission/core": serverInfo.Build,
 	}
+
 	// FUTURE: fetch versions of plugins server-side
 	bs, err := yaml.Marshal(versions)
 	if err != nil {

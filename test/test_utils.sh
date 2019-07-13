@@ -105,10 +105,18 @@ build_and_push_builder() {
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
+    variant=$3
+
     travis_fold_start build_and_push_env_runtime.$env $image_tag
 
+    dockerfile="Dockerfile"
+
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+
     pushd $ROOT/environments/$env/
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag . -f ${dockerfile}
 
     gcloud_login
 
@@ -121,15 +129,23 @@ build_and_push_env_builder() {
     env=$1
     image_tag=$2
     builder_image=$3
+    variant=$4
+
     travis_fold_start build_and_push_env_builder.$env $image_tag
 
-    pushd $ROOT/environments/$env/builder
+    dockerfile="Dockerfile"
 
-    docker build -q -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+
+    pushd ${ROOT}/environments/${env}/builder
+
+    docker build -q -t ${image_tag} --build-arg BUILDER_IMAGE=${builder_image} . -f ${dockerfile}
 
     gcloud_login
 
-    gcloud docker -- push $image_tag
+    gcloud docker -- push ${image_tag}
     popd
     travis_fold_end build_and_push_env_builder.$env
 }
@@ -177,7 +193,7 @@ helm_install_fission() {
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
+    helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,debugEnv=true,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
 
     timeout 30 bash -c "helm_setup"
 

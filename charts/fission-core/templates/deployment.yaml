@@ -159,6 +159,9 @@ spec:
         - name: config-volume
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
+        ports:
+          - containerPort: 8888
+            name: http
       serviceAccount: fission-svc
       volumes:
       - name: config-volume
@@ -198,22 +201,24 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
           - name: ROUTER_ROUND_TRIP_TIMEOUT
-            value: {{ .Values.routerRoundTripTimeout | default "50ms" | quote }}
+            value: {{ .Values.router.roundTrip.timeout | default "50ms" | quote }}
           - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
-            value: {{ .Values.routerRoundTripTimeoutExponent | default 2 | quote }}
+            value: {{ .Values.router.roundTrip.timeoutExponent | default 2 | quote }}
           - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
-            value: {{ .Values.routerRoundTripKeepAliveTime | default "30s" | quote }}
+            value: {{ .Values.router.roundTrip.keepAliveTime | default "30s" | quote }}
+          - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
+            value: {{ .Values.router.roundTrip.disableKeepAlive | default true | quote }}
           - name: ROUTER_ROUND_TRIP_MAX_RETRIES
-            value: {{ .Values.routerRoundTripMaxRetries | default 10 | quote }}
-          - name: ROUTER_ROUND_TRIP_SVC_ADDRESS_MAX_RETRIES
-            value: {{ .Values.routerRoundTripSvcAddressMaxRetries | default 5 | quote }}
-          - name: ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT
-            value: {{ .Values.routerRoundTripSvcAddressUpdateTimeout | default 30 | quote }}
+            value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
+          - name: ROUTER_SVC_ADDRESS_MAX_RETRIES
+            value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
+          - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
+            value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
+          - name: TRACING_SAMPLING_RATE
+            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
 {{ if .Values.analytics }}
           - name: ANALYTICS_URL
             value: "https://g.fission.sh/metrics"
@@ -234,6 +239,11 @@ spec:
             port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
+        ports:
+          - containerPort: 8080
+            name: metrics
+          - containerPort: 8888
+            name: http
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -311,6 +321,11 @@ spec:
             port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
+        ports:
+          - containerPort: 8080
+            name: metrics
+          - containerPort: 8888
+            name: http
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -447,6 +462,9 @@ spec:
         volumeMounts:
         - name: fission-storage
           mountPath: /fission
+        ports:
+          - containerPort: 8000
+            name: http
       serviceAccount: fission-svc
       volumes:
       - name: fission-storage

@@ -44,6 +44,36 @@ builderNamespace: fission-builder
 ## Enable istio integration
 enableIstio: false
 
+## Router config
+router:
+  svcAddressMaxRetries: 5
+  svcAddressUpdateTimeout: 30s
+  roundTrip:
+    ## If true, router will disable the HTTP keep-alive which result in performance degradation.
+    ## But it ensures that router can redirect new coming requests to new function pods.
+    ##
+    ## If false, router will enable transport keep-alive feature for better performance.
+    ## However, the drawback is it takes longer to switch to newly created function pods
+    ## if using newdeploy as executor type for function. If you want to preserve the
+    ## performance while keeping the short switching time to new function, you can create
+    ## an environment with short grace period by setting flag "--graceperiod" (default 360s),
+    ## so that kubernetes will be able to reap old function pod quickly.
+    ##
+    ## For details, see https://github.com/fission/fission/issues/723
+    disableKeepAlive: true
+
+    ## The keep-alive period for an active network connection to function pod.
+    keepAliveTime: 30s
+
+    ## HTTP transport request timeout
+    timeout: 50ms
+
+    ## The length of request timeout will multiply with timeoutExponent after each retry
+    timeoutExponent: 2
+
+    ## Max retries times of a failed request
+    maxRetries: 10
+
 ## Persist data to a persistent volume.
 persistence:
   ## If true, fission will create/use a Persistent Volume Claim
@@ -103,7 +133,7 @@ preUpgradeChecksImage: fission/pre-upgrade-checks
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response
-debugEnv: true
+debugEnv: false
 
 ## set this flag to true if prometheus needs to be deployed along with fission
 prometheusDeploy: false

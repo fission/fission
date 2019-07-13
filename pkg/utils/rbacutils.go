@@ -138,7 +138,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 			rbObj := makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
 			rbObj, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
 			if err == nil {
-				logger.Info("created rolebinding",
+				logger.Debug("created rolebinding",
 					zap.String("role_binding", roleBinding),
 					zap.String("role_binding_namespace", roleBindingNs))
 				return err
@@ -181,7 +181,7 @@ func RemoveSAFromRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernete
 			roleBinding, metav1.GetOptions{})
 		if err != nil {
 			// silently ignoring the error. there's no need for us to remove sa anymore.
-			logger.Info("rolebinding not found, but ignoring the error since we're cleaning up",
+			logger.Debug("rolebinding not found, but ignoring the error since we're cleaning up",
 				zap.Error(err),
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
@@ -213,13 +213,13 @@ func RemoveSAFromRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernete
 		_, err = k8sClient.RbacV1beta1().RoleBindings(rbObj.Namespace).Update(rbObj)
 		switch {
 		case err == nil:
-			logger.Info("removed service accounts from rolebinding",
+			logger.Debug("removed service accounts from rolebinding",
 				zap.Any("service_accounts", saToRemove),
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
 			return nil
 		case k8serrors.IsConflict(err):
-			logger.Info("conflict in update of rolebinding - retrying",
+			logger.Error("conflict in update of rolebinding - retrying",
 				zap.Error(err),
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
@@ -241,14 +241,14 @@ func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleB
 
 	if err == nil {
 		if !isSAInRoleBinding(rbObj, sa, saNamespace) {
-			logger.Info("service account is not present in the rolebinding - will add",
+			logger.Debug("service account is not present in the rolebinding - will add",
 				zap.String("service_account_name", sa),
 				zap.String("service_account_namespace", saNamespace),
 				zap.String("role_binding", roleBinding),
 				zap.String("role_binding_namespace", roleBindingNs))
 			return AddSaToRoleBindingWithRetries(logger, k8sClient, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind)
 		}
-		logger.Info("service account already present in rolebinding so nothing to add",
+		logger.Debug("service account already present in rolebinding so nothing to add",
 			zap.String("service_account_name", sa),
 			zap.String("service_account_namespace", saNamespace),
 			zap.String("role_binding", roleBinding),
@@ -258,14 +258,14 @@ func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleB
 
 	// if role binding is missing, create it. also add this sa to the binding.
 	if k8serrors.IsNotFound(err) {
-		logger.Info("rolebinding does NOT exist in namespace - creating it",
+		logger.Debug("rolebinding does NOT exist in namespace - creating it",
 			zap.Error(err),
 			zap.String("role_binding", roleBinding),
 			zap.String("role_binding_namespace", roleBindingNs))
 		rbObj = makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
 		rbObj, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
 		if k8serrors.IsAlreadyExists(err) {
-			logger.Info("rolebinding already exists in namespace - adding service account to rolebinding",
+			logger.Debug("rolebinding already exists in namespace - adding service account to rolebinding",
 				zap.String("service_account_name", sa),
 				zap.String("service_account_namespace", saNamespace),
 				zap.String("role_binding", roleBinding),

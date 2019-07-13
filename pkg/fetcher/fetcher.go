@@ -654,14 +654,17 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq types.Functi
 		return errors.Wrap(err, "error encoding load request")
 	}
 
+	// Instead of using "localhost", here we use "127.0.0.1" for
+	// inter-pod communication to prevent wrongly record returned from DNS.
+
 	if loadReq.EnvVersion >= 2 {
 		contentType = "application/json"
-		specializeURL = "http://localhost:8888/v2/specialize"
+		specializeURL = "http://127.0.0.1:8888/v2/specialize"
 		reader = bytes.NewReader(loadPayload)
 		fetcher.logger.Info("calling environment v2 specialization endpoint")
 	} else {
 		contentType = "text/plain"
-		specializeURL = "http://localhost:8888/specialize"
+		specializeURL = "http://127.0.0.1:8888/specialize"
 		reader = bytes.NewReader([]byte{})
 		fetcher.logger.Info("calling environment v1 specialization endpoint")
 	}

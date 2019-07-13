@@ -133,14 +133,16 @@ spec:
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
-          - name: FISSION_FUNCTION_NAMESPACE
-            value: "{{ .Values.functionNamespace }}"
-          - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+        - name: FISSION_FUNCTION_NAMESPACE
+          value: "{{ .Values.functionNamespace }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -158,6 +160,9 @@ spec:
         - name: config-volume
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
+        ports:
+          - containerPort: 8888
+            name: http
       serviceAccount: fission-svc
       volumes:
       - name: config-volume
@@ -197,27 +202,29 @@ spec:
               fieldRef:
                 fieldPath: metadata.namespace
           - name: ROUTER_ROUND_TRIP_TIMEOUT
-            value: {{ .Values.routerRoundTripTimeout | default "50ms" | quote }}
+            value: {{ .Values.router.roundTrip.timeout | default "50ms" | quote }}
           - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
-            value: {{ .Values.routerRoundTripTimeoutExponent | default 2 | quote }}
+            value: {{ .Values.router.roundTrip.timeoutExponent | default 2 | quote }}
           - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
-            value: {{ .Values.routerRoundTripKeepAliveTime | default "30s" | quote }}
+            value: {{ .Values.router.roundTrip.keepAliveTime | default "30s" | quote }}
+          - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
+            value: {{ .Values.router.roundTrip.disableKeepAlive | default true | quote }}
           - name: ROUTER_ROUND_TRIP_MAX_RETRIES
-            value: {{ .Values.routerRoundTripMaxRetries | default 10 | quote }}
-          - name: ROUTER_ROUND_TRIP_SVC_ADDRESS_MAX_RETRIES
-            value: {{ .Values.routerRoundTripSvcAddressMaxRetries | default 5 | quote }}
-          - name: ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT
-            value: {{ .Values.routerRoundTripSvcAddressUpdateTimeout | default 30 | quote }}
+            value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
+          - name: ROUTER_SVC_ADDRESS_MAX_RETRIES
+            value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
+          - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
+            value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
 {{ if .Values.analytics }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.sh/metrics"
+        - name: ANALYTICS_URL
+          value: "https://g.fission.sh/metrics"
 {{ else if .Values.analyticsNonHelmInstall }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.sh/metrics"
+        - name: ANALYTICS_URL
+          value: "https://g.fission.sh/metrics"
 {{ end }}
         readinessProbe:
           httpGet:
@@ -303,6 +310,8 @@ spec:
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -366,7 +375,9 @@ spec:
         - name: FETCHER_MAXCPU
           value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
         - name: FETCHER_MAXMEM
-          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
+          value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -395,6 +406,8 @@ spec:
         env:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -435,18 +448,18 @@ spec:
         image: fission/influxdb
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
-          - name: PRE_CREATE_DB
-            value: fissionFunctionLog
-          - name: ADMIN_USER
-            valueFrom:
-              secretKeyRef:
-                name: influxdb
-                key: username
-          - name: INFLUXDB_INIT_PWD
-            valueFrom:
-              secretKeyRef:
-                name: influxdb
-                key: password
+        - name: PRE_CREATE_DB
+          value: fissionFunctionLog
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: influxdb
+              key: username
+        - name: INFLUXDB_INIT_PWD
+          valueFrom:
+            secretKeyRef:
+              name: influxdb
+              key: password
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
 {{- end }}
@@ -514,6 +527,9 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -622,7 +638,9 @@ spec:
         - name: MESSAGE_QUEUE_URL
           value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -659,7 +677,9 @@ spec:
         - name: MESSAGE_QUEUE_KAFKA_VERSION
           value: "{{.Values.kafka.version}}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}          
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -700,6 +720,8 @@ spec:
             secretKeyRef:
               name: azure-storage-account-key
               key: key
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
       serviceAccount: fission-svc
 {{- if .Values.extraCoreComponmentPodConfig }}
 {{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
@@ -731,6 +753,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
         volumeMounts:
         - name: fission-storage
           mountPath: /fission
@@ -747,6 +771,9 @@ spec:
             port: 8000
           initialDelaySeconds: 35
           periodSeconds: 5
+        ports:
+          - containerPort: 8000
+            name: http
       serviceAccount: fission-svc
       volumes:
       - name: fission-storage
