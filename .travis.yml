@@ -2,10 +2,6 @@ sudo: required
 
 dist: trusty
 
-branches:
-  only:
-  - master
-
 language: go
 
 go:
@@ -35,17 +31,20 @@ env:
 before_script:
   - cd ${TRAVIS_BUILD_DIR}
   - go mod download
-  - go mod vendor
   - hack/verify-staticcheck.sh
   - hack/verify-gofmt.sh
   - hack/verify-govet.sh
   - helm lint charts/fission-all/ charts/fission-core/
   - hack/runtests.sh
+  - test/build.sh
 
 script:
   - cd ${TRAVIS_BUILD_DIR}
-  - test/build_and_test.sh
+  - test/test.sh
   - test/upgrade/fission_upgrade_test.sh
+
+after_script:
+  - kubectl --namespace default delete configmap -l travidID=${TRAVIS_BUILD_ID}
 
 notifications:
   slack:

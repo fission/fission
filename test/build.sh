@@ -48,5 +48,3 @@ build_and_push_env_builder jvm $REPO/jvm-env-builder:$TAG $BUILDER_IMAGE:$TAG ""
 build_and_push_env_builder go $REPO/go-env-builder:$TAG $BUILDER_IMAGE:$TAG "1.12"
 
 build_fission_cli
-
-install_and_test $REPO $IMAGE $TAG $FETCHER_IMAGE $TAG $PRUNE_INTERVAL $ROUTER_SERVICE_TYPE $SERVICE_TYPE $PRE_UPGRADE_CHECK_IMAGE
