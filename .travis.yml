@@ -11,11 +11,16 @@ language: go
 go:
   - 1.11.6
 
+env:
+  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:$HOME/tool:$HOME/google-cloud-sdk/bin:${PATH} GO111MODULE=on
+  - DOCKER_CACHE_DIR=${HOME}/docker/
+
 cache:
   directories:
     - $HOME/google-cloud-sdk/
     - $HOME/k8scli
     - $HOME/tool
+    - $HOME/docker
 
 services:
   - docker
@@ -28,9 +33,6 @@ before_install:
 
 install:
   - hack/travis-kube-setup.sh
-
-env:
-  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:$HOME/tool:$HOME/google-cloud-sdk/bin:${PATH} GO111MODULE=on
 
 before_script:
   - cd ${TRAVIS_BUILD_DIR}
@@ -46,6 +48,9 @@ script:
   - cd ${TRAVIS_BUILD_DIR}
   - test/test.sh
   - test/upgrade/fission_upgrade_test.sh
+
+before_cache:
+  - test/save_cache.sh # save docker cache
 
 after_script:
   - kubectl --namespace default delete configmap -l travidID=${TRAVIS_BUILD_ID} # remove in-test configmap to indicate this CI build finished

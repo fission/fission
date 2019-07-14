@@ -53,6 +53,13 @@ getGitCommit() {
     echo $(git rev-parse HEAD)
 }
 
+load_docker_cache() {
+    cache=$1
+    if [ -f ${cache} ]; then
+        gunzip -c ${cache} | docker load;
+    fi
+}
+
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
@@ -213,7 +220,7 @@ helm_install_fission() {
 	 --wait			\
 	 --timeout 540	        \
 	 --name $id		\
-	 --set $helmVars	\
+	 --set-string $helmVars	\
 	 --namespace $ns        \
 	 $ROOT/charts/fission-all
 
