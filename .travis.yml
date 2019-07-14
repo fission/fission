@@ -44,7 +44,7 @@ script:
   - test/upgrade/fission_upgrade_test.sh
 
 after_script:
-  - kubectl --namespace default delete configmap -l travidID=${TRAVIS_BUILD_ID}
+  - kubectl --namespace default delete configmap -l travidID=${TRAVIS_BUILD_ID} # remove in-test configmap to indicate this CI build finished
 
 notifications:
   slack:
