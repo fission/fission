@@ -467,16 +467,17 @@ export FAILURES=0
 
 run_all_tests() {
     id=$1
+    imageTag=$2
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${TRAVIS_BUILD_ID}
-    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${TRAVIS_BUILD_ID}
-    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${TRAVIS_BUILD_ID}
-    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${TRAVIS_BUILD_ID}
-    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${TRAVIS_BUILD_ID}
-    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${TRAVIS_BUILD_ID}
-    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${TRAVIS_BUILD_ID}
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${imageTag}
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${imageTag}
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${imageTag}
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${imageTag}
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${imageTag}
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${imageTag}
+    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${imageTag}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
@@ -581,7 +582,7 @@ install_and_test() {
     # ensure we run tests against with the same git commit version of CLI & server
     fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit"
 
-    run_all_tests $id
+    run_all_tests $id $imageTag
 
     dump_logs $id
 
