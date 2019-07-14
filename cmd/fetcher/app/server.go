@@ -1,3 +1,19 @@
+/*
+Copyright 2019 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package app
 
 import (
@@ -100,16 +116,23 @@ func Run(logger *zap.Logger) {
 	mux.HandleFunc("/specialize", f.SpecializeHandler)
 	mux.HandleFunc("/upload", f.UploadHandler)
 	mux.HandleFunc("/version", f.VersionHandler)
-	mux.HandleFunc("/readniess-healthz", func(w http.ResponseWriter, r *http.Request) {
+
+	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
 		if !*specializeOnStart || readyToServe {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
-	})
+	}
+
+	mux.HandleFunc("/readiness-healthz", readinessHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	// For backward compatibility
+	// TODO: remove this path in future
+	mux.HandleFunc("/readniess-healthz", readinessHandler)
 
 	logger.Info("fetcher ready to receive requests")
 	http.ListenAndServe(":8000", &ochttp.Handler{
