@@ -10,7 +10,7 @@ ENV APP	   ${GOPATH}/src/github.com/fission/fission/environments/tensorflow-serv
 
 WORKDIR ${APP}
 
-ADD server.go   ${APP}
+ADD server.go ${APP}
 
 RUN go get
 RUN go build -a -o /server server.go
