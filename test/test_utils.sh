@@ -451,13 +451,13 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
-    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
-    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:test
-    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
-    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
-    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
-    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:test
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${TRAVIS_BUILD_ID}
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${TRAVIS_BUILD_ID}
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${TRAVIS_BUILD_ID}
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${TRAVIS_BUILD_ID}
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${TRAVIS_BUILD_ID}
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${TRAVIS_BUILD_ID}
+    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${TRAVIS_BUILD_ID}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
