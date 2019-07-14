@@ -18,7 +18,6 @@ package utils
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"net"
 	"path/filepath"
