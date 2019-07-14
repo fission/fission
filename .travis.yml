@@ -20,6 +20,8 @@ cache:
     - $HOME/k8scli
     - $HOME/tool
     - $HOME/docker
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
 
 services:
   - docker
