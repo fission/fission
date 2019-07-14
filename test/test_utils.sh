@@ -53,6 +53,18 @@ getGitCommit() {
     echo $(git rev-parse HEAD)
 }
 
+setupCIBuildEnv() {
+    export REPO=gcr.io/fission-ci
+    export IMAGE=fission-bundle
+    export FETCHER_IMAGE=$REPO/fetcher
+    export BUILDER_IMAGE=$REPO/builder
+    export TAG=test-${TRAVIS_BUILD_ID}
+    export PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
+    export ROUTER_SERVICE_TYPE=LoadBalancer
+    export SERVICE_TYPE=LoadBalancer
+    export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
+}
+
 load_docker_cache() {
     cache=$1
     if [ -f ${cache} ]; then
@@ -220,7 +232,7 @@ helm_install_fission() {
 	 --wait			\
 	 --timeout 540	        \
 	 --name $id		\
-	 --set-string $helmVars	\
+	 --set $helmVars	\
 	 --namespace $ns        \
 	 $ROOT/charts/fission-all
 

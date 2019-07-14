@@ -17,17 +17,9 @@ fi
 
 source $(dirname $0)/test_utils.sh
 
-REPO=gcr.io/fission-ci
-IMAGE=fission-bundle
-FETCHER_IMAGE=$REPO/fetcher
-BUILDER_IMAGE=$REPO/builder
-TAG=${TRAVIS_BUILD_ID}
-PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
-ROUTER_SERVICE_TYPE=LoadBalancer
-SERVICE_TYPE=LoadBalancer
-PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
-
 dump_system_info
+
+setupCIBuildEnv
 
 load_docker_cache ${DOCKER_CACHE_DIR}/python-env.tar.gz;
 load_docker_cache ${DOCKER_CACHE_DIR}/jvm-env.tar.gz;

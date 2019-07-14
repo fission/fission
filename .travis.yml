@@ -12,8 +12,7 @@ go:
   - 1.11.6
 
 env:
-  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:$HOME/tool:$HOME/google-cloud-sdk/bin:${PATH} GO111MODULE=on
-  - DOCKER_CACHE_DIR=${HOME}/docker/
+  - KUBECONFIG=${HOME}/.kube/config PATH=$HOME/k8scli:$HOME/tool:$HOME/google-cloud-sdk/bin:${PATH} GO111MODULE=on DOCKER_CACHE_DIR=${HOME}/docker/
 
 cache:
   directories:
