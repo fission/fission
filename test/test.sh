@@ -33,7 +33,7 @@ while true; do
     # If previous build state is not equal to "started" means its end.
     # We can remove the configmap safely and start next k8s test safely.
     if [[ $build_state != "started" ]]; then
-        kubectl --namespace default delete configmap -l travisID=${TRAVIS_BUILD_ID}
+        kubectl --namespace default delete configmap -l travisID=${previous_build_id}
     fi
 
     created=$(kubectl --namespace default create configmap in-test|grep "created"||true)
