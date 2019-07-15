@@ -53,6 +53,25 @@ getGitCommit() {
     echo $(git rev-parse HEAD)
 }
 
+setupCIBuildEnv() {
+    export REPO=gcr.io/fission-ci
+    export IMAGE=fission-bundle
+    export FETCHER_IMAGE=$REPO/fetcher
+    export BUILDER_IMAGE=$REPO/builder
+    export TAG=test-${TRAVIS_BUILD_ID}
+    export PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
+    export ROUTER_SERVICE_TYPE=LoadBalancer
+    export SERVICE_TYPE=LoadBalancer
+    export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
+}
+
+load_docker_cache() {
+    cache=$1
+    if [ -f ${cache} ]; then
+        gunzip -c ${cache} | docker load;
+    fi
+}
+
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
@@ -448,16 +467,17 @@ export FAILURES=0
 
 run_all_tests() {
     id=$1
+    imageTag=$2
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
-    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
-    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:test
-    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
-    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
-    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
-    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:test
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${imageTag}
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${imageTag}
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${imageTag}
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${imageTag}
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${imageTag}
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${imageTag}
+    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${imageTag}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
@@ -467,8 +487,6 @@ run_all_tests() {
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/recordreplay/test_record_greetings.sh \
         $ROOT/test/tests/recordreplay/test_record_rv.sh \
         $ROOT/test/tests/recordreplay/test_recorder_update.sh \
@@ -492,11 +510,13 @@ run_all_tests() {
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
         $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
-        $ROOT/test/tests/test_environments/test_go_env.sh
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.
-    export JOBS=1
+    export JOBS=2
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
@@ -562,7 +582,7 @@ install_and_test() {
     # ensure we run tests against with the same git commit version of CLI & server
     fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit"
 
-    run_all_tests $id
+    run_all_tests $id $imageTag
 
     dump_logs $id
 
