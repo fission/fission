@@ -26,15 +26,17 @@ while true; do
 
     previous_build_id=$(kubectl --namespace default get configmap in-test --ignore-not-found -o=jsonpath='{.metadata.labels.travisID}')
 
-    build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
+    if [[ ! -z ${previous_build_id} ]]; then
+        build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
         -H "Authorization: token ${TRAVIS_TOKEN}" \
         -H "Travis-API-Version: 3" | python -c "import sys,json; print json.load(sys.stdin)['state']")
 
-    # If previous build state is not equal to "started" or the previous build id
-    # equals to the current build ID means the previous build is end or restart.
-    # We can remove the configmap safely and start next k8s test safely.
-    if [[ ${TRAVIS_TOKEN} == ${previous_build_id} ]] || [[ $build_state != "started" ]]; then
-        kubectl --namespace default delete configmap -l travisID=${previous_build_id}
+        # If previous build state is not equal to "started" or the previous build id
+        # equals to the current build ID means the previous build is end or restart.
+        # We can remove the configmap safely and start next k8s test safely.
+        if [[ ${TRAVIS_TOKEN} == ${previous_build_id} ]] || [[ $build_state != "started" ]]; then
+            kubectl --namespace default delete configmap -l travisID=${previous_build_id}
+        fi
     fi
 
     created=$(kubectl --namespace default create configmap in-test|grep "created"||true)
