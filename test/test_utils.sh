@@ -487,8 +487,6 @@ run_all_tests() {
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/recordreplay/test_record_greetings.sh \
         $ROOT/test/tests/recordreplay/test_record_rv.sh \
         $ROOT/test/tests/recordreplay/test_recorder_update.sh \
@@ -512,11 +510,13 @@ run_all_tests() {
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
         $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
-        $ROOT/test/tests/test_environments/test_go_env.sh
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.
-    export JOBS=1
+    export JOBS=2
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
