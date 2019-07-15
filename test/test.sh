@@ -23,13 +23,26 @@ setupCIBuildEnv
 
 while true; do
     # ensure that gke cluster is now free for testing
-    resp=$(kubectl --namespace default create configmap in-test|grep "created"||true)
-    if [[ -z $resp ]]; then
+
+    previous_build_id=$(kubectl --namespace default get configmap in-test --ignore-not-found -o=jsonpath='{.metadata.labels.travisID}')
+
+    build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
+        -H "Authorization: token ${TRAVIS_TOKEN}" \
+        -H "Travis-API-Version: 3" | python -c "import sys,json; print json.load(sys.stdin)['state']")
+
+    # If previous build state is not equal to "started" means its end.
+    # We can remove the configmap safely and start next k8s test safely.
+    if [[ $build_state != "started" ]]; then
+        kubectl --namespace default delete configmap -l travisID=${TRAVIS_BUILD_ID}
+    fi
+
+    created=$(kubectl --namespace default create configmap in-test|grep "created"||true)
+    if [[ -z $created ]]; then
         echo "Cluster is now in used. Retrying after 15 seconds..."
         sleep 15
         continue
     fi
-    kubectl --namespace default label configmap in-test travidID=${TRAVIS_BUILD_ID}
+    kubectl --namespace default label configmap in-test travisID=${TRAVIS_BUILD_ID}
     break
 done
 

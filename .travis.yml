@@ -54,7 +54,7 @@ before_cache:
   - test/save_cache.sh # save docker cache
 
 after_script:
-  - kubectl --namespace default delete configmap -l travidID=${TRAVIS_BUILD_ID} # remove in-test configmap to indicate this CI build finished
+  - kubectl --namespace default delete configmap -l travisID=${TRAVIS_BUILD_ID} # remove in-test configmap to indicate this CI build finished
 
 notifications:
   slack:
