@@ -361,7 +361,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 			roundTripper.logger.Debug("request errored out - backing off before retrying",
 				zap.String("url", req.URL.Host),
 				zap.String("function_name", fnMeta.Name),
-				zap.Duration("backoff_time", executingTimeout),
 				zap.Error(err))
 			retryCounter++
 		}
