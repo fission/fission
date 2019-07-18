@@ -267,11 +267,11 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// creating pools for envs that are actually used by functions.  Also we might want
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
-		for i := range envs.Items {
-			env := envs.Items[i]
+		for _, item := range envs.Items {
+			env := item
 			// Create pool only if poolsize greater than zero
 			if gpm.getEnvPoolsize(&env) > 0 {
-				_, err := gpm.GetPool(&envs.Items[i])
+				_, err := gpm.GetPool(&item)
 				if err != nil {
 					gpm.logger.Error("eager-create pool failed", zap.Error(err))
 				}
