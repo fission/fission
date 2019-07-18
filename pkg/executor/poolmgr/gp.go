@@ -590,9 +590,11 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
-	gp.logger.Info("using pod IP for specialized pod",
+	gp.logger.Info("specialized pod",
 		zap.String("pod", pod.ObjectMeta.Name),
+		zap.String("podNamespace", pod.ObjectMeta.Namespace),
 		zap.String("function", m.Name),
+		zap.String("functionNamespace", m.Namespace),
 		zap.String("specialization_host", svcHost))
 
 	kubeObjRefs := []apiv1.ObjectReference{
