@@ -71,11 +71,11 @@ func DumpInfo(c *cli.Context) error {
 		"fission-version": resources.NewFissionVersion(client),
 
 		// fission component logs & spec
-		"fission-components-svc-sepc": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
+		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
-		"fission-components-deployment-sepc": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
+		"fission-components-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
-		"fission-components-pod-sepc": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
+		"fission-components-pod-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
 		"fission-components-pod-log": resources.NewKubernetesPodLogDumper(k8sClient,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
@@ -87,7 +87,7 @@ func DumpInfo(c *cli.Context) error {
 		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "owner=buildermgr"),
 
 		// fission function logs & spec
-		"fission-function-svc-sepc":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "executorType=newdeploy"),
+		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "executorType=newdeploy"),
 		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "executorType in (poolmgr, newdeploy)"),
 		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "executorType in (poolmgr, newdeploy)"),
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
