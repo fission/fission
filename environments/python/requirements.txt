@@ -1,4 +1,4 @@
-flask ~= 0.12.3
+flask ~= 1.0.4
 bjoern
 httplib2
 python-dateutil
