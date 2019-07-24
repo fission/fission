@@ -21,6 +21,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +31,73 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterTimeTriggerRoute(ws *restful.WebService) {
+	tags := []string{"TimeTrigger"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "TimeTrigger", Description: "TimeTrigger Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/triggers/time").
+			Doc("List all time trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of timeTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.TimeTrigger{}).
+			Returns(http.StatusOK, "List of timeTriggers", []fv1.TimeTrigger{}))
+
+	ws.Route(
+		ws.POST("/v2/triggers/time").
+			Doc("Create time trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.TimeTrigger{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusCreated, "Metadata of created timeTrigger", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/triggers/time/{timeTrigger}").
+			Doc("Get detail of time trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("timeTrigger", "TimeTrigger name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of timeTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.TimeTrigger{}). // on the response
+			Returns(http.StatusOK, "A timeTrigger", fv1.TimeTrigger{}))
+
+	ws.Route(
+		ws.PUT("/v2/triggers/time/{timeTrigger}").
+			Doc("Update time trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("timeTrigger", "TimeTrigger name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.TimeTrigger{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated timeTrigger", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/triggers/time/{timeTrigger}").
+			Doc("Delete time trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("timeTrigger", "TimeTrigger name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of timeTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")

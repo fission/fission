@@ -23,13 +23,83 @@ import (
 	"net/http"
 
 	"github.com/dustin/go-humanize"
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
 	"github.com/fission/fission/pkg/types"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterPackageRoute(ws *restful.WebService) {
+	tags := []string{"Package"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "Package", Description: "Package Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/packages").
+			Doc("List all packages").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of package").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.Package{}).
+			Returns(http.StatusOK, "List of packages", []fv1.Package{}))
+
+	ws.Route(
+		ws.POST("/v2/packages").
+			Doc("Create package").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Package{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusCreated, "Metadata of created package", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/packages/{package}").
+			Doc("Get detail of package").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("package", "Package name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of package").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.Package{}). // on the response
+			Returns(http.StatusOK, "A package", fv1.Package{}))
+
+	ws.Route(
+		ws.PUT("/v2/packages/{package}").
+			Doc("Update package").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("package", "Package name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Package{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated package", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/packages/{package}").
+			Doc("Delete package").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("package", "Package name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of package").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) PackageApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
