@@ -1,21 +1,52 @@
-# 1.3.0
+# 1.4.0
 [Documentation](https://docs.fission.io/)
-## Downloads for 1.3.0
+## Downloads for 1.4.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-core-1.3.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0-minikube.yaml) | `5e65d844b6f545a2368cc2ea7df549c53a859d4621f62489a62afa540b5d3fe2`
-[fission-all-1.3.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0-minikube.yaml) | `9ec1f4b30d73cb5fa3a68f4c804b65b31fdb3c96c4c75ca9963cab8a0c75c24e`
-[fission-core-1.3.0.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0.yaml) | `5daf079ee473a6167da893d58dad964a62b8b4d70724686dbac64243c0553498`
-[fission-all-1.3.0.yaml](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0.yaml) | `adf8c3ea584074afad1455c5fa0876b64fc15ed933f5a1570fda15e852060a67`
-[fission-core-1.3.0.tgz](https://github.com/fission/fission/releases/download/1.3.0/fission-core-1.3.0.tgz) | `76715e0c557790824b857882224511e5b4eda6ffd5c7874dcd51bcf0e26efcae`
-[fission-all-1.3.0.tgz](https://github.com/fission/fission/releases/download/1.3.0/fission-all-1.3.0.tgz) | `e5abef76f9605a3dd4920e6054810a4368d11c050b83adbd92ccb05b98a2163a`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-osx) | `b0f536e484e53ba0c6eaef270be38102cf8085470507d7713393a8af48a9dec7`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-linux) | `e75ee64d4ab2ce752dca1186a88439ae9db5aa9e575436161b9232aa5147c622`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.3.0/fission-cli-windows.exe) | `d1bfb95b2795b102a603eb5d70bc1a61ee8341a8aee2d5a6f0f753de91664aaf`
+[fission-all-1.4.0.yaml](https://github.com/fission/fission/releases/download/1.4.0/fission-all-1.4.0.yaml) | `29cd0f6c92db509bb11bd9f92995c2d3a8d6388118120644bad5220b15e2671c`
+[fission-core-1.4.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.4.0/fission-core-1.4.0-minikube.yaml) | `870c1b036ee6999368f12067d97e0d54211ec0ba5b9dfd6b29a5e42bbc046158`
+[fission-core-1.4.0.yaml](https://github.com/fission/fission/releases/download/1.4.0/fission-core-1.4.0.yaml) | `02826d138ddb142c5973203de2c721985f656ad8d9024c194906107f1296bb59`
+[fission-all-1.4.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.4.0/fission-all-1.4.0-minikube.yaml) | `58022f3ac7d01f8cce3651c73abc120aa32bb84e85f4044ecb7e2ffa249c8973`
+[fission-core-1.4.0.tgz](https://github.com/fission/fission/releases/download/1.4.0/fission-core-1.4.0.tgz) | `c2bbfa89f52bacd5089265a9ec25ca62f674ebee9806b338504cd8e18dfa7b9c`
+[fission-all-1.4.0.tgz](https://github.com/fission/fission/releases/download/1.4.0/fission-all-1.4.0.tgz) | `0080c4d37ad7bfcca4eb008df6aa65dcb28ea91e7f1576b57df3f0aeb11cc846`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.4.0/fission-cli-osx) | `2ce184c37ea8917349e3f802a3280bc0b0a6f13e2bf609d75564f3c5cc05bbd1`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.4.0/fission-cli-linux) | `17d29e807c9208d633bf8db9310ea3520d244c50fad407bb7fca34ac846ed9b9`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.4.0/fission-cli-windows.exe) | `a8e8ab2094f980d59336c02114fabe3e2854ea297e8c839dadee0a9d99bab453`
 
 # Change Log
+
+## [1.4.0](https://github.com/fission/fission/tree/1.4.0) (2019-07-24)
+[Full Changelog](https://github.com/fission/fission/compare/1.3.0...1.4.0)
+
+**Merged pull requests:**
+
+- Update flask version to resolve CVE alert [\#1243](https://github.com/fission/fission/pull/1243) ([life1347](https://github.com/life1347))
+- Fix typo where "spec" is spelt "sepc" in some dump directories. [\#1239](https://github.com/fission/fission/pull/1239) ([davidsmf](https://github.com/davidsmf))
+- Fix fetcher client doesn't handle error properly [\#1238](https://github.com/fission/fission/pull/1238) ([life1347](https://github.com/life1347))
+- Fix build failed due to script unable to find configmap [\#1237](https://github.com/fission/fission/pull/1237) ([life1347](https://github.com/life1347))
+- Enable concurrent CI builds [\#1236](https://github.com/fission/fission/pull/1236) ([life1347](https://github.com/life1347))
+- Change log-level for better performance and less annoying logs [\#1231](https://github.com/fission/fission/pull/1231) ([life1347](https://github.com/life1347))
+- Replace localhost with 127.0.0.1 to prevent DNS resolving problem [\#1227](https://github.com/fission/fission/pull/1227) ([life1347](https://github.com/life1347))
+- Fix release script wrongly tags builder as env image [\#1226](https://github.com/fission/fission/pull/1226) ([life1347](https://github.com/life1347))
+- Make router keep-alive setting configurable [\#1225](https://github.com/fission/fission/pull/1225) ([life1347](https://github.com/life1347))
+- Function Update if config/secret changes [\#1224](https://github.com/fission/fission/pull/1224) ([vishal-biyani](https://github.com/vishal-biyani))
+- Fix nil pointer when CLI unable to get server version [\#1223](https://github.com/fission/fission/pull/1223) ([life1347](https://github.com/life1347))
+- Reuse go docker build cache [\#1218](https://github.com/fission/fission/pull/1218) ([life1347](https://github.com/life1347))
+- Allow to set log level through environment variable [\#1217](https://github.com/fission/fission/pull/1217) ([life1347](https://github.com/life1347))
+- Fix roundtripper doesn't increase request timeout setting after each retry [\#1216](https://github.com/fission/fission/pull/1216) ([life1347](https://github.com/life1347))
+- Configmaps/secrets in function exist check [\#1214](https://github.com/fission/fission/pull/1214) ([vishal-biyani](https://github.com/vishal-biyani))
+- Add experimental environment: tensorflow-serving [\#1212](https://github.com/fission/fission/pull/1212) ([life1347](https://github.com/life1347))
+- Fix executor panic problem when specialization timeout [\#1211](https://github.com/fission/fission/pull/1211) ([life1347](https://github.com/life1347))
+- Fix fetcher of newdeploy pod error out when starting up. [\#1210](https://github.com/fission/fission/pull/1210) ([life1347](https://github.com/life1347))
+- Fix Istio-proxy cannot collect HTTP-level information [\#1209](https://github.com/fission/fission/pull/1209) ([life1347](https://github.com/life1347))
+- Fix poolmanager specializes a function pod repeatedly if istio is enabled [\#1208](https://github.com/fission/fission/pull/1208) ([life1347](https://github.com/life1347))
+- Reuse docker maven build cache in JVM environment build process [\#1207](https://github.com/fission/fission/pull/1207) ([life1347](https://github.com/life1347))
+- modify code to make log collection comprehensive [\#1206](https://github.com/fission/fission/pull/1206) ([cocoifly10](https://github.com/cocoifly10))
+- Fallback to get user home directory from env [\#1203](https://github.com/fission/fission/pull/1203) ([life1347](https://github.com/life1347))
+- \[bugfix\] Fix CLI drops controller URL path when querying logs [\#1201](https://github.com/fission/fission/pull/1201) ([moluzhang](https://github.com/moluzhang))
+- Enable go module support for go environment [\#1152](https://github.com/fission/fission/pull/1152) ([life1347](https://github.com/life1347))
 
 ## [1.3.0](https://github.com/fission/fission/tree/1.3.0) (2019-06-03)
 [Full Changelog](https://github.com/fission/fission/compare/1.2.1...1.3.0)
@@ -738,7 +769,6 @@ filename | sha256 hash
 - Fix `environment` command typo. [\#39](https://github.com/fission/fission/pull/39) ([pirogoeth](https://github.com/pirogoeth))
 - Edit readme [\#38](https://github.com/fission/fission/pull/38) ([soamvasani](https://github.com/soamvasani))
 - Updated README to include protocol scheme for FISSION\_URL prefix [\#36](https://github.com/fission/fission/pull/36) ([efexen](https://github.com/efexen))
-- Add minikube example in readme [\#34](https://github.com/fission/fission/pull/34) ([johscheuer](https://github.com/johscheuer))
 - README: use kubectl create -f http [\#32](https://github.com/fission/fission/pull/32) ([philips](https://github.com/philips))
 - Python environment improvements [\#30](https://github.com/fission/fission/pull/30) ([soamvasani](https://github.com/soamvasani))
 - Readme updates [\#29](https://github.com/fission/fission/pull/29) ([soamvasani](https://github.com/soamvasani))
@@ -748,6 +778,7 @@ filename | sha256 hash
 ## [kubecon](https://github.com/fission/fission/tree/kubecon) (2016-11-11)
 **Merged pull requests:**
 
+- Add minikube example in readme [\#34](https://github.com/fission/fission/pull/34) ([johscheuer](https://github.com/johscheuer))
 - Reap idle pods [\#20](https://github.com/fission/fission/pull/20) ([soamvasani](https://github.com/soamvasani))
 - Fission CLI [\#19](https://github.com/fission/fission/pull/19) ([soamvasani](https://github.com/soamvasani))
 - Fix resource store errors on empty db [\#18](https://github.com/fission/fission/pull/18) ([soamvasani](https://github.com/soamvasani))
