@@ -34,7 +34,7 @@ while true; do
         # If previous build state is not equal to "started" or the previous build id
         # equals to the current build ID means the previous build is end or restart.
         # We can remove the configmap safely and start next k8s test safely.
-        if [[ ${TRAVIS_TOKEN} == ${previous_build_id} ]] || [[ $build_state != "started" ]]; then
+        if [[ ${TRAVIS_BUILD_ID} == ${previous_build_id} ]] || [[ $build_state != "started" ]]; then
             kubectl --namespace default delete configmap -l travisID=${previous_build_id}
         fi
     fi
