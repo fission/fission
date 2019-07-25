@@ -220,11 +220,11 @@ spec:
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
 {{ if .Values.analytics }}
-        - name: ANALYTICS_URL
-          value: "https://g.fission.sh/metrics"
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
 {{ else if .Values.analyticsNonHelmInstall }}
-        - name: ANALYTICS_URL
-          value: "https://g.fission.sh/metrics"
+          - name: ANALYTICS_URL
+            value: "https://g.fission.sh/metrics"
 {{ end }}
         readinessProbe:
           httpGet:
