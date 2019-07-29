@@ -44,7 +44,7 @@ import (
 	"github.com/fission/fission/pkg/types"
 )
 
-const SPEC_API_VERSION = "fv1.io/v1"
+const SPEC_API_VERSION = "fission.io/v1"
 
 const ARCHIVE_URL_PREFIX string = "archive://"
 
