@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,16 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file tells deepcopy-gen to generate deepcopy methods for all structs in the package.
-// For more details, please visit https://blog.openshift.com/kubernetes-deep-dive-code-generation-customresources/
+package cmd
 
-// +k8s:deepcopy-gen=package
-// +k8s:defaulter-gen=TypeMeta
-// +groupName=fission.io
-package v1
+import (
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+)
 
-const (
-	CRD_VERSION = "fission.io/v1"
-
-	CRD_NAME_ENVIRONMENT = "Environment"
+type (
+	CommandAction func(flags cli.Input) error
 )

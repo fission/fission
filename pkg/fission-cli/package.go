@@ -43,6 +43,8 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
@@ -519,19 +521,19 @@ func createArchive(client *client.Client, includeFiles []string, noZip bool, spe
 		// check if this AUS exists in the specs; if so, don't create a new one
 		fr, err := readSpecs(specDir)
 		util.CheckErr(err, "read specs")
-		if m := fr.specExists(aus, false, true); m != nil {
+		if m := fr.SpecExists(aus, false, true); m != nil {
 			fmt.Printf("Re-using previously created archive %v\n", m.Name)
 			aus.Name = m.Name
 		} else {
 			// save the uploadspec
-			err := specSave(*aus, specFile)
+			err := spec.SpecSave(*aus, specFile)
 			util.CheckErr(err, fmt.Sprintf("write spec file %v", specFile))
 		}
 
 		// create the archive object
 		ar := &fv1.Archive{
 			Type: fv1.ArchiveTypeUrl,
-			URL:  fmt.Sprintf("%v%v", ARCHIVE_URL_PREFIX, aus.Name),
+			URL:  fmt.Sprintf("%v%v", spec.ARCHIVE_URL_PREFIX, aus.Name),
 		}
 		return ar
 	}
@@ -624,14 +626,14 @@ func createPackage(client *client.Client, pkgNamespace string, envName string, e
 
 	if len(specFile) > 0 {
 		// if a package sith the same spec exists, don't create a new spec file
-		fr, err := readSpecs(getSpecDir(nil))
+		fr, err := readSpecs(cmdutils.GetSpecDir(nil))
 		util.CheckErr(err, "read specs")
-		if m := fr.specExists(pkg, false, true); m != nil {
+		if m := fr.SpecExists(pkg, false, true); m != nil {
 			fmt.Printf("Re-using previously created package %v\n", m.Name)
 			return m
 		}
 
-		err = specSave(*pkg, specFile)
+		err = spec.SpecSave(*pkg, specFile)
 		util.CheckErr(err, "save package spec")
 		return &pkg.Metadata
 	} else {

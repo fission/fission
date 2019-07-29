@@ -28,7 +28,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
 	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	apiv1 "k8s.io/api/core/v1"
@@ -37,15 +36,19 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/types"
 )
 
 const (
-	DEFAULT_MIN_SCALE              = 1
-	DEFAULT_TARGET_CPU_PERCENTAGE  = 80
-	DEFAULT_SPECIALIZATION_TIMEOUT = 120
+	DEFAULT_MIN_SCALE             = 1
+	DEFAULT_TARGET_CPU_PERCENTAGE = 80
 )
 
 func printPodLogs(c *cli.Context) error {
@@ -125,7 +128,7 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
 		minScale := DEFAULT_MIN_SCALE
 		maxScale := minScale
-		specializationTimeout := DEFAULT_SPECIALIZATION_TIMEOUT
+		specializationTimeout := fv1.DefaultSpecializationTimeOut
 
 		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
@@ -151,7 +154,7 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 
 		if c.IsSet("specializationtimeout") {
 			specializationTimeout = c.Int("specializationtimeout")
-			if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+			if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 				return nil, errors.New("specializationtimeout must be greater than or equal to 120 seconds")
 			}
 		}
@@ -203,13 +206,13 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	// user wants a spec, create a yaml file with package and function
-	spec := false
+	toSpec := false
 	specFile := ""
 	if c.Bool("spec") {
-		spec = true
+		toSpec = true
 		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
-	specDir := getSpecDir(c)
+	specDir := cmdutils.GetSpecDir(urfavecli.Parse(c))
 
 	// check for unique function names within a namespace
 	fnList, err := client.FunctionList(fnNamespace)
@@ -230,7 +233,10 @@ func fnCreate(c *cli.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
+	resourceReq, err := cmd.GetResourceReqs(urfavecli.Parse(c), &apiv1.ResourceRequirements{})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
@@ -255,7 +261,7 @@ func fnCreate(c *cli.Context) error {
 		}
 
 		// examine existence of given environment. If specs - then spec validate will do it, don't check here.
-		if !spec {
+		if !toSpec {
 			_, err := client.EnvironmentGet(&metav1.ObjectMeta{
 				Namespace: envNamespace,
 				Name:      envName,
@@ -347,14 +353,14 @@ func fnCreate(c *cli.Context) error {
 			},
 			Secrets:        secrets,
 			ConfigMaps:     cfgmaps,
-			Resources:      resourceReq,
+			Resources:      *resourceReq,
 			InvokeStrategy: *invokeStrategy,
 		},
 	}
 
 	// if we're writing a spec, don't create the function
-	if spec {
-		err = specSave(*function, specFile)
+	if toSpec {
+		err = spec.SpecSave(*function, specFile)
 		util.CheckErr(err, "create function spec")
 		return nil
 
@@ -578,14 +584,19 @@ func fnUpdate(c *cli.Context) error {
 			log.Fatal("specializationtimeout flag is only applicable for newdeploy type of executor")
 		}
 
-		if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
 		} else {
 			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
 		}
 	}
 
-	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
+	resReqs, err := cmd.GetResourceReqs(urfavecli.Parse(c), &function.Spec.Resources)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	function.Spec.Resources = *resReqs
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: fnNamespace,
