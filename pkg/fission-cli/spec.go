@@ -44,7 +44,7 @@ import (
 	"github.com/fission/fission/pkg/types"
 )
 
-const SPEC_API_VERSION = "fv1.io/v1"
+const SPEC_API_VERSION = "fission.io/v1"
 
 const ARCHIVE_URL_PREFIX string = "archive://"
 
@@ -88,7 +88,7 @@ resources on the cluster to resources in this directory.
 
 All resources created by 'fission spec apply' are annotated with this UID.  Resources on
 the cluster that are _not_ annotated with this UID are never modified or deleted by
-fv1.
+fission.
 
 `
 

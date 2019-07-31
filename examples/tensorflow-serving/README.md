@@ -3,7 +3,7 @@
 ## Create Environment 
 
 ```bash
-$ fission env create --name tensorflow --image fission/tensorflow-serving --version 2
+$ fission env create --name tensorflow --image fission/tensorflow-serving-env --version 2
 ```
 
 ## Create Package
