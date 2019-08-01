@@ -42,7 +42,11 @@ spec:
               readOnly: false
       containers:
         - name: logger
+{{ if .Values.repository }}
           image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+{{ else }}
+          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+{{ end }}
           imagePullPolicy: IfNotPresent
           env:
             - name: NODE_NAME
@@ -60,7 +64,11 @@ spec:
               mountPath: /var/lib/docker/containers
               readOnly: true
         - name: fluentbit
+{{- if .Values.repository }}
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+{{ else }}
+          image: "{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+{{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
           command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
