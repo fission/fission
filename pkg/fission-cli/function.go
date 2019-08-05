@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/types"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -45,6 +45,7 @@ import (
 const (
 	DEFAULT_MIN_SCALE             = 1
 	DEFAULT_TARGET_CPU_PERCENTAGE = 80
+	DEFAULT_DEPLOY_TIMEOUT        = 120
 )
 
 func printPodLogs(c *cli.Context) error {
@@ -101,6 +102,10 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		fnExecutor = newFnExecutor
 	}
 
+	if c.IsSet("deploytimeout") && fnExecutor != types.ExecutorTypeNewdeploy {
+		return nil, errors.New("deploytimeout flag is only applicable for newdeploy type of executor")
+	}
+
 	if fnExecutor == types.ExecutorTypePoolmgr {
 		if c.IsSet("targetcpu") || c.IsSet("minscale") || c.IsSet("maxscale") {
 			log.Fatal("To set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
@@ -120,11 +125,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
 		minScale := DEFAULT_MIN_SCALE
 		maxScale := minScale
+		timeout := DEFAULT_DEPLOY_TIMEOUT
 
 		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
 			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
 			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
+			timeout = existingInvokeStrategy.ExecutionStrategy.Timeout
 		}
 
 		if c.IsSet("targetcpu") {
@@ -142,6 +149,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 			}
 		}
 
+		if c.IsSet("deploytimeout") {
+			timeout = c.Int("deploytimeout")
+			if timeout < 0 {
+				return nil, errors.New("deploytimeout must be greater than or equal to zero")
+			}
+		}
+
 		if minScale > maxScale {
 			return nil, fmt.Errorf("minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale)
 		}
@@ -155,6 +169,7 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 				MinScale:         minScale,
 				MaxScale:         maxScale,
 				TargetCPUPercent: targetCPU,
+				Timeout:          timeout,
 			},
 		}
 	}

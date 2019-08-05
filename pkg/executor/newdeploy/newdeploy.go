@@ -46,6 +46,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	timeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.Timeout)
 
 	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
 	// in such cases we need set minscale to 1 for router to serve requests.
@@ -65,7 +66,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 
 			if existingDepl.Status.AvailableReplicas < minScale {
-				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale, timeout)
 			}
 		}
 		return existingDepl, err
@@ -93,7 +94,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		}
 
 		if waitForDeploy {
-			depl, err = deploy.waitForDeploy(depl, minScale)
+			depl, err = deploy.waitForDeploy(depl, minScale, timeout)
 		}
 
 		return depl, err
@@ -414,8 +415,8 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 	return nil
 }
 
-func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
-	for i := 0; i < 120; i++ {
+func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, waitTimeOut int) (*v1beta1.Deployment, error) {
+	for i := 0; i < waitTimeOut; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -428,7 +429,10 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 		}
 		time.Sleep(time.Second)
 	}
-	return nil, errors.New("failed to create deployment within timeout window")
+
+	// this error appears in the executor pod logs
+	timeoutError := fmt.Sprintf("failed to create deployment within timeout window of %d seconds", waitTimeOut)
+	return nil, errors.New(timeoutError)
 }
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
