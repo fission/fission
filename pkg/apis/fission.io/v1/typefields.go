@@ -171,6 +171,7 @@ type (
 		MinScale         int
 		MaxScale         int
 		TargetCPUPercent int
+		Timeout          int
 	}
 
 	FunctionReferenceType string
