@@ -40,7 +40,7 @@ func functionTests(crdClient *rest.RESTClient) {
 	function := &fv1.Function{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Function",
-			APIVersion: "fv1.io/v1",
+			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
@@ -140,7 +140,7 @@ func environmentTests(crdClient *rest.RESTClient) {
 	environment := &fv1.Environment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Environment",
-			APIVersion: "fv1.io/v1",
+			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
@@ -233,7 +233,7 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	httpTrigger := &fv1.HTTPTrigger{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPTrigger",
-			APIVersion: "fv1.io/v1",
+			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
@@ -325,7 +325,7 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	kubernetesWatchTrigger := &fv1.KubernetesWatchTrigger{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "KubernetesWatchTrigger",
-			APIVersion: "fv1.io/v1",
+			APIVersion: "fission.io/v1",
 		},
 		Metadata: metav1.ObjectMeta{
 			Name:      "hello",
