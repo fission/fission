@@ -43,9 +43,9 @@ import (
 )
 
 const (
-	DEFAULT_MIN_SCALE             = 1
-	DEFAULT_TARGET_CPU_PERCENTAGE = 80
-	DEFAULT_DEPLOY_TIMEOUT        = 120
+	DEFAULT_MIN_SCALE              = 1
+	DEFAULT_TARGET_CPU_PERCENTAGE  = 80
+	DEFAULT_SPECIALIZATION_TIMEOUT = 120
 )
 
 func printPodLogs(c *cli.Context) error {
@@ -102,8 +102,8 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		fnExecutor = newFnExecutor
 	}
 
-	if c.IsSet("deploytimeout") && fnExecutor != types.ExecutorTypeNewdeploy {
-		return nil, errors.New("deploytimeout flag is only applicable for newdeploy type of executor")
+	if c.IsSet("specializationtimeout") && fnExecutor != types.ExecutorTypeNewdeploy {
+		return nil, errors.New("specializationtimeout flag is only applicable for newdeploy type of executor")
 	}
 
 	if fnExecutor == types.ExecutorTypePoolmgr {
@@ -125,13 +125,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
 		minScale := DEFAULT_MIN_SCALE
 		maxScale := minScale
-		timeout := DEFAULT_DEPLOY_TIMEOUT
+		specializationTimeout := DEFAULT_SPECIALIZATION_TIMEOUT
 
 		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
 			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
 			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
-			timeout = existingInvokeStrategy.ExecutionStrategy.Timeout
+			specializationTimeout = existingInvokeStrategy.ExecutionStrategy.SpecializationTimeout
 		}
 
 		if c.IsSet("targetcpu") {
@@ -149,10 +149,10 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 			}
 		}
 
-		if c.IsSet("deploytimeout") {
-			timeout = c.Int("deploytimeout")
-			if timeout < 0 {
-				return nil, errors.New("deploytimeout must be greater than or equal to zero")
+		if c.IsSet("specializationtimeout") {
+			specializationTimeout = c.Int("specializationtimeout")
+			if specializationTimeout < 0 {
+				return nil, errors.New("specializationtimeout must be greater than or equal to zero")
 			}
 		}
 
@@ -165,11 +165,11 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
-				ExecutorType:     fnExecutor,
-				MinScale:         minScale,
-				MaxScale:         maxScale,
-				TargetCPUPercent: targetCPU,
-				Timeout:          timeout,
+				ExecutorType:          fnExecutor,
+				MinScale:              minScale,
+				MaxScale:              maxScale,
+				TargetCPUPercent:      targetCPU,
+				SpecializationTimeout: specializationTimeout,
 			},
 		}
 	}
