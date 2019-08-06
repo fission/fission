@@ -431,8 +431,8 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32,
 	}
 
 	// this error appears in the executor pod logs
-	timeoutError := fmt.Sprintf("failed to create deployment within timeout window of %d seconds", waitTimeOut)
-	return nil, errors.New(timeoutError)
+	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", waitTimeOut)
+	return nil, timeoutError
 }
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
