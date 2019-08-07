@@ -38,8 +38,9 @@ import (
 )
 
 const (
-	DeploymentKind    = "Deployment"
-	DeploymentVersion = "extensions/v1beta1"
+	DeploymentKind                 = "Deployment"
+	DeploymentVersion              = "extensions/v1beta1"
+	DEFAULT_SPECIALIZATION_TIMEOUT = 120
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
@@ -47,6 +48,11 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
+
+	// if no specializationTimeout is set, use default value
+	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+		specializationTimeout = DEFAULT_SPECIALIZATION_TIMEOUT
+	}
 
 	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
 	// in such cases we need set minscale to 1 for router to serve requests.
