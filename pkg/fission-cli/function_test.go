@@ -276,7 +276,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 			// case: change specializationtimeout
 			testArgs: map[string]string{
 				"executortype":          fv1.ExecutorTypeNewdeploy,
-				"specializationtimeout": "10",
+				"specializationtimeout": "200",
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -293,7 +293,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              2,
 					MaxScale:              5,
-					SpecializationTimeout: 10,
+					SpecializationTimeout: 200,
 					TargetCPUPercent:      DEFAULT_TARGET_CPU_PERCENTAGE,
 				},
 			},
@@ -310,10 +310,10 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectError:            true,
 		},
 		{
-			// case: specializationtimeout should not be less than zero
+			// case: specializationtimeout should not be less than 120
 			testArgs: map[string]string{
 				"executortype":          fv1.ExecutorTypeNewdeploy,
-				"specializationtimeout": "-1",
+				"specializationtimeout": "90",
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,

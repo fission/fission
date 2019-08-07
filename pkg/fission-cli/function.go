@@ -151,8 +151,8 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 
 		if c.IsSet("specializationtimeout") {
 			specializationTimeout = c.Int("specializationtimeout")
-			if specializationTimeout < 0 {
-				return nil, errors.New("specializationtimeout must be greater than or equal to zero")
+			if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+				return nil, errors.New("specializationtimeout must be greater than or equal to 120 seconds")
 			}
 		}
 
@@ -504,6 +504,7 @@ func fnUpdate(c *cli.Context) error {
 
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
+	specializationTimeout := c.Int("specializationtimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
@@ -566,11 +567,16 @@ func fnUpdate(c *cli.Context) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
+	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+		log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+	}
+
 	strategy, err := getInvokeStrategy(c, &function.Spec.InvokeStrategy)
 	if err != nil {
 		log.Fatal(err)
 	}
 	function.Spec.InvokeStrategy = *strategy
+	function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
 	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
