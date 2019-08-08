@@ -29,3 +29,14 @@ canary:
   {{- end }}
   {{- printf "\n" -}}
 {{- end -}}
+
+{{- define "fission-core-bundleImage" -}}
+{{- $repositoryName := .Values.repository -}}
+{{- $imageName := .Values.image -}}
+{{- $imageTag := .Values.imageTag | toString -}}
+{{- if .Values.repository }}
+        {{- printf " %s/%s:%s" $repositoryName $imageName $imageTag -}}
+{{- else }}
+        {{- printf " %s:%s" $imageName $imageTag -}}
+{{- end }}
+{{- end -}}
