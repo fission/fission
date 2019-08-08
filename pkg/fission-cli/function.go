@@ -567,16 +567,24 @@ func fnUpdate(c *cli.Context) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
-	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
-		log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
-	}
-
 	strategy, err := getInvokeStrategy(c, &function.Spec.InvokeStrategy)
 	if err != nil {
 		log.Fatal(err)
 	}
 	function.Spec.InvokeStrategy = *strategy
-	function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
+
+	if c.IsSet("specializationtimeout") {
+		if c.String("executortype") != types.ExecutorTypeNewdeploy {
+			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+		}
+
+		if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+		} else {
+			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
+		}
+	}
+
 	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
