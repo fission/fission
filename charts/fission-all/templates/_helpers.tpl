@@ -31,13 +31,13 @@ canary:
   {{- printf "\n" -}}
 {{- end -}}
 
+{{/*
+This template generates the image name for the deployment depending on the value of "repository" field in values.yaml file.
+*/}}
 {{- define "fission-all-bundleImage" -}}
-{{- $repositoryName := .Values.repository -}}
-{{- $imageName := .Values.image -}}
-{{- $imageTag := .Values.imageTag | toString -}}
-{{- if .Values.repository }}
-        {{- printf " %s/%s:%s" $repositoryName $imageName $imageTag -}}
-{{- else }}
-        {{- printf " %s:%s" $imageName $imageTag -}}
+{{- if .Values.repository -}}
+    {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
+{{- else -}}
+    {{ .Values.image }}:{{ .Values.imageTag }}    
 {{- end }}
 {{- end -}}
