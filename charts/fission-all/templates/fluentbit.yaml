@@ -35,6 +35,7 @@ spec:
       initContainers:
         - name: init
           image: busybox
+          imagePullPolicy: {{ .Values.pullPolicy }}
           command: ['mkdir', '-p', '/var/log/fission']
           volumeMounts:
             - name: container-log
@@ -43,7 +44,7 @@ spec:
       containers:
         - name: logger
           image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: NODE_NAME
               valueFrom:
