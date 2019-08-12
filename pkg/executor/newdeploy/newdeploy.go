@@ -49,11 +49,6 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
 
-	// if no specializationTimeout is set, use default value
-	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
-		specializationTimeout = DEFAULT_SPECIALIZATION_TIMEOUT
-	}
-
 	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
 	// in such cases we need set minscale to 1 for router to serve requests.
 	if !firstcreate && minScale <= 0 {
@@ -422,6 +417,11 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 }
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
+	// if no specializationTimeout is set, use default value
+	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+		specializationTimeout = DEFAULT_SPECIALIZATION_TIMEOUT
+	}
+
 	for i := 0; i < specializationTimeout; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
