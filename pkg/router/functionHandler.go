@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -30,8 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
@@ -45,6 +44,7 @@ import (
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/redis"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/types"
 )
 
 const (
@@ -290,6 +290,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		overhead := time.Since(startTime)
 
+		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
+
 		// forward the request to the function service
 		resp, err = ocRoundTripper.RoundTrip(req)
 		if err == nil {
@@ -407,11 +409,12 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	// retrieve url params and add them to request header
-	vars := mux.Vars(request)
-	for k, v := range vars {
-		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
-	}
+
+	// url path
+	setPathInfoToHeader(request)
+
+	// system params
+	setFunctionMetadataToHeader(fh.function, request)
 
 	var reqUID string
 	if len(fh.recorderName) > 0 {
@@ -432,9 +435,6 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		fh.function = fnMetadata
 		fh.logger.Debug("chosen function backend's metadata", zap.Any("metadata", fh.function))
 	}
-
-	// system params
-	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
