@@ -27,13 +27,11 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/generator"
 )
 
 type UpdateSubCommand struct {
-	client    *client.Client
-	env       *fv1.Environment
-	generator generator.StructuredGenerator
+	client *client.Client
+	env    *fv1.Environment
 }
 
 func Update(flags cli.Input) error {
@@ -87,7 +85,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, flags cli.Input) (*f
 	envExternalNetwork := flags.Bool(cmd.ENVIRONMENT_EXTERNAL_NETWORK)
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
-		e = multierror.Append(e, errors.New("need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command."))
+		e = multierror.Append(e, errors.New("need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command"))
 	}
 
 	if len(envImg) > 0 {
@@ -95,7 +93,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, flags cli.Input) (*f
 	}
 
 	if env.Spec.Version == 1 && (len(envBuilderImg) > 0 || len(envBuildCmd) > 0) {
-		e = multierror.Append(e, errors.New("version 1 Environments do not support builders. Must specify --version=2."))
+		e = multierror.Append(e, errors.New("version 1 Environments do not support builders. Must specify --version=2"))
 	}
 
 	if len(envBuilderImg) > 0 {

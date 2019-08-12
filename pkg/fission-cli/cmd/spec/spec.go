@@ -236,7 +236,8 @@ func SpecSave(resource interface{}, specFile string) error {
 		data, err = yaml.Marshal(typedres)
 	case fv1.Environment:
 		env := resource.(fv1.Environment)
-		generator, err := v1generator.CreateEnvironmentGeneratorFromObj(&env)
+		var generator *v1generator.EnvironmentGenerator
+		generator, err = v1generator.CreateEnvironmentGeneratorFromObj(&env)
 		if err != nil {
 			return err
 		}
