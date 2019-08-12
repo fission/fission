@@ -44,5 +44,5 @@ func setPathInfoToHeader(request *http.Request) {
 	for k, v := range vars {
 		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
-	request.Header.Set("X-Fission-Full-URL", request.URL.String())
+	request.Header.Set("X-Fission-Full-Url", request.URL.String())
 }
