@@ -33,7 +33,7 @@ canary:
 {{/*
 This template generates the image name for the deployment depending on the value of "repository" field in values.yaml file.
 */}}
-{{- define "fission-core-bundleImage" -}}
+{{- define "fission-bundleImage" -}}
 {{- if .Values.repository -}}
     {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
 {{- else -}}
