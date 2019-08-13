@@ -10,6 +10,7 @@ serviceType: ClusterIP
 routerServiceType: LoadBalancer
 
 ## Image base repository
+## Leave it empty for using existing local image
 repository: index.docker.io
 
 ## Fission image repository
