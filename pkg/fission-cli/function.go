@@ -27,6 +27,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"regexp"
 
 	"github.com/fission/fission/pkg/types"
 	"github.com/satori/go.uuid"
@@ -206,6 +207,11 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 	entrypoint := c.String("entrypoint")
+	regex := regexp.MustCompile("^[a-zA-Z0-9_.]*$")
+	if !regex.MatchString(entrypoint){
+                log.Fatal("Entrypoint should not contain any special character except underscore('_') and dot('.').")
+        }
+
 	pkgName := c.String("pkg")
 
 	secretName := c.String("secret")

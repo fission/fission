@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -495,6 +496,11 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
+		}
+		regex := regexp.MustCompile("^[a-zA-Z0-9_.]*$")
+		if !regex.MatchString(v.Spec.Package.FunctionName) {
+			return fmt.Errorf("FunctionName should not contain any special character " +
+						"except underscore('_') and dot('.'). Failed to Parse %v in %v", tm.Kind, loc)
 		}
 		m = &v.Metadata
 		fr.functions = append(fr.functions, v)
