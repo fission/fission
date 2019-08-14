@@ -17,6 +17,7 @@ limitations under the License.
 package messageQueue
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -214,7 +215,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	}
 	if resp.StatusCode != 200 {
 		errorHandler(kafka.logger, trigger, producer, url,
-			errors.Wrapf(err, "request returned failure: %v", resp.StatusCode))
+			fmt.Errorf("request returned failure: %v", resp.StatusCode))
 		return false
 	}
 	if len(trigger.Spec.ResponseTopic) > 0 {
