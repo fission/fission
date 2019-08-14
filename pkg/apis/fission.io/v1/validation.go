@@ -347,9 +347,10 @@ func (es ExecutionStrategy) Validate() error {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
 		}
 
-		if es.SpecializationTimeout < 120 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
-		}
+		// TODO Add validation warning
+		//if es.SpecializationTimeout < 120 {
+		//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
+		//}
 	}
 
 	return result.ErrorOrNil()

@@ -437,6 +437,10 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
 			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
+		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
+		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+			log.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", DEFAULT_SPECIALIZATION_TIMEOUT))
+		}
 	}
 
 	// (ErrorOrNil returns nil if there were no errors appended.)
