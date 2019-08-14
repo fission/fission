@@ -17,6 +17,7 @@ limitations under the License.
 package messageQueue
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
