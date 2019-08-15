@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -408,32 +409,28 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-
-	// url path
-	setPathInfoToHeader(request)
-
-	// system params
-	setFunctionMetadataToHeader(fh.function, request)
-
-	var reqUID string
-	if len(fh.recorderName) > 0 {
-		UID := strings.ToLower(uuid.NewV4().String())
-		reqUID = "REQ" + UID
-		request.Header.Set("X-Fission-ReqUID", reqUID)
-		fh.logger.Debug("record request", zap.String("request_id", reqUID))
-	}
-
 	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == types.FunctionReferenceTypeFunctionWeights {
 		// canary deployment. need to determine the function to send request to now
 		fnMetadata := getCanaryBackend(fh.functionMetadataMap, fh.fnWeightDistributionList)
 		if fnMetadata == nil {
-			fh.logger.Error("could not get canary backend", zap.String("request_id", reqUID))
+			fh.logger.Error("could not get canary backend",
+				zap.Any("metadataMap", fh.functionMetadataMap),
+				zap.Any("distributionList", fh.fnWeightDistributionList))
 			// TODO : write error to responseWrite and return response
 			return
 		}
 		fh.function = fnMetadata
 		fh.logger.Debug("chosen function backend's metadata", zap.Any("metadata", fh.function))
 	}
+
+	// set record id
+	setRecordRequestIDHeader(fh.recorderName, request)
+
+	// url path
+	setPathInfoToHeader(request)
+
+	// system params
+	setFunctionMetadataToHeader(fh.function, request)
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {

@@ -19,8 +19,10 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
+	uuid "github.com/satori/go.uuid"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,4 +47,12 @@ func setPathInfoToHeader(request *http.Request) {
 		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 	request.Header.Set("X-Fission-Full-Url", request.URL.String())
+}
+
+// setRecordRequestIDHeader set record ID to request header
+func setRecordRequestIDHeader(recorderName string, request *http.Request) {
+	if len(recorderName) > 0 {
+		reqUID := "REQ" + strings.ToLower(uuid.NewV4().String())
+		request.Header.Set("X-Fission-ReqUID", reqUID)
+	}
 }
