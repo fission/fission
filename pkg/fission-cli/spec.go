@@ -437,7 +437,7 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
 			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
-    
+
 		// TODO: After a couple of releases below check should abort the requests
 		// Adding a check for functionName/entrypoint validation
 		if !util.CheckForNameValidation(f.Spec.Package.FunctionName) {
