@@ -575,7 +575,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if c.IsSet("specializationtimeout") {
 		if c.String("executortype") != types.ExecutorTypeNewdeploy {
-			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+			log.Fatal("specializationtimeout flag is only applicable for newdeploy type of executor")
 		}
 
 		if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
