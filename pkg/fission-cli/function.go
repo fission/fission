@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -207,8 +206,7 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 	entrypoint := c.String("entrypoint")
-	regex := regexp.MustCompile("^[a-zA-Z0-9_.]*$")
-	if !regex.MatchString(entrypoint) {
+	if !util.CheckForNameValidation(entrypoint) {
 		log.Fatal("Entrypoint should not contain any special character except underscore('_') and dot('.').")
 	}
 
@@ -490,6 +488,9 @@ func fnUpdate(c *cli.Context) error {
 	srcArchiveFiles := c.StringSlice("src")
 	pkgName := c.String("pkg")
 	entrypoint := c.String("entrypoint")
+	if !util.CheckForNameValidation(entrypoint) {
+		log.Fatal("Entrypoint should not contain any special character except underscore('_') and dot('.').")
+	}
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
 

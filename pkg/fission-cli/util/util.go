@@ -180,3 +180,12 @@ func CheckFunctionExistence(fissionClient *client.Client, functions []string, fn
 
 	return nil
 }
+
+// given a entrypoint/functionName, this checks if the function name is valid
+func CheckForNameValidation(fnName string) (valid bool) {
+	regex := regexp.MustCompile("^[a-zA-Z0-9_.]*$")
+	if regex.MatchString(fnName) {
+		return true
+	}
+	return false
+}

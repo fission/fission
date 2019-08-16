@@ -24,7 +24,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"time"
 
@@ -438,6 +437,11 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
 			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
+		// TODO: After a couple of releases below check should abort the requests
+		// Adding a check for functionName validation
+		if !util.CheckForNameValidation(f.Spec.Package.FunctionName) {
+			log.Warn(fmt.Sprintf("FunctionName \"%v\" should not contain any special character except underscore('_') and dot('.')", f.Spec.Package.FunctionName))
+		}
 	}
 
 	// (ErrorOrNil returns nil if there were no errors appended.)
@@ -496,11 +500,6 @@ func (fr *FissionResources) parseYaml(b []byte, loc *location) error {
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
-		}
-		regex := regexp.MustCompile("^[a-zA-Z0-9_.]*$")
-		if !regex.MatchString(v.Spec.Package.FunctionName) {
-			return fmt.Errorf("FunctionName should not contain any special character "+
-				"except underscore('_') and dot('.'). Failed to Parse %v in %v", tm.Kind, loc)
 		}
 		m = &v.Metadata
 		fr.functions = append(fr.functions, v)
