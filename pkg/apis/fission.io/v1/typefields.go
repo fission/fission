@@ -167,10 +167,11 @@ type (
 	and resources allocated to the function pod.
 	*/
 	ExecutionStrategy struct {
-		ExecutorType     ExecutorType
-		MinScale         int
-		MaxScale         int
-		TargetCPUPercent int
+		ExecutorType          ExecutorType
+		MinScale              int
+		MaxScale              int
+		TargetCPUPercent      int
+		SpecializationTimeout int
 	}
 
 	FunctionReferenceType string
