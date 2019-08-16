@@ -437,10 +437,15 @@ func (fr *FissionResources) validate(c *cli.Context) error {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
 			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
+    
 		// TODO: After a couple of releases below check should abort the requests
-		// Adding a check for functionName validation
+		// Adding a check for functionName/entrypoint validation
 		if !util.CheckForNameValidation(f.Spec.Package.FunctionName) {
 			log.Warn(fmt.Sprintf("FunctionName \"%v\" should not contain any special character except underscore('_') and dot('.')", f.Spec.Package.FunctionName))
+
+		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
+		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+			log.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", DEFAULT_SPECIALIZATION_TIMEOUT))
 		}
 	}
 
