@@ -837,6 +837,11 @@ func fnTest(c *cli.Context) error {
 		defer resp.Body.Close()
 		return nil
 	}
+	if resp.StatusCode == http.StatusRequestTimeout {
+               body, _ := ioutil.ReadAll(resp.Body)
+               fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", fnName, resp.StatusCode, string(body))
+               return nil
+        }
 
 	body, err := ioutil.ReadAll(resp.Body)
 	util.CheckErr(err, "read log response from pod")

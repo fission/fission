@@ -56,6 +56,8 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 		errCode = ErrorNotFound
 	case http.StatusConflict:
 		errCode = ErrorNameExists
+	case http.StatusRequestTimeout:
+		errCode = ErrorRequestContextTimedOut
 	default:
 		errCode = ErrorInternal
 	}
@@ -128,6 +130,7 @@ const (
 	ErrorNotImplmented
 	ErrorChecksumFail
 	ErrorSizeLimitExceeded
+	ErrorRequestContextTimedOut
 )
 
 // must match order and len of the above const

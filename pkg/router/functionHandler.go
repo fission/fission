@@ -289,8 +289,36 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
 
+		//Creating context for client
+		roundTripper.logger.Debug("Creating the context for request\n")
+		var closeCtx func()
+		ctx, closeCtx := context.WithTimeout(context.Background(), 60*time.Second)
+		defer closeCtx()
+		out := make(chan bool)
 		// forward the request to the function service
-		resp, err = ocRoundTripper.RoundTrip(req)
+		go func() {
+			resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
+		        out <- true
+		}()
+		//Check for Timeout
+		select {
+	        case <-out:
+			roundTripper.logger.Debug("Response received from server")
+		case <-ctx.Done():
+			roundTripper.logger.Error("Request Context Timed out")
+			//Return if request context is timed out
+			return &http.Response{
+                                                StatusCode:    http.StatusRequestTimeout,
+                                                Proto:         req.Proto,
+                                                ProtoMajor:    req.ProtoMajor,
+                                                ProtoMinor:    req.ProtoMinor,
+                                                Body:          ioutil.NopCloser(bytes.NewBufferString("Request Timed out\n")),
+                                                ContentLength: int64(len("Request Timed out\n")),
+                                                Request:       req,
+                                                Header:        make(http.Header, 0),
+                                        }, nil
+		}
+
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
