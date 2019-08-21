@@ -21,12 +21,82 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterWatchRoute(ws *restful.WebService) {
+	tags := []string{"KubernetesWatch"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "KubernetesWatch", Description: "KubernetesWatch Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/watches").
+			Doc("List all kubernetes watch").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of kubernetesWatch").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.KubernetesWatchTrigger{}).
+			Returns(http.StatusOK, "List of kubernetesWatchs", []fv1.KubernetesWatchTrigger{}))
+
+	ws.Route(
+		ws.POST("/v2/watches").
+			Doc("Create kubernetes watch").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.KubernetesWatchTrigger{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusCreated, "Metadata of created kubernetesWatch", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/watches/{watch}").
+			Doc("Get detail of kubernetes watch").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("watch", "KubernetesWatch name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of kubernetesWatch").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.KubernetesWatchTrigger{}). // on the response
+			Returns(http.StatusOK, "A kubernetesWatch", fv1.KubernetesWatchTrigger{}))
+
+	ws.Route(
+		ws.PUT("/v2/watches/{watch}").
+			Doc("Update kubernetes watch").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("watch", "KubernetesWatch name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.KubernetesWatchTrigger{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated kubernetesWatch", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/watches/{watch}").
+			Doc("Delete kubernetes watch").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("watch", "KubernetesWatch name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of kubernetesWatch").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
