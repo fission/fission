@@ -298,25 +298,25 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 		// forward the request to the function service
 		go func() {
 			resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
-		        out <- true
+			out <- true
 		}()
 		//Check for Timeout
 		select {
-	        case <-out:
+		case <-out:
 			roundTripper.logger.Debug("Response received from server")
 		case <-ctx.Done():
 			roundTripper.logger.Error("Request Context Timed out")
 			//Return if request context is timed out
 			return &http.Response{
-                                                StatusCode:    http.StatusRequestTimeout,
-                                                Proto:         req.Proto,
-                                                ProtoMajor:    req.ProtoMajor,
-                                                ProtoMinor:    req.ProtoMinor,
-                                                Body:          ioutil.NopCloser(bytes.NewBufferString("Request Timed out\n")),
-                                                ContentLength: int64(len("Request Timed out\n")),
-                                                Request:       req,
-                                                Header:        make(http.Header, 0),
-                                        }, nil
+				StatusCode:    http.StatusRequestTimeout,
+				Proto:         req.Proto,
+				ProtoMajor:    req.ProtoMajor,
+				ProtoMinor:    req.ProtoMinor,
+				Body:          ioutil.NopCloser(bytes.NewBufferString("Request Timed out\n")),
+				ContentLength: int64(len("Request Timed out\n")),
+				Request:       req,
+				Header:        make(http.Header, 0),
+			}, nil
 		}
 
 		if err == nil {
