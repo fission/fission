@@ -113,7 +113,7 @@ func NewCliApp() *cli.App {
 	fnEntryPointFlag := cli.StringFlag{Name: "entrypoint", Usage: "entry point for environment v2 to load with"}
 	fnBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "build command for builder to run with"}
 	fnSecretFlag := cli.StringSliceFlag{Name: "secret", Usage: "function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags."}
-	fnCfgMapFlag := cli.StringSliceFlag{Name: "configmap", Usage: "function access to configmap, should be present in the same namespace as the function. You can provice multiple configmaps using multiple --configmap flags."}
+	fnCfgMapFlag := cli.StringSliceFlag{Name: "configmap", Usage: "function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags."}
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Value: types.ExecutorTypePoolmgr, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
