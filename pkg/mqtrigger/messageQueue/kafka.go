@@ -93,7 +93,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	producerConfig.Producer.Return.Successes = true
 	producerConfig.Version = kafka.version
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
-	kafka.logger.Info("created a new producer", zap.Any("consumer", producer))
+	kafka.logger.Info("created a new producer", zap.Any("producer", producer))
 	if err != nil {
 		panic(err)
 	}
