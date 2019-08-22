@@ -277,6 +277,7 @@ wait_for_service() {
 	      sleep 1
     done
 }
+export -f wait_for_service
 
 wait_for_services() {
     id=$1
