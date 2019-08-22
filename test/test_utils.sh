@@ -269,13 +269,12 @@ wait_for_service() {
     ns=f-$id
     while true
     do
-	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-	if [ ! -z $ip ]
-	then
-	    break
-	fi
-	echo Waiting for service $svc...
-	sleep 1
+	     ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+	      if [ ! -z $ip ]; then
+	         break
+	      fi
+	      echo Waiting for service $svc...
+	      sleep 1
     done
 }
 
@@ -286,16 +285,30 @@ wait_for_services() {
     wait_for_service $id router
 
     echo Waiting for service is routable...
-    sleep 10
+    sleep 30
 }
+export -f wait_for_services
+
+check_gitcommit_version() {
+    while true
+    do
+        # ensure we run tests against with the same git commit version of CLI & server
+	      ip=$(fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit")
+	      if [ $? -eq 0 ]; then
+	        break
+	      fi
+	      echo Retrying getting build version from the controller...
+	      sleep 1
+    done
+}
+export -f check_gitcommit_version
 
 helm_uninstall_fission() {(set +e
     id=$1
 
-    if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
-    then
-	echo "Fission uninstallation skipped"
-	return
+    if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]; then
+	    echo "Fission uninstallation skipped"
+	    return
     fi
 
     echo "Uninstalling fission"
@@ -576,11 +589,9 @@ install_and_test() {
 	    exit 1
     fi
 
-    wait_for_services $id
+    timeout 150 bash -c "wait_for_services $id"
+    timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
-
-    # ensure we run tests against with the same git commit version of CLI & server
-    fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit"
 
     run_all_tests $id $imageTag
 
