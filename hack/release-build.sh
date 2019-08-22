@@ -266,12 +266,27 @@ build_all() {
     fi
     
     mkdir -p $BUILDDIR
-    
+
+    # generate swagger (OpenApi 2.0) doc before building bundle image
+    generate_swagger_doc
+
     build_fission_bundle_image $version $date $gitcommit
     build_fetcher_image $version $date $gitcommit
     build_builder_image $version $date $gitcommit
     build_all_cli $version $date $gitcommit
     build_pre_upgrade_checks_image $version $date $gitcommit
+
+    remove_generated_swagger_doc
+}
+
+generate_swagger_doc() {
+  pushd $DIR/pkg/apis/fission.io/v1/tool
+  ./update-generated-swagger-docs.sh
+  popd
+}
+
+remove_generated_swagger_doc() {
+  rm $DIR/pkg/apis/fission.io/v1/types_swagger_doc_generated.go
 }
 
 version=${VERSION}

@@ -49,6 +49,9 @@ func Start(logger *zap.Logger, port int, unitTestFlag bool) {
 	}
 	defer cancel()
 
+	// openapi service
+	//go openAPI(cLogger)
+
 	api, err := MakeAPI(cLogger, featureStatus)
 	if err != nil {
 		cLogger.Fatal("failed to start controller", zap.Error(err))
