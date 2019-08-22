@@ -17,6 +17,7 @@ require (
 	github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/goproxy v0.0.0-20181111060418-2ce16c963a8a // indirect
+	github.com/emicklei/go-restful-openapi v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
@@ -64,7 +65,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.2.0
 	github.com/spf13/pflag v1.0.1 // indirect
-	github.com/stretchr/testify v1.2.2
+	github.com/stretchr/testify v1.3.0
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/urfave/cli v1.20.0
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
@@ -86,4 +87,5 @@ require (
 	k8s.io/apiextensions-apiserver v0.0.0-20190116211702-f0729a5940c5
 	k8s.io/apimachinery v0.0.0-20190116203031-d49e237a2683
 	k8s.io/client-go v7.0.0+incompatible
+	k8s.io/klog v0.3.3 // indirect
 )

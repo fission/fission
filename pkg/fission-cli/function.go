@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/types"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,8 +43,9 @@ import (
 )
 
 const (
-	DEFAULT_MIN_SCALE             = 1
-	DEFAULT_TARGET_CPU_PERCENTAGE = 80
+	DEFAULT_MIN_SCALE              = 1
+	DEFAULT_TARGET_CPU_PERCENTAGE  = 80
+	DEFAULT_SPECIALIZATION_TIMEOUT = 120
 )
 
 func printPodLogs(c *cli.Context) error {
@@ -101,6 +102,10 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		fnExecutor = newFnExecutor
 	}
 
+	if c.IsSet("specializationtimeout") && fnExecutor != types.ExecutorTypeNewdeploy {
+		return nil, errors.New("specializationtimeout flag is only applicable for newdeploy type of executor")
+	}
+
 	if fnExecutor == types.ExecutorTypePoolmgr {
 		if c.IsSet("targetcpu") || c.IsSet("minscale") || c.IsSet("maxscale") {
 			log.Fatal("To set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
@@ -120,11 +125,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
 		minScale := DEFAULT_MIN_SCALE
 		maxScale := minScale
+		specializationTimeout := DEFAULT_SPECIALIZATION_TIMEOUT
 
 		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
 			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
 			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
+			specializationTimeout = existingInvokeStrategy.ExecutionStrategy.SpecializationTimeout
 		}
 
 		if c.IsSet("targetcpu") {
@@ -142,6 +149,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 			}
 		}
 
+		if c.IsSet("specializationtimeout") {
+			specializationTimeout = c.Int("specializationtimeout")
+			if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+				return nil, errors.New("specializationtimeout must be greater than or equal to 120 seconds")
+			}
+		}
+
 		if minScale > maxScale {
 			return nil, fmt.Errorf("minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale)
 		}
@@ -151,10 +165,11 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
-				ExecutorType:     fnExecutor,
-				MinScale:         minScale,
-				MaxScale:         maxScale,
-				TargetCPUPercent: targetCPU,
+				ExecutorType:          fnExecutor,
+				MinScale:              minScale,
+				MaxScale:              maxScale,
+				TargetCPUPercent:      targetCPU,
+				SpecializationTimeout: specializationTimeout,
 			},
 		}
 	}
@@ -489,6 +504,7 @@ func fnUpdate(c *cli.Context) error {
 
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
+	specializationTimeout := c.Int("specializationtimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
@@ -556,6 +572,19 @@ func fnUpdate(c *cli.Context) error {
 		log.Fatal(err)
 	}
 	function.Spec.InvokeStrategy = *strategy
+
+	if c.IsSet("specializationtimeout") {
+		if c.String("executortype") != types.ExecutorTypeNewdeploy {
+			log.Fatal("specializationtimeout flag is only applicable for newdeploy type of executor")
+		}
+
+		if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
+			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+		} else {
+			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
+		}
+	}
+
 	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
