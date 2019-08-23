@@ -23,8 +23,8 @@ import (
 	"os"
 	"strconv"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
 	docopt "github.com/docopt/docopt-go"
-	"go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/trace"
 	"go.uber.org/zap"
 

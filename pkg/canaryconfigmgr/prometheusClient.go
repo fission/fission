@@ -21,7 +21,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	promClient "github.com/prometheus/client_golang/api/prometheus"
+	prometheus "github.com/prometheus/client_golang/api"
+	prometheusv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
@@ -29,20 +30,20 @@ import (
 
 type PrometheusApiClient struct {
 	logger *zap.Logger
-	client promClient.QueryAPI
+	client prometheusv1.API
 }
 
 func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*PrometheusApiClient, error) {
-	promApiConfig := promClient.Config{
+	promApiConfig := prometheus.Config{
 		Address: prometheusSvc,
 	}
 
-	promApiClient, err := promClient.New(promApiConfig)
+	promApiClient, err := prometheus.NewClient(promApiConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error creating prometheus api client for svc: %s", prometheusSvc)
 	}
 
-	apiQueryClient := promClient.NewQueryAPI(promApiClient)
+	apiQueryClient := prometheusv1.NewAPI(promApiClient)
 
 	return &PrometheusApiClient{
 		logger: logger.Named("prometheus_api_client"),
@@ -124,9 +125,13 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(f
 }
 
 func (promApiClient *PrometheusApiClient) executeQuery(queryString string) (float64, error) {
-	val, err := promApiClient.client.Query(context.Background(), queryString, time.Now())
+	val, warn, err := promApiClient.client.Query(context.Background(), queryString, time.Now())
 	if err != nil {
 		return 0, errors.Wrapf(err, "error querying prometheus")
+	}
+
+	if warn != nil {
+		promApiClient.logger.Warn("receive prometheus client query warning", zap.Any("msg", warn))
 	}
 
 	switch {
