@@ -167,8 +167,8 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -245,8 +245,8 @@ spec:
           - containerPort: 8888
             name: http
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -327,8 +327,8 @@ spec:
           - containerPort: 8888
             name: http
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -373,8 +373,8 @@ spec:
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -401,8 +401,8 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -429,8 +429,8 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -474,6 +474,6 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
