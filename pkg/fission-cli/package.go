@@ -43,6 +43,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
@@ -97,7 +98,7 @@ func pkgCreate(c *cli.Context) error {
 		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	createPackage(client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
+	createPackage(c, client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
 
 	return nil
 }
@@ -513,7 +514,7 @@ func createArchive(client *client.Client, includeFiles []string, noZip bool, spe
 
 	if len(specFile) > 0 {
 		// create an ArchiveUploadSpec and reference it from the archive
-		aus := &ArchiveUploadSpec{
+		aus := &spec.ArchiveUploadSpec{
 			Name:         archiveName("", includeFiles),
 			IncludeGlobs: includeFiles,
 		}
@@ -583,7 +584,7 @@ func uploadArchive(ctx context.Context, client *client.Client, fileName string) 
 	return &archive
 }
 
-func createPackage(client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) *metav1.ObjectMeta {
+func createPackage(c *cli.Context, client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) *metav1.ObjectMeta {
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
 			Namespace: envNamespace,
@@ -626,7 +627,7 @@ func createPackage(client *client.Client, pkgNamespace string, envName string, e
 
 	if len(specFile) > 0 {
 		// if a package sith the same spec exists, don't create a new spec file
-		fr, err := readSpecs(cmdutils.GetSpecDir(nil))
+		fr, err := readSpecs(cmdutils.GetSpecDir(urfavecli.Parse(c)))
 		util.CheckErr(err, "read specs")
 		if m := fr.SpecExists(pkg, false, true); m != nil {
 			fmt.Printf("Re-using previously created package %v\n", m.Name)

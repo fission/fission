@@ -40,11 +40,12 @@ import (
 var specDefaultEncoder = encoder.DefaultYAMLEncoder()
 
 const (
-	SPEC_API_VERSION = "fission.io/v1"
+	FISSION_DEPLOYMENT_NAME_KEY = "fission-name"
+	FISSION_DEPLOYMENT_UID_KEY  = "fission-uid"
 
+	SPEC_API_VERSION          = "fission.io/v1"
 	ARCHIVE_URL_PREFIX string = "archive://"
-
-	SPEC_README = `
+	SPEC_README               = `
 Fission Specs
 =============
 

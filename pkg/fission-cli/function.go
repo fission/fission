@@ -293,7 +293,7 @@ func fnCreate(c *cli.Context) error {
 		buildcmd := c.String("buildcmd")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+		pkgMetadata = createPackage(c, client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 	}
 
 	var secrets []fv1.SecretReference

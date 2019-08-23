@@ -48,7 +48,7 @@ import (
 
 // writeDeploymentConfig serializes the DeploymentConfig to YAML and writes it to a new
 // fission-config.yaml in specDir.
-func writeDeploymentConfig(specDir string, dc *DeploymentConfig) error {
+func writeDeploymentConfig(specDir string, dc *spec.DeploymentConfig) error {
 	y, err := yaml.Marshal(dc)
 	if err != nil {
 		return err
@@ -97,8 +97,8 @@ func specInit(c *cli.Context) error {
 	}
 
 	// Write the deployment config
-	dc := DeploymentConfig{
-		TypeMeta: TypeMeta{
+	dc := spec.DeploymentConfig{
+		TypeMeta: spec.TypeMeta{
 			APIVersion: spec.SPEC_API_VERSION,
 			Kind:       "DeploymentConfig",
 		},
@@ -660,15 +660,15 @@ func applyDeploymentConfig(m *metav1.ObjectMeta, fr *spec.FissionResources) {
 	if m.Annotations == nil {
 		m.Annotations = make(map[string]string)
 	}
-	m.Annotations[FISSION_DEPLOYMENT_NAME_KEY] = fr.DeploymentConfig.Name
-	m.Annotations[FISSION_DEPLOYMENT_UID_KEY] = fr.DeploymentConfig.UID
+	m.Annotations[spec.FISSION_DEPLOYMENT_NAME_KEY] = fr.DeploymentConfig.Name
+	m.Annotations[spec.FISSION_DEPLOYMENT_UID_KEY] = fr.DeploymentConfig.UID
 }
 
 func hasDeploymentConfig(m *metav1.ObjectMeta, fr *spec.FissionResources) bool {
 	if m.Annotations == nil {
 		return false
 	}
-	uid, ok := m.Annotations[FISSION_DEPLOYMENT_UID_KEY]
+	uid, ok := m.Annotations[spec.FISSION_DEPLOYMENT_UID_KEY]
 	if ok && uid == fr.DeploymentConfig.UID {
 		return true
 	}
