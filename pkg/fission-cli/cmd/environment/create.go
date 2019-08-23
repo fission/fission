@@ -79,7 +79,7 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 	// save to spec file
 	if flags.Bool(cmd.SPEC_SPEC) {
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
-		err = spec.SpecSave(opts.env, specFile)
+		err = spec.SpecSave(*opts.env, specFile)
 		util.CheckErr(err, "create environment spec")
 		return nil
 	}
