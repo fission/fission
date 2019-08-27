@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,16 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file tells deepcopy-gen to generate deepcopy methods for all structs in the package.
-// For more details, please visit https://blog.openshift.com/kubernetes-deep-dive-code-generation-customresources/
-
-// +k8s:deepcopy-gen=package
-// +k8s:defaulter-gen=TypeMeta
-// +groupName=fission.io
-package v1
-
-const (
-	CRD_VERSION = "fission.io/v1"
-
-	CRD_NAME_ENVIRONMENT = "Environment"
-)
+// Package cliwrapper is a wrapper that allowing functions to access flag value in an
+// identical way no matter what underlying CLI package used. It brings couple benefits
+// for doing this:
+// 1. Separate CLI function and CLI package.
+// 2. Easier to write test no matter what CLI package actually used.
+// 3. Migrate to new CLI package without changing the way for CLI function to access flag value.
+package cliwrapper

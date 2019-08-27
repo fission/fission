@@ -68,7 +68,7 @@ func (csController *ConfigSecretController) Run(ctx context.Context) {
 func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) (cache.Store, cache.Controller) {
 	resyncPeriod := 30 * time.Second
-	listWatch := cache.NewListWatchFromClient(kubernetesClient.Core().RESTClient(), "configmaps", metav1.NamespaceAll, fields.Everything())
+	listWatch := cache.NewListWatchFromClient(kubernetesClient.AppsV1().RESTClient(), "configmaps", metav1.NamespaceAll, fields.Everything())
 	store, controller := cache.NewInformer(listWatch, &apiv1.ConfigMap{}, resyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
 		DeleteFunc: func(obj interface{}) {},
@@ -116,7 +116,7 @@ func getConfigmapRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionC
 func initSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) (cache.Store, cache.Controller) {
 	resyncPeriod := 30 * time.Second
-	listWatch := cache.NewListWatchFromClient(kubernetesClient.Core().RESTClient(), "secrets", metav1.NamespaceAll, fields.Everything())
+	listWatch := cache.NewListWatchFromClient(kubernetesClient.AppsV1().RESTClient(), "secrets", metav1.NamespaceAll, fields.Everything())
 	store, controller := cache.NewInformer(listWatch, &apiv1.Secret{}, resyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
 		DeleteFunc: func(obj interface{}) {},
