@@ -45,8 +45,9 @@ import (
 )
 
 const (
-	FORWARDED        = "Forwarded"
-	X_FORWARDED_HOST = "X-Forwarded-Host"
+	FORWARDED                = "Forwarded"
+	X_FORWARDED_HOST         = "X-Forwarded-Host"
+	DEFAULT_FUNCTION_TIMEOUT = 60
 )
 
 type (
@@ -64,7 +65,7 @@ type (
 		recorderName             string
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
-		functionTimeout		 uint64
+		functionTimeout          uint64
 	}
 
 	tsRoundTripperParams struct {
@@ -292,9 +293,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		//Creating context for client
 		if roundTripper.funcHandler.functionTimeout == 0 {
-			roundTripper.funcHandler.functionTimeout = 60
+			roundTripper.funcHandler.functionTimeout = DEFAULT_FUNCTION_TIMEOUT
 		}
-		roundTripper.logger.Info("Creating context for request for ", zap.Any("Time ",roundTripper.funcHandler.functionTimeout))
+		roundTripper.logger.Info("Creating context for request for ", zap.Any("Time ", roundTripper.funcHandler.functionTimeout))
 		var closeCtx func()
 		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.funcHandler.functionTimeout)*time.Second)
 		defer closeCtx()

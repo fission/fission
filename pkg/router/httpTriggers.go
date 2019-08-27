@@ -150,10 +150,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		}
 
 		functionTimeout := ts.triggers[i].Spec.FunctionReference.FunctionTimeout
-		ts.logger.Info("Function Timeout for ", zap.Any("Function Name ",ts.triggers[i].Spec.FunctionReference.Name), zap.Any("time", functionTimeout))
-		if functionTimeout == 0 {
-			functionTimeout = 60
-		}
+		ts.logger.Debug("Function Timeout for ", zap.Any("Function Name ", ts.triggers[i].Spec.FunctionReference.Name), zap.Any("time", functionTimeout))
 
 		fh := &functionHandler{
 			logger:                   ts.logger.Named(trigger.Metadata.Name),
@@ -168,7 +165,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:             recorderName,
 			isDebugEnv:               ts.isDebugEnv,
 			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
-			functionTimeout:	  functionTimeout,
+			functionTimeout:          functionTimeout,
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",

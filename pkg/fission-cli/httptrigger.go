@@ -62,8 +62,8 @@ func getMethod(method string) string {
 func setHtFunctionRef(functionList []string, functionWeightsList []int, functionTimeout uint64) (*fv1.FunctionReference, error) {
 	if len(functionList) == 1 {
 		return &fv1.FunctionReference{
-			Type: fv1.FunctionReferenceTypeFunctionName,
-			Name: functionList[0],
+			Type:            fv1.FunctionReferenceTypeFunctionName,
+			Name:            functionList[0],
 			FunctionTimeout: functionTimeout,
 		}, nil
 	} else if len(functionList) == 2 {
