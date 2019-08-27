@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
@@ -110,7 +111,7 @@ func mqtCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", mqtName)
-		err := specSave(*mqt, specFile)
+		err := spec.SpecSave(*mqt, specFile)
 		util.CheckErr(err, "create message queue trigger spec")
 		return nil
 	}

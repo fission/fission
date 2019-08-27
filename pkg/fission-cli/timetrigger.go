@@ -29,6 +29,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -93,7 +94,7 @@ func ttCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", name)
-		err := specSave(*tt, specFile)
+		err := spec.SpecSave(*tt, specFile)
 		util.CheckErr(err, "create time trigger spec")
 		return nil
 	}

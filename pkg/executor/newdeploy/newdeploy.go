@@ -38,9 +38,8 @@ import (
 )
 
 const (
-	DeploymentKind                 = "Deployment"
-	DeploymentVersion              = "extensions/v1beta1"
-	DEFAULT_SPECIALIZATION_TIMEOUT = 120
+	DeploymentKind    = "Deployment"
+	DeploymentVersion = "extensions/v1beta1"
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
@@ -418,8 +417,8 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
 	// if no specializationTimeout is set, use default value
-	if specializationTimeout < DEFAULT_SPECIALIZATION_TIMEOUT {
-		specializationTimeout = DEFAULT_SPECIALIZATION_TIMEOUT
+	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+		specializationTimeout = fv1.DefaultSpecializationTimeOut
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
