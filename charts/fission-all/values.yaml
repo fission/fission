@@ -140,7 +140,7 @@ persistence:
 ## Extend the container specs for the core fission pods. 
 ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
 ## For example:
-## extraCoreComponmentPodConfig:
+## extraCoreComponentPodConfig:
 ##   affinity:
 ##     nodeAffinity:
 ##       requiredDuringSchedulingIgnoredDuringExecution:
@@ -150,7 +150,7 @@ persistence:
 ##               operator: In
 ##               values:
 ##                 - app
-extraCoreComponmentPodConfig:
+extraCoreComponentPodConfig:
 #  affinity:
 #  tolerations:
 #  nodeSelector:
