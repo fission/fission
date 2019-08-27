@@ -29,6 +29,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -106,7 +107,7 @@ func htCreate(c *cli.Context) error {
 
 	triggerName := c.String("name")
 	fnNamespace := c.String("fnNamespace")
-	spec := c.Bool("spec")
+	toSpec := c.Bool("spec")
 
 	m := &metav1.ObjectMeta{
 		Name:      triggerName,
@@ -135,7 +136,7 @@ func htCreate(c *cli.Context) error {
 	}
 
 	// For Specs, the spec validate checks for function reference
-	if !spec {
+	if !toSpec {
 		err = util.CheckFunctionExistence(client, functionList, fnNamespace)
 		if err != nil {
 			log.Warn(err.Error())
@@ -169,9 +170,9 @@ func htCreate(c *cli.Context) error {
 	}
 
 	// if we're writing a spec, don't call the API
-	if spec {
+	if toSpec {
 		specFile := fmt.Sprintf("route-%v.yaml", triggerName)
-		err := specSave(*ht, specFile)
+		err := spec.SpecSave(*ht, specFile)
 		util.CheckErr(err, "create HTTP trigger spec")
 		return nil
 	}

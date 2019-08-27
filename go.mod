@@ -22,7 +22,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/spec v0.17.2
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
-	github.com/gogo/protobuf v1.2.0 // indirect
+	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/golang/protobuf v1.3.1

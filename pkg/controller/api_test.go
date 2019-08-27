@@ -235,6 +235,7 @@ func TestEnvironmentApi(t *testing.T) {
 
 	testEnv.Metadata.ResourceVersion = ""
 	testEnv.Metadata.Name = "bar"
+
 	m2, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
 	defer g.client.EnvironmentDelete(m2)
