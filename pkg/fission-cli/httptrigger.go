@@ -59,11 +59,12 @@ func getMethod(method string) string {
 	return ""
 }
 
-func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.FunctionReference, error) {
+func setHtFunctionRef(functionList []string, functionWeightsList []int, functionTimeout uint64) (*fv1.FunctionReference, error) {
 	if len(functionList) == 1 {
 		return &fv1.FunctionReference{
 			Type: fv1.FunctionReferenceTypeFunctionName,
 			Name: functionList[0],
+			FunctionTimeout: functionTimeout,
 		}, nil
 	} else if len(functionList) == 2 {
 		if len(functionWeightsList) != 2 {
@@ -83,6 +84,7 @@ func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.Fu
 		return &fv1.FunctionReference{
 			Type:            fv1.FunctionReferenceTypeFunctionWeights,
 			FunctionWeights: functionWeights,
+			FunctionTimeout: functionTimeout,
 		}, nil
 	}
 
@@ -94,12 +96,13 @@ func htCreate(c *cli.Context) error {
 
 	functionList := c.StringSlice("function")
 	functionWeightsList := c.IntSlice("weight")
+	functionTimeout := c.Uint64("timeout")
 
 	if len(functionList) == 0 {
 		log.Fatal("Need a function name to create a trigger, use --function")
 	}
 
-	functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
+	functionRef, err := setHtFunctionRef(functionList, functionWeightsList, functionTimeout)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -248,8 +251,10 @@ func htUpdate(c *cli.Context) error {
 			functionWeightsList = c.IntSlice("weight")
 		}
 
+		functionTimeout := c.Uint64("timeout")
+
 		// set function reference
-		functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
+		functionRef, err := setHtFunctionRef(functionList, functionWeightsList, functionTimeout)
 		if err != nil {
 			log.Fatal(err.Error())
 		}

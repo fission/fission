@@ -64,6 +64,7 @@ type (
 		recorderName             string
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
+		functionTimeout		 uint64
 	}
 
 	tsRoundTripperParams struct {
@@ -290,9 +291,12 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
 
 		//Creating context for client
-		roundTripper.logger.Debug("Creating the context for request\n")
+		if roundTripper.funcHandler.functionTimeout == 0 {
+			roundTripper.funcHandler.functionTimeout = 60
+		}
+		roundTripper.logger.Info("Creating context for request for ", zap.Any("Time ",roundTripper.funcHandler.functionTimeout))
 		var closeCtx func()
-		ctx, closeCtx := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.funcHandler.functionTimeout)*time.Second)
 		defer closeCtx()
 		out := make(chan bool)
 		// forward the request to the function service
@@ -303,7 +307,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 		//Check for Timeout
 		select {
 		case <-out:
-			roundTripper.logger.Debug("Response received from server")
+			roundTripper.logger.Info("Response received from server")
 		case <-ctx.Done():
 			roundTripper.logger.Error("Request Context Timed out")
 			//Return if request context is timed out
