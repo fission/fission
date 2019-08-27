@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -82,7 +83,7 @@ func recorderCreate(c *cli.Context) error {
 	// If we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("recorder-%v.yaml", recName)
-		err := specSave(*recorder, specFile)
+		err := spec.SpecSave(*recorder, specFile)
 		util.CheckErr(err, "create recorder spec")
 		return nil
 	}
