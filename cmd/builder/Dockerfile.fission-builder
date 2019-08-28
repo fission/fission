@@ -1,7 +1,7 @@
 FROM alpine:3.10 as base
 RUN apk add --update ca-certificates
 
-FROM golang:1.11-alpine as fission-builder
+FROM golang:1.12-alpine as fission-builder
 RUN apk add bash ca-certificates git gcc g++ libc-dev
 
 ARG GOPKG=github.com/fission/fission

@@ -128,9 +128,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				// It normally happened if there are multiple requests are
 				// waiting for the same function and executor failed to cre-
 				// ate service for function.
-				err = errors.Wrapf(err, "error getting service for function",
-					zap.String("function_name", m.Name),
-					zap.String("function_namespace", m.Namespace))
+				err = errors.Wrapf(err, "error getting service for function %v in namespace %v", m.Name, m.Namespace)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
