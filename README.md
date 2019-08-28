@@ -4,7 +4,7 @@ Fission: Serverless Functions for Kubernetes
 [![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
 [![Fission Slack](http://slack.fission.io/badge.svg)](http://slack.fission.io)
 
-[fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
+[fission.io](http://fission.io) [@fissionio](http://twitter.com/fissionio)
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
@@ -40,7 +40,9 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 Getting started and documentation
 ===============================
 
-You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io). See the [installation guide](https://docs.fission.io/installation/) for installing and running Fission.
+You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io). 
+* See the [installation guide](https://docs.fission.io/installation/) for installing and running Fission.
+* See the [troubleshooting guide](https://docs.fission.io/trouble-shooting/) for debugging your functions and Fission installation.
 
 Contributing
 =================
@@ -60,7 +62,11 @@ A regular community meeting takes place every other Thursday at 08:30 AM PT (Pac
 
 ## Official Releases
 
-Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from the master branch are subject to changes and incompatibilities that will not be supported in the official releases. Builds from the master branch can have functionality changed and even removed at any time without compatibility support and without prior notice.
+Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
+Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
+the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
+Builds from the master branch can have functionality changed and even removed at any time without compatibility support 
+and without prior notice.
 
 ## Licensing
 
