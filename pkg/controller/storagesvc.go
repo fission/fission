@@ -22,8 +22,39 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"go.uber.org/zap"
 )
+
+func RegisterStorageServiceProxyRoute(ws *restful.WebService) {
+	tags := []string{"StorageServiceProxy"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "StorageServiceProxy", Description: "StorageServiceProxy Operation"}})
+
+	// workaround as go-restful has to set HTTP method explicitly.
+	ws.Route(
+		ws.POST("/proxy/storage/v1/archive").
+			Doc("Create archive").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}))
+	ws.Route(
+		ws.GET("/proxy/storage/v1/archive").
+			Doc("Get archive").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}))
+	ws.Route(
+		ws.DELETE("/proxy/storage/v1/archive").
+			Doc("Delete archive").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}))
+}
 
 func (api *API) StorageServiceProxy(w http.ResponseWriter, r *http.Request) {
 	u := api.storageServiceUrl

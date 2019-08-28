@@ -17,9 +17,8 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/hashicorp/go-multierror"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -47,18 +46,19 @@ type (
 		Metadata        metav1.ObjectMeta `json:"metadata"`
 		Spec            PackageSpec       `json:"spec"`
 
+		// Status indicates the build status of package.
 		Status PackageStatus `json:"status"`
 	}
 
+	// PackageList is a list of Packages.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []Package `json:"items"`
+		Items           []Package       `json:"items"`
 	}
 
-	// Functions.
+	// Function is function runs within environment runtime with given package and secrets/configmaps.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Function struct {
 		metav1.TypeMeta `json:",inline"`
@@ -66,15 +66,15 @@ type (
 		Spec            FunctionSpec      `json:"spec"`
 	}
 
+	// FunctionList is a list of Functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	FunctionList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []Function `json:"items"`
+		Items           []Function      `json:"items"`
 	}
 
-	// Environments.
+	// Environment is environment for building and running user functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Environment struct {
 		metav1.TypeMeta `json:",inline"`
@@ -82,14 +82,15 @@ type (
 		Spec            EnvironmentSpec   `json:"spec"`
 	}
 
+	// EnvironmentList is a list of Environments.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	EnvironmentList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []Environment `json:"items"`
+		Items           []Environment   `json:"items"`
 	}
 
+	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	HTTPTrigger struct {
 		metav1.TypeMeta `json:",inline"`
@@ -97,15 +98,15 @@ type (
 		Spec            HTTPTriggerSpec   `json:"spec"`
 	}
 
+	// HTTPTriggerList is a list of HTTPTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []HTTPTrigger `json:"items"`
+		Items           []HTTPTrigger   `json:"items"`
 	}
 
-	// Kubernetes Watches as triggers
+	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	KubernetesWatchTrigger struct {
 		metav1.TypeMeta `json:",inline"`
@@ -113,15 +114,15 @@ type (
 		Spec            KubernetesWatchTriggerSpec `json:"spec"`
 	}
 
+	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []KubernetesWatchTrigger `json:"items"`
+		Metadata        metav1.ListMeta          `json:"metadata"`
+		Items           []KubernetesWatchTrigger `json:"items"`
 	}
 
-	// Time triggers
+	// TimeTrigger invokes functions based on given cron schedule.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	TimeTrigger struct {
 		metav1.TypeMeta `json:",inline"`
@@ -129,6 +130,7 @@ type (
 		Spec            TimeTriggerSpec   `json:"spec"`
 	}
 
+	// TimeTriggerList is a list of TimeTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -137,7 +139,7 @@ type (
 		Items []TimeTrigger `json:"items"`
 	}
 
-	// Message Queue triggers
+	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	MessageQueueTrigger struct {
 		metav1.TypeMeta `json:",inline"`
@@ -145,14 +147,15 @@ type (
 		Spec            MessageQueueTriggerSpec `json:"spec"`
 	}
 
+	// MessageQueueTriggerList is a list of MessageQueueTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []MessageQueueTrigger `json:"items"`
+		Metadata        metav1.ListMeta       `json:"metadata"`
+		Items           []MessageQueueTrigger `json:"items"`
 	}
 
+	// Recorder allows user to record all traffic payload to a certain function.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Recorder struct {
 		metav1.TypeMeta `json:",inline"`
@@ -160,6 +163,7 @@ type (
 		Spec            RecorderSpec      `json:"spec"`
 	}
 
+	// RecorderList is a list of Recorders.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	RecorderList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -168,6 +172,7 @@ type (
 		Items []Recorder `json:"items"`
 	}
 
+	// CanaryConfig is for canary deployment of two functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	CanaryConfig struct {
 		metav1.TypeMeta `json:",inline"`
@@ -176,6 +181,7 @@ type (
 		Status          CanaryConfigStatus `json:"status"`
 	}
 
+	// CanaryConfigList is a list of CanaryConfigs.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -183,272 +189,472 @@ type (
 
 		Items []CanaryConfig `json:"items"`
 	}
+
+	//
+	// Functions and packages
+	//
+
+	// ChecksumType specifies the checksum algorithm, such as
+	// sha256, used for a checksum.
+	ChecksumType string
+
+	// Checksum of package contents when the contents are stored
+	// outside the Package struct. Type is the checksum algorithm;
+	// "sha256" is the only currently supported one. Sum is hex
+	// encoded.
+	Checksum struct {
+		Type ChecksumType `json:"type,omitempty"`
+		Sum  string       `json:"sum,omitempty"`
+	}
+
+	// ArchiveType is either literal or URL, indicating whether
+	// the package is specified in the Archive struct or
+	// externally.
+	ArchiveType string
+
+	// Package contains or references a collection of source or
+	// binary files.
+	Archive struct {
+		// Type defines how the package is specified: literal or URL.
+		// Available value:
+		//  - literal
+		//  - url
+		Type ArchiveType `json:"type,omitempty"`
+
+		// Literal contents of the package. Can be used for
+		// encoding packages below TODO (256KB?) size.
+		Literal []byte `json:"literal,omitempty"`
+
+		// URL references a package.
+		URL string `json:"url,omitempty"`
+
+		// Checksum ensures the integrity of packages
+		// refereced by URL. Ignored for literals.
+		Checksum Checksum `json:"checksum,omitempty"`
+	}
+
+	// EnvironmentReference is a reference to a environment.
+	EnvironmentReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
+	// SecretReference is a reference to a kubernetes secret.
+	SecretReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
+	// ConfigMapReference is a reference to a kubernetes configmap.
+	ConfigMapReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+
+	// BuildStatus indicates the current build status of a package.
+	BuildStatus string
+
+	// PackageSpec includes source/deploy archives and the reference of environment to build the package.
+	PackageSpec struct {
+		// Environment is a reference to the environment for building source archive.
+		Environment EnvironmentReference `json:"environment"`
+
+		// Source is the archive contains source code and dependencies file.
+		// If the package status is in PENDING state, builder manager will then
+		// notify builder to compile source and save the result as deployable archive.
+		Source Archive `json:"source,omitempty"`
+
+		// Deployment is the deployable archive that environment runtime used to run user function.
+		Deployment Archive `json:"deployment,omitempty"`
+
+		// BuildCommand is a custom build command that builder used to build the source archive.
+		BuildCommand string `json:"buildcmd,omitempty"`
+
+		// In the future, we can have a debug build here too
+	}
+
+	// PackageStatus contains the build status of a package also the build log for examination.
+	PackageStatus struct {
+		// BuildStatus is the package build status.
+		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
+
+		// BuildLog stores build log during the compilation.
+		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
+	}
+
+	// PackageRef is a reference to the package.
+	PackageRef struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+
+		// Including resource version in the reference forces the function to be updated on
+		// package update, making it possible to cache the function based on its metadata.
+		ResourceVersion string `json:"resourceversion,omitempty"`
+	}
+
+	// FunctionPackageRef includes the reference to the package also the entrypoint of package.
+	FunctionPackageRef struct {
+		// Package reference
+		PackageRef PackageRef `json:"packageref"`
+
+		// FunctionName specifies a specific function within the package. This allows
+		// functions to share packages, by having different functions within the same
+		// package.
+		//
+		// Fission itself does not interpret this path. It is passed verbatim to
+		// build and runtime environments.
+		//
+		// This is optional: if unspecified, the environment has a default name.
+		FunctionName string `json:"functionName,omitempty"`
+	}
+
+	// ExecutorType is the primary executor for an environment
+	ExecutorType string
+
+	// StrategyType is the strategy to be used for function execution
+	StrategyType string
+
+	// FunctionSpec describes the contents of the function.
+	FunctionSpec struct {
+		// Environment is the build and runtime environment that this function is
+		// associated with. An Environment with this name should exist, otherwise the
+		// function cannot be invoked.
+		Environment EnvironmentReference `json:"environment"`
+
+		// Reference to a package containing deployment and optionally the source.
+		Package FunctionPackageRef `json:"package"`
+
+		// Reference to a list of secrets.
+		Secrets []SecretReference `json:"secrets"`
+
+		// Reference to a list of configmaps.
+		ConfigMaps []ConfigMapReference `json:"configmaps"`
+
+		// cpu and memory resources as per K8S standards
+		// This is only for newdeploy to set up resource limitation
+		// when creating deployment for a function.
+		Resources apiv1.ResourceRequirements `json:"resources"`
+
+		// InvokeStrategy is a set of controls which affect how function executes
+		InvokeStrategy InvokeStrategy
+	}
+
+	// InvokeStrategy is a set of controls over how the function executes.
+	// It affects the performance and resource usage of the function.
+	//
+	// An InvokeStrategy is of one of two types: ExecutionStrategy, which controls low-level
+	// parameters such as which ExecutorType to use, when to autoscale, minimum and maximum
+	// number of running instances, etc. A higher-level AbstractInvokeStrategy will also be
+	// supported; this strategy would specify the target request rate of the function,
+	// the target latency statistics, and the target cost (in terms of compute resources).
+	InvokeStrategy struct {
+
+		// ExecutionStrategy specifies low-level parameters for function execution,
+		// such as the number of instances.
+		ExecutionStrategy ExecutionStrategy
+
+		// StrategyType is the strategy type of a function.
+		// Now it only supports 'execution'.
+		StrategyType StrategyType
+	}
+
+	// ExecutionStrategy specifies low-level parameters for function execution,
+	// such as the number of instances.
+	//
+	// MinScale affects the cold start behaviour for a function. If MinScale is 0 then the
+	// deployment is created on first invocation of function and is good for requests of
+	// asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are
+	// created at the time of creation of function. This ensures faster response during first
+	// invocation at the cost of consuming resources.
+	//
+	// MaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent
+	// and resources allocated to the function pod.
+	ExecutionStrategy struct {
+
+		// ExecutorType is the executor type of a function used. Defaults to "poolmgr".
+		//
+		// Available value:
+		//  - poolmgr
+		//  - newdeploy
+		ExecutorType ExecutorType
+
+		// This is only for newdeploy to set up minimum replicas of deployment.
+		MinScale int
+
+		// This is only for newdeploy to set up maximum replicas of deployment.
+		MaxScale int
+
+		// This is only for newdeploy to set up target CPU utilization of HPA.
+		TargetCPUPercent int
+
+		// This is the timeout setting for executor to wait for pod specialization.
+		// Currently, only newdeploy utilizes this value.
+		SpecializationTimeout int
+	}
+
+	FunctionReferenceType string
+
+	FunctionReference struct {
+		// Type indicates whether this function reference is by name or selector. For now,
+		// the only supported reference type is by "name".  Future reference types:
+		//   * Function by label or annotation
+		//   * Branch or tag of a versioned function
+		//   * A "rolling upgrade" from one version of a function to another
+		// Available value:
+		// - name
+		// - function-weights
+		Type FunctionReferenceType `json:"type"`
+
+		// Name of the function.
+		Name string `json:"name"`
+
+		// Function Reference by weight. this map contains function name as key and its weight
+		// as the value. This is for canary upgrade purpose.
+		FunctionWeights map[string]int `json:"functionweights"`
+	}
+
+	//
+	// Environments
+	//
+
+	// Runtime is the setting for environment runtime.
+	Runtime struct {
+		// Image for containing the language runtime.
+		Image string `json:"image"`
+
+		// NOT USED NOW
+		// LoadEndpointPort defines the port on which the
+		// server listens for function load
+		// requests. Optional; default 8888.
+		LoadEndpointPort int32 `json:"-"` // `json:"loadendpointport"`
+
+		// NOT USED NOW
+		// LoadEndpointPath defines the relative URL on which
+		// the server listens for function load
+		// requests. Optional; default "/specialize".
+		LoadEndpointPath string `json:"-"` // `json:"loadendpointpath"`
+
+		// NOT USED NOW
+		// FunctionEndpointPort defines the port on which the
+		// server listens for function requests. Optional;
+		// default 8888.
+		FunctionEndpointPort int32 `json:"-"` // `json:"functionendpointport"`
+
+		// (Optional) Container allows the modification of the deployed runtime
+		// container using the Kubernetes Container spec. Fission overrides
+		// the following fields:
+		// - Name
+		// - Image; set to the Runtime.Image
+		// - TerminationMessagePath
+		// - ImagePullPolicy
+		//
+		// You can set either PodSpec or Container, but not both.
+		Container *apiv1.Container `json:"container,omitempty"`
+
+		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
+		// The merging logic is briefly described below and detailed MergePodSpec function
+		// - Volumes mounts and env variables for function and fetcher container are appended
+		// - All additional containers and init containers are appended
+		// - Volume definitions are appended
+		// - Lists such as tolerations, ImagePullSecrets, HostAliases are appended
+		// - Structs are merged and variables from pod spec take precedence
+		//
+		// You can set either PodSpec or Container, but not both.
+		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
+	}
+
+	// Builder is the setting for environment builder.
+	Builder struct {
+		// Image for containing the language compilation environment.
+		Image string `json:"image,omitempty"`
+
+		// (Optional) Default build command to run for this build environment.
+		Command string `json:"command,omitempty"`
+
+		// (Optional) Container allows the modification of the deployed builder
+		// container using the Kubernetes Container spec. Fission overrides
+		// the following fields:
+		// - Name
+		// - Image; set to the Builder.Image
+		// - Command; set to the Builder.Command
+		// - TerminationMessagePath
+		// - ImagePullPolicy
+		// - ReadinessProbe
+		Container *apiv1.Container `json:"container,omitempty"`
+	}
+
+	// EnvironmentSpec contains with builder, runtime and some other related environment settings.
+	EnvironmentSpec struct {
+		// Version is the Environment API version
+		//
+		// Version "1" allows user to run code snippet in a file and
+		// it's supported by most of environments except tensorflow-serving.
+		//
+		// Version "2" supports downloading and compiling user function if source archive is not empty.
+		//
+		// Version "3" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment.
+		Version int `json:"version"`
+
+		// Runtime is configuration for running function, like container image etc.
+		Runtime Runtime `json:"runtime"`
+
+		// (Optional) Builder is configuration for builder manager to launch environment builder to build source code into
+		// deployable binary.
+		Builder Builder `json:"builder"`
+
+		// NOT USED NOW.
+		// (Optional) Strongly encouraged. Used to populate links from UI, CLI, etc.
+		DocumentationURL string `json:"-"` // `json:"documentationurl,omitempty"`
+
+		// (Optional) defaults to 'single'. Fission workflow uses
+		// 'infinite' to load multiple functions in one function pod.
+		// Available value:
+		// - single
+		// - infinite
+		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
+
+		// Istio default blocks all egress traffic for safety.
+		// To enable accessibility of external network for builder/function pod, set to 'true'.
+		// (Optional) defaults to 'false'
+		AllowAccessToExternalNetwork bool `json:"allowAccessToExternalNetwork,omitempty"`
+
+		// The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.
+		// (Optional) defaults to no limitation.
+		Resources apiv1.ResourceRequirements `json:"resources"`
+
+		// The initial pool size for environment
+		Poolsize int `json:"poolsize,omitempty"`
+
+		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
+		// (Optional) defaults to 360 seconds
+		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
+
+		// KeepArchive is used by fetcher to determine if the extracted archive
+		// or unarchived file should be placed, which is then used by specialize handler.
+		// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
+		KeepArchive bool `json:"keeparchive"`
+	}
+
+	AllowedFunctionsPerContainer string
+
+	//
+	// Triggers
+	//
+
+	// HTTPTriggerSpec is for router to expose user functions at the given URL path.
+	HTTPTriggerSpec struct {
+		// NOT USED NOW
+		Host string `json:"-"` //`json:"host"`
+
+		// RelativeURL is the exposed URL for external client to access a function with.
+		RelativeURL string `json:"relativeurl"`
+
+		// If CreateIngress is true, router will create a ingress definition.
+		CreateIngress bool `json:"createingress"`
+
+		// HTTP method to access a function.
+		Method string `json:"method"`
+
+		// FunctionReference is a reference to the target function.
+		FunctionReference FunctionReference `json:"functionref"`
+	}
+
+	// KubernetesWatchTriggerSpec
+	KubernetesWatchTriggerSpec struct {
+		Namespace string `json:"namespace"`
+
+		// Type of resource to watch (Pod, Service, etc.)
+		Type string `json:"type"`
+
+		// Resource labels
+		LabelSelector map[string]string `json:"labelselector"`
+
+		// The reference to a function for kubewatcher to invoke with
+		// when receiving events.
+		FunctionReference FunctionReference `json:"functionref"`
+	}
+
+	// Type of message queue
+	MessageQueueType string
+
+	// MessageQueueTriggerSpec defines a binding from a topic in a
+	// message queue to a function.
+	MessageQueueTriggerSpec struct {
+		// The reference to a function for message queue trigger to invoke with
+		// when receiving messages from subscribed topic.
+		FunctionReference FunctionReference `json:"functionref"`
+
+		// Type of message queue (NATS, Kafka, AzureQueue)
+		MessageQueueType MessageQueueType `json:"messageQueueType"`
+
+		// Subscribed topic
+		Topic string `json:"topic"`
+
+		// Topic for message queue trigger to sent response from function.
+		ResponseTopic string `json:"respTopic,omitempty"`
+
+		// Topic to collect error response sent from function
+		ErrorTopic string `json:"errorTopic"`
+
+		// Maximum times for message queue trigger to retry
+		MaxRetries int `json:"maxRetries"`
+
+		// Content type of payload
+		ContentType string `json:"contentType"`
+	}
+
+	// RecorderSpec defines a policy for recording requests and responses
+	// to a function, that can be later inspected or replayed.
+	RecorderSpec struct {
+		// Name of recorder resource
+		Name string `json:"name"`
+
+		// Function to collect requests/responses
+		Function string `json:"function"`
+
+		// HTTP trigger to record the requests and responses.
+		Triggers        []string `json:"triggers"`
+		RetentionPolicy string   `json:"-"` // `json:"retentionPolicy"`
+		EvictionPolicy  string   `json:"-"` // `json:"evictionPolicy"`
+		Enabled         bool     `json:"enabled"`
+	}
+
+	// TimeTrigger invokes the specific function at a time or
+	// times specified by a cron string.
+	TimeTriggerSpec struct {
+		// Cron schedule
+		Cron string `json:"cron"`
+
+		// The reference to function
+		FunctionReference `json:"functionref"`
+	}
+
+	FailureType string
+
+	// Canary Config Spec
+	CanaryConfigSpec struct {
+		// HTTP trigger that this config references
+		Trigger string `json:"trigger"`
+
+		// New version of the function
+		NewFunction string `json:"newfunction"`
+
+		// Old stable version of the function
+		OldFunction string `json:"oldfunction"`
+
+		// Weight increment step for function
+		WeightIncrement int `json:"weightincrement"`
+
+		// Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d (default: "2m")
+		WeightIncrementDuration string `json:"duration"`
+
+		// Threshold in percentage beyond which the new version of the function is considered unstable
+		FailureThreshold int         `json:"failurethreshold"`
+		FailureType      FailureType `json:"failureType"`
+	}
+
+	// CanaryConfig Status
+	CanaryConfigStatus struct {
+		Status string `json:"status"`
+	}
 )
-
-// Each CRD type needs:
-//   GetObjectKind (to satisfy the Object interface)
-//
-// In addition, each singular CRD type needs:
-//   GetObjectMeta (to satisfy the ObjectMetaAccessor interface)
-//
-// And each list CRD type needs:
-//   GetListMeta (to satisfy the ListMetaAccessor interface)
-
-func (f *Function) GetObjectKind() schema.ObjectKind {
-	return &f.TypeMeta
-}
-func (e *Environment) GetObjectKind() schema.ObjectKind {
-	return &e.TypeMeta
-}
-func (ht *HTTPTrigger) GetObjectKind() schema.ObjectKind {
-	return &ht.TypeMeta
-}
-func (w *KubernetesWatchTrigger) GetObjectKind() schema.ObjectKind {
-	return &w.TypeMeta
-}
-func (t *TimeTrigger) GetObjectKind() schema.ObjectKind {
-	return &t.TypeMeta
-}
-func (m *MessageQueueTrigger) GetObjectKind() schema.ObjectKind {
-	return &m.TypeMeta
-}
-func (p *Package) GetObjectKind() schema.ObjectKind {
-	return &p.TypeMeta
-}
-func (c *CanaryConfig) GetObjectKind() schema.ObjectKind {
-	return &c.TypeMeta
-}
-
-func (r *Recorder) GetObjectKind() schema.ObjectKind {
-	return &r.TypeMeta
-}
-
-func (f *Function) GetObjectMeta() metav1.Object {
-	return &f.Metadata
-}
-func (e *Environment) GetObjectMeta() metav1.Object {
-	return &e.Metadata
-}
-func (ht *HTTPTrigger) GetObjectMeta() metav1.Object {
-	return &ht.Metadata
-}
-func (w *KubernetesWatchTrigger) GetObjectMeta() metav1.Object {
-	return &w.Metadata
-}
-func (t *TimeTrigger) GetObjectMeta() metav1.Object {
-	return &t.Metadata
-}
-func (m *MessageQueueTrigger) GetObjectMeta() metav1.Object {
-	return &m.Metadata
-}
-func (p *Package) GetObjectMeta() metav1.Object {
-	return &p.Metadata
-}
-func (c *CanaryConfig) GetObjectMeta() metav1.Object {
-	return &c.Metadata
-}
-
-func (r *Recorder) GetObjectMeta() metav1.Object {
-	return &r.Metadata
-}
-
-func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
-	return &fl.TypeMeta
-}
-func (el *EnvironmentList) GetObjectKind() schema.ObjectKind {
-	return &el.TypeMeta
-}
-func (hl *HTTPTriggerList) GetObjectKind() schema.ObjectKind {
-	return &hl.TypeMeta
-}
-func (wl *KubernetesWatchTriggerList) GetObjectKind() schema.ObjectKind {
-	return &wl.TypeMeta
-}
-func (wl *TimeTriggerList) GetObjectKind() schema.ObjectKind {
-	return &wl.TypeMeta
-}
-func (ml *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
-	return &ml.TypeMeta
-}
-func (pl *PackageList) GetObjectKind() schema.ObjectKind {
-	return &pl.TypeMeta
-}
-func (rl *RecorderList) GetObjectKind() schema.ObjectKind {
-	return &rl.TypeMeta
-}
-
-func (cl *CanaryConfigList) GetObjectKind() schema.ObjectKind {
-	return &cl.TypeMeta
-}
-
-func (fl *FunctionList) GetListMeta() metav1.ListInterface {
-	return &fl.Metadata
-}
-func (el *EnvironmentList) GetListMeta() metav1.ListInterface {
-	return &el.Metadata
-}
-func (hl *HTTPTriggerList) GetListMeta() metav1.ListInterface {
-	return &hl.Metadata
-}
-func (wl *KubernetesWatchTriggerList) GetListMeta() metav1.ListInterface {
-	return &wl.Metadata
-}
-func (wl *TimeTriggerList) GetListMeta() metav1.ListInterface {
-	return &wl.Metadata
-}
-func (ml *MessageQueueTriggerList) GetListMeta() metav1.ListInterface {
-	return &ml.Metadata
-}
-func (pl *PackageList) GetListMeta() metav1.ListInterface {
-	return &pl.Metadata
-}
-
-func (rl *RecorderList) GetListMeta() metav1.ListInterface {
-	return &rl.Metadata
-}
-
-func (cl *CanaryConfigList) GetListMeta() metav1.ListInterface {
-	return &cl.Metadata
-}
-
-func validateMetadata(field string, m metav1.ObjectMeta) error {
-	return ValidateKubeReference(field, m.Name, m.Namespace)
-}
-
-func (p *Package) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("Package", p.Metadata),
-		p.Spec.Validate(),
-		p.Status.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (pl *PackageList) Validate() error {
-	var result *multierror.Error
-	// not validate ListMeta
-	for _, p := range pl.Items {
-		result = multierror.Append(result, p.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (f *Function) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("Function", f.Metadata),
-		f.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (fl *FunctionList) Validate() error {
-	var result *multierror.Error
-	for _, f := range fl.Items {
-		result = multierror.Append(result, f.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (e *Environment) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("Environment", e.Metadata),
-		e.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (el *EnvironmentList) Validate() error {
-	var result *multierror.Error
-	for _, e := range el.Items {
-		result = multierror.Append(result, e.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (h *HTTPTrigger) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("HTTPTrigger", h.Metadata),
-		h.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (hl *HTTPTriggerList) Validate() error {
-	var result *multierror.Error
-	for _, h := range hl.Items {
-		result = multierror.Append(result, h.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (k *KubernetesWatchTrigger) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("KubernetesWatchTrigger", k.Metadata),
-		k.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (kl *KubernetesWatchTriggerList) Validate() error {
-	var result *multierror.Error
-	for _, k := range kl.Items {
-		result = multierror.Append(result, k.Validate())
-	}
-	return result
-}
-
-func (t *TimeTrigger) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("TimeTrigger", t.Metadata),
-		t.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (tl *TimeTriggerList) Validate() error {
-	var result *multierror.Error
-	for _, t := range tl.Items {
-		result = multierror.Append(result, t.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (m *MessageQueueTrigger) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("MessageQueueTrigger", m.Metadata),
-		m.Spec.Validate())
-
-	return result.ErrorOrNil()
-}
-
-func (ml *MessageQueueTriggerList) Validate() error {
-	var result *multierror.Error
-	for _, m := range ml.Items {
-		result = multierror.Append(result, m.Validate())
-	}
-	return result.ErrorOrNil()
-}
-
-func (r *Recorder) Validate() error {
-	var result *multierror.Error
-
-	result = multierror.Append(result,
-		validateMetadata("Recorder", r.Metadata),
-		r.Spec.Validate())
-
-	return result.ErrorOrNil()
-}

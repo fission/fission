@@ -21,12 +21,82 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterMessageQueueTriggerRoute(ws *restful.WebService) {
+	tags := []string{"MessageQueueTrigger"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "MessageQueueTrigger", Description: "MessageQueueTrigger Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/triggers/messagequeue").
+			Doc("List all message queue triggers").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of messageQueueTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.MessageQueueTrigger{}).
+			Returns(http.StatusOK, "List of messageQueueTriggers", []fv1.MessageQueueTrigger{}))
+
+	ws.Route(
+		ws.POST("/v2/triggers/messagequeue").
+			Doc("Create message queue trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.MessageQueueTrigger{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusCreated, "Metadata of created messageQueueTrigger", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/triggers/messagequeue/{mqTrigger}").
+			Doc("Get detail of message queue trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("mqTrigger", "MessageQueueTriggers name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of messageQueueTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.MessageQueueTrigger{}). // on the response
+			Returns(http.StatusOK, "A messageQueueTrigger", fv1.MessageQueueTrigger{}))
+
+	ws.Route(
+		ws.PUT("/v2/triggers/messagequeue/{mqTrigger}").
+			Doc("Update message queue trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("mqTrigger", "MessageQueueTrigger name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.MessageQueueTrigger{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated messageQueueTrigger", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/triggers/messagequeue/{mqTrigger}").
+			Doc("Delete message queue trigger").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("mqTrigger", "MessageQueueTrigger name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of messageQueueTrigger").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	//mqType := r.FormValue("mqtype") // ignored for now

@@ -21,3 +21,9 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=fission.io
 package v1
+
+const (
+	CRD_VERSION = "fission.io/v1"
+
+	CRD_NAME_ENVIRONMENT = "Environment"
+)

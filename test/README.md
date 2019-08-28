@@ -26,7 +26,6 @@ export TEST_NOCLEANUP=yes
 # run 'tests/test_environments/test_go_env.sh' with custom images
 export GO_RUNTIME_IMAGE=my.docker.repo/go-env:test
 ./tests/test_environments/test_go_env.sh
-
 ```
 
 

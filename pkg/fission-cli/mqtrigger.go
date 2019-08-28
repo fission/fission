@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    tttp://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
@@ -110,7 +111,7 @@ func mqtCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", mqtName)
-		err := specSave(*mqt, specFile)
+		err := spec.SpecSave(*mqt, specFile)
 		util.CheckErr(err, "create message queue trigger spec")
 		return nil
 	}

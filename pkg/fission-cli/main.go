@@ -27,6 +27,9 @@ import (
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/plugin"
 	"github.com/fission/fission/pkg/fission-cli/support"
@@ -66,9 +69,9 @@ func NewCliApp() *cli.App {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "server", Value: "", Usage: "Fission server URL"},
-		cli.IntFlag{Name: "verbosity", Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
-		cli.BoolFlag{Name: "plugin", Hidden: true},
+		cli.StringFlag{Name: cmd.FISSION_SERVER, Value: "", Usage: "Fission server URL"},
+		cli.IntFlag{Name: cmd.GLOBAL_VERBOSITY, Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
+		cli.BoolFlag{Name: cmd.GLOBAL_PLUGIN, Hidden: true},
 	}
 
 	// all resource create commands accept --spec
@@ -76,7 +79,7 @@ func NewCliApp() *cli.App {
 
 	// namespace reference for all objects
 	fnNamespaceFlag := cli.StringFlag{Name: "fnNamespace, fns", Value: metav1.NamespaceDefault, Usage: "Namespace for function object"}
-	envNamespaceFlag := cli.StringFlag{Name: "envNamespace, envns", Value: metav1.NamespaceDefault, Usage: "Namespace for environment object"}
+	envNamespaceFlag := cli.StringFlag{Name: cmd.GetCliFlagName(cmd.ENVIRONMENT_NAMESPACE, cmd.ENVIRONMENT_NAMESPACE_ALIAS), Value: metav1.NamespaceDefault, Usage: "Namespace for environment object"}
 	pkgNamespaceFlag := cli.StringFlag{Name: "pkgNamespace, pkgns", Value: metav1.NamespaceDefault, Usage: "Namespace for package object"}
 	triggerNamespaceFlag := cli.StringFlag{Name: "triggerNamespace, triggerns", Value: metav1.NamespaceDefault, Usage: "Namespace for trigger object"}
 	recorderNamespaceFlag := cli.StringFlag{Name: "recorderNamespace, recorderns", Value: metav1.NamespaceDefault, Usage: "Namespace for recorder object"}
@@ -87,13 +90,13 @@ func NewCliApp() *cli.App {
 	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
 
 	// Resource & scale related flags (Used in env and function)
-	minCpu := cli.IntFlag{Name: "mincpu", Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
-	maxCpu := cli.IntFlag{Name: "maxcpu", Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
-	minMem := cli.IntFlag{Name: "minmemory", Usage: "Minimum memory to be assigned to pod (In megabyte)"}
-	maxMem := cli.IntFlag{Name: "maxmemory", Usage: "Maximum memory to be assigned to pod (In megabyte)"}
-	minScale := cli.IntFlag{Name: "minscale", Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
-	maxScale := cli.IntFlag{Name: "maxscale", Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
-	targetcpu := cli.IntFlag{Name: "targetcpu", Usage: "Target average CPU usage percentage across pods for scaling"}
+	minCpu := cli.IntFlag{Name: cmd.RUNTIME_MINCPU, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
+	maxCpu := cli.IntFlag{Name: cmd.RUNTIME_MAXCPU, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
+	minMem := cli.IntFlag{Name: cmd.RUNTIME_MINMEMORY, Usage: "Minimum memory to be assigned to pod (In megabyte)"}
+	maxMem := cli.IntFlag{Name: cmd.RUNTIME_MAXMEMORY, Usage: "Maximum memory to be assigned to pod (In megabyte)"}
+	minScale := cli.IntFlag{Name: cmd.RUNTIME_MINSCALE, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
+	maxScale := cli.IntFlag{Name: cmd.RUNTIME_MAXSCALE, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
+	targetcpu := cli.IntFlag{Name: cmd.RUNTIME_TARGETCPU, Usage: "Target average CPU usage percentage across pods for scaling"}
 	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Usage: "Timeout for newdeploy to wait for function pod creation"}
 
 	// functions
@@ -212,21 +215,21 @@ func NewCliApp() *cli.App {
 	reqIDFlag := cli.StringFlag{Name: "reqUID", Usage: "Replay a particular request by providing the reqUID (to view reqUIDs, do 'fission records view')"}
 
 	// environments
-	envNameFlag := cli.StringFlag{Name: "name", Usage: "Environment name"}
-	envPoolsizeFlag := cli.IntFlag{Name: "poolsize", Value: 3, Usage: "Size of the pool"}
-	envImageFlag := cli.StringFlag{Name: "image", Usage: "Environment image URL"}
-	envBuilderImageFlag := cli.StringFlag{Name: "builder", Usage: "Environment builder image URL (optional)"}
-	envBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for environment builder to build source package (optional)"}
-	envKeepArchiveFlag := cli.BoolFlag{Name: "keeparchive", Usage: "Keep the archive instead of extracting it into a directory (optional, defaults to false)"}
-	envExternalNetworkFlag := cli.BoolFlag{Name: "externalnetwork", Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
-	envTerminationGracePeriodFlag := cli.Int64Flag{Name: "graceperiod, period", Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
-	envVersionFlag := cli.IntFlag{Name: "version", Value: 1, Usage: "Environment API version (1 means v1 interface)"}
+	envNameFlag := cli.StringFlag{Name: cmd.RESOURCE_NAME, Usage: "Environment name"}
+	envPoolsizeFlag := cli.IntFlag{Name: cmd.ENVIRONMENT_POOLSIZE, Value: 3, Usage: "Size of the pool"}
+	envImageFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_IMAGE, Usage: "Environment image URL"}
+	envBuilderImageFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_BUILDER, Usage: "Environment builder image URL (optional)"}
+	envBuildCmdFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_BUILDCOMMAND, Usage: "Build command for environment builder to build source package (optional)"}
+	envKeepArchiveFlag := cli.BoolFlag{Name: cmd.ENVIRONMENT_KEEPARCHIVE, Usage: "Keep the archive instead of extracting it into a directory (optional, defaults to false)"}
+	envExternalNetworkFlag := cli.BoolFlag{Name: cmd.ENVIRONMENT_EXTERNAL_NETWORK, Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
+	envTerminationGracePeriodFlag := cli.Int64Flag{Name: cmd.GetCliFlagName(cmd.ENVIRONMENT_GRACE_PERIOD, cmd.ENVIRONMENT_GRACE_PERIOD_ALIAS), Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
+	envVersionFlag := cli.IntFlag{Name: cmd.ENVIRONMENT_VERSION, Value: 1, Usage: "Environment API version (1 means v1 interface)"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, specSaveFlag}, Action: envCreate},
-		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envGet},
-		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag, envTerminationGracePeriodFlag}, Action: envUpdate},
-		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envDelete},
-		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{envNamespaceFlag}, Action: envList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, specSaveFlag}, Action: urfavecli.Wrapper(environment.Create)},
+		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: urfavecli.Wrapper(environment.Get)},
+		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag, envTerminationGracePeriodFlag}, Action: urfavecli.Wrapper(environment.Update)},
+		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: urfavecli.Wrapper(environment.Delete)},
+		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{envNamespaceFlag}, Action: urfavecli.Wrapper(environment.List)},
 	}
 
 	// watches
@@ -261,13 +264,6 @@ func NewCliApp() *cli.App {
 		{Name: "info", Usage: "Show package information", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgInfo},
 		{Name: "list", Usage: "List all packages", Flags: []cli.Flag{pkgOrphanFlag, pkgNamespaceFlag}, Action: pkgList},
 		{Name: "delete", Usage: "Delete package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgForceFlag, pkgOrphanFlag}, Action: pkgDelete},
-	}
-
-	// upgrades, data migrations
-	upgradeFileFlag := cli.StringFlag{Name: "file", Usage: "JSON file containing all fission state"}
-	upgradeSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Dump all state from a v0.1 fission installation", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeDumpState},
-		{Name: "restore", Usage: "Restore state dumped from a v0.1 install into a v0.2+ install", Flags: []cli.Flag{upgradeFileFlag}, Action: upgradeRestoreState},
 	}
 
 	// specs
@@ -320,7 +316,6 @@ func NewCliApp() *cli.App {
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
-		{Name: "upgrade", Aliases: []string{}, Usage: "Upgrade tool from fission v0.1", Subcommands: upgradeSubCommands},
 		{Name: "support", Usage: "Collect an archive of diagnostic information for support", Subcommands: supportSubCommands},
 		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},

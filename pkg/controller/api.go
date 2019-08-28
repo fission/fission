@@ -270,6 +270,8 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 	r.HandleFunc("/proxy/svcname", api.GetSvcName).Queries("application", "").Methods("GET")
 
+	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
+
 	address := fmt.Sprintf(":%v", port)
 
 	api.logger.Info("server started", zap.Int("port", port))

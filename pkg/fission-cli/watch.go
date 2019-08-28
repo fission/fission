@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -82,7 +83,7 @@ func wCreate(c *cli.Context) error {
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", watchName)
-		err := specSave(*w, specFile)
+		err := spec.SpecSave(*w, specFile)
 		util.CheckErr(err, "create kubernetes watch spec")
 		return nil
 	}
