@@ -153,14 +153,14 @@ func specializeHandlerV2(logger *zap.Logger) func(http.ResponseWriter, *http.Req
 			if os.IsNotExist(err) {
 				logger.Error("code path does not exist",
 					zap.Error(err),
-					zap.String("code_path", CODE_PATH))
+					zap.String("code_path", loadreq.FilePath))
 				w.WriteHeader(http.StatusNotFound)
-				w.Write([]byte(CODE_PATH + ": not found"))
+				w.Write([]byte(loadreq.FilePath + ": not found"))
 				return
 			} else {
 				logger.Error("unknown error looking for code path",
 					zap.Error(err),
-					zap.String("code_path", CODE_PATH))
+					zap.String("code_path", loadreq.FilePath))
 				err = errors.Wrap(err, "unknown error")
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
