@@ -16,7 +16,8 @@ ENV JAVA_HOME /usr/lib/jvm/java-1.8-openjdk
 ENV PATH $PATH:/usr/lib/jvm/java-1.8-openjdk/jre/bin:/usr/lib/jvm/java-1.8-openjdk/bin
 
 ENV JAVA_VERSION 8u181
-ENV JAVA_ALPINE_VERSION 8.212.04-r0
+## Use "fuzzy" version matching to pin the version to a major/minor release
+ENV JAVA_ALPINE_VERSION "~8.212"
 
 RUN set -x \
     && apk add --no-cache \

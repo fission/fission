@@ -21,6 +21,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +31,73 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterEnvironmentRoute(ws *restful.WebService) {
+	tags := []string{"Environment"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "Environment", Description: "Environment Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/environments").
+			Doc("List all environments").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of environment").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.Environment{}).
+			Returns(http.StatusOK, "List of environments", []fv1.Environment{}))
+
+	ws.Route(
+		ws.POST("/v2/environments").
+			Doc("Create environment").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Environment{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusCreated, "Metadata of created environment", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/environments/{environment}").
+			Doc("Get detail of environment").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("environment", "Environment name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of environment").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.Environment{}). // on the response
+			Returns(http.StatusOK, "A environment", fv1.Environment{}))
+
+	ws.Route(
+		ws.PUT("/v2/environments/{environment}").
+			Doc("Update environment").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("environment", "Environment name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Environment{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated environment", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/environments/{environment}").
+			Doc("Delete environment").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("environment", "Environment name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of environment").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")

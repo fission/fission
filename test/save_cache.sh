@@ -23,6 +23,9 @@ setupCIBuildEnv
 
 mkdir -p ${DOCKER_CACHE_DIR}
 
+# remove old images
+rm -rf ${DOCKER_CACHE_DIR}/*
+
 docker save $(docker history -q $REPO/python-env:$TAG | grep -v '<missing>') | gzip > ${DOCKER_CACHE_DIR}/python-env.tar.gz || true
 docker save $(docker history -q $REPO/jvm-env:$TAG | grep -v '<missing>') | gzip > ${DOCKER_CACHE_DIR}/jvm-env.tar.gz || true
 docker save $(docker history -q $REPO/go-env:$TAG | grep -v '<missing>') | gzip > ${DOCKER_CACHE_DIR}/go-env.tar.gz || true

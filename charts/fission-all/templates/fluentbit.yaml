@@ -35,6 +35,7 @@ spec:
       initContainers:
         - name: init
           image: busybox
+          imagePullPolicy: {{ .Values.pullPolicy }}
           command: ['mkdir', '-p', '/var/log/fission']
           volumeMounts:
             - name: container-log
@@ -42,8 +43,12 @@ spec:
               readOnly: false
       containers:
         - name: logger
+{{ if .Values.repository }}
           image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
-          imagePullPolicy: IfNotPresent
+{{ else }}
+          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+{{ end }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: NODE_NAME
               valueFrom:
@@ -60,7 +65,11 @@ spec:
               mountPath: /var/lib/docker/containers
               readOnly: true
         - name: fluentbit
+{{- if .Values.repository }}
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+{{ else }}
+          image: "{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+{{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
           command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]

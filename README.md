@@ -4,7 +4,7 @@ Fission: Serverless Functions for Kubernetes
 [![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
 [![Fission Slack](http://slack.fission.io/badge.svg)](http://slack.fission.io)
 
-[fission.io](http://fission.io)  [@fissionio](http://twitter.com/fissionio)
+[fission.io](http://fission.io) [@fissionio](http://twitter.com/fissionio)
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
@@ -37,75 +37,37 @@ Building on Kubernetes also means that anything you do for operations
 on your Kubernetes cluster &mdash; such as monitoring or log
 aggregation &mdash; also helps with ops on your Fission deployment.
 
-
-Fission Concepts
-----------------
-
-A _function_ is a piece of code that follows the fission function
-interface.
-
-An _environment_ contains the language- and runtime-specific parts of
-running a function.  
-
-The following environments are currently available:
- 
- | Environment                          | Image                     |
- | ------------------------------------ | ------------------------- |
- | Binary (for executables or scripts)  | `fission/binary-env`      |
- | Go                                   | `fission/go-env`          |
- | JVM                                  | `fission/jvm-env`         |
- | .NET                                 | `fission/dotnet-env`      |
- | .NET 2.0                             | `fission/dotnet20-env`    |
- | NodeJS (Alpine)                      | `fission/node-env`        |
- | NodeJS (Debian)                      | `fission/node-env-debian` |
- | Perl                                 | `fission/perl-env`        |
- | PHP 7                                | `fission/php-env`         |
- | Python 3                             | `fission/python-env`      |
- | Ruby                                 | `fission/ruby-env`        |
-
-You can also extend environments or create entirely new
-ones if you want.  (An environment is essentially just a container
-with a webserver and dynamic loader.)
-
-A _trigger_ is something that maps an event to a function; Fission
-as of today supports [HTTP request](https://docs.fission.io/usage/trigger/#create-a-http-trigger), [timed](https://docs.fission.io/usage/trigger/#create-a-time-trigger), and [message queue](https://docs.fission.io/usage/trigger/#create-a-message-queue-trigger) triggers.
-
-Usage
------
-
-```bash
-
-  # Add the stock NodeJS env to your Fission deployment
-  $ fission env create --name nodejs --image fission/node-env
-
-  # A javascript one-liner that prints "hello world"
-  $ curl https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js > hello.js
-
-  # Upload your function code to fission
-  $ fission function create --name hello --env nodejs --code hello.js
-
-  # Map GET /hello to your new function
-  $ fission route create --method GET --url /hello --function hello
-
-  # Run the function.  This takes about 100msec the first time.
-  $ fission function test --name hello
-  Hello, world!
-```
-
-See the [examples](examples) directory for more.
-
-Running Fission on your Cluster
+Getting started and documentation
 ===============================
 
-See the [installation guide](https://docs.fission.io/installation/).
+You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io). 
+* See the [installation guide](https://docs.fission.io/installation/) for installing and running Fission.
+* See the [troubleshooting guide](https://docs.fission.io/trouble-shooting/) for debugging your functions and Fission installation.
 
-Compiling Fission
+Contributing
 =================
 
+### Building Fission
 See the [compilation guide](https://docs.fission.io/contributing/).
 
+### Contact
 Reach us on [slack](http://slack.fission.io) or
 [twitter](https://twitter.com/fissionio).
 
-Fission is a project by [Platform9 Systems](https://platform9.com/fission/)
-and [many contributors](https://github.com/fission/fission/graphs/contributors).
+Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
+
+### Community meeting 
+
+A regular community meeting takes place every other Thursday at 08:30 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=08:30&tz=PT%20%28Pacific%20Time%29).
+
+## Official Releases
+
+Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
+Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
+the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
+Builds from the master branch can have functionality changed and even removed at any time without compatibility support 
+and without prior notice.
+
+## Licensing
+
+Fission is under the Apache 2.0 license.

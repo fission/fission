@@ -129,7 +129,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -167,8 +167,8 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -192,7 +192,7 @@ spec:
     spec:
       containers:
       - name: router
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -245,8 +245,8 @@ spec:
           - containerPort: 8888
             name: http
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -285,7 +285,7 @@ spec:
     spec:
       containers:
       - name: executor
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -327,8 +327,8 @@ spec:
           - containerPort: 8888
             name: http
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -347,7 +347,7 @@ spec:
     spec:
       containers:
       - name: buildermgr
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -373,8 +373,8 @@ spec:
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -393,7 +393,7 @@ spec:
     spec:
       containers:
       - name: kubewatcher
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -401,8 +401,8 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -421,7 +421,7 @@ spec:
     spec:
       containers:
       - name: timer
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -429,8 +429,8 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
       serviceAccount: fission-svc
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 
 ---
@@ -450,7 +450,7 @@ spec:
     spec:
       containers:
       - name: storagesvc
-        image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--storageServicePort", "8000", "--filePath", "/fission", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
@@ -474,6 +474,6 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-{{- if .Values.extraCoreComponmentPodConfig }}
-{{ toYaml .Values.extraCoreComponmentPodConfig | indent 6 -}}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
