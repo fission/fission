@@ -147,6 +147,7 @@ func environmentTests(crdClient *rest.RESTClient) {
 			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fv1.EnvironmentSpec{
+			Version: 1,
 			Runtime: fv1.Runtime{
 				Image: "xxx",
 			},
