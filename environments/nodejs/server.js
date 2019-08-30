@@ -138,7 +138,7 @@ app.all('/', function (req, res) {
     // you can do that here by adding properties to the context.
     //
 
-    if (userFunction.length <= 1) { // One argument (context)
+    if (userFunction.length <= 1) { // One or zero argument (context)
         let result;
         // Make sure their function returns a promise
         if (userFunction.length === 0) {
@@ -146,9 +146,9 @@ app.all('/', function (req, res) {
         } else {
             result = Promise.resolve(userFunction(context))
         }
-        result.then(function ({status, body, headers}) {
+        result.then(function({status, body, headers}) {
             callback(status, body, headers);
-        }).catch(function (err) {
+        }).catch(function(err) {
             console.log(`Function error: ${err}`);
             callback(500, "Internal server error");
         });
