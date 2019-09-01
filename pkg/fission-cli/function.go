@@ -572,9 +572,9 @@ func fnUpdate(c *cli.Context) error {
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
 	}
-	if fnTimeout >= 0 {
-		function.Spec.Package.FunctionTimeout = fnTimeout
-	}
+
+	function.Spec.Package.FunctionTimeout = fnTimeout
+
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
