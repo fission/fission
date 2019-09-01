@@ -57,6 +57,7 @@ type HTTPTriggerSet struct {
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	svcAddrUpdateThrottler     *throttler.Throttler
+	httpTriggersTimeout        map[string]uint64
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, frmap *functionRecorderMap, trmap *triggerRecorderMap, fissionClient *crd.FissionClient,
@@ -149,9 +150,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			ts.logger.Panic("resolve result type not implemented", zap.Any("type", rr.resolveResultType))
 		}
 
-		functionTimeout := ts.triggers[i].Spec.FunctionReference.FunctionTimeout
-		ts.logger.Debug("Function Timeout for ", zap.Any("Function Name ", ts.triggers[i].Spec.FunctionReference.Name), zap.Any("time", functionTimeout))
-
+		ts.logger.Debug("Setting up the function timeout for HTTPtrigger ", zap.Any("trName :", trigger.Metadata.Name), zap.Any("Time", ts.httpTriggersTimeout[trigger.Metadata.Name]))
 		fh := &functionHandler{
 			logger:                   ts.logger.Named(trigger.Metadata.Name),
 			fmap:                     ts.functionServiceMap,
@@ -165,7 +164,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:             recorderName,
 			isDebugEnv:               ts.isDebugEnv,
 			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
-			functionTimeout:          functionTimeout,
+			functionTimeout:          ts.httpTriggersTimeout[trigger.Metadata.Name],
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -212,6 +211,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName = recorder.Spec.Name
 		}
 
+		ts.logger.Debug("Setting up the function timeout for function ", zap.Any("Function", function.Spec.Package.FunctionName), zap.Any("Time", function.Spec.Package.FunctionTimeout))
+
 		fh := &functionHandler{
 			logger:                 ts.logger.Named(m.Name),
 			fmap:                   ts.functionServiceMap,
@@ -223,6 +224,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:           recorderName,
 			isDebugEnv:             ts.isDebugEnv,
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
+			functionTimeout:        function.Spec.Package.FunctionTimeout,
 		}
 		muxRouter.HandleFunc(utils.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
 	}
@@ -355,14 +357,28 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		// get triggers
 		latestTriggers := ts.triggerStore.List()
 		triggers := make([]fv1.HTTPTrigger, len(latestTriggers))
-		for _, t := range latestTriggers {
-			triggers = append(triggers, *t.(*fv1.HTTPTrigger))
-		}
-		ts.triggers = triggers
 
 		// get functions
 		latestFunctions := ts.funcStore.List()
 		functions := make([]fv1.Function, len(latestFunctions))
+
+		//Make HTTPTriggerName-FunctionTimeout map
+		httpTriggersTimeout := make(map[string]uint64)
+
+		//Iterate over each HTTPTrigger
+		for _, t := range latestTriggers {
+			triggers = append(triggers, *t.(*fv1.HTTPTrigger))
+			//Iterate over each function and populate HTTPTriggerName-FunctionTimeout map
+			for _, f := range latestFunctions {
+				if (*t.(*fv1.HTTPTrigger)).Spec.FunctionReference.Name == (*f.(*fv1.Function)).Metadata.Name {
+					httpTriggersTimeout[(*t.(*fv1.HTTPTrigger)).Metadata.Name] = uint64((*f.(*fv1.Function)).Spec.Package.FunctionTimeout)
+				}
+			}
+		}
+		ts.triggers = triggers
+		ts.httpTriggersTimeout = httpTriggersTimeout
+
+		//Iterate over function to create function list
 		for _, f := range latestFunctions {
 			functions = append(functions, *f.(*fv1.Function))
 		}

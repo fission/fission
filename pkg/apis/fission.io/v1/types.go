@@ -306,6 +306,9 @@ type (
 		//
 		// This is optional: if unspecified, the environment has a default name.
 		FunctionName string `json:"functionName,omitempty"`
+
+		//This is optional. If not specified default value will be taken as 60s
+		FunctionTimeout uint64 `json:"functionTimeout,omitempty"`
 	}
 
 	// ExecutorType is the primary executor for an environment
@@ -407,9 +410,6 @@ type (
 
 		// Name of the function.
 		Name string `json:"name"`
-
-		//This is optional. If not specified default value will be taken as 60s
-		FunctionTimeout uint64 `json:"timeout"`
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.

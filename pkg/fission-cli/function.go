@@ -224,6 +224,7 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 	entrypoint := c.String("entrypoint")
+	fnTimeout := c.Uint64("fntimeout")
 	pkgName := c.String("pkg")
 
 	secretName := c.String("secret")
@@ -344,7 +345,8 @@ func fnCreate(c *cli.Context) error {
 				Namespace: envNamespace,
 			},
 			Package: fv1.FunctionPackageRef{
-				FunctionName: entrypoint,
+				FunctionName:    entrypoint,
+				FunctionTimeout: fnTimeout,
 				PackageRef: fv1.PackageRef{
 					Namespace:       pkgMetadata.Namespace,
 					Name:            pkgMetadata.Name,
@@ -511,6 +513,7 @@ func fnUpdate(c *cli.Context) error {
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 	specializationTimeout := c.Int("specializationtimeout")
+	fnTimeout := c.Uint64("fntimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
@@ -568,6 +571,9 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
+	}
+	if fnTimeout >= 0 {
+		function.Spec.Package.FunctionTimeout = fnTimeout
 	}
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
