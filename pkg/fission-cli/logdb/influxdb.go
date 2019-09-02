@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -66,7 +65,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	parameters["time"] = timestamp
 	//the parameters above are only for the where clause and do not work with LIMIT
 
-	orderCondition := ""
+	orderCondition := " order by \"time\" asc"
 	if filter.Reverse {
 		orderCondition = " order by \"time\" desc"
 	}
@@ -130,16 +129,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 			}
 		}
 	}
-	sort.Slice(logEntries, func(i, j int) bool {
 
-		if logEntries[i].Timestamp.Before(logEntries[j].Timestamp) {
-			return true
-		}
-		if logEntries[j].Timestamp.Before(logEntries[i].Timestamp) {
-			return false
-		}
-		return logEntries[i].Sequence < logEntries[j].Sequence
-	})
 	return logEntries, nil
 }
 
