@@ -5,7 +5,6 @@
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
 # Change <DOCKERHUB_REPO> -> to your Dockerhub username
-# Run `go mod vendor` so that all dependencies are downloaded
 # Run `skaffold run` to build and deploy with helm. 
 # Run`skaffold build` to only build and push images
 ############## Current Limitations ##############

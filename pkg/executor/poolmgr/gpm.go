@@ -25,7 +25,9 @@ import (
 
 	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -111,7 +113,7 @@ func MakeGenericPoolManager(
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
 		if err != nil {
-			gpmLogger.Info("failed to parse ENABLE_ISTIO")
+			gpmLogger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
 		}
 		gpm.enableIstio = istio
 	}
@@ -128,6 +130,48 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
 	go gpm.idleObjectReaper()
+}
+
+func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+
+	env, err := gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	if err != nil {
+		return err
+	}
+
+	gp, err := gpm.GetPool(env)
+	if err != nil {
+		return err
+	}
+
+	funcSvc, err := gp.fsCache.GetByFunction(&f.Metadata)
+	if err != nil {
+		return err
+	}
+
+	gp.fsCache.DeleteEntry(funcSvc)
+
+	funcLabels := gp.labelsForFunction(&f.Metadata)
+
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, po := range podList.Items {
+		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(po.ObjectMeta.Name, &metav1.DeleteOptions{})
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (gpm *GenericPoolManager) service() {
@@ -204,7 +248,7 @@ func (gpm *GenericPoolManager) CleanupPools(envs []fv1.Environment) {
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	// from Func -> get Env
-	gpm.logger.Info("getting environment for function", zap.String("function", metadata.Name))
+	gpm.logger.Debug("getting environment for function", zap.String("function", metadata.Name))
 	env, err := gpm.getFunctionEnv(metadata)
 	if err != nil {
 		return nil, err
@@ -216,7 +260,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.
 	}
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Info("getting function service from pool", zap.String("function", metadata.Name))
+	gpm.logger.Debug("getting function service from pool", zap.String("function", metadata.Name))
 	return pool.GetFuncSvc(ctx, metadata)
 }
 
@@ -237,7 +281,6 @@ func (gpm *GenericPoolManager) getFunctionEnv(m *metav1.ObjectMeta) (*fv1.Enviro
 	}
 
 	// Get env from metadata
-	gpm.logger.Info("getting env", zap.Any("function", m))
 	env, err = gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
@@ -300,9 +343,16 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
 		if obj.Kind == "pod" {
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && strings.Contains(fsvc.Address, pod.Status.PodIP) && utils.IsReadyPod(pod) {
-				gpm.logger.Info("valid pod address", zap.String("address", fsvc.Address))
-				return true
+			if err == nil && utils.IsReadyPod(pod) {
+				// Normally, the address format is http://[pod-ip]:[port], however, if the
+				// Istio is enabled the address format changes to http://[svc-name]:[port].
+				// So if the Istio is enabled and pod is in ready state, we return true directly;
+				// Otherwise, we need to ensure that the address contains pod ip.
+				if gpm.enableIstio ||
+					(!gpm.enableIstio && strings.Contains(fsvc.Address, pod.Status.PodIP)) {
+					gpm.logger.Debug("valid address", zap.String("address", fsvc.Address))
+					return true
+				}
 			}
 		}
 	}
@@ -340,7 +390,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			// For function with the environment that no longer exists, executor
 			// cleanups the idle pod as usual and prints log to notify user.
 			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
-				gpm.logger.Info("function environment no longer exists",
+				gpm.logger.Warn("function environment no longer exists",
 					zap.String("environment", fsvc.Environment.Metadata.Name),
 					zap.String("function", fsvc.Name))
 			}

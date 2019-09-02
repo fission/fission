@@ -53,6 +53,25 @@ getGitCommit() {
     echo $(git rev-parse HEAD)
 }
 
+setupCIBuildEnv() {
+    export REPO=gcr.io/fission-ci
+    export IMAGE=fission-bundle
+    export FETCHER_IMAGE=$REPO/fetcher
+    export BUILDER_IMAGE=$REPO/builder
+    export TAG=test-${TRAVIS_BUILD_ID}
+    export PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
+    export ROUTER_SERVICE_TYPE=LoadBalancer
+    export SERVICE_TYPE=LoadBalancer
+    export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
+}
+
+load_docker_cache() {
+    cache=$1
+    if [ -f ${cache} ]; then
+        gunzip -c ${cache} | docker load;
+    fi
+}
+
 build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
@@ -105,10 +124,18 @@ build_and_push_builder() {
 build_and_push_env_runtime() {
     env=$1
     image_tag=$2
+    variant=$3
+
     travis_fold_start build_and_push_env_runtime.$env $image_tag
 
+    dockerfile="Dockerfile"
+
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+
     pushd $ROOT/environments/$env/
-    docker build -q -t $image_tag .
+    docker build -q -t $image_tag . -f ${dockerfile}
 
     gcloud_login
 
@@ -121,15 +148,23 @@ build_and_push_env_builder() {
     env=$1
     image_tag=$2
     builder_image=$3
+    variant=$4
+
     travis_fold_start build_and_push_env_builder.$env $image_tag
 
-    pushd $ROOT/environments/$env/builder
+    dockerfile="Dockerfile"
 
-    docker build -q -t $image_tag --build-arg BUILDER_IMAGE=${builder_image} .
+    if [ ! -z ${variant} ]; then
+        dockerfile=${dockerfile}-${variant}
+    fi
+
+    pushd ${ROOT}/environments/${env}/builder
+
+    docker build -q -t ${image_tag} --build-arg BUILDER_IMAGE=${builder_image} . -f ${dockerfile}
 
     gcloud_login
 
-    gcloud docker -- push $image_tag
+    gcloud docker -- push ${image_tag}
     popd
     travis_fold_end build_and_push_env_builder.$env
 }
@@ -177,7 +212,7 @@ helm_install_fission() {
     ns=f-$id
     fns=f-func-$id
 
-    helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
+    helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcherImage=$fetcherImage,fetcherImageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,debugEnv=true,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
 
     timeout 30 bash -c "helm_setup"
 
@@ -234,15 +269,15 @@ wait_for_service() {
     ns=f-$id
     while true
     do
-	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-	if [ ! -z $ip ]
-	then
-	    break
-	fi
-	echo Waiting for service $svc...
-	sleep 1
+	     ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+	      if [ ! -z $ip ]; then
+	         break
+	      fi
+	      echo Waiting for service $svc...
+	      sleep 1
     done
 }
+export -f wait_for_service
 
 wait_for_services() {
     id=$1
@@ -251,16 +286,30 @@ wait_for_services() {
     wait_for_service $id router
 
     echo Waiting for service is routable...
-    sleep 10
+    sleep 30
 }
+export -f wait_for_services
+
+check_gitcommit_version() {
+    while true
+    do
+        # ensure we run tests against with the same git commit version of CLI & server
+	      ip=$(fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit")
+	      if [ $? -eq 0 ]; then
+	        break
+	      fi
+	      echo Retrying getting build version from the controller...
+	      sleep 1
+    done
+}
+export -f check_gitcommit_version
 
 helm_uninstall_fission() {(set +e
     id=$1
 
-    if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]
-    then
-	echo "Fission uninstallation skipped"
-	return
+    if [ ! -z ${FISSION_TEST_SKIP_DELETE:+} ]; then
+	    echo "Fission uninstallation skipped"
+	    return
     fi
 
     echo "Uninstalling fission"
@@ -432,15 +481,17 @@ export FAILURES=0
 
 run_all_tests() {
     id=$1
+    imageTag=$2
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:test
-    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:test
-    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:test
-    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:test
-    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:test
-    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:test
+    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${imageTag}
+    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${imageTag}
+    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${imageTag}
+    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${imageTag}
+    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${imageTag}
+    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${imageTag}
+    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${imageTag}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
@@ -448,9 +499,8 @@ run_all_tests() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/recordreplay/test_record_greetings.sh \
         $ROOT/test/tests/recordreplay/test_record_rv.sh \
         $ROOT/test/tests/recordreplay/test_recorder_update.sh \
@@ -458,7 +508,6 @@ run_all_tests() {
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_buildermgr.sh \
-        $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
@@ -473,14 +522,17 @@ run_all_tests() {
         $ROOT/test/tests/test_router_cache_invalidation.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
-        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh
+        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
+        $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh
     FAILURES=$?
 
     # FIXME: run tests with newdeploy one by one.
-    export JOBS=1
+    export JOBS=2
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
-        $ROOT/test/tests/test_environments/test_go_env.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
@@ -538,13 +590,11 @@ install_and_test() {
 	    exit 1
     fi
 
-    wait_for_services $id
+    timeout 150 bash -c "wait_for_services $id"
+    timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
 
-    # ensure we run tests against with the same git commit version of CLI & server
-    fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit"
-
-    run_all_tests $id
+    run_all_tests $id $imageTag
 
     dump_logs $id
 

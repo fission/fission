@@ -28,8 +28,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,9 +36,14 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/types"
 )
 
 const (
@@ -101,6 +105,10 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		fnExecutor = newFnExecutor
 	}
 
+	if c.IsSet("specializationtimeout") && fnExecutor != types.ExecutorTypeNewdeploy {
+		return nil, errors.New("specializationtimeout flag is only applicable for newdeploy type of executor")
+	}
+
 	if fnExecutor == types.ExecutorTypePoolmgr {
 		if c.IsSet("targetcpu") || c.IsSet("minscale") || c.IsSet("maxscale") {
 			log.Fatal("To set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
@@ -120,11 +128,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
 		minScale := DEFAULT_MIN_SCALE
 		maxScale := minScale
+		specializationTimeout := fv1.DefaultSpecializationTimeOut
 
 		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
 			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
 			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
+			specializationTimeout = existingInvokeStrategy.ExecutionStrategy.SpecializationTimeout
 		}
 
 		if c.IsSet("targetcpu") {
@@ -142,6 +152,13 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 			}
 		}
 
+		if c.IsSet("specializationtimeout") {
+			specializationTimeout = c.Int("specializationtimeout")
+			if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+				return nil, errors.New("specializationtimeout must be greater than or equal to 120 seconds")
+			}
+		}
+
 		if minScale > maxScale {
 			return nil, fmt.Errorf("minscale provided: %v can not be greater than maxscale value %v", minScale, maxScale)
 		}
@@ -151,10 +168,11 @@ func getInvokeStrategy(c *cli.Context, existingInvokeStrategy *fv1.InvokeStrateg
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
-				ExecutorType:     fnExecutor,
-				MinScale:         minScale,
-				MaxScale:         maxScale,
-				TargetCPUPercent: targetCPU,
+				ExecutorType:          fnExecutor,
+				MinScale:              minScale,
+				MaxScale:              maxScale,
+				TargetCPUPercent:      targetCPU,
+				SpecializationTimeout: specializationTimeout,
 			},
 		}
 	}
@@ -188,13 +206,13 @@ func fnCreate(c *cli.Context) error {
 	}
 
 	// user wants a spec, create a yaml file with package and function
-	spec := false
+	toSpec := false
 	specFile := ""
 	if c.Bool("spec") {
-		spec = true
+		toSpec = true
 		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
-	specDir := getSpecDir(c)
+	specDir := cmdutils.GetSpecDir(urfavecli.Parse(c))
 
 	// check for unique function names within a namespace
 	fnList, err := client.FunctionList(fnNamespace)
@@ -208,14 +226,17 @@ func fnCreate(c *cli.Context) error {
 	entrypoint := c.String("entrypoint")
 	pkgName := c.String("pkg")
 
-	secretName := c.String("secret")
-	cfgMapName := c.String("configmap")
+	secretNames := c.StringSlice("secret")
+	cfgMapNames := c.StringSlice("configmap")
 
 	invokeStrategy, err := getInvokeStrategy(c, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	resourceReq := getResourceReq(c, apiv1.ResourceRequirements{})
+	resourceReq, err := cmd.GetResourceReqs(urfavecli.Parse(c), &apiv1.ResourceRequirements{})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
@@ -240,7 +261,7 @@ func fnCreate(c *cli.Context) error {
 		}
 
 		// examine existence of given environment. If specs - then spec validate will do it, don't check here.
-		if !spec {
+		if !toSpec {
 			_, err := client.EnvironmentGet(&metav1.ObjectMeta{
 				Namespace: envNamespace,
 				Name:      envName,
@@ -272,44 +293,50 @@ func fnCreate(c *cli.Context) error {
 		buildcmd := c.String("buildcmd")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+		pkgMetadata = createPackage(c, client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 	}
 
 	var secrets []fv1.SecretReference
 	var cfgmaps []fv1.ConfigMapReference
 
-	if len(secretName) > 0 {
+	if len(secretNames) > 0 {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
-		_, err := client.SecretGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      secretName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+		for _, secretName := range secretNames {
+			_, err := client.SecretGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      secretName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+			}
 		}
-
-		newSecret := fv1.SecretReference{
-			Name:      secretName,
-			Namespace: fnNamespace,
+		for _, secretName := range secretNames {
+			newSecret := fv1.SecretReference{
+				Name:      secretName,
+				Namespace: fnNamespace,
+			}
+			secrets = append(secrets, newSecret)
 		}
-		secrets = []fv1.SecretReference{newSecret}
 	}
 
-	if len(cfgMapName) > 0 {
+	if len(cfgMapNames) > 0 {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		_, err := client.ConfigMapGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      cfgMapName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+		for _, cfgMapName := range cfgMapNames {
+			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      cfgMapName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+			}
 		}
-
-		newCfgMap := fv1.ConfigMapReference{
-			Name:      cfgMapName,
-			Namespace: fnNamespace,
+		for _, cfgMapName := range cfgMapNames {
+			newCfgMap := fv1.ConfigMapReference{
+				Name:      cfgMapName,
+				Namespace: fnNamespace,
+			}
+			cfgmaps = append(cfgmaps, newCfgMap)
 		}
-		cfgmaps = []fv1.ConfigMapReference{newCfgMap}
 	}
 
 	function := &fv1.Function{
@@ -332,14 +359,14 @@ func fnCreate(c *cli.Context) error {
 			},
 			Secrets:        secrets,
 			ConfigMaps:     cfgmaps,
-			Resources:      resourceReq,
+			Resources:      *resourceReq,
 			InvokeStrategy: *invokeStrategy,
 		},
 	}
 
 	// if we're writing a spec, don't create the function
-	if spec {
-		err = specSave(*function, specFile)
+	if toSpec {
+		err = spec.SpecSave(*function, specFile)
 		util.CheckErr(err, "create function spec")
 		return nil
 
@@ -489,6 +516,7 @@ func fnUpdate(c *cli.Context) error {
 
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
+	specializationTimeout := c.Int("specializationtimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
@@ -556,7 +584,25 @@ func fnUpdate(c *cli.Context) error {
 		log.Fatal(err)
 	}
 	function.Spec.InvokeStrategy = *strategy
-	function.Spec.Resources = getResourceReq(c, function.Spec.Resources)
+
+	if c.IsSet("specializationtimeout") {
+		if c.String("executortype") != types.ExecutorTypeNewdeploy {
+			log.Fatal("specializationtimeout flag is only applicable for newdeploy type of executor")
+		}
+
+		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+			log.Fatal("specializationtimeout must be greater than or equal to 120 seconds")
+		} else {
+			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
+		}
+	}
+
+	resReqs, err := cmd.GetResourceReqs(urfavecli.Parse(c), &function.Spec.Resources)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	function.Spec.Resources = *resReqs
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
 		Namespace: fnNamespace,

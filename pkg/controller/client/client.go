@@ -18,12 +18,16 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
+
+	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/info"
@@ -94,7 +98,11 @@ func (c *Client) handleCreateResponse(resp *http.Response) ([]byte, error) {
 
 func (c *Client) ServerInfo() (*info.ServerInfo, error) {
 	url := fmt.Sprintf(c.Url)
-	resp, err := http.Get(url)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := ctxhttp.Get(ctx, &http.Client{}, url)
 	if err != nil {
 		return nil, err
 	}

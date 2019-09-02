@@ -80,50 +80,51 @@ func (p *WebhookPublisher) svc() {
 
 func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 	url := p.baseUrl + "/" + strings.TrimPrefix(r.target, "/")
-	p.logger.Info("making HTTP request", zap.String("url", url))
+
+	msg := "making HTTP request"
+	level := zap.ErrorLevel
+	fields := []zap.Field{zap.String("url", url), zap.String("type", "publish_request")}
+
+	// log once for this request
+	defer func() {
+		if ce := p.logger.Check(level, msg); ce != nil {
+			ce.Write(fields...)
+		}
+	}()
 
 	var buf bytes.Buffer
 	buf.WriteString(r.body)
 
 	// Create request
-	req, err := http.NewRequest("POST", url, &buf)
+	req, err := http.NewRequest(http.MethodPost, url, &buf)
 	if err != nil {
-		p.logger.Error("error creating request", zap.Error(err), zap.String("url", url))
+		fields = append(fields, zap.Error(err))
+		return
 	}
 	for k, v := range r.headers {
 		req.Header.Set(k, v)
 	}
-
 	// Make the request
 	resp, err := http.DefaultClient.Do(req)
-
-	// All done if the request succeeded with 200 OK.
-	if err == nil && resp.StatusCode == 200 {
-		resp.Body.Close()
-		return
-	}
-
-	// Log errors
 	if err != nil {
-		p.logger.Error("request failed",
-			zap.Error(err),
-			zap.Any("request", r),
-			zap.String("url", url))
-	} else if resp.StatusCode != 200 {
-		p.logger.Error("request returned failure status code",
-			zap.Any("request", r),
-			zap.String("url", url),
-			zap.Int("status_code", resp.StatusCode))
-		body, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
+		fields = append(fields, zap.Error(err), zap.Any("request", r))
+	} else {
+		var body []byte
+		body, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			p.logger.Error("error reading error request body",
-				zap.Error(err),
-				zap.Any("request", r),
-				zap.String("url", url),
-				zap.Int("status_code", resp.StatusCode))
+			fields = append(fields, zap.Error(err), zap.Any("request", r))
+			msg = "read response body error"
 		} else {
-			p.logger.Error("request error", zap.String("body", string(body)))
+			fields = append(fields, zap.Int("status_code", resp.StatusCode), zap.String("body", string(body)))
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				level = zap.InfoLevel
+			} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				msg = "request returned bad request status code"
+				level = zap.WarnLevel
+			} else {
+				msg = "request returned failure status code"
+			}
+			return
 		}
 	}
 
@@ -135,7 +136,7 @@ func (p *WebhookPublisher) makeHttpRequest(r *publishRequest) {
 			p.requestChannel <- r
 		})
 	} else {
-		p.logger.Error("final retry failed, giving up", zap.String("url", url))
+		msg = "final retry failed, giving up"
 		// Event dropped
 	}
 }

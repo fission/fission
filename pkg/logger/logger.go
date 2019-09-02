@@ -18,6 +18,7 @@ package logger
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
-	log "github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

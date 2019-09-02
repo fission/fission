@@ -32,12 +32,12 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/cms"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/newdeploy"
 	"github.com/fission/fission/pkg/executor/poolmgr"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -46,6 +46,7 @@ type (
 
 		gpm *poolmgr.GenericPoolManager
 		ndm *newdeploy.NewDeploy
+		cms *cms.ConfigSecretController
 
 		fissionClient *crd.FissionClient
 		fsCache       *fscache.FunctionServiceCache
@@ -65,11 +66,12 @@ type (
 	}
 )
 
-func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
+func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, cms *cms.ConfigSecretController, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
 	executor := &Executor{
 		logger:        logger.Named("executor"),
 		gpm:           gpm,
 		ndm:           ndm,
+		cms:           cms,
 		fissionClient: fissionClient,
 		fsCache:       fsCache,
 
@@ -115,7 +117,7 @@ func (executor *Executor) serveCreateFuncServices() {
 		} else {
 			// There's an existing request for this function, wait for it to finish
 			go func() {
-				executor.logger.Info("waiting for concurrent request for the same function",
+				executor.logger.Debug("waiting for concurrent request for the same function",
 					zap.Any("function", m))
 				wg.Wait()
 
@@ -126,9 +128,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				// It normally happened if there are multiple requests are
 				// waiting for the same function and executor failed to cre-
 				// ate service for function.
-				err = errors.Wrapf(err, "error getting service for function",
-					zap.String("function_name", m.Name),
-					zap.String("function_namespace", m.Namespace))
+				err = errors.Wrapf(err, "error getting service for function %v in namespace %v", m.Name, m.Namespace)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
@@ -147,7 +147,7 @@ func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fv1.
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
-	executor.logger.Info("no cached function service found, creating one",
+	executor.logger.Debug("no cached function service found, creating one",
 		zap.String("function_name", meta.Name),
 		zap.String("function_namespace", meta.Namespace))
 
@@ -206,9 +206,6 @@ func serveMetric(logger *zap.Logger) {
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(logger *zap.Logger, fissionNamespace string, functionNamespace string, envBuilderNamespace string, port int) error {
-	// setup a signal handler for SIGTERM
-	utils.SetupStackTraceHandler()
-
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 
 	err = fissionClient.WaitForCRDs()
@@ -242,7 +239,9 @@ func StartExecutor(logger *zap.Logger, fissionNamespace string, functionNamespac
 		fissionClient, kubernetesClient, restClient,
 		functionNamespace, fetcherConfig, poolID)
 
-	api := MakeExecutor(logger, gpm, ndm, fissionClient, fsCache)
+	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, ndm, gpm)
+
+	api := MakeExecutor(logger, gpm, ndm, cms, fissionClient, fsCache)
 
 	go api.Serve(port)
 	go serveMetric(logger)

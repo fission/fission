@@ -22,6 +22,11 @@ const (
 )
 
 const (
+	//LastUpdateTimestamp env variable is used for updating configmaps and secrets in pods
+	LastUpdateTimestamp string = "LASTUPDATE_TIMESTAMP"
+)
+
+const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
 
@@ -95,4 +100,8 @@ const (
 
 	// set a max number for iterations to prevent infinite processing of canary config
 	MaxIterationsForCanaryConfig = 10
+)
+
+const (
+	DefaultSpecializationTimeOut = 120
 )

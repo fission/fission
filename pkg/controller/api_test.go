@@ -205,6 +205,7 @@ func TestEnvironmentApi(t *testing.T) {
 			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fv1.EnvironmentSpec{
+			Version: 1,
 			Runtime: fv1.Runtime{
 				Image: "gcr.io/xyz",
 			},
@@ -235,6 +236,7 @@ func TestEnvironmentApi(t *testing.T) {
 
 	testEnv.Metadata.ResourceVersion = ""
 	testEnv.Metadata.Name = "bar"
+
 	m2, err := g.client.EnvironmentCreate(testEnv)
 	panicIf(err)
 	defer g.client.EnvironmentDelete(m2)

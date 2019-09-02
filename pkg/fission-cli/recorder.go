@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    tttp://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -82,7 +83,7 @@ func recorderCreate(c *cli.Context) error {
 	// If we're writing a spec, don't call the API
 	if c.Bool("spec") {
 		specFile := fmt.Sprintf("recorder-%v.yaml", recName)
-		err := specSave(*recorder, specFile)
+		err := spec.SpecSave(*recorder, specFile)
 		util.CheckErr(err, "create recorder spec")
 		return nil
 	}

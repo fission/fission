@@ -35,6 +35,7 @@ import (
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -84,9 +85,6 @@ func MakeNewDeploy(
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 ) *NewDeploy {
-
-	logger.Info("creating NewDeploy ExecutorType")
-
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -183,7 +181,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 			oldEnv := oldObj.(*fv1.Environment)
 			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
 			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
-				deploy.logger.Info("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
+				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
 				funcs := deploy.getEnvFunctions(&newEnv.Metadata)
 				for _, f := range funcs {
 					function, err := deploy.fissionClient.Functions(f.Metadata.Namespace).Get(f.Metadata.Name)
@@ -223,6 +221,45 @@ func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, metadata *metav1.Object
 	return deploy.createFunction(fn, false)
 }
 
+// RefreshFuncPods deleted pods related to the function so that new pods are replenished
+func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+
+	env, err := deploy.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	if err != nil {
+		return err
+	}
+
+	funcLabels := deploy.getDeployLabels(f.Metadata, metav1.ObjectMeta{
+		Name:      f.Spec.Environment.Name,
+		Namespace: f.Spec.Environment.Namespace,
+		UID:       env.Metadata.UID,
+	})
+
+	dep, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%s"}]}]}}}}`,
+		f.Metadata.Name,
+		fv1.LastUpdateTimestamp,
+		time.Now().String())
+
+	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
+	for _, deployment := range dep.Items {
+		_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
+			k8sTypes.StrategicMergePatchType,
+			[]byte(patch))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fscache.FuncSvc, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
 		return nil, nil
@@ -234,6 +271,15 @@ func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fs
 		}
 		return deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	})
+
+	if err != nil {
+		e := "error updating service address entry for function"
+		deploy.logger.Error(e,
+			zap.Error(err),
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
+		return nil, errors.Wrapf(err, "%s %s_%s", e, fn.Metadata.Name, fn.Metadata.Namespace)
+	}
 
 	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
 	if !ok {
@@ -270,7 +316,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 			objName = fsvc.Name
 		}
 	}
-	deployLabels := deploy.getDeployLabels(fn, env)
+	deployLabels := deploy.getDeployLabels(fn.Metadata, env.Metadata)
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
@@ -485,8 +531,9 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 	}
 	fnObjName := fsvc.Name
 
-	deployLabels := deploy.getDeployLabels(fn, env)
-	deploy.logger.Info("updating deployment due to function/environment update", zap.String("deployment", fnObjName), zap.Any("function", fn.Metadata.Name))
+	deployLabels := deploy.getDeployLabels(fn.Metadata, env.Metadata)
+	deploy.logger.Info("updating deployment due to function/environment update",
+		zap.String("deployment", fnObjName), zap.Any("function", fn.Metadata.Name))
 
 	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, deployLabels)
 	if err != nil {
@@ -550,16 +597,16 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v", fn.Metadata.Name, fn.Metadata.Namespace, uniuri.NewLen(8)))
 }
 
-func (deploy *NewDeploy) getDeployLabels(fn *fv1.Function, env *fv1.Environment) map[string]string {
+func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
 		types.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
 		types.EXECUTOR_TYPE:             fv1.ExecutorTypeNewdeploy,
-		types.ENVIRONMENT_NAME:          env.Metadata.Name,
-		types.ENVIRONMENT_NAMESPACE:     env.Metadata.Namespace,
-		types.ENVIRONMENT_UID:           string(env.Metadata.UID),
-		types.FUNCTION_NAME:             fn.Metadata.Name,
-		types.FUNCTION_NAMESPACE:        fn.Metadata.Namespace,
-		types.FUNCTION_UID:              string(fn.Metadata.UID),
+		types.ENVIRONMENT_NAME:          envMeta.Name,
+		types.ENVIRONMENT_NAMESPACE:     envMeta.Namespace,
+		types.ENVIRONMENT_UID:           string(envMeta.UID),
+		types.FUNCTION_NAME:             fnMeta.Name,
+		types.FUNCTION_NAMESPACE:        fnMeta.Namespace,
+		types.FUNCTION_UID:              string(fnMeta.UID),
 	}
 }
 
@@ -580,7 +627,7 @@ func (deploy *NewDeploy) updateKubeObjRefRV(fsvc *fscache.FuncSvc, objKind strin
 // updateStatus is a function which updates status of update.
 // Current implementation only logs messages, in future it will update function status
 func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message string) {
-	deploy.logger.Info("function status update", zap.Error(err), zap.Any("function", fn), zap.String("message", message))
+	deploy.logger.Error("function status update", zap.Error(err), zap.Any("function", fn), zap.String("message", message))
 }
 
 // IsValid does a get on the service address to ensure it's a valid service, then

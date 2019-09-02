@@ -26,6 +26,9 @@ import (
 	"net/url"
 	"sort"
 
+	"github.com/emicklei/go-restful"
+	restfulspec "github.com/emicklei/go-restful-openapi"
+	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -35,6 +38,73 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
+
+func RegisterFunctionRoute(ws *restful.WebService) {
+	tags := []string{"Function"}
+	specTag = append(specTag, spec.Tag{TagProps: spec.TagProps{Name: "Function", Description: "Function Operation"}})
+
+	ws.Route(
+		ws.GET("/v2/functions").
+			Doc("List all functions").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.QueryParameter("namespace", "Namespace of function").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes([]fv1.Function{}).
+			Returns(http.StatusOK, "List of functions", []fv1.Function{}))
+
+	ws.Route(
+		ws.POST("/v2/functions").
+			Doc("Create function").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Function{}).
+			Writes(metav1.ObjectMeta{}).
+			Returns(http.StatusOK, "Metadata of created function", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.GET("/v2/functions/{function}").
+			Doc("Get detail of function").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("function", "Function name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of function").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Writes(fv1.Function{}). // on the response
+			Returns(http.StatusOK, "A function", fv1.Function{}))
+
+	ws.Route(
+		ws.PUT("/v2/functions/{function}").
+			Doc("Update function").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("function", "Function name").DataType("string").DefaultValue("").Required(true)).
+			Produces(restful.MIME_JSON).
+			Reads(fv1.Function{}).
+			Writes(metav1.ObjectMeta{}). // on the response
+			Returns(http.StatusOK, "Metadata of updated function", metav1.ObjectMeta{}))
+
+	ws.Route(
+		ws.DELETE("/v2/functions/{function}").
+			Doc("Delete function").
+			Metadata(restfulspec.KeyOpenAPITags, tags).
+			To(func(req *restful.Request, resp *restful.Response) {
+				resp.ResponseWriter.WriteHeader(http.StatusOK)
+			}).
+			Param(ws.PathParameter("function", "Function name").DataType("string").DefaultValue("").Required(true)).
+			Param(ws.QueryParameter("namespace", "Namespace of function").DataType("string").DefaultValue(metav1.NamespaceAll).Required(false)).
+			Produces(restful.MIME_JSON).
+			Returns(http.StatusOK, "Only HTTP status returned", nil))
+}
 
 func (a *API) getIstioServiceLabels(fnName string) map[string]string {
 	return map[string]string{

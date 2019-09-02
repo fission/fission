@@ -346,6 +346,11 @@ func (es ExecutionStrategy) Validate() error {
 		if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
 		}
+
+		// TODO Add validation warning
+		//if es.SpecializationTimeout < 120 {
+		//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
+		//}
 	}
 
 	return result.ErrorOrNil()
@@ -390,7 +395,7 @@ func (builder Builder) Validate() error {
 func (spec EnvironmentSpec) Validate() error {
 	var result *multierror.Error
 
-	if spec.Version < 1 && spec.Version > 3 {
+	if spec.Version < 1 || spec.Version > 3 {
 		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Version", spec.Version, "not a valid environment version"))
 	}
 

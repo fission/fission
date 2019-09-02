@@ -87,19 +87,19 @@ build_builder_image() {
 
 build_env_image() {
     local version=$1
-    envdir=$2
-    imgnamebase=$3
-    imgvariant=$4
+    local envdir=$2
+    local imgnamebase=$3
+    local imgvariant=$4
 
     if [ -z "$imgvariant" ]
-    then 
+    then
         # no variant specified, just use the base name
         imgname=$imgnamebase
         dockerfile="Dockerfile"
-    else 
+    else
         # variant specified - append variant to image name and assume dockerfile 
         # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
-        imgname="$imgname-$imgvariant"
+        imgname="$imgnamebase-$imgvariant"
         dockerfile="Dockerfile-$imgvariant"
     fi
     echo "Building $envdir -> $imgname:$version using $dockerfile"
@@ -131,19 +131,21 @@ build_all_envs() {
     local version=$1
 
     # call with version, env dir, image name base, image name variant
-    build_env_image "$version" "nodejs"   "node-env"     ""
-    build_env_image "$version" "nodejs"   "node-env"     "debian"
-    build_env_image "$version" "binary"   "binary-env"   ""
-    build_env_image "$version" "dotnet"   "dotnet-env"   ""
-    build_env_image "$version" "dotnet20" "dotnet20-env" ""
-    build_env_image "$version" "go"       "go-env"       ""
-    build_env_image "$version" "go"       "go-env"       "1.11.4"
-    build_env_image "$version" "perl"     "perl-env"     ""
-    build_env_image "$version" "php7"     "php-env"      ""
-    build_env_image "$version" "python"   "python-env"   ""
-    build_env_image "$version" "python"   "python-env"   "2.7"
-    build_env_image "$version" "ruby"     "ruby-env"     ""
-    build_env_image "$version" "jvm"      "jvm-env"      ""
+    build_env_image "$version" "nodejs"               "node-env"            ""
+    build_env_image "$version" "nodejs"               "node-env"            "debian"
+    build_env_image "$version" "binary"               "binary-env"          ""
+    build_env_image "$version" "dotnet"               "dotnet-env"          ""
+    build_env_image "$version" "dotnet20"             "dotnet20-env"        ""
+    build_env_image "$version" "go"                   "go-env"              ""
+    build_env_image "$version" "go"                   "go-env"              "1.11.4"
+    build_env_image "$version" "go"                   "go-env"              "1.12"
+    build_env_image "$version" "perl"                 "perl-env"            ""
+    build_env_image "$version" "php7"                 "php-env"             ""
+    build_env_image "$version" "python"               "python-env"          ""
+    build_env_image "$version" "python"               "python-env"          "2.7"
+    build_env_image "$version" "ruby"                 "ruby-env"            ""
+    build_env_image "$version" "jvm"                  "jvm-env"             ""
+    build_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
 }
 
 build_env_builder_image() {
@@ -179,11 +181,12 @@ build_all_env_builders() {
     build_env_builder_image "$version" "binary"   "binary-builder"   ""
     build_env_builder_image "$version" "go"       "go-builder"       ""
     build_env_builder_image "$version" "go"       "go-builder"       "1.11.4"
+    build_env_builder_image "$version" "go"       "go-builder"       "1.12"
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     build_env_builder_image "$version" "nodejs"   "node-builder"     ""
     build_env_builder_image "$version" "php7"     "php-builder"      ""
-    build_env_builder_image "$version" "ruby"     "ruby-env"         ""
-    build_env_builder_image "$version" "dotnet20" "dotnet20-env"     ""
+    build_env_builder_image "$version" "ruby"     "ruby-builder"     ""
+    build_env_builder_image "$version" "dotnet20" "dotnet20-builder" ""
 }
 
 build_charts() {
@@ -263,12 +266,27 @@ build_all() {
     fi
     
     mkdir -p $BUILDDIR
-    
+
+    # generate swagger (OpenApi 2.0) doc before building bundle image
+    generate_swagger_doc
+
     build_fission_bundle_image $version $date $gitcommit
     build_fetcher_image $version $date $gitcommit
     build_builder_image $version $date $gitcommit
     build_all_cli $version $date $gitcommit
     build_pre_upgrade_checks_image $version $date $gitcommit
+
+    remove_generated_swagger_doc
+}
+
+generate_swagger_doc() {
+  pushd $DIR/pkg/apis/fission.io/v1/tool
+  ./update-generated-swagger-docs.sh
+  popd
+}
+
+remove_generated_swagger_doc() {
+  rm $DIR/pkg/apis/fission.io/v1/types_swagger_doc_generated.go
 }
 
 version=${VERSION}

@@ -60,7 +60,6 @@ func TestRouter(t *testing.T) {
 		&tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
 			timeoutExponent: 2,
-			keepAlive:       30 * time.Second,
 			maxRetries:      10,
 		}, false, throttler.MakeThrottler(30*time.Second))
 	triggerUrl := "/foo"

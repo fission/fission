@@ -46,6 +46,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
 
 	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
 	// in such cases we need set minscale to 1 for router to serve requests.
@@ -65,7 +66,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 
 			if existingDepl.Status.AvailableReplicas < minScale {
-				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale)
+				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale, specializationTimeout)
 			}
 		}
 		return existingDepl, err
@@ -93,7 +94,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		}
 
 		if waitForDeploy {
-			depl, err = deploy.waitForDeploy(depl, minScale)
+			depl, err = deploy.waitForDeploy(depl, minScale, specializationTimeout)
 		}
 
 		return depl, err
@@ -185,6 +186,9 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 	resources := deploy.getResources(env, fn)
 
+	maxUnavailable := intstr.FromString("20%")
+	maxSurge := intstr.FromString("100%")
+
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   deployName,
@@ -217,11 +221,31 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 									},
 								},
 							},
+							Env: []apiv1.EnvVar{
+								{
+									Name:  fv1.LastUpdateTimestamp,
+									Value: time.Now().String(),
+								},
+							},
+							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "http-env",
+									ContainerPort: int32(8888),
+								},
+							},
 							Resources: resources,
 						}, env.Spec.Runtime.Container),
 					},
 					ServiceAccountName:            "fission-fetcher",
 					TerminationGracePeriodSeconds: &gracePeriodSeconds,
+				},
+			},
+			Strategy: v1beta1.DeploymentStrategy{
+				Type: v1beta1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &v1beta1.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
 				},
 			},
 		},
@@ -362,14 +386,9 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 			Spec: apiv1.ServiceSpec{
 				Ports: []apiv1.ServicePort{
 					{
-						Name:       "runtime-env-port",
+						Name:       "http-env",
 						Port:       int32(80),
 						TargetPort: intstr.FromInt(8888),
-					},
-					{
-						Name:       "fetcher-port",
-						Port:       int32(8000),
-						TargetPort: intstr.FromInt(8000),
 					},
 				},
 				Selector: deployLabels,
@@ -396,8 +415,13 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 	return nil
 }
 
-func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
-	for i := 0; i < 120; i++ {
+func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
+	// if no specializationTimeout is set, use default value
+	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+		specializationTimeout = fv1.DefaultSpecializationTimeOut
+	}
+
+	for i := 0; i < specializationTimeout; i++ {
 		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -410,7 +434,10 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32)
 		}
 		time.Sleep(time.Second)
 	}
-	return nil, errors.New("failed to create deployment within timeout window")
+
+	// this error appears in the executor pod logs
+	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
+	return nil, timeoutError
 }
 
 // cleanupNewdeploy cleans all kubernetes objects related to function

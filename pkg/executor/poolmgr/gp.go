@@ -234,14 +234,14 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 			// modified, this should fail; in that case just
 			// retry.
 			chosenPod.ObjectMeta.Labels = newLabels
-			gp.logger.Info("relabeling pod", zap.String("pod", chosenPod.ObjectMeta.Name))
 			_, err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Update(chosenPod)
 			if err != nil {
 				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.ObjectMeta.Name))
 				continue
 			}
 		}
-		gp.logger.Info("chose pod", zap.String("pod", chosenPod.ObjectMeta.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
+			zap.String("pod", chosenPod.ObjectMeta.Name), zap.Duration("elapsed_time", time.Since(startTime)))
 		return chosenPod, nil
 	}
 }
@@ -276,8 +276,8 @@ func IsIPv6(podIP string) bool {
 	return ip != nil && strings.Contains(podIP, ":")
 }
 
-func (gp *GenericPool) getSpecializeUrl(podIP string) string {
-	testUrl := os.Getenv("TEST_SPECIALIZE_URL")
+func (gp *GenericPool) getFetcherUrl(podIP string) string {
+	testUrl := os.Getenv("TEST_FETCHER_URL")
 	if len(testUrl) != 0 {
 		// it takes a second or so for the test service to
 		// become routable once a pod is relabeled. This is
@@ -312,7 +312,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metada
 	}
 
 	// tell fetcher to get the function.
-	fetcherUrl := gp.getSpecializeUrl(podIP)
+	fetcherUrl := gp.getFetcherUrl(podIP)
 	gp.logger.Info("calling fetcher to copy function", zap.String("function", metadata.Name), zap.String("url", fetcherUrl))
 
 	fn, err := gp.fissionClient.
@@ -326,6 +326,8 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metada
 
 	gp.logger.Info("specializing pod", zap.String("function", metadata.Name))
 
+	// Fetcher will download user function to share volume of pod, and
+	// invoke environment specialize api for pod specialization.
 	err = fetcherClient.MakeClient(gp.logger, fetcherUrl).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
@@ -394,6 +396,17 @@ func (gp *GenericPool) createPool() error {
 											fmt.Sprintf("%v", gracePeriodSeconds),
 										},
 									},
+								},
+							},
+							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "http-fetcher",
+									ContainerPort: int32(8000),
+								},
+								{
+									Name:          "http-env",
+									ContainerPort: int32(8888),
 								},
 							},
 						}, gp.env.Spec.Runtime.Container),
@@ -574,9 +587,15 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		svc := utils.GetFunctionIstioServiceName(m.Name, m.Namespace)
 		svcHost = fmt.Sprintf("%v.%v:8888", svc, gp.namespace)
 	} else {
-		gp.logger.Info("using pod IP for specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("function", m.Name))
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
+
+	gp.logger.Info("specialized pod",
+		zap.String("pod", pod.ObjectMeta.Name),
+		zap.String("podNamespace", pod.ObjectMeta.Namespace),
+		zap.String("function", m.Name),
+		zap.String("functionNamespace", m.Namespace),
+		zap.String("specialization_host", svcHost))
 
 	kubeObjRefs := []apiv1.ObjectReference{
 		{

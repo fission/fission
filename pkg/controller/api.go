@@ -34,7 +34,6 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/info"
-	"github.com/fission/fission/pkg/utils"
 )
 
 var podNamespace string
@@ -271,10 +270,11 @@ func (api *API) Serve(port int) {
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 	r.HandleFunc("/proxy/svcname", api.GetSvcName).Queries("application", "").Methods("GET")
 
+	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
+
 	address := fmt.Sprintf(":%v", port)
 
 	api.logger.Info("server started", zap.Int("port", port))
-	r.Use(utils.LoggingMiddleware(api.logger))
 	err := http.ListenAndServe(address, r)
 	api.logger.Fatal("done listening", zap.Error(err))
 }

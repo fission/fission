@@ -5,12 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
-
-	"go.uber.org/zap"
-
 	"net/http"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/net/context/ctxhttp"
@@ -61,6 +60,9 @@ func (c *Client) Fetch(ctx context.Context, fr *types.FunctionFetchRequest) erro
 
 func (c *Client) Upload(ctx context.Context, fr *types.ArchiveUploadRequest) (*types.ArchiveUploadResponse, error) {
 	body, err := sendRequest(c.logger, ctx, c.httpClient, fr, c.getUploadUrl())
+	if err != nil {
+		return nil, err
+	}
 
 	uploadResp := types.ArchiveUploadResponse{}
 	err = json.Unmarshal(body, &uploadResp)
