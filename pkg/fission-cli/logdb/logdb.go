@@ -34,6 +34,7 @@ type LogFilter struct {
 	Function    string
 	FuncUid     string
 	Since       time.Time
+	Reverse     bool
 	RecordLimit int
 }
 
