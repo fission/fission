@@ -73,7 +73,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 
 	if filter.Pod != "" {
 		// wait for bug fix for fluent-bit influxdb plugin
-		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"pod\" = $pod AND \"time\" > $time " + orderCondition + "LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"pod\" = $pod AND \"time\" > $time " + orderCondition + " LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
 		// wait for bug fix for fluent-bit influxdb plugin
