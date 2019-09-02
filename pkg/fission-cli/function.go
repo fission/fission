@@ -730,6 +730,8 @@ func fnLogs(c *cli.Context) error {
 		Namespace: fnNamespace,
 	}
 
+	logReverseQuery := !c.Bool("f") && c.Bool("r")
+
 	recordLimit := c.Int("recordcount")
 	if recordLimit <= 0 {
 		recordLimit = 1000
@@ -758,6 +760,7 @@ func fnLogs(c *cli.Context) error {
 					Function:    f.Metadata.Name,
 					FuncUid:     string(f.Metadata.UID),
 					Since:       t,
+					Reverse:     logReverseQuery,
 					RecordLimit: recordLimit,
 				}
 				logEntries, err := logDB.GetLogs(logFilter)
