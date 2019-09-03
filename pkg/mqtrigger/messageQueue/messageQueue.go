@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
@@ -42,8 +43,9 @@ type (
 	requestType int
 
 	MessageQueueConfig struct {
-		MQType string
-		Url    string
+		MQType  string
+		Url     string
+		Secrets *v1.Secret
 	}
 
 	MessageQueue interface {

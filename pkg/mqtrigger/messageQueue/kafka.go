@@ -17,10 +17,13 @@ limitations under the License.
 package messageQueue
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	sarama "github.com/Shopify/sarama"
@@ -35,10 +38,11 @@ import (
 
 type (
 	Kafka struct {
-		logger    *zap.Logger
-		routerUrl string
-		brokers   []string
-		version   sarama.KafkaVersion
+		logger       *zap.Logger
+		routerUrl    string
+		brokers      []string
+		version      sarama.KafkaVersion
+		certificates map[string][]byte
 	}
 )
 
@@ -57,11 +61,18 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 			zap.Any("default_version", kafkaVersion))
 	}
 
+	certificates := make(map[string][]byte)
+
+	certificates["caCert"] = mqCfg.Secrets.Data["caCert"]
+	certificates["userCert"] = mqCfg.Secrets.Data["userCert"]
+	certificates["userKey"] = mqCfg.Secrets.Data["userKey"]
+
 	kafka := Kafka{
-		logger:    logger.Named("kafka"),
-		routerUrl: routerUrl,
-		brokers:   strings.Split(mqCfg.Url, ","),
-		version:   kafkaVersion,
+		logger:       logger.Named("kafka"),
+		routerUrl:    routerUrl,
+		brokers:      strings.Split(mqCfg.Url, ","),
+		version:      kafkaVersion,
+		certificates: certificates,
 	}
 	logger.Info("created kafka queue", zap.Any("kafka", kafka))
 	return kafka, nil
@@ -80,11 +91,6 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	consumerConfig.Consumer.Return.Errors = true
 	consumerConfig.Group.Return.Notifications = true
 	consumerConfig.Config.Version = kafka.version
-	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
-	kafka.logger.Info("created a new consumer", zap.Any("consumer", consumer))
-	if err != nil {
-		panic(err)
-	}
 
 	// Create new producer
 	producerConfig := sarama.NewConfig()
@@ -92,6 +98,22 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	producerConfig.Producer.Retry.Max = 10
 	producerConfig.Producer.Return.Successes = true
 	producerConfig.Version = kafka.version
+
+	// Setup TLS for both producer and consumer
+	if tls, _ := strconv.ParseBool(os.Getenv("TLS_ENABLED")); tls == true {
+		consumerConfig.Net.TLS.Enable = true
+		producerConfig.Net.TLS.Enable = true
+		tlsConfig := kafka.getTLSConfig()
+		producerConfig.Net.TLS.Config = &tlsConfig
+		consumerConfig.Net.TLS.Config = &tlsConfig
+	}
+
+	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
+	kafka.logger.Info("created a new consumer", zap.Any("consumer", consumer))
+	if err != nil {
+		panic(err)
+	}
+
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
 	kafka.logger.Info("created a new producer", zap.Any("producer", producer))
 	if err != nil {
@@ -123,6 +145,27 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	}()
 
 	return consumer, nil
+}
+
+func (kafka Kafka) getTLSConfig() tls.Config {
+	tlsConfig := tls.Config{}
+	cert, err := tls.X509KeyPair(kafka.certificates["userCert"], kafka.certificates["userKey"])
+	if err != nil {
+		panic(err)
+	}
+
+	tlsConfig.Certificates = []tls.Certificate{cert}
+
+	if err != nil {
+		panic(err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(kafka.certificates["caCert"])
+	tlsConfig.RootCAs = caCertPool
+	tlsConfig.BuildNameToCertificate()
+
+	return tlsConfig
 }
 
 func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {

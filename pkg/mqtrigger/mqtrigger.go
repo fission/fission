@@ -17,17 +17,20 @@ limitations under the License.
 package mqtrigger
 
 import (
+	"io/ioutil"
 	"os"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"strings"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
-	fissionClient, _, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
 	}
@@ -40,10 +43,31 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	// Message queue type: nats is the only supported one for now
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
+
+	// For authentication with message queue
+	mqSecretName := os.Getenv("MESSAGE_QUEUE_SECRETS")
+
+	var secrets *v1.Secret
+	if mqSecretName != "" {
+		secrets, _ = kubeClient.CoreV1().Secrets(getCurrentNamespace()).Get(mqSecretName, metav1.GetOptions{})
+	}
+
 	mqCfg := messageQueue.MessageQueueConfig{
-		MQType: mqType,
-		Url:    mqUrl,
+		MQType:  mqType,
+		Url:     mqUrl,
+		Secrets: secrets,
 	}
 	messageQueue.MakeMessageQueueTriggerManager(logger, fissionClient, routerUrl, mqCfg)
 	return nil
+}
+
+func getCurrentNamespace() string {
+	data, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+
+	namespace := strings.TrimSpace(string(data))
+	if err == nil && len(namespace) > 0 {
+		return namespace
+	}
+
+	return "default"
 }
