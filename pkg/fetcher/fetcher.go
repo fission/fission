@@ -19,10 +19,9 @@ package fetcher
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/utils"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -129,26 +128,25 @@ func downloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	return nil
 }
 
-func getChecksum(path string) (*fv1.Checksum, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	hasher := sha256.New()
-	_, err = io.Copy(hasher, f)
-	if err != nil {
-		return nil, err
-	}
-
-	c := hex.EncodeToString(hasher.Sum(nil))
-
-	return &fv1.Checksum{
-		Type: fv1.ChecksumTypeSHA256,
-		Sum:  c,
-	}, nil
-}
+//
+//func getChecksum(path string) (*fv1.Checksum, error) {
+//	f, err := os.Open(path)
+//	if err != nil {
+//		return nil, err
+//	}
+//	defer f.Close()
+//
+//	hasher := sha256.New()
+//	_, err = io.Copy(hasher, f)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	return &fv1.Checksum{
+//		Type: fv1.ChecksumTypeSHA256,
+//		Sum:  hex.EncodeToString(hasher.Sum(nil)),
+//	}, nil
+//}
 
 func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 	if checksum.Type != fv1.ChecksumTypeSHA256 {
@@ -328,7 +326,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 				return http.StatusBadRequest, errors.Wrapf(err, "%s %s", e, req.Url)
 			}
 
-			checksum, err := getChecksum(tmpPath)
+			checksum, err := utils.FileChecksum(tmpPath)
 			if err != nil {
 				e := "failed to get checksum"
 				fetcher.logger.Error(e, zap.Error(err))
@@ -534,7 +532,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sum, err := getChecksum(dstFilepath)
+	sum, err := utils.FileChecksum(dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
 		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))

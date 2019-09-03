@@ -52,6 +52,7 @@ func (opts *CreateSubCommand) do(flags cli.Input) error {
 	return opts.run(flags)
 }
 
+// complete creates a environment objects and populates it with default value and CLI inputs.
 func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	env, err := createEnvironmentFromCmd(flags)
 	if err != nil {
@@ -61,6 +62,8 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
+// run write the resource to a spec file or create a fission CRD with remote fission server.
+// It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(flags cli.Input) error {
 	m, err := cmd.GetMetadata(flags)
 	if err != nil {
