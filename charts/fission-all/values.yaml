@@ -103,15 +103,17 @@ azureStorageQueue:
   
 ## Kafka: enable and configure the details
 kafka:
-  enabled: true
+  enabled: false
+  brokers: 'broker.kafka:9092' # or bootstrap-server.kafka:9092/9093
   authentication:
     tls:
       enabled: false
-      caCert: 'auth/kafka/ca.crt'
-      userCert: 'auth/kafka/user.crt'
-      userKey: 'auth/kafka/user.key'
+      # These files are dummies. Please use your own key/certificates here
+      caCert: 'auth/kafka/ca.crt' # certificate containing public key of CA authority
+      userCert: 'auth/kafka/user.crt' # certificate containing public key of the user signed by CA authority
+      userKey: 'auth/kafka/user.key' # private key of the user
 
-  brokers: 'my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9093'
+  # brokers: 'my-broker.kafka:9092' # or my-bootstrap-server.kafka:9092/9093
   # Sample config for authentication
   #   authentication:
   #   tls:
@@ -120,7 +122,7 @@ kafka:
   #     userCert: 'auth/kafka/user.crt'
   #     userKey: 'auth/kafka/user.key'
 
-  #  brokers: 'my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9093'
+  
 
   ## version of Kafka broker
   ## For 0.x it must be a string in the format
