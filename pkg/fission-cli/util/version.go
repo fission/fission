@@ -3,8 +3,6 @@ package util
 import (
 	"fmt"
 
-	yaml "gopkg.in/yaml.v2"
-
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/plugin"
@@ -17,7 +15,7 @@ type Versions struct {
 	Server map[string]info.BuildMeta `json:"server"`
 }
 
-func GetVersion(client *client.Client) []byte {
+func GetVersion(client *client.Client) Versions {
 	// Fetch client versions
 	versions := Versions{
 		Client: map[string]info.BuildMeta{
@@ -43,10 +41,6 @@ func GetVersion(client *client.Client) []byte {
 	}
 
 	// FUTURE: fetch versions of plugins server-side
-	bs, err := yaml.Marshal(versions)
-	if err != nil {
-		log.Fatal("Failed to format versions: " + err.Error())
-	}
 
-	return bs
+	return versions
 }

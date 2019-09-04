@@ -119,6 +119,8 @@ metadata:
   name: controller
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: controller
+    application: fission-api
 spec:
   replicas: 1
   template:
@@ -178,6 +180,8 @@ metadata:
   name: router
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
 spec:
   replicas: 1
   template:
@@ -272,6 +276,7 @@ metadata:
   name: executor
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
 spec:
   replicas: 1
   template:
@@ -338,6 +343,7 @@ metadata:
   name: buildermgr
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: buildermgr
 spec:
   replicas: 1
   template:
@@ -384,6 +390,7 @@ metadata:
   name: kubewatcher
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: kubewatcher
 spec:
   replicas: 1
   template:
@@ -412,6 +419,7 @@ metadata:
   name: timer
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: timer
 spec:
   replicas: 1
   template:
@@ -440,6 +448,8 @@ metadata:
   name: storagesvc
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: storagesvc
+    application: fission-storage
 spec:
   replicas: 1
   template:
