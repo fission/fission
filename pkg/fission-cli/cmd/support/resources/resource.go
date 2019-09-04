@@ -37,6 +37,11 @@ func getFileName(dumpdir string, meta metav1.ObjectMeta) string {
 	return filepath.Clean(f)
 }
 
+func getPodFileName(dumpdir string, pod metav1.ObjectMeta, containerName string) string {
+	f := fmt.Sprintf("%v/%v_%v_%v_%v.txt", dumpdir, pod.Namespace, pod.Name, pod.ResourceVersion, containerName)
+	return filepath.Clean(f)
+}
+
 func writeToFile(file string, obj interface{}) {
 	bs, err := yaml.Marshal(obj)
 	if err != nil {

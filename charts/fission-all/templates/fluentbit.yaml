@@ -26,6 +26,7 @@ metadata:
   name: logger
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
 spec:
   template:
     metadata:

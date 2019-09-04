@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,9 +24,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
 
-	"github.com/fission/fission/pkg/fission-cli/support/resources"
+	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -36,12 +38,26 @@ const (
 	DEFAULT_OUTPUT_DIR  = "fission-dump"
 )
 
-func DumpInfo(c *cli.Context) error {
+type DumpSubCommand struct {
+	client *client.Client
+}
 
+func Dump(flags cli.Input) error {
+	opts := &DumpSubCommand{
+		client: cmd.GetServer(flags),
+	}
+	return opts.run(flags)
+}
+
+func (opts *DumpSubCommand) do(flags cli.Input) error {
+	return opts.run(flags)
+}
+
+func (opts *DumpSubCommand) run(flags cli.Input) error {
 	fmt.Println("Start dumping process...")
 
-	nozip := c.Bool("nozip")
-	outputDir := c.String("output")
+	nozip := flags.Bool("nozip")
+	outputDir := flags.String("output")
 
 	// check whether the dump directory exists.
 	_, err := os.Stat(outputDir)
@@ -59,7 +75,6 @@ func DumpInfo(c *cli.Context) error {
 		panic(errors.Wrap(err, "Error creating dump directory for dumping files"))
 	}
 
-	client := util.GetApiClient(util.GetServerUrl())
 	_, k8sClient := util.GetKubernetesClient()
 
 	ress := map[string]resources.Resource{
@@ -68,12 +83,14 @@ func DumpInfo(c *cli.Context) error {
 		"kubernetes-nodes":   resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesNode, ""),
 
 		// fission info
-		"fission-version": resources.NewFissionVersion(client),
+		"fission-version": resources.NewFissionVersion(opts.client),
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
 		"fission-components-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
+			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
+		"fission-components-daemonset-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDaemonSet,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
 		"fission-components-pod-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
 			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, nats-streaming, redis, router, storagesvc, timer)"),
@@ -93,13 +110,13 @@ func DumpInfo(c *cli.Context) error {
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
 
 		// CRD resources
-		"fission-crd-packages":     resources.NewCrdDumper(client, resources.CrdPackage),
-		"fission-crd-environments": resources.NewCrdDumper(client, resources.CrdEnvironment),
-		"fission-crd-functions":    resources.NewCrdDumper(client, resources.CrdFunction),
-		"fission-crd-httptriggers": resources.NewCrdDumper(client, resources.CrdHttpTrigger),
-		"fission-crd-kubewatchers": resources.NewCrdDumper(client, resources.CrdKubeWatcher),
-		"fission-crd-mqtriggers":   resources.NewCrdDumper(client, resources.CrdMessageQueueTrigger),
-		"fission-crd-timetriggers": resources.NewCrdDumper(client, resources.CrdTimeTrigger),
+		"fission-crd-packages":     resources.NewCrdDumper(opts.client, resources.CrdPackage),
+		"fission-crd-environments": resources.NewCrdDumper(opts.client, resources.CrdEnvironment),
+		"fission-crd-functions":    resources.NewCrdDumper(opts.client, resources.CrdFunction),
+		"fission-crd-httptriggers": resources.NewCrdDumper(opts.client, resources.CrdHttpTrigger),
+		"fission-crd-kubewatchers": resources.NewCrdDumper(opts.client, resources.CrdKubeWatcher),
+		"fission-crd-mqtriggers":   resources.NewCrdDumper(opts.client, resources.CrdMessageQueueTrigger),
+		"fission-crd-timetriggers": resources.NewCrdDumper(opts.client, resources.CrdTimeTrigger),
 	}
 
 	dumpName := fmt.Sprintf("%v_%v", DUMP_ARCHIVE_PREFIX, time.Now().Unix())
@@ -107,8 +124,14 @@ func DumpInfo(c *cli.Context) error {
 
 	wg := &sync.WaitGroup{}
 
+	tempDir, err := utils.GetTempDir()
+	if err != nil {
+		fmt.Printf("Error creating temporary directory: %v\n", err.Error())
+		return err
+	}
+
 	for key, res := range ress {
-		dir := fmt.Sprintf("%v/%v/", dumpDir, key)
+		dir := fmt.Sprintf("%v/%v/", tempDir, key)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			err = os.MkdirAll(dir, 0755)
 			if err != nil {
@@ -125,15 +148,20 @@ func DumpInfo(c *cli.Context) error {
 	wg.Wait()
 
 	if !nozip {
-		defer os.Remove(dumpDir)
+		defer os.RemoveAll(tempDir)
 		path := filepath.Join(outputDir, fmt.Sprintf("%v.zip", dumpName))
-		_, err := utils.MakeArchive(path, dumpDir)
+		_, err := utils.MakeArchive(path, tempDir)
 		if err != nil {
 			fmt.Printf("Error creating archive for dump files: %v", err)
-			return nil
+			return err
 		}
 		fmt.Printf("The archive dump file is %v\n", path)
 	} else {
+		err = os.Rename(tempDir, dumpDir)
+		if err != nil {
+			fmt.Printf("Error creating dump directory: %v\n", err.Error())
+			return err
+		}
 		fmt.Printf("The dump files are placed at %v\n", dumpDir)
 	}
 

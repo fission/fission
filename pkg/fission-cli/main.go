@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,9 +31,9 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
+	"github.com/fission/fission/pkg/fission-cli/cmd/support"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/plugin"
-	"github.com/fission/fission/pkg/fission-cli/support"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/types"
@@ -286,7 +287,7 @@ func NewCliApp() *cli.App {
 	supportOutputFlag := cli.StringFlag{Name: "output, o", Value: support.DEFAULT_OUTPUT_DIR, Usage: "Output directory to save dump archive/files"}
 	supportNoZipFlag := cli.BoolFlag{Name: "nozip", Usage: "Save dump information into multiple files instead of single zip file"}
 	supportSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Collect & dump all necessary for troubleshooting", Flags: []cli.Flag{supportOutputFlag, supportNoZipFlag}, Action: support.DumpInfo},
+		{Name: "dump", Usage: "Collect & dump all necessary for troubleshooting", Flags: []cli.Flag{supportOutputFlag, supportNoZipFlag}, Action: urfavecli.Wrapper(support.Dump)},
 	}
 
 	// canary configs
@@ -395,7 +396,11 @@ To install it for your local Fission CLI:
 func versionPrinter(_ *cli.Context) {
 	client := util.GetApiClient(util.GetServerUrl())
 	ver := util.GetVersion(client)
-	fmt.Print(string(ver))
+	bs, err := yaml.Marshal(ver)
+	if err != nil {
+		log.Fatal("Error formatting versions: " + err.Error())
+	}
+	fmt.Print(string(bs))
 }
 
 func flagValueParser(args []string) error {
