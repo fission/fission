@@ -29,11 +29,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
-	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
@@ -42,12 +37,16 @@ import (
 	"github.com/fission/fission/pkg/redis"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/types"
+	"github.com/pkg/errors"
+	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 const (
-	FORWARDED                = "Forwarded"
-	X_FORWARDED_HOST         = "X-Forwarded-Host"
-	DEFAULT_FUNCTION_TIMEOUT = 60
+	FORWARDED        = "Forwarded"
+	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
 type (
@@ -65,7 +64,7 @@ type (
 		recorderName             string
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
-		functionTimeout          uint64
+		functionTimeoutMap       map[k8stypes.UID]uint64
 	}
 
 	tsRoundTripperParams struct {
@@ -92,6 +91,7 @@ type (
 	RetryingRoundTripper struct {
 		logger      *zap.Logger
 		funcHandler *functionHandler
+		timeout     uint64
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -292,37 +292,16 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
 
 		//Creating context for client
-		if roundTripper.funcHandler.functionTimeout == 0 {
-			roundTripper.funcHandler.functionTimeout = DEFAULT_FUNCTION_TIMEOUT
+		if roundTripper.timeout == 0 {
+			roundTripper.timeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 		}
-		roundTripper.logger.Info("Creating context for request for ", zap.Any("Time ", roundTripper.funcHandler.functionTimeout))
+		roundTripper.logger.Debug("Creating context for request for ", zap.Any("Time", roundTripper.timeout))
 		var closeCtx func()
-		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.funcHandler.functionTimeout)*time.Second)
+		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.timeout)*time.Second)
 		defer closeCtx()
-		out := make(chan bool)
+
 		// forward the request to the function service
-		go func() {
-			resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
-			out <- true
-		}()
-		//Check for Timeout
-		select {
-		case <-out:
-			roundTripper.logger.Info("Response received from server")
-		case <-ctx.Done():
-			roundTripper.logger.Error("Request Context Timed out")
-			//Return if request context is timed out
-			return &http.Response{
-				StatusCode:    http.StatusRequestTimeout,
-				Proto:         req.Proto,
-				ProtoMajor:    req.ProtoMajor,
-				ProtoMinor:    req.ProtoMinor,
-				Body:          ioutil.NopCloser(bytes.NewBufferString("Request Timed out\n")),
-				ContentLength: int64(len("Request Timed out\n")),
-				Request:       req,
-				Header:        make(http.Header, 0),
-			}, nil
-		}
+		resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
 
 		if err == nil {
 			// Track metrics
@@ -352,6 +331,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 			return resp, nil
 		} else if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			// return here if we are in the last round
+			//Check for timeout error first
 			roundTripper.logger.Error("error getting response from function",
 				zap.String("function_name", fnMeta.Name),
 				zap.Error(err))
@@ -469,11 +449,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
+	var timeout uint64 = fv1.DEFAULT_FUNCTION_TIMEOUT
+	if fh.functionTimeoutMap != nil {
+		timeout = fh.functionTimeoutMap[fh.function.GetUID()]
+	}
+
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: &RetryingRoundTripper{
 			logger:      fh.logger.Named("roundtripper"),
 			funcHandler: &fh,
+			timeout:     timeout,
 		},
 	}
 

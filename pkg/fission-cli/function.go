@@ -345,18 +345,18 @@ func fnCreate(c *cli.Context) error {
 				Namespace: envNamespace,
 			},
 			Package: fv1.FunctionPackageRef{
-				FunctionName:    entrypoint,
-				FunctionTimeout: fnTimeout,
+				FunctionName: entrypoint,
 				PackageRef: fv1.PackageRef{
 					Namespace:       pkgMetadata.Namespace,
 					Name:            pkgMetadata.Name,
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
-			Secrets:        secrets,
-			ConfigMaps:     cfgmaps,
-			Resources:      *resourceReq,
-			InvokeStrategy: *invokeStrategy,
+			Secrets:         secrets,
+			ConfigMaps:      cfgmaps,
+			Resources:       *resourceReq,
+			InvokeStrategy:  *invokeStrategy,
+			FunctionTimeout: fnTimeout,
 		},
 	}
 
@@ -573,7 +573,9 @@ func fnUpdate(c *cli.Context) error {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
-	function.Spec.Package.FunctionTimeout = fnTimeout
+	if c.IsSet("fntimeout") {
+		function.Spec.FunctionTimeout = fnTimeout
+	}
 
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
@@ -852,11 +854,6 @@ func fnTest(c *cli.Context) error {
 		util.CheckErr(err, "Function test")
 		fmt.Print(string(body))
 		defer resp.Body.Close()
-		return nil
-	}
-	if resp.StatusCode == http.StatusRequestTimeout {
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", fnName, resp.StatusCode, string(body))
 		return nil
 	}
 
