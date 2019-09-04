@@ -46,14 +46,10 @@ func Dump(flags cli.Input) error {
 	opts := &DumpSubCommand{
 		client: cmd.GetServer(flags),
 	}
-	return opts.run(flags)
+	return opts.do(flags)
 }
 
 func (opts *DumpSubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
-}
-
-func (opts *DumpSubCommand) run(flags cli.Input) error {
 	fmt.Println("Start dumping process...")
 
 	nozip := flags.Bool("nozip")
