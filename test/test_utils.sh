@@ -294,7 +294,7 @@ check_gitcommit_version() {
     while true
     do
         # ensure we run tests against with the same git commit version of CLI & server
-	      ip=$(fission --version|grep "gitcommit"|tr -d ' '|uniq -c|grep "2 gitcommit")
+	      ip=$(fission --version|grep "GitCommit"|tr -d ' '|uniq -c|grep "2 GitCommit")
 	      if [ $? -eq 0 ]; then
 	        break
 	      fi
