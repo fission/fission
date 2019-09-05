@@ -205,6 +205,7 @@ func TestEnvironmentApi(t *testing.T) {
 			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: fv1.EnvironmentSpec{
+			Version: 1,
 			Runtime: fv1.Runtime{
 				Image: "gcr.io/xyz",
 			},

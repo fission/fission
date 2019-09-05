@@ -14,7 +14,9 @@ ROOT=$(dirname $0)/../../..
 env=python-$TEST_ID
 fn=testnormal-$TEST_ID
 fn_secret=testsecret-$TEST_ID
+fn_secret1=testsecret1-$TEST_ID
 fn_cfgmap=testcfgmap-$TEST_ID
+fn_cfgmap1=testcfgmap1-$TEST_ID
 
 cleanup() {
     log "Cleaning up..."
@@ -29,7 +31,10 @@ else
 fi
 
 sed "s/{{ FN_SECRET }}/${fn_secret}/g" $(dirname $0)/secret.py.template > $tmp_dir/secret.py
+sed -e "s/{{ FN_SECRET }}/${fn_secret}/g" -e "s/{{ FN_SECRET1 }}/${fn_secret1}/g" $(dirname $0)/multisecret.py.template > $tmp_dir/multisecret.py
+
 sed "s/{{ FN_CFGMAP }}/${fn_cfgmap}/g" $(dirname $0)/cfgmap.py.template > $tmp_dir/cfgmap.py
+sed -e "s/{{ FN_CFGMAP }}/${fn_cfgmap}/g" -e "s/{{ FN_CFGMAP1 }}/${fn_cfgmap1}/g" $(dirname $0)/multicfgmap.py.template > $tmp_dir/multicfgmap.py
 
 checkFunctionResponse() {
     log "Doing an HTTP GET on the function's route"
@@ -68,6 +73,20 @@ sleep 5
 
 timeout 60 bash -c "checkFunctionResponse ${fn_secret} 'TESTVALUE' 'secret'"
 
+log "Creating second secret"
+kubectl create secret generic ${fn_secret1} --from-literal=TEST_KEY1="TESTVALUE1" -n default
+
+log "Creating function with multiple secrets"
+fission fn create --name ${fn_secret1} --env $env --code $tmp_dir/multisecret.py --secret ${fn_secret} --secret ${fn_secret1}
+
+log "Creating route"
+fission route create --function ${fn_secret1} --url /${fn_secret1} --method GET
+
+log "Waiting for router to catch up"
+sleep 5
+
+timeout 60 bash -c "checkFunctionResponse ${fn_secret1} 'TESTVALUE-TESTVALUE1' 'multiple-secret'"
+
 log "Creating function with newdeploy executorType and new secret value"
 kubectl patch secrets ${fn_secret} -p '{"data":{"TEST_KEY":"TkVXVkFMCg=="}}' -n default
 fission fn create --name ${fn_secret}-1 --env $env --code $tmp_dir/secret.py --secret ${fn_secret} --executortype newdeploy
@@ -93,6 +112,20 @@ log "Waiting for router to catch up"
 sleep 5
 
 timeout 60 bash -c "checkFunctionResponse ${fn_cfgmap} 'TESTVALUE' 'configmap'"
+
+log "Creating second configmap"
+kubectl create configmap ${fn_cfgmap1} --from-literal=TEST_KEY1="TESTVALUE1" -n default
+
+log "Creating function with multiple configmaps"
+fission fn create --name ${fn_cfgmap1} --env $env --code $tmp_dir/multicfgmap.py --configmap ${fn_cfgmap} --configmap ${fn_cfgmap1}
+
+log "Creating route"
+fission route create --function ${fn_cfgmap1} --url /${fn_cfgmap1} --method GET
+
+log "Waiting for router to catch up"
+sleep 5
+
+timeout 60 bash -c "checkFunctionResponse ${fn_cfgmap1} 'TESTVALUE-TESTVALUE1' 'multiple-configmap'"
 
 log "Creating function with newdeploy executorType and new configmap value"
 kubectl patch configmap ${fn_cfgmap} -p '{"data":{"TEST_KEY":"NEWVAL"}}' -n default

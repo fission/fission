@@ -227,8 +227,8 @@ func fnCreate(c *cli.Context) error {
 	fnTimeout := c.Uint64("fntimeout")
 	pkgName := c.String("pkg")
 
-	secretName := c.String("secret")
-	cfgMapName := c.String("configmap")
+	secretNames := c.StringSlice("secret")
+	cfgMapNames := c.StringSlice("configmap")
 
 	invokeStrategy, err := getInvokeStrategy(c, nil)
 	if err != nil {
@@ -300,38 +300,44 @@ func fnCreate(c *cli.Context) error {
 	var secrets []fv1.SecretReference
 	var cfgmaps []fv1.ConfigMapReference
 
-	if len(secretName) > 0 {
+	if len(secretNames) > 0 {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
-		_, err := client.SecretGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      secretName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+		for _, secretName := range secretNames {
+			_, err := client.SecretGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      secretName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+			}
 		}
-
-		newSecret := fv1.SecretReference{
-			Name:      secretName,
-			Namespace: fnNamespace,
+		for _, secretName := range secretNames {
+			newSecret := fv1.SecretReference{
+				Name:      secretName,
+				Namespace: fnNamespace,
+			}
+			secrets = append(secrets, newSecret)
 		}
-		secrets = []fv1.SecretReference{newSecret}
 	}
 
-	if len(cfgMapName) > 0 {
+	if len(cfgMapNames) > 0 {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		_, err := client.ConfigMapGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      cfgMapName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+		for _, cfgMapName := range cfgMapNames {
+			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      cfgMapName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+			}
 		}
-
-		newCfgMap := fv1.ConfigMapReference{
-			Name:      cfgMapName,
-			Namespace: fnNamespace,
+		for _, cfgMapName := range cfgMapNames {
+			newCfgMap := fv1.ConfigMapReference{
+				Name:      cfgMapName,
+				Namespace: fnNamespace,
+			}
+			cfgmaps = append(cfgmaps, newCfgMap)
 		}
-		cfgmaps = []fv1.ConfigMapReference{newCfgMap}
 	}
 
 	function := &fv1.Function{
@@ -732,6 +738,8 @@ func fnLogs(c *cli.Context) error {
 		Namespace: fnNamespace,
 	}
 
+	logReverseQuery := !c.Bool("f") && c.Bool("r")
+
 	recordLimit := c.Int("recordcount")
 	if recordLimit <= 0 {
 		recordLimit = 1000
@@ -760,6 +768,7 @@ func fnLogs(c *cli.Context) error {
 					Function:    f.Metadata.Name,
 					FuncUid:     string(f.Metadata.UID),
 					Since:       t,
+					Reverse:     logReverseQuery,
 					RecordLimit: recordLimit,
 				}
 				logEntries, err := logDB.GetLogs(logFilter)

@@ -118,6 +118,8 @@ metadata:
   name: controller
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: controller
+    application: fission-api
 spec:
   replicas: 1
   template:
@@ -178,13 +180,15 @@ metadata:
   name: router
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        application: fission-router
         svc: router
+        application: fission-router
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
@@ -272,6 +276,7 @@ metadata:
   name: executor
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
 spec:
   replicas: 1
   template:
@@ -342,6 +347,7 @@ metadata:
   name: buildermgr
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: buildermgr
 spec:
   replicas: 1
   template:
@@ -390,6 +396,7 @@ metadata:
   name: kubewatcher
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: kubewatcher
 spec:
   replicas: 1
   template:
@@ -436,6 +443,7 @@ metadata:
   name: influxdb
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: influxdb
 spec:
   replicas: 1
   template:
@@ -491,6 +499,7 @@ metadata:
   namespace: kube-system
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: heapster
 spec:
   replicas: 1
   template:
@@ -514,6 +523,7 @@ metadata:
   name: timer
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: timer
 spec:
   replicas: 1
   template:
@@ -618,6 +628,8 @@ metadata:
   name: mqtrigger-nats-streaming
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: nats-streaming
 spec:
   replicas: 1
   template:
@@ -655,6 +667,8 @@ metadata:
   name: mqtrigger-kafka
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: kafka
 spec:
   replicas: 1
   template:
@@ -694,6 +708,8 @@ metadata:
   name: mqtrigger-azure-storage-queue
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: azure-storage-queue
 spec:
   replicas: 1
   template:
@@ -734,6 +750,8 @@ metadata:
   name: storagesvc
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: storagesvc
+    application: fission-storage
 spec:
   replicas: 1
   template:
