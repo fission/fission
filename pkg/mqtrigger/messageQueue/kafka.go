@@ -108,7 +108,12 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	if kafka.tls {
 		consumerConfig.Net.TLS.Enable = true
 		producerConfig.Net.TLS.Enable = true
-		tlsConfig := kafka.getTLSConfig()
+		tlsConfig, err := kafka.getTLSConfig()
+
+		if err != nil {
+			panic(err)
+		}
+
 		producerConfig.Net.TLS.Config = tlsConfig
 		consumerConfig.Net.TLS.Config = tlsConfig
 	}
@@ -152,17 +157,17 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	return consumer, nil
 }
 
-func (kafka Kafka) getTLSConfig() *tls.Config {
+func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 	tlsConfig := tls.Config{}
 	cert, err := tls.X509KeyPair(kafka.authKeys["userCert"], kafka.authKeys["userKey"])
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	tlsConfig.Certificates = []tls.Certificate{cert}
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	caCertPool := x509.NewCertPool()
@@ -170,7 +175,7 @@ func (kafka Kafka) getTLSConfig() *tls.Config {
 	tlsConfig.RootCAs = caCertPool
 	tlsConfig.BuildNameToCertificate()
 
-	return &tlsConfig
+	return &tlsConfig, nil
 }
 
 func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
