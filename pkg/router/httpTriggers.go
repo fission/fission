@@ -98,6 +98,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
+		mr.updateRouter(ts.getRouter(nil))
 		ts.logger.Info("skipping continuous trigger updates")
 		return
 	}
