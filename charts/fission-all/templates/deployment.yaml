@@ -708,9 +708,22 @@ metadata:
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 data:
+  {{- if .Files.Get  (printf "%s" .Values.kafka.authentication.tls.caCert) }}
   caCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.caCert) | b64enc}}
+  {{- else }}
+  {{ fail "Invalid chart. CA Certificate not found." }}
+  {{- end }}
+  {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) }}
   userCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) | b64enc}}
+  {{- else }}
+  {{ fail "Invalid chart. User Certificate not found." }}
+  {{- end }}
+  {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) }}
   userKey: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) | b64enc}}
+  {{- else }}
+  {{ fail "Invalid chart. User Key not found." }}
+  {{- end }}
+
 
 {{- end }}
 
