@@ -17,20 +17,21 @@ limitations under the License.
 package mqtrigger
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
-	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
+	fissionClient, _, _, err := crd.MakeFissionClient()
+
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
 	}
@@ -45,11 +46,10 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 
 	// For authentication with message queue
-	mqSecretName := os.Getenv("MESSAGE_QUEUE_SECRETS")
+	secrets, err := readSecrets(logger)
 
-	var secrets *v1.Secret
-	if mqSecretName != "" {
-		secrets, _ = kubeClient.CoreV1().Secrets(getCurrentNamespace()).Get(mqSecretName, metav1.GetOptions{})
+	if err != nil {
+		panic(err)
 	}
 
 	mqCfg := messageQueue.MessageQueueConfig{
@@ -70,4 +70,42 @@ func getCurrentNamespace() string {
 	}
 
 	return "default"
+}
+
+func readSecrets(logger *zap.Logger) (map[string][]byte, error) {
+	secretsPath := "/etc/secrets"
+	secrets := make(map[string][]byte)
+
+	// return if no secrets exist
+	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+		return secrets, nil
+	}
+
+	secretFiles, err := ioutil.ReadDir(secretsPath)
+
+	if err != nil {
+		return secrets, err
+	}
+
+	for _, secretFile := range secretFiles {
+
+		fileName := secretFile.Name()
+
+		// /etc/secrets contain some hidden directories (like .data)
+		// ignore them
+		if !secretFile.IsDir() && !strings.HasPrefix(fileName, ".") {
+			logger.Info(fmt.Sprintf("Reading secret from %#v", fileName))
+			filePath := path.Join(secretsPath, fileName)
+			secret, fileReadErr := ioutil.ReadFile(filePath)
+
+			if fileReadErr != nil {
+				return secrets, fileReadErr
+			}
+
+			secrets[fileName] = secret
+		}
+
+	}
+
+	return secrets, nil
 }

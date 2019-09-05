@@ -38,11 +38,12 @@ import (
 
 type (
 	Kafka struct {
-		logger       *zap.Logger
-		routerUrl    string
-		brokers      []string
-		version      sarama.KafkaVersion
-		certificates map[string][]byte
+		logger    *zap.Logger
+		routerUrl string
+		brokers   []string
+		version   sarama.KafkaVersion
+		authKeys  map[string][]byte
+		tls       bool
 	}
 )
 
@@ -61,19 +62,23 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 			zap.Any("default_version", kafkaVersion))
 	}
 
-	certificates := make(map[string][]byte)
-
-	certificates["caCert"] = mqCfg.Secrets.Data["caCert"]
-	certificates["userCert"] = mqCfg.Secrets.Data["userCert"]
-	certificates["userKey"] = mqCfg.Secrets.Data["userKey"]
-
 	kafka := Kafka{
-		logger:       logger.Named("kafka"),
-		routerUrl:    routerUrl,
-		brokers:      strings.Split(mqCfg.Url, ","),
-		version:      kafkaVersion,
-		certificates: certificates,
+		logger:    logger.Named("kafka"),
+		routerUrl: routerUrl,
+		brokers:   strings.Split(mqCfg.Url, ","),
+		version:   kafkaVersion,
 	}
+
+	if tls, _ := strconv.ParseBool(os.Getenv("TLS_ENABLED")); tls == true {
+		kafka.tls = true
+
+		authKeys := make(map[string][]byte)
+		authKeys["caCert"] = mqCfg.Secrets["caCert"]
+		authKeys["userCert"] = mqCfg.Secrets["userCert"]
+		authKeys["userKey"] = mqCfg.Secrets["userKey"]
+		kafka.authKeys = authKeys
+	}
+
 	logger.Info("created kafka queue", zap.Any("kafka", kafka))
 	return kafka, nil
 }
@@ -100,12 +105,12 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	producerConfig.Version = kafka.version
 
 	// Setup TLS for both producer and consumer
-	if tls, _ := strconv.ParseBool(os.Getenv("TLS_ENABLED")); tls == true {
+	if kafka.tls {
 		consumerConfig.Net.TLS.Enable = true
 		producerConfig.Net.TLS.Enable = true
 		tlsConfig := kafka.getTLSConfig()
-		producerConfig.Net.TLS.Config = &tlsConfig
-		consumerConfig.Net.TLS.Config = &tlsConfig
+		producerConfig.Net.TLS.Config = tlsConfig
+		consumerConfig.Net.TLS.Config = tlsConfig
 	}
 
 	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
@@ -147,9 +152,9 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	return consumer, nil
 }
 
-func (kafka Kafka) getTLSConfig() tls.Config {
+func (kafka Kafka) getTLSConfig() *tls.Config {
 	tlsConfig := tls.Config{}
-	cert, err := tls.X509KeyPair(kafka.certificates["userCert"], kafka.certificates["userKey"])
+	cert, err := tls.X509KeyPair(kafka.authKeys["userCert"], kafka.authKeys["userKey"])
 	if err != nil {
 		panic(err)
 	}
@@ -161,11 +166,11 @@ func (kafka Kafka) getTLSConfig() tls.Config {
 	}
 
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(kafka.certificates["caCert"])
+	caCertPool.AppendCertsFromPEM(kafka.authKeys["caCert"])
 	tlsConfig.RootCAs = caCertPool
 	tlsConfig.BuildNameToCertificate()
 
-	return tlsConfig
+	return &tlsConfig
 }
 
 func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
