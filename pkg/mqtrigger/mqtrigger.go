@@ -23,10 +23,11 @@ import (
 	"path"
 	"strings"
 
-	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
@@ -47,9 +48,8 @@ func Start(logger *zap.Logger, routerUrl string) error {
 
 	// For authentication with message queue
 	secrets, err := readSecrets(logger)
-
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	mqCfg := messageQueue.MessageQueueConfig{
@@ -61,50 +61,40 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	return nil
 }
 
-func getCurrentNamespace() string {
-	data, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-
-	namespace := strings.TrimSpace(string(data))
-	if err == nil && len(namespace) > 0 {
-		return namespace
-	}
-
-	return "default"
-}
-
 func readSecrets(logger *zap.Logger) (map[string][]byte, error) {
-	secretsPath := "/etc/secrets"
-	secrets := make(map[string][]byte)
+	secretsPath := strings.TrimSpace(os.Getenv("MESSAGE_QUEUE_SECRETS"))
+	// return if no secretsPath is present
+	if len(secretsPath) == 0 {
+		return nil, nil
+	}
 
 	// return if no secrets exist
 	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
-		return secrets, nil
+		return nil, nil
 	}
 
 	secretFiles, err := ioutil.ReadDir(secretsPath)
-
 	if err != nil {
-		return secrets, err
+		return nil, err
 	}
 
+	secrets := make(map[string][]byte)
 	for _, secretFile := range secretFiles {
 
 		fileName := secretFile.Name()
-
 		// /etc/secrets contain some hidden directories (like .data)
 		// ignore them
 		if !secretFile.IsDir() && !strings.HasPrefix(fileName, ".") {
-			logger.Info(fmt.Sprintf("Reading secret from %#v", fileName))
+			logger.Info(fmt.Sprintf("Reading secret from %s", fileName))
+
 			filePath := path.Join(secretsPath, fileName)
 			secret, fileReadErr := ioutil.ReadFile(filePath)
-
 			if fileReadErr != nil {
-				return secrets, fileReadErr
+				return nil, fileReadErr
 			}
 
 			secrets[fileName] = secret
 		}
-
 	}
 
 	return secrets, nil

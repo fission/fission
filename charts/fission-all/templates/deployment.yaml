@@ -685,13 +685,13 @@ spec:
         {{- if .Values.kafka.authentication.tls.enabled}}
         - name: TLS_ENABLED
           value: "true"
+        - name: MESSAGE_QUEUE_SECRETS
+          value: /etc/fission/secrets        
         volumeMounts:
         - name: kafka-secrets
-          mountPath: /etc/secrets
-        {{- end}}
-        
+          mountPath: /etc/fission/secrets
+        {{- end}}        
       serviceAccount: fission-svc
-
       {{- if .Values.kafka.authentication.tls.enabled}}
       volumes:
       - name: kafka-secrets
@@ -723,10 +723,7 @@ data:
   {{- else }}
   {{ fail "Invalid chart. User Key not found." }}
   {{- end }}
-
-
 {{- end }}
-
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
