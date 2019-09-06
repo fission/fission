@@ -340,7 +340,7 @@ type (
 
 		// FunctionTimeout provides a maximum amount of duration wihtin which a request for a particular function execution should be complete.
 		// This is optional. If not specified default value will be taken as 60s
-		FunctionTimeout uint64 `json:"functionTimeout,omitempty"`
+		FunctionTimeout int `json:"functionTimeout,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

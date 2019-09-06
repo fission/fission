@@ -224,7 +224,7 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 	entrypoint := c.String("entrypoint")
-	fnTimeout := c.Uint64("fntimeout")
+	fnTimeout := c.Int("fntimeout")
 	pkgName := c.String("pkg")
 
 	secretNames := c.StringSlice("secret")
@@ -519,7 +519,7 @@ func fnUpdate(c *cli.Context) error {
 	secretName := c.String("secret")
 	cfgMapName := c.String("configmap")
 	specializationTimeout := c.Int("specializationtimeout")
-	fnTimeout := c.Uint64("fntimeout")
+	fnTimeout := c.Int("fntimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")

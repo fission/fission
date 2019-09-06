@@ -29,6 +29,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
@@ -37,11 +43,6 @@ import (
 	"github.com/fission/fission/pkg/redis"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/types"
-	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
-	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -64,7 +65,7 @@ type (
 		recorderName             string
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
-		functionTimeoutMap       map[k8stypes.UID]uint64
+		functionTimeoutMap       map[k8stypes.UID]int
 	}
 
 	tsRoundTripperParams struct {
@@ -91,7 +92,7 @@ type (
 	RetryingRoundTripper struct {
 		logger      *zap.Logger
 		funcHandler *functionHandler
-		timeout     uint64
+		timeout     int
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -291,8 +292,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
 
-		//Creating context for client
-		if roundTripper.timeout == 0 {
+		// Creating context for client
+		if roundTripper.timeout <= 0 {
 			roundTripper.timeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 		}
 		roundTripper.logger.Debug("Creating context for request for ", zap.Any("Time", roundTripper.timeout))
@@ -302,7 +303,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		// forward the request to the function service
 		resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
-
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
@@ -331,7 +331,6 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 			return resp, nil
 		} else if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			// return here if we are in the last round
-			//Check for timeout error first
 			roundTripper.logger.Error("error getting response from function",
 				zap.String("function_name", fnMeta.Name),
 				zap.Error(err))
@@ -449,7 +448,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	var timeout uint64 = fv1.DEFAULT_FUNCTION_TIMEOUT
+	var timeout int = fv1.DEFAULT_FUNCTION_TIMEOUT
 	if fh.functionTimeoutMap != nil {
 		timeout = fh.functionTimeoutMap[fh.function.GetUID()]
 	}

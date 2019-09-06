@@ -120,7 +120,7 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]uint64) *mux.Router {
+func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 
 	// HTTP triggers setup by the user
@@ -357,8 +357,6 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		// get triggers
 		latestTriggers := ts.triggerStore.List()
 		triggers := make([]fv1.HTTPTrigger, len(latestTriggers))
-
-		//Iterate over each HTTPTrigger
 		for _, t := range latestTriggers {
 			triggers = append(triggers, *t.(*fv1.HTTPTrigger))
 		}
@@ -366,8 +364,7 @@ func (ts *HTTPTriggerSet) updateRouter() {
 
 		// get functions
 		latestFunctions := ts.funcStore.List()
-		functionTimeout := make(map[types.UID]uint64)
-
+		functionTimeout := make(map[types.UID]int, len(latestFunctions))
 		functions := make([]fv1.Function, len(latestFunctions))
 		for _, f := range latestFunctions {
 			fn := *f.(*fv1.Function)
