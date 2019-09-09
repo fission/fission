@@ -130,7 +130,7 @@ const (
 	ErrorNotImplmented
 	ErrorChecksumFail
 	ErrorSizeLimitExceeded
-	ErrorRequestTimedOut
+	ErrorRequestTimeout
 )
 
 // must match order and len of the above const
