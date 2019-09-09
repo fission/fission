@@ -304,7 +304,7 @@ func (spec FunctionSpec) Validate() error {
 		result = multierror.Append(result, spec.InvokeStrategy.Validate())
 	}
 
-	//TODO Add below validation warning
+	// TODO Add below validation warning
 	/*if spec.FunctionTimeout <= 0 {
 		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "FunctionTimeout value", spec.FunctionTimeout, "not a valid value. Should always be more than 0"))
 	}*/
