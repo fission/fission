@@ -57,7 +57,7 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 	case http.StatusConflict:
 		errCode = ErrorNameExists
 	case http.StatusRequestTimeout:
-		errCode = ErrorRequestTimedOut
+		errCode = ErrorRequestTimeout
 	default:
 		errCode = ErrorInternal
 	}
