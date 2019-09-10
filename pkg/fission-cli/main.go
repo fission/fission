@@ -98,7 +98,7 @@ func NewCliApp() *cli.App {
 	minScale := cli.IntFlag{Name: cmd.RUNTIME_MINSCALE, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
 	maxScale := cli.IntFlag{Name: cmd.RUNTIME_MAXSCALE, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
 	targetcpu := cli.IntFlag{Name: cmd.RUNTIME_TARGETCPU, Usage: "Target average CPU usage percentage across pods for scaling"}
-	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Usage: "Timeout for newdeploy to wait for function pod creation"}
+	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Value: 120, Usage: "Timeout for newdeploy to wait for function pod creation"}
 
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
