@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -94,10 +95,10 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, frmap *fun
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter, resolver *functionReferenceResolver) {
 	ts.resolver = resolver
 	ts.mutableRouter = mr
-	mr.updateRouter(ts.getRouter())
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
+		mr.updateRouter(ts.getRouter(nil))
 		ts.logger.Info("skipping continuous trigger updates")
 		return
 	}
@@ -119,7 +120,7 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (ts *HTTPTriggerSet) getRouter() *mux.Router {
+func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 
 	// HTTP triggers setup by the user
@@ -149,6 +150,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			ts.logger.Panic("resolve result type not implemented", zap.Any("type", rr.resolveResultType))
 		}
 
+		ts.logger.Debug("Setting up the function timeout for HTTPtrigger", zap.Any("trigger name", trigger.Metadata.Name))
 		fh := &functionHandler{
 			logger:                   ts.logger.Named(trigger.Metadata.Name),
 			fmap:                     ts.functionServiceMap,
@@ -162,6 +164,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:             recorderName,
 			isDebugEnv:               ts.isDebugEnv,
 			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
+			functionTimeoutMap:       fnTimeoutMap,
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -208,6 +211,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName = recorder.Spec.Name
 		}
 
+		ts.logger.Debug("Setting up the function timeout for function", zap.Any("function name", function.Spec.Package.FunctionName), zap.Any("timeout", function.Spec.FunctionTimeout))
+
 		fh := &functionHandler{
 			logger:                 ts.logger.Named(m.Name),
 			fmap:                   ts.functionServiceMap,
@@ -219,6 +224,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:           recorderName,
 			isDebugEnv:             ts.isDebugEnv,
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
+			functionTimeoutMap:     fnTimeoutMap,
 		}
 		muxRouter.HandleFunc(utils.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
 	}
@@ -358,13 +364,16 @@ func (ts *HTTPTriggerSet) updateRouter() {
 
 		// get functions
 		latestFunctions := ts.funcStore.List()
+		functionTimeout := make(map[types.UID]int, len(latestFunctions))
 		functions := make([]fv1.Function, len(latestFunctions))
 		for _, f := range latestFunctions {
+			fn := *f.(*fv1.Function)
+			functionTimeout[fn.Metadata.UID] = fn.Spec.FunctionTimeout
 			functions = append(functions, *f.(*fv1.Function))
 		}
 		ts.functions = functions
 
 		// make a new router and use it
-		ts.mutableRouter.updateRouter(ts.getRouter())
+		ts.mutableRouter.updateRouter(ts.getRouter(functionTimeout))
 	}
 }

@@ -33,6 +33,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -64,6 +65,7 @@ type (
 		recorderName             string
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
+		functionTimeoutMap       map[k8stypes.UID]int
 	}
 
 	tsRoundTripperParams struct {
@@ -90,6 +92,7 @@ type (
 	RetryingRoundTripper struct {
 		logger      *zap.Logger
 		funcHandler *functionHandler
+		timeout     int
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -289,8 +292,16 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
 
+		// Creating context for client
+		if roundTripper.timeout <= 0 {
+			roundTripper.timeout = fv1.DEFAULT_FUNCTION_TIMEOUT
+		}
+		roundTripper.logger.Debug("Creating context for request for ", zap.Any("Time", roundTripper.timeout))
+		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.timeout)*time.Second)
+
 		// forward the request to the function service
-		resp, err = ocRoundTripper.RoundTrip(req)
+		resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
+		closeCtx()
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
@@ -436,11 +447,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
+	var timeout int = fv1.DEFAULT_FUNCTION_TIMEOUT
+	if fh.functionTimeoutMap != nil {
+		timeout = fh.functionTimeoutMap[fh.function.GetUID()]
+	}
+
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: &RetryingRoundTripper{
 			logger:      fh.logger.Named("roundtripper"),
 			funcHandler: &fh,
+			timeout:     timeout,
 		},
 	}
 

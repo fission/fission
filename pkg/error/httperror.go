@@ -56,6 +56,8 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 		errCode = ErrorNotFound
 	case http.StatusConflict:
 		errCode = ErrorNameExists
+	case http.StatusRequestTimeout:
+		errCode = ErrorRequestTimeout
 	default:
 		errCode = ErrorInternal
 	}
@@ -128,6 +130,7 @@ const (
 	ErrorNotImplmented
 	ErrorChecksumFail
 	ErrorSizeLimitExceeded
+	ErrorRequestTimeout
 )
 
 // must match order and len of the above const
@@ -141,4 +144,5 @@ var errorDescriptions = []string{
 	"Not implemented",
 	"Checksum verification failed",
 	"Size limit exceeded",
+	"Request time limit exceeded",
 }
