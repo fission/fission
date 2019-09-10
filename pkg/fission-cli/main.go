@@ -122,7 +122,7 @@ func NewCliApp() *cli.App {
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Value: types.ExecutorTypePoolmgr, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
-	fnExecutionTimeoutFlag := cli.IntFlag{Name: "fntimeout, ft", Value: 60, Usage: "The length of time to wait for the response. If set to zero, by default it will wait of 60s for the response."}
+	fnExecutionTimeoutFlag := cli.IntFlag{Name: "fntimeout, ft", Value: 60, Usage: "Time duration to wait for the response while executing the function. If the flag is not provided, by default it will wait of 60s for the response."}
 
 	fnTimeoutFlag := cli.DurationFlag{Name: "timeout, t", Value: 30 * time.Second, Usage: "The length of time to wait for the response. If set to zero or negative number, no timeout is set."}
 

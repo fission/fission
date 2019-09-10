@@ -490,9 +490,8 @@ func (fr *FissionResources) Validate(c *cli.Context) error {
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
 			log.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
 		}
-		fnTimeout := f.Spec.FunctionTimeout
-		if fnTimeout <= 0 {
-			log.Warn(fmt.Sprintf("FunctionTimeout in function spec should be field which should have a value greater than 0"))
+		if f.Spec.FunctionTimeout <= 0 {
+			log.Warn(fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
 		}
 	}
 

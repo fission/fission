@@ -225,12 +225,9 @@ func fnCreate(c *cli.Context) error {
 	}
 	entrypoint := c.String("entrypoint")
 
-	var fnTimeout int
-	if c.IsSet("fntimeout") {
-		fnTimeout = c.Int("fntimeout")
-		if fnTimeout <= 0 {
-			log.Fatal("fntimeout must be greater than 0")
-		}
+	fnTimeout := c.Int("fntimeout")
+	if fnTimeout <= 0 {
+		log.Fatal("fntimeout must be greater than 0")
 	}
 
 	pkgName := c.String("pkg")

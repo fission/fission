@@ -297,12 +297,11 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 			roundTripper.timeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 		}
 		roundTripper.logger.Debug("Creating context for request for ", zap.Any("Time", roundTripper.timeout))
-		var closeCtx func()
 		ctx, closeCtx := context.WithTimeout(context.Background(), time.Duration(roundTripper.timeout)*time.Second)
-		defer closeCtx()
 
 		// forward the request to the function service
 		resp, err = ocRoundTripper.RoundTrip(req.WithContext(ctx))
+		closeCtx()
 		if err == nil {
 			// Track metrics
 			httpMetricLabels.code = resp.StatusCode
