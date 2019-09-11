@@ -224,6 +224,12 @@ func fnCreate(c *cli.Context) error {
 		}
 	}
 	entrypoint := c.String("entrypoint")
+
+	fnTimeout := c.Int("fntimeout")
+	if fnTimeout <= 0 {
+		log.Fatal("fntimeout must be greater than 0")
+	}
+
 	pkgName := c.String("pkg")
 
 	secretNames := c.StringSlice("secret")
@@ -357,10 +363,11 @@ func fnCreate(c *cli.Context) error {
 					ResourceVersion: pkgMetadata.ResourceVersion,
 				},
 			},
-			Secrets:        secrets,
-			ConfigMaps:     cfgmaps,
-			Resources:      *resourceReq,
-			InvokeStrategy: *invokeStrategy,
+			Secrets:         secrets,
+			ConfigMaps:      cfgmaps,
+			Resources:       *resourceReq,
+			InvokeStrategy:  *invokeStrategy,
+			FunctionTimeout: fnTimeout,
 		},
 	}
 
@@ -575,6 +582,15 @@ func fnUpdate(c *cli.Context) error {
 	if len(entrypoint) > 0 {
 		function.Spec.Package.FunctionName = entrypoint
 	}
+
+	if c.IsSet("fntimeout") {
+		fnTimeout := c.Int("fntimeout")
+		if fnTimeout <= 0 {
+			log.Fatal("fntimeout must be greater than 0")
+		}
+		function.Spec.FunctionTimeout = fnTimeout
+	}
+
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
