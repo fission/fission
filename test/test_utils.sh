@@ -76,7 +76,7 @@ build_and_push_pre_upgrade_check_image() {
     image_tag=$1
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
-    docker build -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker buildx build --platform linux/amd64,linux/arm64 -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -88,7 +88,7 @@ build_and_push_fission_bundle() {
     image_tag=$1
     travis_fold_start build_and_push_fission_bundle $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker buildx build --platform linux/amd64,linux/arm64 -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -100,7 +100,7 @@ build_and_push_fetcher() {
     image_tag=$1
     travis_fold_start build_and_push_fetcher $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker buildx build --platform linux/amd64,linux/arm64 -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -113,7 +113,7 @@ build_and_push_builder() {
     image_tag=$1
     travis_fold_start build_and_push_builder $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker buildx build --platform linux/amd64,linux/arm64 -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
