@@ -20,13 +20,15 @@ else
     fi
 fi
 
+set +x
+
 # for codecov
 echo "" > coverage.txt
 
 # The executor unit test only works with NodePort-type services for
 # now. So disable it for our travis ci tests.
 for d in $(go list ./... | grep -v '/vendor/' | grep -v 'examples/go' | grep -v executor | grep -v 'benchmark'); do
-    go test -v -race -coverprofile=profile.out -covermode=atomic $d
+    go test -v -coverprofile=profile.out -covermode=atomic $d
     if [ -f profile.out ]; then
         cat profile.out >> coverage.txt
         rm profile.out
