@@ -123,8 +123,6 @@ kafka:
   #     userCert: 'auth/kafka/user.crt'
   #     userKey: 'auth/kafka/user.key'
 
-  
-
   ## version of Kafka broker
   ## For 0.x it must be a string in the format
   ## "major.minor.veryMinor.patch" example: 0.8.2.0

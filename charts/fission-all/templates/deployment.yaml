@@ -682,7 +682,7 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         # TLS authentication is TLS with authentication (2 way)
         # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview
-        {{- if .Values.kafka.authentication.tls.enabled}}
+        {{- if .Values.kafka.authentication.tls.enabled }}
         - name: TLS_ENABLED
           value: "true"
         - name: MESSAGE_QUEUE_SECRETS
@@ -690,14 +690,14 @@ spec:
         volumeMounts:
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
-        {{- end}}        
+        {{- end }}        
       serviceAccount: fission-svc
-      {{- if .Values.kafka.authentication.tls.enabled}}
+      {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:
       - name: kafka-secrets
         secret:
           secretName: mqtrigger-kafka-secrets
-      {{- end}}
+      {{- end }}
 
 ---
 {{- if .Values.kafka.authentication.tls.enabled }}
@@ -709,17 +709,17 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 data:
   {{- if .Files.Get  (printf "%s" .Values.kafka.authentication.tls.caCert) }}
-  caCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.caCert) | b64enc}}
+  caCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.caCert) | b64enc }}
   {{- else }}
   {{ fail "Invalid chart. CA Certificate not found." }}
   {{- end }}
   {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) }}
-  userCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) | b64enc}}
+  userCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) | b64enc }}
   {{- else }}
   {{ fail "Invalid chart. User Certificate not found." }}
   {{- end }}
   {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) }}
-  userKey: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) | b64enc}}
+  userKey: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) | b64enc }}
   {{- else }}
   {{ fail "Invalid chart. User Key not found." }}
   {{- end }}
