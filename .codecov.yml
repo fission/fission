@@ -1,0 +1,13 @@
+ignore:
+  - "charts"
+  - "demos"
+  - "Documentation"
+  - "examples"
+  - "test"
+  - "tools"
+coverage:
+  status:
+    project:
+      default:
+        threshold: 2
+    patch: off
