@@ -558,7 +558,7 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 }
 
 func (deploy *NewDeploy) fnDelete(fn *fv1.Function) error {
-	var multierr *multierror.Error
+	multierr := &multierror.Error{}
 
 	// GetByFunction uses resource version as part of cache key, however,
 	// the resource version in function metadata will be changed when a function

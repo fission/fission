@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	asv1 "k8s.io/api/autoscaling/v1"
@@ -35,6 +33,8 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -70,9 +70,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 		}
 		return existingDepl, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		err := deploy.setupRBACObjs(deployNamespace, fn)
 		if err != nil {
 			return nil, err
@@ -442,7 +440,7 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32,
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
-	var multierr *multierror.Error
+	result := &multierror.Error{}
 
 	err := deploy.deleteSvc(ns, name)
 	if err != nil {
@@ -450,7 +448,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteHpa(ns, name)
@@ -459,7 +457,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteDeployment(ns, name)
@@ -468,7 +466,8 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
-	return multierr.ErrorOrNil()
+
+	return result.ErrorOrNil()
 }
