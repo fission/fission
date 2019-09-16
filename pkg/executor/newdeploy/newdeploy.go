@@ -156,13 +156,9 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it markes for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment,
@@ -364,18 +360,14 @@ func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
 }
 
 func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
-	err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
-	return err
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
 func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
-
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return existingSvc, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		service := &apiv1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   svcName,
@@ -398,19 +390,13 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 		if err != nil {
 			return nil, err
 		}
-
 		return svc, nil
 	}
-
 	return nil, err
 }
 
 func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
-	err := deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
@@ -443,7 +429,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 	result := &multierror.Error{}
 
 	err := deploy.deleteSvc(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting service for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
@@ -452,8 +438,8 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 	}
 
 	err = deploy.deleteHpa(ns, name)
-	if err != nil {
-		deploy.logger.Error("error deleting service for newdeploy function",
+	if err != nil && !k8s_err.IsNotFound(err) {
+		deploy.logger.Error("error deleting HPA for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
@@ -461,7 +447,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 	}
 
 	err = deploy.deleteDeployment(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting deployment for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
