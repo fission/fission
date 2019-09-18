@@ -1,0 +1,17 @@
+version = 1
+
+test_patterns = [
+  
+]
+
+exclude_patterns = [
+  
+]
+
+[[analyzers]]
+name = 'go'
+enabled = true
+
+
+  [analyzers.meta]
+  import_path = 'github.com/fission/fission'
