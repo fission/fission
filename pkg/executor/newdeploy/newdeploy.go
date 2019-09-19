@@ -183,9 +183,10 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	maxUnavailable := intstr.FromString("20%")
 	maxSurge := intstr.FromString("100%")
 
-	// Newdeploy updates LastUpdateTimestamp whenever a configmap/secret gets an update
-	// and leaves multiple replicasets for rollback propose. Since we always update
-	// a deployment instead of performing a rollback, set revision history limit to 0
+	// Newdeploy updates the environment variable "LastUpdateTimestamp" of deployment
+	// whenever a configmap/secret gets an update, but it also leaves multiple ReplicaSets for
+	// rollback purpose. Since fission always update a deployment instead of performing a
+	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
 	deployment := &v1beta1.Deployment{
