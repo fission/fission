@@ -180,9 +180,8 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 	resources := deploy.getResources(env, fn)
 
-	// TODO: add to ExecutionStrategy
 	maxUnavailable := intstr.FromString("20%")
-	maxSurge := intstr.FromString("20%")
+	maxSurge := intstr.FromString("100%")
 
 	// Newdeploy updates LastUpdateTimestamp whenever a configmap/secret gets an update
 	// and leaves multiple replicasets for rollback propose. Since we always update
