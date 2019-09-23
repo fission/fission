@@ -22,6 +22,15 @@ fi
 
 cd ${srcDir}
 
+# use private vendor is the vendor dir is exsit
+if  [ -d "vendor" ] && [ ! -z ${GOLANG_VERSION} ] && version_ge ${GOLANG_VERSION} "1.11"; then
+  if [ ! -f "go.mod" ]; then
+     go mod init
+     fi
+  go build -mod=vendor -buildmode=plugin -i -o ${DEPLOY_PKG} .
+  exit 0;
+  fi
+
 if [ ! -z ${GOLANG_VERSION} ] && version_ge ${GOLANG_VERSION} "1.12"; then
     if [ -f "go.mod" ]; then
         go mod download
