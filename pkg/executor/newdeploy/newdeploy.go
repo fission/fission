@@ -180,8 +180,16 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 	resources := deploy.getResources(env, fn)
 
+	// Set maxUnavailable and maxSurge to 20% is because we want
+	// fission to rollout newer function version gradually without
+	// affecting any online service. For example, if you set maxSurge
+	// to 100%, the new ReplicaSet scales up immediately and may
+	// consume all remaining compute resources which might be an
+	// issue if a cluster's resource is on a budget.
+	// TODO: add to ExecutionStrategy so that the user
+	// can do more fine control over different functions.
 	maxUnavailable := intstr.FromString("20%")
-	maxSurge := intstr.FromString("100%")
+	maxSurge := intstr.FromString("20%")
 
 	// Newdeploy updates the environment variable "LastUpdateTimestamp" of deployment
 	// whenever a configmap/secret gets an update, but it also leaves multiple ReplicaSets for
