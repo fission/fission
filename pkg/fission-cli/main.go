@@ -143,15 +143,16 @@ func NewCliApp() *cli.App {
 
 	// httptriggers
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
-	htHostFlag := cli.StringFlag{Name: "host", Usage: "FQDN of the network host for route"}
+	htHostFlag := cli.StringFlag{Name: "host", Usage: "(DEPRECATED) Use --ingressrule instead"}
 	htIngressFlag := cli.BoolFlag{Name: "createingress", Usage: "Creates ingress with same URL, defaults to false"}
+	htIngressRuleFlag := cli.StringFlag{Name: "ingressrule", Usage: "Host for Ingress rule: --ingressrule host=path (the format of host/path depends on what ingress controller you used)"}
+	htIngressAnnotationFlag := cli.StringSliceFlag{Name: "ingressannotation", Usage: "Annotation for Ingress: --ingressannotation key=value (the format of annotation depends on what ingress controller you used)"}
 	htFnNameFlag := cli.StringSliceFlag{Name: "function", Usage: "Name(s) of the function for this trigger. If 2 functions are supplied with this flag, traffic gets routed to them based on weights supplied with --weight flag."}
 	htFnWeightFlag := cli.IntSliceFlag{Name: "weight", Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
 	htSubcommands := []cli.Command{
-
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htHostFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag}, Action: htCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag, htHostFlag}, Action: htCreate},
 		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: htGet},
-		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htHostFlag, htIngressFlag, htFnWeightFlag}, Action: htUpdate},
+		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressFlag, htFnWeightFlag, htHostFlag}, Action: htUpdate},
 		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag}, Action: htDelete},
 		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: htList},
 	}

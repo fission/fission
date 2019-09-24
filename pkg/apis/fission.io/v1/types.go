@@ -547,20 +547,41 @@ type (
 
 	// HTTPTriggerSpec is for router to expose user functions at the given URL path.
 	HTTPTriggerSpec struct {
-		// NOT USED NOW
-		Host string `json:"-"` //`json:"host"`
+		// TODO: remove this field since we have IngressConfig already
+		// Deprecated: the original idea of this field is not for setting Ingress.
+		// Since we have IngressConfig now, remove Host after couple releases.
+		Host string `json:"host"`
 
 		// RelativeURL is the exposed URL for external client to access a function with.
 		RelativeURL string `json:"relativeurl"`
-
-		// If CreateIngress is true, router will create a ingress definition.
-		CreateIngress bool `json:"createingress"`
 
 		// HTTP method to access a function.
 		Method string `json:"method"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`
+
+		// If CreateIngress is true, router will create a ingress definition.
+		CreateIngress bool `json:"createingress"`
+
+		// TODO: make IngressConfig a independent Fission resource
+		// IngressConfig for router to set up Ingress.
+		IngressConfig IngressConfig `json:"ingressconfig"`
+	}
+
+	// IngressConfig is for router to set up Ingress.
+	IngressConfig struct {
+		// Annotations will be add to metadata when creating Ingress.
+		Annotations map[string]string `json:"annotations"`
+
+		// Path is for path matching. The format of path
+		// depends on what ingress controller you used.
+		Path string `json:"path"`
+
+		// Host is for ingress controller to apply rules. If
+		// host is empty or "*", the rule applies to all
+		// inbound HTTP traffic.
+		Host string `json:"host"`
 	}
 
 	// KubernetesWatchTriggerSpec

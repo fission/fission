@@ -32,6 +32,8 @@ const (
 	ErrorUnsupportedType = iota
 	ErrorInvalidValue
 	ErrorInvalidObject
+
+	totalAnnotationSizeLimitB int = 256 * (1 << 10) // 256 kB
 )
 
 var (
@@ -442,6 +444,58 @@ func (spec HTTPTriggerSpec) Validate() error {
 		if len(e) > 0 {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
 		}
+	}
+
+	result = multierror.Append(result, spec.IngressConfig.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (config IngressConfig) Validate() error {
+	result := &multierror.Error{}
+
+	// Details for how to validate Ingress host rule,
+	// see https://github.com/kubernetes/kubernetes/blob/release-1.16/pkg/apis/networking/validation/validation.go
+
+	if len(config.Path) > 0 {
+		if !strings.HasPrefix(config.Path, "/") {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be an absolute path"))
+		}
+
+		_, err := regexp.CompilePOSIX(config.Path)
+		if err != nil {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be a valid regex"))
+		}
+	}
+
+	// In Ingress, to accept requests from all host, the host field will
+	// be an empty string instead of "*" shown in kubectl. The router replaces
+	// the asterisk with "" when creating/updateing the Ingress, so here we
+	// skip the check if the Host is equal to "*".
+	if len(config.Host) > 0 && config.Host != "*" {
+		if strings.Contains(config.Host, "*") {
+			for _, msg := range validation.IsWildcardDNS1123Subdomain(config.Host) {
+				result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
+			}
+		}
+		for _, msg := range validation.IsDNS1123Subdomain(config.Host) {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
+		}
+	}
+
+	// Details for how to validate annotations,
+	// see https://github.com/kubernetes/kubernetes/blob/512eccac1f1d72d6d1cb304bc565c50d1f2e295e/staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go#L46
+
+	var totalSize int64
+	for k, v := range config.Annotations {
+		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.key", k, msg))
+		}
+		totalSize += (int64)(len(k)) + (int64)(len(v))
+	}
+	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+		msg := fmt.Sprintf("must have at most %v characters", totalSize)
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
 
 	return result.ErrorOrNil()
