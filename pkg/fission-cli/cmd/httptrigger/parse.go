@@ -43,15 +43,15 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 		}, nil
 	}
 
-	if removeAnns || len(anns) == 0 {
+	if removeAnns {
 		oldIngressConfig.Annotations = nil
-	} else {
-		for k, v := range oldIngressConfig.Annotations {
-			if _, ok := anns[k]; !ok {
-				anns[k] = v
-			}
+	} else if len(anns) > 0 {
+		if oldIngressConfig.Annotations == nil {
+			oldIngressConfig.Annotations = make(map[string]string, len(anns))
 		}
-		oldIngressConfig.Annotations = anns
+		for k, v := range anns {
+			oldIngressConfig.Annotations[k] = v
+		}
 	}
 
 	if isEmptyRule {

@@ -225,6 +225,29 @@ func Test_GetIngressConfig(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "preserve-annotation-if-nothing-change",
+			args: args{
+				ingressConfig: &fv1.IngressConfig{
+					Annotations: map[string]string{
+						"a": "b",
+					},
+					Host: "test.com",
+					Path: "/foo/bar",
+				},
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"a": "b",
+				},
+				Host: "test.com",
+				Path: "/foo/bar",
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
