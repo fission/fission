@@ -29,6 +29,7 @@ func Test_GetIngressConfig(t *testing.T) {
 		annotations         []string
 		rule                string
 		fallbackRelativeURL string
+		tls                 string
 	}
 	tests := []struct {
 		name    string
@@ -248,10 +249,105 @@ func Test_GetIngressConfig(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "tls-setup",
+			args: args{
+				ingressConfig: &fv1.IngressConfig{
+					Annotations: map[string]string{
+						"a": "b",
+					},
+					Host: "test.com",
+					Path: "/foo/bar",
+					TLS:  "",
+				},
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+				tls:                 "dummy",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"a": "b",
+				},
+				Host: "test.com",
+				Path: "/foo/bar",
+				TLS:  "dummy",
+			},
+			wantErr: false,
+		},
+		{
+			name: "same-tls",
+			args: args{
+				ingressConfig:       nil,
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+				tls:                 "dummy",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: nil,
+				Host:        "*",
+				Path:        "/test",
+				TLS:         "dummy",
+			},
+			wantErr: false,
+		},
+		{
+			name: "replace-tls",
+			args: args{
+				ingressConfig: &fv1.IngressConfig{
+					Annotations: map[string]string{
+						"a": "b",
+					},
+					Host: "test.com",
+					Path: "/foo/bar",
+					TLS:  "foobar",
+				},
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+				tls:                 "dummy",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"a": "b",
+				},
+				Host: "test.com",
+				Path: "/foo/bar",
+				TLS:  "dummy",
+			},
+			wantErr: false,
+		},
+		{
+			name: "remove-tls",
+			args: args{
+				ingressConfig: &fv1.IngressConfig{
+					Annotations: map[string]string{
+						"a": "b",
+					},
+					Host: "test.com",
+					Path: "/foo/bar",
+					TLS:  "foobar",
+				},
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+				tls:                 "-",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"a": "b",
+				},
+				Host: "test.com",
+				Path: "/foo/bar",
+				TLS:  "",
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetIngressConfig(tt.args.annotations, tt.args.rule, tt.args.fallbackRelativeURL, tt.args.ingressConfig)
+			got, err := GetIngressConfig(tt.args.annotations, tt.args.rule, tt.args.tls, tt.args.fallbackRelativeURL, tt.args.ingressConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getIngressConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -436,6 +532,54 @@ func Test_getIngressHostRule(t *testing.T) {
 			}
 			if gotPath != tt.wantPath {
 				t.Errorf("getIngressHostRule() gotPath = %v, want %v", gotPath, tt.wantPath)
+			}
+		})
+	}
+}
+
+func Test_getIngressTLS(t *testing.T) {
+	type args struct {
+		secret string
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantRemove bool
+		wantTls    string
+	}{
+		{
+			name: "tls-setup",
+			args: args{
+				secret: "foobar",
+			},
+			wantRemove: false,
+			wantTls:    "foobar",
+		},
+		{
+			name: "remove-tls",
+			args: args{
+				secret: "-",
+			},
+			wantRemove: true,
+			wantTls:    "",
+		},
+		{
+			name: "empty-tls",
+			args: args{
+				secret: "",
+			},
+			wantRemove: false,
+			wantTls:    "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotRemove, gotTls := getIngressTLS(tt.args.secret)
+			if gotRemove != tt.wantRemove {
+				t.Errorf("getIngressTLS() gotRemove = %v, want %v", gotRemove, tt.wantRemove)
+			}
+			if gotTls != tt.wantTls {
+				t.Errorf("getIngressTLS() gotTls = %v, want %v", gotTls, tt.wantTls)
 			}
 		})
 	}
