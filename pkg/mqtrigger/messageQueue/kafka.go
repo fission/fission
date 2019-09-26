@@ -89,6 +89,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 		zap.String("output topic", trigger.Spec.ResponseTopic),
 		zap.String("error topic", trigger.Spec.ErrorTopic),
 		zap.String("trigger name", trigger.Metadata.Name),
+		zap.String("function namespace", trigger.Metadata.Namespace),
 		zap.String("function name", trigger.Spec.FunctionReference.Name))
 
 	if err != nil {
@@ -107,6 +108,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 		zap.String("output topic", trigger.Spec.ResponseTopic),
 		zap.String("error topic", trigger.Spec.ErrorTopic),
 		zap.String("trigger name", trigger.Metadata.Name),
+		zap.String("function namespace", trigger.Metadata.Namespace),
 		zap.String("function name", trigger.Spec.FunctionReference.Name))
 
 	if err != nil {
