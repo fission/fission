@@ -29,6 +29,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -143,12 +144,14 @@ func htCreate(c *cli.Context) error {
 		}
 	}
 
-	createIngress := false
-	if c.IsSet("createingress") {
-		createIngress = c.Bool("createingress")
-	}
+	createIngress := c.Bool("createingress")
+	ingressConfig, err := httptrigger.GetIngressConfig(c.StringSlice("ingressannotation"), c.String("ingressrule"), triggerUrl, nil)
+	util.CheckErr(err, "parse ingress configuration")
 
 	host := c.String("host")
+	if c.IsSet("host") {
+		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+	}
 
 	// just name triggers by uuid.
 	if triggerName == "" {
@@ -166,6 +169,7 @@ func htCreate(c *cli.Context) error {
 			Method:            getMethod(method),
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
+			IngressConfig:     *ingressConfig,
 		},
 	}
 
@@ -264,6 +268,12 @@ func htUpdate(c *cli.Context) error {
 
 	if c.IsSet("host") {
 		ht.Spec.Host = c.String("host")
+		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+	}
+
+	if c.IsSet("ingressrule") || c.IsSet("ingressannotation") {
+		_, err = httptrigger.GetIngressConfig(c.StringSlice("ingressannotation"), c.String("ingressrule"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+		util.CheckErr(err, "parse ingress configuration")
 	}
 
 	_, err = client.HTTPTriggerUpdate(ht)

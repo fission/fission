@@ -65,6 +65,20 @@ setupCIBuildEnv() {
     export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
 }
 
+setupIngressController() {
+    # set up NGINX ingress controller
+    kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user $(gcloud config get-value account) || true
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
+}
+
+removeIngressController() {
+    # set up NGINX ingress controller
+    kubectl delete clusterrolebinding cluster-admin-binding || true
+    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
+    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
+}
+
 build_and_push_go_mod_cache_image() {
     image_tag=$1
     travis_fold_start go_mod_cache_image $image_tag
@@ -195,9 +209,13 @@ set_environment() {
     id=$1
     ns=f-$id
 
+    # fission env
     export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
     export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
     export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $ns get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
+
+    # ingress controller env
+    export INGRESS_CONTROLLER=$(kubectl -n ingress-nginx get svc ingress-nginx -o jsonpath='{...ip}')
 }
 
 generate_test_id() {
@@ -273,10 +291,9 @@ dump_tiller_logs() {
 export -f dump_tiller_logs
 
 wait_for_service() {
-    id=$1
+    ns=$1
     svc=$2
 
-    ns=f-$id
     while true
     do
 	     ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
@@ -291,9 +308,11 @@ export -f wait_for_service
 
 wait_for_services() {
     id=$1
+    ns=f-$id
 
-    wait_for_service $id controller
-    wait_for_service $id router
+    wait_for_service $ns controller
+    wait_for_service $ns router
+    wait_for_service "ingress-nginx" ingress-nginx
 
     echo Waiting for service is routable...
     sleep 30
@@ -338,23 +357,6 @@ port_forward_services() {
         sed 's/^.*\///' | \
         xargs -I{} kubectl port-forward {} $port:$port -n $ns &
 }
-
-wait_for_service() { 
-    id=$1 
-    svc=$2 
-  
-    ns=f-$id 
-    while true 
-        do 
-        ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}') 
-        if [ ! -z $ip ] 
-        then 
-            break 
-        fi 
-        echo Waiting for service $svc... 
-        sleep 1 
-    done 
- } 
 
 dump_builder_pod_logs() {
     bns=$1
@@ -600,6 +602,8 @@ install_and_test() {
 	    exit 1
     fi
 
+    setupIngressController
+
     timeout 150 bash -c "wait_for_services $id"
     timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
@@ -607,14 +611,15 @@ install_and_test() {
     run_all_tests $id $imageTag
 
     dump_logs $id
+    removeIngressController
 
-# Commented out due to Travis-CI log length limit
-#    if [ $FAILURES -ne 0 ]
-#    then
-#        # describe each pod in fission ns and function namespace
-#        describe_all_pods $id
-#	    exit 1
-#    fi
+    if [ $FAILURES -ne 0 ]
+    then
+        # Commented out due to Travis-CI log length limit
+        # describe each pod in fission ns and function namespace
+        # describe_all_pods $id
+	      exit 1
+    fi
 }
 
 
