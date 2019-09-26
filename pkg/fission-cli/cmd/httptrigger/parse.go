@@ -36,6 +36,10 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 	}
 
 	if oldIngressConfig == nil {
+		if isEmptyRule { // assign default value
+			host = "*"
+			path = fallbackRelativeURL
+		}
 		return &fv1.IngressConfig{
 			Annotations: anns,
 			Host:        host,
@@ -59,10 +63,10 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 		// leave host and path intact except when host
 		// or path is empty.
 		if len(oldIngressConfig.Host) == 0 {
-			oldIngressConfig.Host = host
+			oldIngressConfig.Host = "*"
 		}
 		if len(oldIngressConfig.Path) == 0 {
-			oldIngressConfig.Path = path
+			oldIngressConfig.Path = fallbackRelativeURL
 		}
 	} else {
 		oldIngressConfig.Host = host
@@ -98,7 +102,7 @@ func getIngressHostRule(rule string, fallbackPath string) (empty bool, host stri
 		return false, "", "", fmt.Errorf("fallback url cannot be empty")
 	}
 	if len(rule) == 0 {
-		return true, "*", fallbackPath, nil
+		return true, "", "", nil
 	}
 	if rule == "-" {
 		return false, "*", fallbackPath, nil

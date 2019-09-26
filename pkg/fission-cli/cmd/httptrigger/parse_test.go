@@ -383,19 +383,8 @@ func Test_getIngressHostRule(t *testing.T) {
 				fallbackPath: "/foo",
 			},
 			wantEmpty: true,
-			wantHost:  "*",
-			wantPath:  "/foo",
-			wantErr:   false,
-		},
-		{
-			name: "empty-rule",
-			args: args{
-				rule:         "",
-				fallbackPath: "/foo",
-			},
-			wantEmpty: true,
-			wantHost:  "*",
-			wantPath:  "/foo",
+			wantHost:  "",
+			wantPath:  "",
 			wantErr:   false,
 		},
 		{
