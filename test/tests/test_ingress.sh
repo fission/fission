@@ -8,7 +8,7 @@ echo "TEST_ID = $TEST_ID"
 ROOT=$(dirname $0)/../..
 
 env=nodejs-$TEST_ID
-relativeUrl="/itest-$TEST_ID/{url}"
+relativeUrl="/itest-$TEST_ID"
 functionName="hellotest-$TEST_ID"
 hostName="test-$TEST_ID.com"
 routeName="ingress-$TEST_ID"
@@ -27,15 +27,15 @@ checkIngress() {
     kubectl get ing -l 'functionName='$functionName',triggerName='$route --all-namespaces -o=json
 
     log "Verifying to route value in ingress"
-    actual_route=$(kubectl get ing -l 'functionName='$functionName',triggerName='$route --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].http.paths[0].path}')
+    actual_path=$(kubectl get ing -l "functionName=$functionName,triggerName=$route" --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].http.paths[0].path}')
 
-    if [ "$path" != "$actual_route" ]
+    if [ "$path" != "$actual_path" ]
     then
-        log "Provided route ($path) and route ($actual_route) in ingress don't match"
+        log "Provided route ($path) and route ($actual_path) in ingress don't match"
         exit 1
     fi
 
-    actual_host=$(kubectl get ing -l 'functionName='$functionName',triggerName='$route --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].host}')
+    actual_host=$(kubectl get ing -l "functionName=$functionName,triggerName=$route" --all-namespaces -o=jsonpath='{.items[0].spec.rules[0].host}')
 
     if [ "$host" != "$actual_host" ]
     then
@@ -43,7 +43,7 @@ checkIngress() {
         exit 1
     fi
 
-    actual_ann=$(kubectl get ing -l 'functionName='$functionName',triggerName='$route --all-namespaces -o jsonpath="{.items[0].metadata.annotations}")
+    actual_ann=$(kubectl get ing -l "functionName=$functionName,triggerName=$route" --all-namespaces -o jsonpath="{.items[0].metadata.annotations}")
     if [ "$annotations" != "$actual_ann" ]
     then
         log "Provided annotations ($annotations) and annotations ($actual_ann) in ingress don't match"
@@ -94,6 +94,7 @@ checkIngress $routeName "" $relativeUrl ""
 
 fission route delete --name $routeName
 
+relativeUrl="/itest-$TEST_ID/{url}"
 wildcardPath="/itest-$TEST_ID/*"
 realPath="itest-$TEST_ID/test"
 
