@@ -18,6 +18,7 @@ package fission_cli
 
 import (
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"net/http"
 	"os"
 	"strings"
@@ -289,25 +290,56 @@ func htUpdate(c *cli.Context) error {
 
 func htDelete(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
+
 	htName := c.String("name")
-	if len(htName) == 0 {
-		log.Fatal("Need name of trigger to delete, use --name")
+	fnName := c.String("function")
+	if len(htName) == 0 && len(fnName) == 0 {
+		log.Fatal("Need --name or --function")
+	} else if len(htName) > 0 && len(fnName) > 0 {
+		log.Fatal("Need either of --name or --function and not both arguments")
 	}
+
 	triggerNamespace := c.String("triggerNamespace")
 
-	err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
-		Name:      htName,
-		Namespace: triggerNamespace,
-	})
-	util.CheckErr(err, "delete trigger")
+	triggers, err := client.HTTPTriggerList(triggerNamespace)
+	util.CheckErr(err, "get HTTP trigger list")
 
-	fmt.Printf("trigger '%v' deleted\n", htName)
+	var triggersToDelete []string
+
+	if len(fnName) > 0 {
+		for _, trigger := range triggers {
+			// TODO: delete canary http triggers as well.
+			if trigger.Spec.FunctionReference.Name == fnName {
+				triggersToDelete = append(triggersToDelete, trigger.Metadata.Name)
+			}
+		}
+	} else {
+		triggersToDelete = []string{htName}
+	}
+
+	errs := &multierror.Error{}
+
+	for _, name := range triggersToDelete {
+		err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
+			Name:      name,
+			Namespace: triggerNamespace,
+		})
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		} else {
+			fmt.Printf("trigger '%v' deleted\n", htName)
+		}
+	}
+
+	util.CheckErr(errs.ErrorOrNil(), "delete trigger(s)")
+
 	return nil
 }
 
 func htList(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 	triggerNamespace := c.String("triggerNamespace")
+	fnName := c.String("function")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
 	util.CheckErr(err, "list HTTP triggers")
@@ -315,9 +347,13 @@ func htList(c *cli.Context) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "INGRESS", "FUNCTION_NAME")
+
 	for _, ht := range hts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-			ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.CreateIngress, ht.Spec.FunctionReference.Name)
+		// TODO: list canary http triggers as well.
+		if len(fnName) == 0 || (len(fnName) > 0 && fnName == ht.Spec.FunctionReference.Name) {
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+				ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.CreateIngress, ht.Spec.FunctionReference.Name)
+		}
 	}
 	w.Flush()
 
