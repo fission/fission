@@ -18,12 +18,12 @@ package fission_cli
 
 import (
 	"fmt"
-	"github.com/hashicorp/go-multierror"
 	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
