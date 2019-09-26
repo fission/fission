@@ -44,9 +44,25 @@ clean_resource_by_id() {
 }
 
 test_fn() {
+    url="http://$FISSION_ROUTER/$1"
+    expect=$2
+    test_response $url $expect
+}
+export -f test_fn
+
+test_ingress() {
+    url="http://$INGRESS_CONTROLLER/$1"
+    expect=$2
+
+    echo $url
+    test_response $url $expect
+}
+export -f test_ingress
+
+test_response() {
     # Doing an HTTP GET on the function's route
     # Checking for valid response
-    url="http://$FISSION_ROUTER/$1"
+    url=$1
     expect=$2
 
     set +e
@@ -69,7 +85,7 @@ test_fn() {
     done
     set -e
 }
-export -f test_fn
+export -f test_response
 
 test_post_route() {
     # Doing an HTTP POST on the function's route

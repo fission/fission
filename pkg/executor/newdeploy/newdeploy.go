@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	asv1 "k8s.io/api/autoscaling/v1"
@@ -35,6 +33,8 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -70,9 +70,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 		}
 		return existingDepl, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		err := deploy.setupRBACObjs(deployNamespace, fn)
 		if err != nil {
 			return nil, err
@@ -158,13 +156,9 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it markes for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment,
@@ -186,8 +180,22 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 	resources := deploy.getResources(env, fn)
 
+	// Set maxUnavailable and maxSurge to 20% is because we want
+	// fission to rollout newer function version gradually without
+	// affecting any online service. For example, if you set maxSurge
+	// to 100%, the new ReplicaSet scales up immediately and may
+	// consume all remaining compute resources which might be an
+	// issue if a cluster's resource is on a budget.
+	// TODO: add to ExecutionStrategy so that the user
+	// can do more fine control over different functions.
 	maxUnavailable := intstr.FromString("20%")
-	maxSurge := intstr.FromString("100%")
+	maxSurge := intstr.FromString("20%")
+
+	// Newdeploy updates the environment variable "LastUpdateTimestamp" of deployment
+	// whenever a configmap/secret gets an update, but it also leaves multiple ReplicaSets for
+	// rollback purpose. Since fission always update a deployment instead of performing a
+	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
+	revisionHistoryLimit := int32(0)
 
 	deployment := &v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,6 +256,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 					MaxSurge:       &maxSurge,
 				},
 			},
+			RevisionHistoryLimit: &revisionHistoryLimit,
 		},
 	}
 
@@ -366,18 +375,14 @@ func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
 }
 
 func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
-	err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
-	return err
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
 func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
-
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return existingSvc, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		service := &apiv1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   svcName,
@@ -400,19 +405,13 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 		if err != nil {
 			return nil, err
 		}
-
 		return svc, nil
 	}
-
 	return nil, err
 }
 
 func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
-	err := deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
@@ -442,33 +441,34 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32,
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
-	var multierr *multierror.Error
+	result := &multierror.Error{}
 
 	err := deploy.deleteSvc(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting service for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteHpa(ns, name)
-	if err != nil {
-		deploy.logger.Error("error deleting service for newdeploy function",
+	if err != nil && !k8s_err.IsNotFound(err) {
+		deploy.logger.Error("error deleting HPA for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteDeployment(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting deployment for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
-	return multierr.ErrorOrNil()
+
+	return result.ErrorOrNil()
 }

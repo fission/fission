@@ -297,7 +297,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 }
 
 func (fr *FissionResources) Validate(c *cli.Context) error {
-	var result *multierror.Error
+	result := &multierror.Error{}
 
 	// check references: both dangling refs + garbage
 	//   packages -> archives
@@ -441,6 +441,11 @@ func (fr *FissionResources) Validate(c *cli.Context) error {
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
+
+		if len(t.Spec.Host) > 0 {
+			log.Warn(fmt.Sprintf("Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details"))
+		}
+
 		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.KubernetesWatchTriggers {
@@ -489,6 +494,9 @@ func (fr *FissionResources) Validate(c *cli.Context) error {
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
 			log.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
+		}
+		if f.Spec.FunctionTimeout <= 0 {
+			log.Warn(fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
 		}
 	}
 
