@@ -206,6 +206,25 @@ func Test_GetIngressConfig(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "backward-compatibility-test",
+			args: args{
+				ingressConfig: &fv1.IngressConfig{
+					Annotations: nil,
+					Host:        "",
+					Path:        "",
+				},
+				annotations:         nil,
+				rule:                "",
+				fallbackRelativeURL: "/test",
+			},
+			want: &fv1.IngressConfig{
+				Annotations: nil,
+				Host:        "*",
+				Path:        "/test",
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
