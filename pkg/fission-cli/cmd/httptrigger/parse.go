@@ -24,7 +24,7 @@ import (
 )
 
 // GetIngressConfig returns an IngressConfig based on user inputs; return error if any.
-func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL string, oldIngressConfig *fv1.IngressConfig) (*fv1.IngressConfig, error) {
+func GetIngressConfig(annotations []string, rule string, tls string, fallbackRelativeURL string, oldIngressConfig *fv1.IngressConfig) (*fv1.IngressConfig, error) {
 
 	removeAnns, anns, err := getIngressAnnotations(annotations)
 	if err != nil {
@@ -34,6 +34,7 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 	if err != nil {
 		return nil, err
 	}
+	removeTLS, secret := getIngressTLS(tls)
 
 	if oldIngressConfig == nil {
 		if isEmptyRule { // assign default value
@@ -44,6 +45,7 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 			Annotations: anns,
 			Host:        host,
 			Path:        path,
+			TLS:         secret,
 		}, nil
 	}
 
@@ -71,6 +73,12 @@ func GetIngressConfig(annotations []string, rule string, fallbackRelativeURL str
 	} else {
 		oldIngressConfig.Host = host
 		oldIngressConfig.Path = path
+	}
+
+	if removeTLS {
+		oldIngressConfig.TLS = ""
+	} else if len(secret) > 0 {
+		oldIngressConfig.TLS = secret
 	}
 
 	return oldIngressConfig, nil
@@ -115,4 +123,15 @@ func getIngressHostRule(rule string, fallbackPath string) (empty bool, host stri
 		return false, "", "", fmt.Errorf("host (%v) or path (%v) cannot be empty", v[0], v[1])
 	}
 	return false, v[0], v[1], nil
+}
+
+func getIngressTLS(secret string) (remove bool, tls string) {
+	switch secret {
+	case "-":
+		return true, ""
+	case "":
+		return false, ""
+	default:
+		return false, secret
+	}
 }

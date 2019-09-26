@@ -145,7 +145,9 @@ func htCreate(c *cli.Context) error {
 	}
 
 	createIngress := c.Bool("createingress")
-	ingressConfig, err := httptrigger.GetIngressConfig(c.StringSlice("ingressannotation"), c.String("ingressrule"), triggerUrl, nil)
+	ingressConfig, err := httptrigger.GetIngressConfig(
+		c.StringSlice("ingressannotation"), c.String("ingressrule"),
+		c.String("ingresstls"), triggerUrl, nil)
 	util.CheckErr(err, "parse ingress configuration")
 
 	host := c.String("host")
@@ -271,8 +273,10 @@ func htUpdate(c *cli.Context) error {
 		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
 	}
 
-	if c.IsSet("ingressrule") || c.IsSet("ingressannotation") {
-		_, err = httptrigger.GetIngressConfig(c.StringSlice("ingressannotation"), c.String("ingressrule"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+	if c.IsSet("ingressrule") || c.IsSet("ingressannotation") || c.IsSet("ingresstls") {
+		_, err = httptrigger.GetIngressConfig(
+			c.StringSlice("ingressannotation"), c.String("ingressrule"),
+			c.String("ingresstls"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
 		util.CheckErr(err, "parse ingress configuration")
 	}
 

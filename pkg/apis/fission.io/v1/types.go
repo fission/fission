@@ -582,6 +582,11 @@ type (
 		// host is empty or "*", the rule applies to all
 		// inbound HTTP traffic.
 		Host string `json:"host"`
+
+		// TLS is for user to specify a Secret that contains
+		// TLS key and certificate. The domain name in the
+		// key and crt must match the value of Host field.
+		TLS string `json:"tls"`
 	}
 
 	// KubernetesWatchTriggerSpec
