@@ -22,6 +22,7 @@ checkIngress() {
     local host=$2
     local path=$3
     local annotations=$4
+    local tls=$5
 
     log "Ingresses matching this trigger:"
     kubectl get ing -l 'functionName='$functionName',triggerName='$route --all-namespaces -o=json
@@ -47,6 +48,22 @@ checkIngress() {
     if [ "$annotations" != "$actual_ann" ]
     then
         log "Provided annotations ($annotations) and annotations ($actual_ann) in ingress don't match"
+        exit 1
+    fi
+
+    actual_tls_secret=$(kubectl get ing -l "functionName=$functionName,triggerName=$route" --all-namespaces -o=jsonpath='{.items[0].spec.tls[0].secretName}')
+
+    if [ "$tls" != "$actual_tls_secret" ]
+    then
+        log "Provided tls secret ($tls) and tls secret ($actual_tls_secret) in ingress don't match"
+        exit 1
+    fi
+
+    actual_tls_host=$(kubectl get ing -l "functionName=$functionName,triggerName=$route" --all-namespaces -o=jsonpath='{.items[0].spec.tls[0].hosts[0]}')
+
+    if [ "$host" != "$actual_tls_host" ]
+    then
+        log "Provided tls host ($host) and tls host ($actual_tls_host) in ingress don't match"
         exit 1
     fi
 }
@@ -78,19 +95,19 @@ log "Creating route for URL $relativeUrl"
 fission route create --name $routeName --url $relativeUrl --function $functionName --createingress
 
 sleep 3
-checkIngress $routeName "" $relativeUrl ""
+checkIngress $routeName "" $relativeUrl "" ""
 
-log "Modifying the route by adding host"
-fission route update --name $routeName --function $functionName --ingressannotation "foo=bar" --ingressrule "$hostName=/foo/bar"
-
-sleep 3
-checkIngress $routeName $hostName "/foo/bar" "map[foo:bar]"
-
-log "Remove ingress annotations, host and rule"
-fission route update --name $routeName --function $functionName --ingressannotation "-" --ingressrule "-"
+log "Modifying the route by adding host, path, annotations, tls"
+fission route update --name $routeName --function $functionName --ingressannotation "foo=bar" --ingressrule "$hostName=/foo/bar" --ingresstls "dummy"
 
 sleep 3
-checkIngress $routeName "" $relativeUrl ""
+checkIngress $routeName $hostName "/foo/bar" "map[foo:bar]" "dummy"
+
+log "Remove ingress annotations, host, rule and tls"
+fission route update --name $routeName --function $functionName --ingressannotation "-" --ingressrule "-" --ingresstls "-"
+
+sleep 3
+checkIngress $routeName "" $relativeUrl "" ""
 
 fission route delete --name $routeName
 
@@ -105,7 +122,7 @@ fission route create --name $routeName --url $relativeUrl --function $functionNa
     --ingressrule "*=$wildcardPath"
 
 sleep 3
-checkIngress $routeName "" $wildcardPath "map[nginx.ingress.kubernetes.io/ssl-redirect:false nginx.ingress.kubernetes.io/use-regex:true]"
+checkIngress $routeName "" $wildcardPath "map[nginx.ingress.kubernetes.io/ssl-redirect:false nginx.ingress.kubernetes.io/use-regex:true]" ""
 timeout 10 bash -c "test_ingress $realPath 'hello, world!'"
 
 log "Test PASSED"
