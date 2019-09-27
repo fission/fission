@@ -197,33 +197,18 @@ func htGet(c *cli.Context) error {
 	name := c.String("name")
 	ns := c.String("fnNamespace")
 
+	if len(name) <= 0 {
+		log.Fatal("Need a trigger name, use --name")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      name,
 		Namespace: ns,
 	}
-
-	htTrigger, err := cliClient.HTTPTriggerGet(m)
+	ht, err := cliClient.HTTPTriggerGet(m)
 	util.CheckErr(err, "get http trigger")
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 1, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "METHOD", "RELATIVE-URL", "FUNCTION-REFERENCE-TYPE", "FUNCTION(s)")
-
-	function := ""
-	if htTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
-		function = htTrigger.Spec.FunctionReference.Name
-	} else {
-		for k, v := range htTrigger.Spec.FunctionReference.FunctionWeights {
-			function += fmt.Sprintf("%s:%v ", k, v)
-		}
-	}
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		htTrigger.Metadata.Name, htTrigger.Metadata.UID, htTrigger.Spec.Method, htTrigger.Spec.RelativeURL,
-		htTrigger.Spec.FunctionReference.Type, function)
-
-	w.Flush()
-
+	printHtSummary([]fv1.HTTPTrigger{*ht})
 	return err
 }
 
@@ -344,18 +329,48 @@ func htList(c *cli.Context) error {
 	hts, err := client.HTTPTriggerList(triggerNamespace)
 	util.CheckErr(err, "list HTTP triggers")
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "INGRESS", "FUNCTION_NAME")
-
+	var triggers []fv1.HTTPTrigger
 	for _, ht := range hts {
 		// TODO: list canary http triggers as well.
 		if len(fnName) == 0 || (len(fnName) > 0 && fnName == ht.Spec.FunctionReference.Name) {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-				ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.CreateIngress, ht.Spec.FunctionReference.Name)
+			triggers = append(triggers, ht)
 		}
 	}
-	w.Flush()
 
+	printHtSummary(triggers)
 	return nil
+}
+
+func printHtSummary(triggers []fv1.HTTPTrigger) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS")
+	for _, trigger := range triggers {
+		function := ""
+		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
+			function = trigger.Spec.FunctionReference.Name
+		} else {
+			for k, v := range trigger.Spec.FunctionReference.FunctionWeights {
+				function += fmt.Sprintf("%s:%v ", k, v)
+			}
+		}
+
+		host := trigger.Spec.Host
+		if len(trigger.Spec.IngressConfig.Host) > 0 {
+			host = trigger.Spec.IngressConfig.Host
+		}
+		path := trigger.Spec.RelativeURL
+		if len(trigger.Spec.IngressConfig.Path) > 0 {
+			path = trigger.Spec.IngressConfig.Path
+		}
+
+		var msg []string
+		for k, v := range trigger.Spec.IngressConfig.Annotations {
+			msg = append(msg, fmt.Sprintf("%v: %v", k, v))
+		}
+		ann := strings.Join(msg, ", ")
+
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			trigger.Metadata.Name, trigger.Spec.Method, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
+	}
+	w.Flush()
 }
