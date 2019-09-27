@@ -327,7 +327,7 @@ func htDelete(c *cli.Context) error {
 		if err != nil {
 			errs = multierror.Append(errs, err)
 		} else {
-			fmt.Printf("trigger '%v' deleted\n", htName)
+			fmt.Printf("trigger '%v' deleted\n", name)
 		}
 	}
 
