@@ -445,6 +445,76 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "tls-setup",
+			args: args{
+				ingressNS: "foobarNS",
+				trigger: &fv1.HTTPTrigger{
+					Metadata: metav1.ObjectMeta{
+						Name:      "foo",
+						Namespace: "bar",
+					},
+					Spec: fv1.HTTPTriggerSpec{
+						RelativeURL: "/foo/bar",
+						FunctionReference: fv1.FunctionReference{
+							Name: "foofunc",
+						},
+						IngressConfig: fv1.IngressConfig{
+							Annotations: map[string]string{
+								"key": "value",
+							},
+							Host: "test.com",
+							TLS:  "foobar",
+						},
+					},
+				},
+			},
+			want: &v1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"triggerName":      "foo",
+						"functionName":     "foofunc",
+						"triggerNamespace": "bar",
+					},
+					Name:      "foo",
+					Namespace: "foobarNS",
+					Annotations: map[string]string{
+						"key": "value",
+					},
+				},
+				Spec: v1beta1.IngressSpec{
+					TLS: []v1beta1.IngressTLS{
+						{
+							Hosts: []string{
+								"test.com",
+							},
+							SecretName: "foobar",
+						},
+					},
+					Rules: []v1beta1.IngressRule{
+						{
+							Host: "",
+							IngressRuleValue: v1beta1.IngressRuleValue{
+								HTTP: &v1beta1.HTTPIngressRuleValue{
+									Paths: []v1beta1.HTTPIngressPath{
+										{
+											Backend: v1beta1.IngressBackend{
+												ServiceName: "router",
+												ServicePort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 80,
+												},
+											},
+											Path: "/foo/bar",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

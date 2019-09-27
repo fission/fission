@@ -38,6 +38,18 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 		host = "" // wildcard Ingress host
 	}
 
+	var ingTLS []v1beta1.IngressTLS
+	if len(trigger.Spec.IngressConfig.TLS) > 0 {
+		ingTLS = []v1beta1.IngressTLS{
+			{
+				Hosts: []string{
+					trigger.Spec.IngressConfig.Host,
+				},
+				SecretName: trigger.Spec.IngressConfig.TLS,
+			},
+		}
+	}
+
 	ing := &v1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: GetDeployLabels(trigger),
@@ -49,6 +61,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 			Annotations: trigger.Spec.IngressConfig.Annotations,
 		},
 		Spec: v1beta1.IngressSpec{
+			TLS: ingTLS,
 			Rules: []v1beta1.IngressRule{
 				{
 					Host: host,
