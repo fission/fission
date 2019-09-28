@@ -71,7 +71,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, frmap *fun
 		kubeClient:                 kubeClient,
 		executor:                   executor,
 		crdClient:                  crdClient,
-		updateRouterRequestChannel: make(chan struct{}),
+		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		svcAddrUpdateThrottler:     actionThrottler,
@@ -103,6 +103,7 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 		return
 	}
 	go ts.updateRouter()
+	go ts.syncTriggers()
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
 	if ts.recorderSet.recController != nil {
