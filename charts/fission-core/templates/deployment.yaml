@@ -113,7 +113,7 @@ data:
   "config.yaml": {{ include "config" . | b64enc }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controller
@@ -123,6 +123,10 @@ metadata:
     application: fission-api
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: controller
+      application: fission-api
   template:
     metadata:
       labels:
@@ -174,7 +178,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: router
@@ -184,6 +188,10 @@ metadata:
     application: fission-router
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      application: fission-router
+      svc: router
   template:
     metadata:
       labels:
@@ -270,7 +278,7 @@ spec:
     svc: executor
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: executor
@@ -279,6 +287,9 @@ metadata:
     svc: executor
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: executor
   template:
     metadata:
       labels:
@@ -337,7 +348,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: buildermgr
@@ -346,6 +357,9 @@ metadata:
     svc: buildermgr
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: buildermgr
   template:
     metadata:
       labels:
@@ -384,7 +398,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kubewatcher
@@ -393,6 +407,9 @@ metadata:
     svc: kubewatcher
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: kubewatcher
   template:
     metadata:
       labels:
@@ -413,7 +430,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: timer
@@ -422,6 +439,9 @@ metadata:
     svc: timer
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: timer
   template:
     metadata:
       labels:
@@ -442,7 +462,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: storagesvc
@@ -452,6 +472,10 @@ metadata:
     application: fission-storage
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: storagesvc
+      application: fission-storage
   template:
     metadata:
       labels:
