@@ -29,15 +29,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -209,7 +211,8 @@ func updatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	if needToBuild || forceRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fv1.PackageStatus{
-			BuildStatus: fv1.BuildStatusPending,
+			BuildStatus:         fv1.BuildStatusPending,
+			LastUpdateTimestamp: time.Now().UTC(),
 		}
 	}
 
@@ -331,20 +334,25 @@ func pkgList(c *cli.Context) error {
 		return err
 	}
 
+	// sort the package list by lastUpdatedTimestamp
+	sort.Slice(pkgList, func(i, j int) bool {
+		return pkgList[i].Status.LastUpdateTimestamp.After(pkgList[j].Status.LastUpdateTimestamp)
+	})
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT")
 	if listOrphans {
 		for _, pkg := range pkgList {
 			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			util.CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 			if len(fnList) == 0 {
-				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+				fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC3339))
 			}
 		}
 	} else {
 		for _, pkg := range pkgList {
-			fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
-				pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name,
+				pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC3339))
 		}
 	}
 
@@ -614,6 +622,7 @@ func createPackage(c *cli.Context, client *client.Client, pkgNamespace string, e
 	if len(pkgName) == 0 {
 		pkgName = strings.ToLower(uuid.NewV4().String())
 	}
+	fmt.Println(time.Now().UTC())
 	pkg := &fv1.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,
@@ -621,12 +630,13 @@ func createPackage(c *cli.Context, client *client.Client, pkgNamespace string, e
 		},
 		Spec: pkgSpec,
 		Status: fv1.PackageStatus{
-			BuildStatus: pkgStatus,
+			BuildStatus:         pkgStatus,
+			LastUpdateTimestamp: time.Now().UTC(),
 		},
 	}
 
 	if len(specFile) > 0 {
-		// if a package sith the same spec exists, don't create a new spec file
+		// if a package with the same spec exists, don't create a new spec file
 		fr, err := readSpecs(cmdutils.GetSpecDir(urfavecli.Parse(c)))
 		util.CheckErr(err, "read specs")
 		if m := fr.SpecExists(pkg, false, true); m != nil {
