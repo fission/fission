@@ -39,7 +39,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
+	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
