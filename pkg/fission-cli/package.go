@@ -622,7 +622,6 @@ func createPackage(c *cli.Context, client *client.Client, pkgNamespace string, e
 	if len(pkgName) == 0 {
 		pkgName = strings.ToLower(uuid.NewV4().String())
 	}
-	fmt.Println(time.Now().UTC())
 	pkg := &fv1.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,

@@ -18,7 +18,7 @@ package v1
 
 import (
 	"time"
-	
+
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -283,7 +283,7 @@ type (
 		// BuildLog stores build log during the compilation.
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
-		// will store the timestamp the package was last updated
+		// LastUpdateTimestamp will store the timestamp the package was last updated
 		LastUpdateTimestamp time.Time `json:"lastUpdateTimestamp,omitempty"`
 	}
 

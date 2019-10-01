@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
@@ -124,8 +125,9 @@ func updatePackage(logger *zap.Logger, fissionClient *crd.FissionClient,
 	uploadResp *types.ArchiveUploadResponse) (*fv1.Package, error) {
 
 	pkg.Status = fv1.PackageStatus{
-		BuildStatus: status,
-		BuildLog:    buildLogs,
+		BuildStatus:         status,
+		BuildLog:            buildLogs,
+		LastUpdateTimestamp: time.Now().UTC(),
 	}
 
 	if uploadResp != nil {
