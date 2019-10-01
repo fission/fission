@@ -16,105 +16,375 @@ limitations under the License.
 package util
 
 import (
+	"reflect"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-func TestMergeContainerSpecs(t *testing.T) {
-	expected := apiv1.Container{
-		Name:  "containerName",
-		Image: "testImage",
-		Command: []string{
-			"command",
-		},
-		Args: []string{
-			"arg1",
-			"arg2",
-		},
-		ImagePullPolicy: apiv1.PullNever,
-		TTY:             true,
-		Env: []apiv1.EnvVar{
-			{
-				Name:  "a",
-				Value: "b",
-			},
-			{
-				Name:  "c",
-				Value: "d",
-			},
-		},
+func Test_checkConflicts(t *testing.T) {
+	type args struct {
+		objs interface{}
 	}
-	specs := []*apiv1.Container{
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
 		{
-			Name:  "containerName",
-			Image: "testImage",
-			Command: []string{
-				"command",
-			},
-			Args: []string{
-				"arg1",
-				"arg2",
-			},
-			ImagePullPolicy: apiv1.PullNever,
-			TTY:             true,
-		},
-		{
-			Name:  "shouldNotBeThere",
-			Image: "shouldNotBeThere",
-			Env: []apiv1.EnvVar{
-				{
-					Name:  "a",
-					Value: "b",
+			name: "container name",
+			args: args{
+				[]apiv1.Container{
+					{
+						Name: "test1",
+					},
+					{
+						Name: "test2",
+					},
+					{
+						Name: "test3",
+					},
 				},
 			},
-			ImagePullPolicy: apiv1.PullAlways,
-			TTY:             false,
+			wantErr: false,
 		},
 		{
-			Env: []apiv1.EnvVar{
-				{
-					Name:  "c",
-					Value: "d",
+			name: "pass non-slice",
+			args: args{
+				apiv1.Container{
+					Name: "test1",
 				},
 			},
-			ImagePullPolicy: apiv1.PullIfNotPresent,
-			TTY:             false,
+			wantErr: true,
+		},
+		{
+			name: "conflict container name",
+			args: args{
+				[]interface{}{
+					apiv1.Container{
+						Name: "test1",
+					},
+					apiv1.Container{
+						Name: "test1",
+					},
+					apiv1.Container{
+						Name: "test3",
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "different types",
+			args: args{
+				[]interface{}{
+					apiv1.VolumeMount{
+						Name: "test1",
+					},
+					apiv1.EnvFromSource{
+						Prefix:       "",
+						ConfigMapRef: nil,
+						SecretRef:    nil,
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "type without target field",
+			args: args{
+				[]interface{}{
+					apiv1.EnvFromSource{
+						Prefix:       "",
+						ConfigMapRef: nil,
+						SecretRef:    nil,
+					},
+				},
+			},
+			wantErr: true,
 		},
 	}
-	result := MergeContainerSpecs(specs...)
-	assert.Equal(t, expected, result)
-
-	// Check if merging order actually matters
-	var rspecs []*apiv1.Container
-	for i := len(specs) - 1; i >= 0; i -= 1 {
-		rspecs = append(rspecs, specs[i])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := checkSliceConflicts("Name", tt.args.objs); (err != nil) != tt.wantErr {
+				t.Errorf("checkNameConflict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
-	reverseResult := MergeContainerSpecs(rspecs...)
-	assert.NotEqual(t, expected, reverseResult)
 }
 
-func TestMergeContainerSpecsSingle(t *testing.T) {
-	expected := apiv1.Container{
-		Name:  "containerName",
-		Image: "testImage",
-		Command: []string{
-			"command",
-		},
-		Args: []string{
-			"arg1",
-			"arg2",
-		},
-		ImagePullPolicy: apiv1.PullNever,
-		TTY:             true,
+func Test_mergeContainer(t *testing.T) {
+	type args struct {
+		dst *apiv1.Container
+		src *apiv1.Container
 	}
-	result := MergeContainerSpecs(&expected)
-	assert.EqualValues(t, expected, result)
-}
-
-func TestMergeContainerSpecsNil(t *testing.T) {
-	expected := apiv1.Container{}
-	result := MergeContainerSpecs()
-	assert.EqualValues(t, expected, result)
+	tests := []struct {
+		name    string
+		args    args
+		want    *apiv1.Container
+		wantErr bool
+	}{
+		{
+			name: "nil-src",
+			args: args{
+				dst: &apiv1.Container{
+					Name: "test",
+				},
+				src: nil,
+			},
+			want: &apiv1.Container{
+				Name: "test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "normal-merge",
+			args: args{
+				dst: &apiv1.Container{
+					Name:       "test",
+					Image:      "foobar",
+					Command:    []string{"a"},
+					Args:       []string{"b"},
+					WorkingDir: "/tmp",
+					Ports: []apiv1.ContainerPort{
+						{
+							Name:     "http1",
+							HostPort: 123,
+						},
+					},
+					EnvFrom: []apiv1.EnvFromSource{
+						{
+							Prefix: "asd",
+						},
+					},
+					Env: []apiv1.EnvVar{
+						{
+							Name:  "foobar",
+							Value: "dummy",
+						},
+					},
+					Resources: apiv1.ResourceRequirements{
+						Limits: apiv1.ResourceList{
+							apiv1.ResourceCPU: resource.Quantity{
+								Format: "limit",
+							},
+						},
+					},
+					VolumeMounts: []apiv1.VolumeMount{
+						{
+							Name:      "volm",
+							ReadOnly:  true,
+							MountPath: "/tmp/foobar",
+						},
+					},
+					VolumeDevices: []apiv1.VolumeDevice{
+						{
+							Name:       "vold",
+							DevicePath: "hello",
+						},
+					},
+					LivenessProbe: &apiv1.Probe{
+						Handler:             apiv1.Handler{},
+						InitialDelaySeconds: 1,
+						TimeoutSeconds:      2,
+						PeriodSeconds:       3,
+						SuccessThreshold:    4,
+						FailureThreshold:    5,
+					},
+					ReadinessProbe: &apiv1.Probe{
+						Handler:             apiv1.Handler{},
+						InitialDelaySeconds: 1,
+						TimeoutSeconds:      2,
+						PeriodSeconds:       3,
+						SuccessThreshold:    4,
+						FailureThreshold:    5,
+					},
+					Lifecycle:                nil,
+					TerminationMessagePath:   "",
+					TerminationMessagePolicy: "",
+					ImagePullPolicy:          "IfNotPresent",
+					SecurityContext:          nil,
+					Stdin:                    false,
+					StdinOnce:                false,
+					TTY:                      false,
+				},
+				src: &apiv1.Container{
+					Name:       "test",
+					Image:      "foobar-1",
+					Command:    []string{"a", "c"},
+					Args:       []string{"b", "d"},
+					WorkingDir: "/tmp/qwer",
+					Ports: []apiv1.ContainerPort{
+						{
+							Name:     "http2",
+							HostPort: 123,
+						},
+					},
+					EnvFrom: []apiv1.EnvFromSource{
+						{
+							Prefix: "asd",
+						},
+					},
+					Env: []apiv1.EnvVar{
+						{
+							Name:  "foobar1",
+							Value: "dummy",
+						},
+					},
+					Resources: apiv1.ResourceRequirements{
+						Limits: apiv1.ResourceList{
+							apiv1.ResourceCPU: resource.Quantity{
+								Format: "unlimit",
+							},
+							apiv1.ResourceMemory: resource.Quantity{
+								Format: "limit",
+							},
+						},
+					},
+					VolumeMounts: []apiv1.VolumeMount{
+						{
+							Name:      "volm1",
+							ReadOnly:  true,
+							MountPath: "/tmp/foobar",
+						},
+					},
+					VolumeDevices: []apiv1.VolumeDevice{
+						{
+							Name:       "vold1",
+							DevicePath: "hello",
+						},
+					},
+					LivenessProbe: &apiv1.Probe{
+						Handler:             apiv1.Handler{},
+						InitialDelaySeconds: 5,
+						TimeoutSeconds:      4,
+						PeriodSeconds:       3,
+						SuccessThreshold:    2,
+						FailureThreshold:    1,
+					},
+					ReadinessProbe: &apiv1.Probe{
+						Handler:             apiv1.Handler{},
+						InitialDelaySeconds: 5,
+						TimeoutSeconds:      4,
+						PeriodSeconds:       3,
+						SuccessThreshold:    2,
+						FailureThreshold:    1,
+					},
+					Lifecycle:                nil,
+					TerminationMessagePath:   "",
+					TerminationMessagePolicy: "",
+					ImagePullPolicy:          "Always",
+					SecurityContext:          nil,
+					Stdin:                    false,
+					StdinOnce:                false,
+					TTY:                      false,
+				},
+			},
+			want: &apiv1.Container{
+				Name:       "test",
+				Image:      "foobar-1",
+				Command:    []string{"a", "a", "c"},
+				Args:       []string{"b", "b", "d"},
+				WorkingDir: "/tmp/qwer",
+				Ports: []apiv1.ContainerPort{
+					{
+						Name:     "http1",
+						HostPort: 123,
+					},
+					{
+						Name:     "http2",
+						HostPort: 123,
+					},
+				},
+				EnvFrom: []apiv1.EnvFromSource{
+					{
+						Prefix: "asd",
+					},
+					{
+						Prefix: "asd",
+					},
+				},
+				Env: []apiv1.EnvVar{
+					{
+						Name:  "foobar",
+						Value: "dummy",
+					},
+					{
+						Name:  "foobar1",
+						Value: "dummy",
+					},
+				},
+				Resources: apiv1.ResourceRequirements{
+					Limits: apiv1.ResourceList{
+						apiv1.ResourceCPU: resource.Quantity{
+							Format: "unlimit",
+						},
+						apiv1.ResourceMemory: resource.Quantity{
+							Format: "limit",
+						},
+					},
+				},
+				VolumeMounts: []apiv1.VolumeMount{
+					{
+						Name:      "volm",
+						ReadOnly:  true,
+						MountPath: "/tmp/foobar",
+					},
+					{
+						Name:      "volm1",
+						ReadOnly:  true,
+						MountPath: "/tmp/foobar",
+					},
+				},
+				VolumeDevices: []apiv1.VolumeDevice{
+					{
+						Name:       "vold",
+						DevicePath: "hello",
+					},
+					{
+						Name:       "vold1",
+						DevicePath: "hello",
+					},
+				},
+				LivenessProbe: &apiv1.Probe{
+					Handler:             apiv1.Handler{},
+					InitialDelaySeconds: 5,
+					TimeoutSeconds:      4,
+					PeriodSeconds:       3,
+					SuccessThreshold:    2,
+					FailureThreshold:    1,
+				},
+				ReadinessProbe: &apiv1.Probe{
+					Handler:             apiv1.Handler{},
+					InitialDelaySeconds: 5,
+					TimeoutSeconds:      4,
+					PeriodSeconds:       3,
+					SuccessThreshold:    2,
+					FailureThreshold:    1,
+				},
+				Lifecycle:                nil,
+				TerminationMessagePath:   "",
+				TerminationMessagePolicy: "",
+				ImagePullPolicy:          "Always",
+				SecurityContext:          nil,
+				Stdin:                    false,
+				StdinOnce:                false,
+				TTY:                      false,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := MergeContainer(tt.args.dst, tt.args.src)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("mergeContainer() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("mergeContainer() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

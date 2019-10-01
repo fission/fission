@@ -18,59 +18,46 @@ package util
 
 import (
 	"errors"
+	"fmt"
+	"log"
+	"reflect"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/imdario/mergo"
 	apiv1 "k8s.io/api/core/v1"
 )
 
-// MergeContainerSpecs merges container specs using a predefined order.
-//
-// The order of the arguments indicates which spec has precedence (lower index takes precedence over higher indexes).
-// Slices and maps are merged; other fields are set only if they are a zero value.
-func MergeContainerSpecs(specs ...*apiv1.Container) apiv1.Container {
-	result := &apiv1.Container{}
-	for _, spec := range specs {
-		if spec == nil {
-			continue
-		}
+// TODO: replace functions here with native kubernetes strategic merge patch.
+// https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/#use-a-strategic-merge-patch-to-update-a-deployment
 
-		err := mergo.Merge(result, spec)
-		if err != nil {
-			panic(err)
-		}
+// MergeContainer returns merged container specs.
+// Slices are merged, and return an error if the elements in the slice have name conflicts.
+// Maps are merged, the value of map of dst container are overridden if the key is the same.
+// The rest of fields of dst container are overridden directly.
+func MergeContainer(dst *apiv1.Container, src *apiv1.Container) (*apiv1.Container, error) {
+	if src == nil {
+		return dst, nil
 	}
-	return *result
+
+	errs := &multierror.Error{}
+
+	err := mergo.Merge(dst, src, mergo.WithAppendSlice, mergo.WithOverride)
+	if err != nil {
+		return nil, err
+	}
+
+	errs = multierror.Append(errs,
+		checkSliceConflicts("Name", dst.Ports),
+		checkSliceConflicts("Name", dst.Env),
+		checkSliceConflicts("Name", dst.VolumeMounts),
+		checkSliceConflicts("Name", dst.VolumeDevices))
+
+	return dst, errs.ErrorOrNil()
 }
 
-// mergeContainer is a specialized implementation of MergeContainerSpecs
-func mergeContainer(deployContainer *apiv1.Container, containerSpec apiv1.Container) error {
-
-	if &containerSpec == nil {
-		return nil
-	}
-
-	if deployContainer.Name == containerSpec.Name {
-		volMap := make(map[string]*apiv1.VolumeMount)
-		for _, vol := range deployContainer.VolumeMounts {
-			volMap[vol.Name] = &vol
-		}
-		for _, specVol := range containerSpec.VolumeMounts {
-			_, ok := volMap[specVol.Name]
-			if ok {
-				return errors.New("Duplicate volume name found in the spec")
-			} else {
-				deployContainer.VolumeMounts = append(deployContainer.VolumeMounts, specVol)
-			}
-		}
-		deployContainer.Env = append(deployContainer.Env, containerSpec.Env...)
-	}
-	return nil
-}
-
-func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
-	if &targetPodSpec == nil {
-		return nil
+func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*apiv1.PodSpec, error) {
+	if targetPodSpec == nil {
+		return srcPodSpec, nil
 	}
 
 	multierr := &multierror.Error{}
@@ -80,18 +67,20 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error
 	// At some point this is better done with generics/reflection?
 	err := mergeContainerLists(srcPodSpec, targetPodSpec)
 	if err != nil {
-		return err
+		multierr = multierror.Append(multierr, err)
 	}
+
+	log.Printf("spec %v", srcPodSpec)
 
 	err = mergeInitContainerList(srcPodSpec, targetPodSpec)
 	if err != nil {
-		return err
+		multierr = multierror.Append(multierr, err)
 	}
 
 	// For volumes - if duplicate exist, throw error
 	err = mergeVolumeLists(srcPodSpec, targetPodSpec)
 	if err != nil {
-		return err
+		multierr = multierror.Append(multierr, err)
 	}
 
 	if targetPodSpec.NodeName != "" {
@@ -145,7 +134,7 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error
 		multierr = multierror.Append(multierr, err)
 	}
 
-	return multierr.ErrorOrNil()
+	return srcPodSpec, multierr.ErrorOrNil()
 }
 
 func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
@@ -156,11 +145,16 @@ func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec
 	}
 
 	multierr := &multierror.Error{}
-	for _, c := range srcPodSpec.Containers {
+	for i, c := range srcPodSpec.Containers {
 		container, ok := targetContainers[c.Name]
 		if ok {
-			err := mergeContainer(&c, container)
-			multierr = multierror.Append(multierr, err)
+			newC, err := MergeContainer(&c, &container)
+			if err != nil {
+				// record the error and continue
+				multierr = multierror.Append(multierr, err)
+			} else {
+				srcPodSpec.Containers[i] = *newC
+			}
 			delete(targetContainers, c.Name)
 		}
 	}
@@ -168,6 +162,8 @@ func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec
 	for _, container := range targetContainers {
 		srcPodSpec.Containers = append(srcPodSpec.Containers, container)
 	}
+
+	log.Printf("loop merge: %v", srcPodSpec)
 
 	return multierr.ErrorOrNil()
 }
@@ -180,11 +176,16 @@ func mergeInitContainerList(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodS
 	}
 
 	multierr := &multierror.Error{}
-	for _, c := range srcPodSpec.InitContainers {
+	for i, c := range srcPodSpec.InitContainers {
 		container, ok := targetContainers[c.Name]
 		if ok {
-			err := mergeContainer(&c, container)
-			multierr = multierror.Append(multierr, err)
+			newC, err := MergeContainer(&c, &container)
+			if err != nil {
+				// record the error and continue
+				multierr = multierror.Append(multierr, err)
+			} else {
+				srcPodSpec.Containers[i] = *newC
+			}
 			delete(targetContainers, c.Name)
 		}
 	}
@@ -216,4 +217,53 @@ func mergeVolumeLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) e
 		srcPodSpec.Volumes = append(srcPodSpec.Volumes, volume)
 	}
 	return multierr.ErrorOrNil()
+}
+
+func checkSliceConflicts(field string, objs interface{}) (err error) {
+	defer func() {
+		// just in case to recover from unknown error
+		if e := recover(); e != nil {
+			err = fmt.Errorf("error checking slice conflicts: %v", e)
+		}
+	}()
+
+	if reflect.TypeOf(objs).Kind() != reflect.Slice {
+		return fmt.Errorf("not a slice type: %v", reflect.TypeOf(objs))
+	}
+
+	errs := &multierror.Error{}
+	names := make(map[string]struct{})
+
+	s := reflect.ValueOf(objs)
+	var elemType reflect.Type
+
+	for i := 0; i < s.Len(); i++ {
+		r := s.Index(i)
+
+		// if objs pass in is a slice of interface{} ([]interface{}), then
+		// use Elem() to get element value.
+		if r.Kind() == reflect.Interface {
+			r = r.Elem()
+		}
+		objType := reflect.Indirect(r).Type()
+
+		if elemType == nil {
+			elemType = objType
+		} else if objType != elemType {
+			return fmt.Errorf("unable to check conflict between different types: %v, %v", elemType, objType)
+		}
+
+		f := reflect.Indirect(r).FieldByName(field)
+		if !f.IsValid() {
+			return fmt.Errorf("cannot compare type without target field: %v %v", objType, field)
+		}
+
+		_, ok := names[f.String()]
+		if ok {
+			errs = multierror.Append(errs, fmt.Errorf("duplicate name in %v: %v", objType, f.String()))
+		} else {
+			names[f.String()] = struct{}{}
+		}
+	}
+	return errs.ErrorOrNil()
 }
