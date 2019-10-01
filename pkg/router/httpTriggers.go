@@ -151,7 +151,6 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			ts.logger.Panic("resolve result type not implemented", zap.Any("type", rr.resolveResultType))
 		}
 
-		ts.logger.Debug("Setting up the function timeout for HTTPtrigger", zap.Any("trigger name", trigger.Metadata.Name))
 		fh := &functionHandler{
 			logger:                   ts.logger.Named(trigger.Metadata.Name),
 			fmap:                     ts.functionServiceMap,
@@ -211,8 +210,6 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		if err == nil && recorder != nil {
 			recorderName = recorder.Spec.Name
 		}
-
-		ts.logger.Debug("Setting up the function timeout for function", zap.Any("function name", function.Spec.Package.FunctionName), zap.Any("timeout", function.Spec.FunctionTimeout))
 
 		fh := &functionHandler{
 			logger:                 ts.logger.Named(m.Name),
