@@ -62,6 +62,9 @@ logger:
 router:
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
+  ## Add annotations for router
+  # svcAnnotations:
+  #   cloud.google.com/load-balancer-type: Internal
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.
