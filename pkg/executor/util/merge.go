@@ -64,13 +64,11 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 
 	// Get item from spec, if they exist in deployment - merge, else append
 	// Same pattern for all lists (Mergo can not handle lists)
-	// At some point this is better done with generics/reflection?
+	// TODO: At some point this is better done with generics/reflection?
 	err := mergeContainerLists(srcPodSpec, targetPodSpec)
 	if err != nil {
 		multierr = multierror.Append(multierr, err)
 	}
-
-	log.Printf("spec %v", srcPodSpec)
 
 	err = mergeInitContainerList(srcPodSpec, targetPodSpec)
 	if err != nil {
@@ -162,8 +160,6 @@ func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec
 	for _, container := range targetContainers {
 		srcPodSpec.Containers = append(srcPodSpec.Containers, container)
 	}
-
-	log.Printf("loop merge: %v", srcPodSpec)
 
 	return multierr.ErrorOrNil()
 }
