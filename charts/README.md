@@ -67,6 +67,7 @@ Parameter | Description | Default
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 `router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
 `router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
+`router.svcAnnotations` | Annotations for router service | None
 `router.roundTrip.disableKeepAlive` | Disable transport keep-alive for fast switching function version | `true`
 `router.roundTrip.keepAliveTime` | The keep-alive period for an active network connection to function pod | `30s`
 `router.roundTrip.timeout` | HTTP transport request timeout | `50ms`
