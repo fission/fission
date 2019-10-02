@@ -17,9 +17,7 @@ limitations under the License.
 package util
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/hashicorp/go-multierror"
@@ -39,20 +37,21 @@ func MergeContainer(dst *apiv1.Container, src *apiv1.Container) (*apiv1.Containe
 		return dst, nil
 	}
 
-	errs := &multierror.Error{}
+	// to prevent any modification to the original obj
+	dstC := *dst
 
-	err := mergo.Merge(dst, src, mergo.WithAppendSlice, mergo.WithOverride)
+	errs := &multierror.Error{}
+	err := mergo.Merge(&dstC, src, mergo.WithAppendSlice, mergo.WithOverride)
 	if err != nil {
 		return nil, err
 	}
-
 	errs = multierror.Append(errs,
-		checkSliceConflicts("Name", dst.Ports),
-		checkSliceConflicts("Name", dst.Env),
-		checkSliceConflicts("Name", dst.VolumeMounts),
-		checkSliceConflicts("Name", dst.VolumeDevices))
+		checkSliceConflicts("Name", dstC.Ports),
+		checkSliceConflicts("Name", dstC.Env),
+		checkSliceConflicts("Name", dstC.VolumeMounts),
+		checkSliceConflicts("Name", dstC.VolumeDevices))
 
-	return dst, errs.ErrorOrNil()
+	return &dstC, errs.ErrorOrNil()
 }
 
 func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*apiv1.PodSpec, error) {
@@ -65,20 +64,26 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 	// Get item from spec, if they exist in deployment - merge, else append
 	// Same pattern for all lists (Mergo can not handle lists)
 	// TODO: At some point this is better done with generics/reflection?
-	err := mergeContainerLists(srcPodSpec, targetPodSpec)
+	cList, err := mergeContainerList(srcPodSpec.Containers, targetPodSpec.Containers)
 	if err != nil {
 		multierr = multierror.Append(multierr, err)
+	} else {
+		srcPodSpec.Containers = cList
 	}
 
-	err = mergeInitContainerList(srcPodSpec, targetPodSpec)
+	cList, err = mergeContainerList(srcPodSpec.InitContainers, targetPodSpec.InitContainers)
 	if err != nil {
 		multierr = multierror.Append(multierr, err)
+	} else {
+		srcPodSpec.InitContainers = cList
 	}
 
 	// For volumes - if duplicate exist, throw error
-	err = mergeVolumeLists(srcPodSpec, targetPodSpec)
+	vols, err := mergeVolumeLists(srcPodSpec.Volumes, targetPodSpec.Volumes)
 	if err != nil {
 		multierr = multierror.Append(multierr, err)
+	} else {
+		srcPodSpec.Volumes = vols
 	}
 
 	if targetPodSpec.NodeName != "" {
@@ -135,84 +140,46 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 	return srcPodSpec, multierr.ErrorOrNil()
 }
 
-func mergeContainerLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
-	targetSpecContainers := targetPodSpec.Containers
-	targetContainers := make(map[string]apiv1.Container)
-	for _, c := range targetSpecContainers {
-		targetContainers[c.Name] = c
-	}
+func mergeContainerList(dst []apiv1.Container, src []apiv1.Container) ([]apiv1.Container, error) {
+	errs := &multierror.Error{}
 
-	multierr := &multierror.Error{}
-	for i, c := range srcPodSpec.Containers {
-		container, ok := targetContainers[c.Name]
+	list := append(dst, src...)
+	containers := make(map[string]*apiv1.Container, len(list))
+
+	for i, c := range list {
+		container, ok := containers[c.Name]
 		if ok {
-			newC, err := MergeContainer(&c, &container)
+			newC, err := MergeContainer(container, &c)
 			if err != nil {
 				// record the error and continue
-				multierr = multierror.Append(multierr, err)
+				errs = multierror.Append(errs, err)
 			} else {
-				srcPodSpec.Containers[i] = *newC
+				containers[c.Name] = newC
 			}
-			delete(targetContainers, c.Name)
-		}
-	}
-
-	for _, container := range targetContainers {
-		srcPodSpec.Containers = append(srcPodSpec.Containers, container)
-	}
-
-	return multierr.ErrorOrNil()
-}
-
-func mergeInitContainerList(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
-	targetSpecContainers := targetPodSpec.InitContainers
-	targetContainers := make(map[string]apiv1.Container)
-	for _, c := range targetSpecContainers {
-		targetContainers[c.Name] = c
-	}
-
-	multierr := &multierror.Error{}
-	for i, c := range srcPodSpec.InitContainers {
-		container, ok := targetContainers[c.Name]
-		if ok {
-			newC, err := MergeContainer(&c, &container)
-			if err != nil {
-				// record the error and continue
-				multierr = multierror.Append(multierr, err)
-			} else {
-				srcPodSpec.Containers[i] = *newC
-			}
-			delete(targetContainers, c.Name)
-		}
-	}
-
-	for _, container := range targetContainers {
-		srcPodSpec.InitContainers = append(srcPodSpec.InitContainers, container)
-	}
-	return multierr.ErrorOrNil()
-}
-
-func mergeVolumeLists(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) error {
-	volumeList := targetPodSpec.Volumes
-	specVolumes := make(map[string]apiv1.Volume)
-	for _, vol := range volumeList {
-		specVolumes[vol.Name] = vol
-	}
-
-	multierr := &multierror.Error{}
-	for _, vol := range srcPodSpec.Volumes {
-		_, ok := specVolumes[vol.Name]
-		if ok {
-			multierr = multierror.Append(multierr, errors.New("Duplicate volume name found in the spec"))
 		} else {
-			delete(specVolumes, vol.Name)
+			containers[c.Name] = &list[i]
 		}
 	}
 
-	for _, volume := range specVolumes {
-		srcPodSpec.Volumes = append(srcPodSpec.Volumes, volume)
+	var containerList []apiv1.Container
+	for _, c := range containers {
+		containerList = append(containerList, *c)
 	}
-	return multierr.ErrorOrNil()
+
+	if errs.ErrorOrNil() != nil {
+		return nil, errs.ErrorOrNil()
+	}
+
+	return containerList, nil
+}
+
+func mergeVolumeLists(dst []apiv1.Volume, src []apiv1.Volume) ([]apiv1.Volume, error) {
+	dst = append(dst, src...)
+	err := checkSliceConflicts("Name", dst)
+	if err != nil {
+		return nil, err
+	}
+	return dst, err
 }
 
 func checkSliceConflicts(field string, objs interface{}) (err error) {
