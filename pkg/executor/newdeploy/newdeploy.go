@@ -197,6 +197,40 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
+	container, err := util.MergeContainer(&apiv1.Container{
+		Name:                   fn.Metadata.Name,
+		Image:                  env.Spec.Runtime.Image,
+		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
+		TerminationMessagePath: "/dev/termination-log",
+		Lifecycle: &apiv1.Lifecycle{
+			PreStop: &apiv1.Handler{
+				Exec: &apiv1.ExecAction{
+					Command: []string{
+						"/bin/sleep",
+						fmt.Sprintf("%v", gracePeriodSeconds),
+					},
+				},
+			},
+		},
+		Env: []apiv1.EnvVar{
+			{
+				Name:  fv1.LastUpdateTimestamp,
+				Value: time.Now().String(),
+			},
+		},
+		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http-env",
+				ContainerPort: int32(8888),
+			},
+		},
+		Resources: resources,
+	}, env.Spec.Runtime.Container)
+	if err != nil {
+		return nil, err
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   deployName,
@@ -213,38 +247,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						util.MergeContainerSpecs(&apiv1.Container{
-							Name:                   fn.Metadata.Name,
-							Image:                  env.Spec.Runtime.Image,
-							ImagePullPolicy:        deploy.runtimeImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							Lifecycle: &apiv1.Lifecycle{
-								PreStop: &apiv1.Handler{
-									Exec: &apiv1.ExecAction{
-										Command: []string{
-											"/bin/sleep",
-											fmt.Sprintf("%v", gracePeriodSeconds),
-										},
-									},
-								},
-							},
-							Env: []apiv1.EnvVar{
-								{
-									Name:  fv1.LastUpdateTimestamp,
-									Value: time.Now().String(),
-								},
-							},
-							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http-env",
-									ContainerPort: int32(8888),
-								},
-							},
-							Resources: resources,
-						}, env.Spec.Runtime.Container),
-					},
+					Containers:                    []apiv1.Container{*container},
 					ServiceAccountName:            "fission-fetcher",
 					TerminationGracePeriodSeconds: &gracePeriodSeconds,
 				},
@@ -261,7 +264,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err := deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
 		fn.Metadata.Name,
 		fn,
@@ -272,10 +275,11 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 
 	if env.Spec.Runtime.PodSpec != nil {
-		err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
+		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
 		if err != nil {
 			return nil, err
 		}
+		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
 	return deployment, nil
