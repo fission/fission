@@ -24,8 +24,8 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -61,7 +61,7 @@ var (
 type (
 	builderInfo struct {
 		envMetadata *metav1.ObjectMeta
-		deployment  *v1beta1.Deployment
+		deployment  *appsv1.Deployment
 		service     *apiv1.Service
 	}
 
@@ -319,7 +319,7 @@ func (envw *environmentWatcher) cleanupEnvBuilders(envs []fv1.Environment) {
 
 func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (*builderInfo, error) {
 	var svc *apiv1.Service
-	var deploy *v1beta1.Deployment
+	var deploy *appsv1.Deployment
 
 	sel := envw.getLabels(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
 
@@ -379,7 +379,7 @@ func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace strin
 }
 
 func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace string) error {
-	err := envw.kubernetesClient.ExtensionsV1beta1().
+	err := envw.kubernetesClient.AppsV1().
 		Deployments(namespace).
 		Delete(name, &delOpt)
 	if err != nil {
@@ -441,8 +441,8 @@ func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns st
 	return &service, nil
 }
 
-func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, ns string) ([]v1beta1.Deployment, error) {
-	deployList, err := envw.kubernetesClient.ExtensionsV1beta1().Deployments(ns).List(
+func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, ns string) ([]appsv1.Deployment, error) {
+	deployList, err := envw.kubernetesClient.AppsV1().Deployments(ns).List(
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
@@ -452,7 +452,7 @@ func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, 
 	return deployList.Items, nil
 }
 
-func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*v1beta1.Deployment, error) {
+func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
 	name := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
 	sel := envw.getLabels(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
 	var replicas int32 = 1
@@ -465,13 +465,37 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
-	deployment := &v1beta1.Deployment{
+	container, err := util.MergeContainer(&apiv1.Container{
+		Name:                   "builder",
+		Image:                  env.Spec.Builder.Image,
+		ImagePullPolicy:        envw.builderImagePullPolicy,
+		TerminationMessagePath: "/dev/termination-log",
+		Command:                []string{"/builder", envw.fetcherConfig.SharedMountPath()},
+		ReadinessProbe: &apiv1.Probe{
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       2,
+			Handler: apiv1.Handler{
+				HTTPGet: &apiv1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8001,
+					},
+				},
+			},
+		},
+	}, env.Spec.Builder.Container)
+	if err != nil {
+		return nil, err
+	}
+
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
 			Name:      name,
 			Labels:    sel,
 		},
-		Spec: v1beta1.DeploymentSpec{
+		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: sel,
@@ -482,41 +506,20 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						util.MergeContainerSpecs(&apiv1.Container{
-							Name:                   "builder",
-							Image:                  env.Spec.Builder.Image,
-							ImagePullPolicy:        envw.builderImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							Command:                []string{"/builder", envw.fetcherConfig.SharedMountPath()},
-							ReadinessProbe: &apiv1.Probe{
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       2,
-								Handler: apiv1.Handler{
-									HTTPGet: &apiv1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8001,
-										},
-									},
-								},
-							},
-						}, env.Spec.Builder.Container),
-					},
+					Containers:         []apiv1.Container{*container},
 					ServiceAccountName: "fission-builder",
 				},
 			},
 		},
 	}
 
-	err := envw.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder")
+	err = envw.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder")
 	if err != nil {
 		return nil, err
 	}
 
 	envw.logger.Info("creating builder deployment", zap.String("deployment", name))
-	_, err = envw.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Create(deployment)
+	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(deployment)
 	if err != nil {
 		return nil, err
 	}

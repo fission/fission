@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
 	uuid "github.com/satori/go.uuid"
 	"io"
 	"io/ioutil"
@@ -31,8 +30,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
@@ -209,7 +210,8 @@ func updatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	if needToBuild || forceRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fv1.PackageStatus{
-			BuildStatus: fv1.BuildStatusPending,
+			BuildStatus:         fv1.BuildStatusPending,
+			LastUpdateTimestamp: time.Now().UTC(),
 		}
 	}
 
@@ -332,8 +334,13 @@ func pkgList(c *cli.Context) error {
 		return err
 	}
 
+	// sort the package list by lastUpdatedTimestamp
+	sort.Slice(pkgList, func(i, j int) bool {
+		return pkgList[i].Status.LastUpdateTimestamp.After(pkgList[j].Status.LastUpdateTimestamp)
+	})
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT")
 	if listOrphans {
 		for _, pkg := range pkgList {
 			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
@@ -629,12 +636,13 @@ func createPackage(c *cli.Context, client *client.Client, pkgNamespace string, e
 		},
 		Spec: pkgSpec,
 		Status: fv1.PackageStatus{
-			BuildStatus: pkgStatus,
+			BuildStatus:         pkgStatus,
+			LastUpdateTimestamp: time.Now().UTC(),
 		},
 	}
 
 	if len(specFile) > 0 {
-		// if a package sith the same spec exists, don't create a new spec file
+		// if a package with the same spec exists, don't create a new spec file
 		fr, err := readSpecs(cmdutils.GetSpecDir(urfavecli.Parse(c)))
 		util.CheckErr(err, "read specs")
 		if m := fr.SpecExists(pkg, false, true); m != nil {

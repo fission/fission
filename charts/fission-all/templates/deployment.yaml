@@ -112,7 +112,7 @@ data:
   "config.yaml": {{ include "config" . | b64enc }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controller
@@ -122,6 +122,10 @@ metadata:
     application: fission-api
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: controller
+      application: fission-api
   template:
     metadata:
       labels:
@@ -174,7 +178,7 @@ spec:
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: router
@@ -184,6 +188,10 @@ metadata:
     application: fission-router
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: router
+      application: fission-router
   template:
     metadata:
       labels:
@@ -270,7 +278,7 @@ spec:
     svc: executor
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: executor
@@ -279,6 +287,9 @@ metadata:
     svc: executor
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: executor
   template:
     metadata:
       labels:
@@ -341,7 +352,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: buildermgr
@@ -350,6 +361,9 @@ metadata:
     svc: buildermgr
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: buildermgr
   template:
     metadata:
       labels:
@@ -390,7 +404,7 @@ spec:
 {{- end }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kubewatcher
@@ -399,6 +413,9 @@ metadata:
     svc: kubewatcher
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: kubewatcher
   template:
     metadata:
       labels:
@@ -437,7 +454,7 @@ spec:
     svc: influxdb
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: influxdb
@@ -446,6 +463,9 @@ metadata:
     svc: influxdb
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: influxdb
   template:
     metadata:
       labels:
@@ -492,7 +512,7 @@ spec:
   selector:
     svc: heapster
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: heapster
@@ -502,6 +522,9 @@ metadata:
     svc: heapster
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: heapster
   template:
     metadata:
       labels:
@@ -517,7 +540,7 @@ spec:
       serviceAccount: {{ .Release.Namespace }}/fission-svc
 {{- end }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: timer
@@ -526,6 +549,9 @@ metadata:
     svc: timer
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: timer
   template:
     metadata:
       labels:
@@ -551,7 +577,7 @@ spec:
 # "fission".
 #
 #---
-#apiVersion: extensions/v1beta1
+#apiVersion: apps/v1
 #kind: Deployment
 #metadata:
 #  name: fission-ui
@@ -575,7 +601,7 @@ spec:
 
 {{- if .Values.nats.enabled }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -583,6 +609,9 @@ metadata:
   name: nats-streaming
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: nats-streaming
   template:
     metadata:
       labels:
@@ -622,7 +651,7 @@ spec:
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mqtrigger-nats-streaming
@@ -632,6 +661,10 @@ metadata:
     messagequeue: nats-streaming
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: nats-streaming
   template:
     metadata:
       labels:
@@ -661,7 +694,7 @@ spec:
 
 {{- if .Values.kafka.enabled }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mqtrigger-kafka
@@ -671,6 +704,10 @@ metadata:
     messagequeue: kafka
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: kafka
   template:
     metadata:
       labels:
@@ -702,7 +739,7 @@ spec:
 
 {{- if .Values.azureStorageQueue.enabled }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mqtrigger-azure-storage-queue
@@ -712,6 +749,10 @@ metadata:
     messagequeue: azure-storage-queue
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: azure-storage-queue
   template:
     metadata:
       labels:
@@ -744,7 +785,7 @@ spec:
 {{- end }}
 {{- end }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: storagesvc
@@ -754,6 +795,10 @@ metadata:
     application: fission-storage
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      svc: storagesvc
+      application: fission-storage
   template:
     metadata:
       labels:
