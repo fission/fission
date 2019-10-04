@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	uuid "github.com/satori/go.uuid"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -37,8 +36,10 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
+	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
