@@ -22,6 +22,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
+	uuid "github.com/satori/go.uuid"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -34,10 +36,8 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -324,6 +324,7 @@ func pkgList(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 	// option for the user to list all orphan packages (not referenced by any function)
 	listOrphans := c.Bool("orphan")
+	status := c.String("status")
 	pkgNamespace := c.String("pkgNamespace")
 
 	pkgList, err := client.PackageList(pkgNamespace)
@@ -338,13 +339,20 @@ func pkgList(c *cli.Context) error {
 			fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 			util.CheckErr(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
 			if len(fnList) == 0 {
-				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+				if status == "" {
+					fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+				} else if status == string(pkg.Status.BuildStatus) {
+					fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+				}
 			}
 		}
 	} else {
 		for _, pkg := range pkgList {
-			fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name,
-				pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			if status == "" {
+				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			} else if status == string(pkg.Status.BuildStatus) {
+				fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			}
 		}
 	}
 
