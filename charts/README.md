@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-- Kubernetes 1.6 or later
+- Kubernetes 1.9 or later
 
 
 ## Helm charts
@@ -65,6 +65,7 @@ Parameter | Description | Default
 `prometheusDeploy` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
 `canaryDeployment.enabled` | Set to true if you need canary deployment feature | `true` in `fission-all`, `false` in `fission-core`
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
+`router.deployAsDaemonSet` | Deploy router as DaemonSet instead of Deployment | `false`
 `router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
 `router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
 `router.svcAnnotations` | Annotations for router service | None

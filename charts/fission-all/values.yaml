@@ -60,6 +60,7 @@ logger:
 
 ## Router config
 router:
+  deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
   ## Add annotations for router
