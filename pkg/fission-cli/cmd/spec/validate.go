@@ -19,7 +19,6 @@ package spec
 import (
 	"bytes"
 	"fmt"
-	"github.com/fission/fission/pkg/controller/client"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -28,6 +27,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/log"

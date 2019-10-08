@@ -26,11 +26,12 @@ import (
 	"os"
 	"path/filepath"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/mholt/archiver"
 	uuid "github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
 func UrlForFunction(name, namespace string) string {
