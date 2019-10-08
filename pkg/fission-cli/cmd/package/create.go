@@ -38,7 +38,6 @@ import (
 
 type CreateSubCommand struct {
 	client *client.Client
-	env    *fv1.Environment
 }
 
 func Create(flags cli.Input) error {

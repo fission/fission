@@ -34,7 +34,6 @@ type ListSubCommand struct {
 	listOrphans  bool
 	status       string
 	pkgNamespace string
-	pkgName      string
 }
 
 func List(flags cli.Input) error {

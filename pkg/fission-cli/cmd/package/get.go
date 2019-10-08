@@ -60,6 +60,14 @@ func GetDeploy(flags cli.Input) error {
 	return opts.do(flags)
 }
 
+func (opts *GetSubCommand) do(flags cli.Input) error {
+	err := opts.complete(flags)
+	if err != nil {
+		return err
+	}
+	return opts.run(flags)
+}
+
 func (opts *GetSubCommand) complete(flags cli.Input) error {
 	opts.name = flags.String("name")
 	if len(opts.name) == 0 {
@@ -70,7 +78,7 @@ func (opts *GetSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
+func (opts *GetSubCommand) run(flags cli.Input) error {
 	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,
