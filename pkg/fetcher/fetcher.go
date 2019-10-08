@@ -128,26 +128,6 @@ func downloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	return nil
 }
 
-//
-//func getChecksum(path string) (*fv1.Checksum, error) {
-//	f, err := os.Open(path)
-//	if err != nil {
-//		return nil, err
-//	}
-//	defer f.Close()
-//
-//	hasher := sha256.New()
-//	_, err = io.Copy(hasher, f)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return &fv1.Checksum{
-//		Type: fv1.ChecksumTypeSHA256,
-//		Sum:  hex.EncodeToString(hasher.Sum(nil)),
-//	}, nil
-//}
-
 func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 	if checksum.Type != fv1.ChecksumTypeSHA256 {
 		return ferror.MakeError(ferror.ErrorInvalidArgument, "Unsupported checksum type")
