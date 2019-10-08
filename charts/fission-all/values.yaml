@@ -66,6 +66,12 @@ router:
   ## Add annotations for router
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
+  
+  ## For router to match encoded path.
+  ## If true, "/foo%2Fbar" will match the path "/{var}";
+  ## Otherwise, it will match the path "/foo/bar".
+  useEncodedPath: false
+  
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.

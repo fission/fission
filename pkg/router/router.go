@@ -63,7 +63,16 @@ import (
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
 func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) *mutableRouter {
-	mr := NewMutableRouter(logger, mux.NewRouter())
+	var mr *mutableRouter
+
+	// see issue https://github.com/fission/fission/issues/1317
+	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
+	if useEncodedPath {
+		mr = NewMutableRouter(logger, mux.NewRouter().UseEncodedPath())
+	} else {
+		mr = NewMutableRouter(logger, mux.NewRouter())
+	}
+
 	httpTriggerSet.subscribeRouter(ctx, mr, resolver)
 	return mr
 }
