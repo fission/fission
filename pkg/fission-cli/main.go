@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,9 +31,9 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
+	"github.com/fission/fission/pkg/fission-cli/cmd/support"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/plugin"
-	"github.com/fission/fission/pkg/fission-cli/support"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/types"
@@ -97,7 +98,7 @@ func NewCliApp() *cli.App {
 	minScale := cli.IntFlag{Name: cmd.RUNTIME_MINSCALE, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
 	maxScale := cli.IntFlag{Name: cmd.RUNTIME_MAXSCALE, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
 	targetcpu := cli.IntFlag{Name: cmd.RUNTIME_TARGETCPU, Usage: "Target average CPU usage percentage across pods for scaling"}
-	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Usage: "Timeout for newdeploy to wait for function pod creation"}
+	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Value: 120, Usage: "Timeout for newdeploy to wait for function pod creation"}
 
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
@@ -115,23 +116,26 @@ func NewCliApp() *cli.App {
 	fnQueryFlag := cli.StringSliceFlag{Name: "query, q", Usage: "request query parameters: -q key1=value1 -q key2=value2"}
 	fnEntryPointFlag := cli.StringFlag{Name: "entrypoint", Usage: "entry point for environment v2 to load with"}
 	fnBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "build command for builder to run with"}
-	fnSecretFlag := cli.StringFlag{Name: "secret", Usage: "function access to secret, should be present in the same namespace as the function"}
-	fnCfgMapFlag := cli.StringFlag{Name: "configmap", Usage: "function access to configmap, should be present in the same namespace as the function"}
+	fnSecretFlag := cli.StringSliceFlag{Name: "secret", Usage: "function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags."}
+	fnCfgMapFlag := cli.StringSliceFlag{Name: "configmap", Usage: "function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags."}
+	fnLogReverseQueryFlag := cli.BoolFlag{Name: "reverse, r", Usage: "specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified"}
 	fnLogCountFlag := cli.StringFlag{Name: "recordcount", Usage: "the n most recent log records"}
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Value: types.ExecutorTypePoolmgr, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
+	fnExecutionTimeoutFlag := cli.IntFlag{Name: "fntimeout, ft", Value: 60, Usage: "Time duration to wait for the response while executing the function. If the flag is not provided, by default it will wait of 60s for the response."}
+
 	fnTimeoutFlag := cli.DurationFlag{Name: "timeout, t", Value: 30 * time.Second, Usage: "The length of time to wait for the response. If set to zero or negative number, no timeout is set."}
 
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, specializationTimeoutFlag}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGet},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGetMeta},
-		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, pkgNamespaceFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, specializationTimeoutFlag}, Action: fnUpdate},
+		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, pkgNamespaceFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnUpdate},
 		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnDelete},
 		// TODO : for fnList, i feel like it's nice to allow --fns all, to list functions across all namespaces for cluster admins, although, this is against ns isolation.
 		// so, in the future, if we end up using kubeconfig in fission cli and enforcing rolebindings to be created for users by admins etc, we can add this option at the time.
 		{Name: "list", Usage: "List all functions in a namespace if specified, else, list functions across all namespaces", Flags: []cli.Flag{fnNamespaceFlag}, Action: fnList},
-		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogCountFlag}, Action: fnLogs},
+		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogReverseQueryFlag, fnLogCountFlag}, Action: fnLogs},
 		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag,
 			fnCodeFlag, fnSrcArchiveFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag, fnQueryFlag, fnTimeoutFlag},
 			Action: fnTest},
@@ -139,18 +143,20 @@ func NewCliApp() *cli.App {
 
 	// httptriggers
 	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
-	htHostFlag := cli.StringFlag{Name: "host", Usage: "FQDN of the network host for route"}
+	htHostFlag := cli.StringFlag{Name: "host", Usage: "(DEPRECATED) Use --ingressrule instead"}
 	htIngressFlag := cli.BoolFlag{Name: "createingress", Usage: "Creates ingress with same URL, defaults to false"}
-	htFnNameFlag := cli.StringSliceFlag{Name: "function", Usage: "Name(s) of the function for this trigger. If 2 functions are supplied with this flag, traffic gets routed to them based on weights supplied with --weight flag."}
+	htIngressRuleFlag := cli.StringFlag{Name: "ingressrule", Usage: "Host for Ingress rule: --ingressrule host=path (the format of host/path depends on what ingress controller you used)"}
+	htIngressAnnotationFlag := cli.StringSliceFlag{Name: "ingressannotation", Usage: "Annotation for Ingress: --ingressannotation key=value (the format of annotation depends on what ingress controller you used)"}
+	htIngressTLSFlag := cli.StringFlag{Name: "ingresstls", Usage: "Name of the Secret contains TLS key and crt for Ingress (the usability of TLS features depends on what ingress controller you used)"}
+	htFnNameFlag := cli.StringSliceFlag{Name: "function", Usage: "Name(s) of the function for this trigger. (If 2 functions are supplied with this flag, traffic gets routed to them based on weights supplied with --weight flag.)"}
 	htFnWeightFlag := cli.IntSliceFlag{Name: "weight", Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
-
+	htFnFilterFlag := cli.StringFlag{Name: "function", Usage: "Name of the function for trigger(s)"}
 	htSubcommands := []cli.Command{
-
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htHostFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag}, Action: htCreate},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag, htHostFlag}, Action: htCreate},
 		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: htGet},
-		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htHostFlag, htIngressFlag, htFnWeightFlag}, Action: htUpdate},
-		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag}, Action: htDelete},
-		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag}, Action: htList},
+		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, htFnWeightFlag, htHostFlag}, Action: htUpdate},
+		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnFilterFlag}, Action: htDelete},
+		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag, htFnFilterFlag}, Action: htList},
 	}
 
 	// timetriggers
@@ -254,6 +260,7 @@ func NewCliApp() *cli.App {
 	pkgDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
 	pkgBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for builder to run with"}
 	pkgOutputFlag := cli.StringFlag{Name: "output, o", Usage: "Output filename to save archive content"}
+	pkgStatusFlag := cli.StringFlag{Name: "status", Usage: `Filter packages by status`}
 	pkgOrphanFlag := cli.BoolFlag{Name: "orphan", Usage: "orphan packages that are not referenced by any function"}
 	pkgSubCommands := []cli.Command{
 		{Name: "create", Usage: "Create new package", Flags: []cli.Flag{pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgBuildCmdFlag}, Action: pkgCreate},
@@ -262,7 +269,7 @@ func NewCliApp() *cli.App {
 		{Name: "getsrc", Usage: "Get source archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgSourceGet},
 		{Name: "getdeploy", Usage: "Get deployment archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgDeployGet},
 		{Name: "info", Usage: "Show package information", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgInfo},
-		{Name: "list", Usage: "List all packages", Flags: []cli.Flag{pkgOrphanFlag, pkgNamespaceFlag}, Action: pkgList},
+		{Name: "list", Usage: "List all packages", Flags: []cli.Flag{pkgOrphanFlag, pkgStatusFlag, pkgNamespaceFlag}, Action: pkgList},
 		{Name: "delete", Usage: "Delete package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgForceFlag, pkgOrphanFlag}, Action: pkgDelete},
 	}
 
@@ -285,7 +292,7 @@ func NewCliApp() *cli.App {
 	supportOutputFlag := cli.StringFlag{Name: "output, o", Value: support.DEFAULT_OUTPUT_DIR, Usage: "Output directory to save dump archive/files"}
 	supportNoZipFlag := cli.BoolFlag{Name: "nozip", Usage: "Save dump information into multiple files instead of single zip file"}
 	supportSubCommands := []cli.Command{
-		{Name: "dump", Usage: "Collect & dump all necessary for troubleshooting", Flags: []cli.Flag{supportOutputFlag, supportNoZipFlag}, Action: support.DumpInfo},
+		{Name: "dump", Usage: "Collect & dump all necessary for troubleshooting", Flags: []cli.Flag{supportOutputFlag, supportNoZipFlag}, Action: urfavecli.Wrapper(support.Dump)},
 	}
 
 	// canary configs
@@ -394,7 +401,11 @@ To install it for your local Fission CLI:
 func versionPrinter(_ *cli.Context) {
 	client := util.GetApiClient(util.GetServerUrl())
 	ver := util.GetVersion(client)
-	fmt.Print(string(ver))
+	bs, err := yaml.Marshal(ver)
+	if err != nil {
+		log.Fatal("Error formatting versions: " + err.Error())
+	}
+	fmt.Print(string(bs))
 }
 
 func flagValueParser(args []string) error {

@@ -31,8 +31,8 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -51,7 +51,7 @@ type (
 		logger                 *zap.Logger
 		env                    *fv1.Environment
 		replicas               int32                         // num idle pods
-		deployment             *v1beta1.Deployment           // kubernetes deployment
+		deployment             *appsv1.Deployment            // kubernetes deployment
 		namespace              string                        // namespace to keep our resources
 		functionNamespace      string                        // fallback namespace for fission functions
 		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
@@ -359,12 +359,50 @@ func (gp *GenericPool) createPool() error {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
-	deployment := &v1beta1.Deployment{
+	container, err := util.MergeContainer(&apiv1.Container{
+		Name:                   gp.env.Metadata.Name,
+		Image:                  gp.env.Spec.Runtime.Image,
+		ImagePullPolicy:        gp.runtimeImagePullPolicy,
+		TerminationMessagePath: "/dev/termination-log",
+		Resources:              gp.env.Spec.Resources,
+		// Pod is removed from endpoints list for service when it's
+		// state became "Termination". We used preStop hook as the
+		// workaround for connection draining since pod maybe shutdown
+		// before grace period expires.
+		// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
+		// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
+		Lifecycle: &apiv1.Lifecycle{
+			PreStop: &apiv1.Handler{
+				Exec: &apiv1.ExecAction{
+					Command: []string{
+						"/bin/sleep",
+						fmt.Sprintf("%v", gracePeriodSeconds),
+					},
+				},
+			},
+		},
+		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http-fetcher",
+				ContainerPort: int32(8000),
+			},
+			{
+				Name:          "http-env",
+				ContainerPort: int32(8888),
+			},
+		},
+	}, gp.env.Spec.Runtime.Container)
+	if err != nil {
+		return err
+	}
+
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   gp.getPoolName(),
 			Labels: gp.labelsForPool,
 		},
-		Spec: v1beta1.DeploymentSpec{
+		Spec: appsv1.DeploymentSpec{
 			Replicas: &gp.replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: gp.labelsForPool,
@@ -375,42 +413,7 @@ func (gp *GenericPool) createPool() error {
 					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						util.MergeContainerSpecs(&apiv1.Container{
-							Name:                   gp.env.Metadata.Name,
-							Image:                  gp.env.Spec.Runtime.Image,
-							ImagePullPolicy:        gp.runtimeImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							Resources:              gp.env.Spec.Resources,
-							// Pod is removed from endpoints list for service when it's
-							// state became "Termination". We used preStop hook as the
-							// workaround for connection draining since pod maybe shutdown
-							// before grace period expires.
-							// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
-							// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
-							Lifecycle: &apiv1.Lifecycle{
-								PreStop: &apiv1.Handler{
-									Exec: &apiv1.ExecAction{
-										Command: []string{
-											"/bin/sleep",
-											fmt.Sprintf("%v", gracePeriodSeconds),
-										},
-									},
-								},
-							},
-							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http-fetcher",
-									ContainerPort: int32(8000),
-								},
-								{
-									Name:          "http-env",
-									ContainerPort: int32(8888),
-								},
-							},
-						}, gp.env.Spec.Runtime.Container),
-					},
+					Containers:         []apiv1.Container{*container},
 					ServiceAccountName: "fission-fetcher",
 					// TerminationGracePeriodSeconds should be equal to the
 					// sleep time of preStop to make sure that SIGTERM is sent
@@ -422,19 +425,20 @@ func (gp *GenericPool) createPool() error {
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err := gp.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, gp.env.Metadata.Name)
+	err = gp.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, gp.env.Metadata.Name)
 	if err != nil {
 		return err
 	}
 
 	if gp.env.Spec.Runtime.PodSpec != nil {
-		err = util.MergePodSpec(&deployment.Spec.Template.Spec, gp.env.Spec.Runtime.PodSpec)
+		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, gp.env.Spec.Runtime.PodSpec)
 		if err != nil {
 			return err
 		}
+		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Create(deployment)
+	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(deployment)
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err
@@ -447,7 +451,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 	startTime := time.Now()
 	for {
 		// TODO: for now we just poll; use a watch instead
-		depl, err := gp.kubernetesClient.ExtensionsV1beta1().Deployments(gp.namespace).Get(
+		depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(
 			gp.deployment.ObjectMeta.Name, metav1.GetOptions{})
 		if err != nil {
 			e := "error waiting for ready pod for deployment"
@@ -471,7 +475,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 
 			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
 			pod := podList.Items[0]
-			var multierr *multierror.Error
+			multierr := &multierror.Error{}
 			for _, cStatus := range pod.Status.ContainerStatuses {
 				if cStatus.Ready != true {
 					multierr = multierror.Append(multierr, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
@@ -632,7 +636,7 @@ func (gp *GenericPool) destroy() error {
 	delOpt := metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	}
-	err := gp.kubernetesClient.ExtensionsV1beta1().
+	err := gp.kubernetesClient.AppsV1().
 		Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, &delOpt)
 	if err != nil {
 		gp.logger.Error("error destroying deployment",

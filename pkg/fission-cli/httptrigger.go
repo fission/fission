@@ -23,12 +23,14 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -143,12 +145,16 @@ func htCreate(c *cli.Context) error {
 		}
 	}
 
-	createIngress := false
-	if c.IsSet("createingress") {
-		createIngress = c.Bool("createingress")
-	}
+	createIngress := c.Bool("createingress")
+	ingressConfig, err := httptrigger.GetIngressConfig(
+		c.StringSlice("ingressannotation"), c.String("ingressrule"),
+		c.String("ingresstls"), triggerUrl, nil)
+	util.CheckErr(err, "parse ingress configuration")
 
 	host := c.String("host")
+	if c.IsSet("host") {
+		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+	}
 
 	// just name triggers by uuid.
 	if triggerName == "" {
@@ -166,6 +172,7 @@ func htCreate(c *cli.Context) error {
 			Method:            getMethod(method),
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
+			IngressConfig:     *ingressConfig,
 		},
 	}
 
@@ -190,33 +197,18 @@ func htGet(c *cli.Context) error {
 	name := c.String("name")
 	ns := c.String("fnNamespace")
 
+	if len(name) <= 0 {
+		log.Fatal("Need a trigger name, use --name")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      name,
 		Namespace: ns,
 	}
-
-	htTrigger, err := cliClient.HTTPTriggerGet(m)
+	ht, err := cliClient.HTTPTriggerGet(m)
 	util.CheckErr(err, "get http trigger")
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 1, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "METHOD", "RELATIVE-URL", "FUNCTION-REFERENCE-TYPE", "FUNCTION(s)")
-
-	function := ""
-	if htTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
-		function = htTrigger.Spec.FunctionReference.Name
-	} else {
-		for k, v := range htTrigger.Spec.FunctionReference.FunctionWeights {
-			function += fmt.Sprintf("%s:%v ", k, v)
-		}
-	}
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-		htTrigger.Metadata.Name, htTrigger.Metadata.UID, htTrigger.Spec.Method, htTrigger.Spec.RelativeURL,
-		htTrigger.Spec.FunctionReference.Type, function)
-
-	w.Flush()
-
+	printHtSummary([]fv1.HTTPTrigger{*ht})
 	return err
 }
 
@@ -264,6 +256,14 @@ func htUpdate(c *cli.Context) error {
 
 	if c.IsSet("host") {
 		ht.Spec.Host = c.String("host")
+		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+	}
+
+	if c.IsSet("ingressrule") || c.IsSet("ingressannotation") || c.IsSet("ingresstls") {
+		_, err = httptrigger.GetIngressConfig(
+			c.StringSlice("ingressannotation"), c.String("ingressrule"),
+			c.String("ingresstls"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+		util.CheckErr(err, "parse ingress configuration")
 	}
 
 	_, err = client.HTTPTriggerUpdate(ht)
@@ -275,37 +275,102 @@ func htUpdate(c *cli.Context) error {
 
 func htDelete(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
+
 	htName := c.String("name")
-	if len(htName) == 0 {
-		log.Fatal("Need name of trigger to delete, use --name")
+	fnName := c.String("function")
+	if len(htName) == 0 && len(fnName) == 0 {
+		log.Fatal("Need --name or --function")
+	} else if len(htName) > 0 && len(fnName) > 0 {
+		log.Fatal("Need either of --name or --function and not both arguments")
 	}
+
 	triggerNamespace := c.String("triggerNamespace")
 
-	err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
-		Name:      htName,
-		Namespace: triggerNamespace,
-	})
-	util.CheckErr(err, "delete trigger")
+	triggers, err := client.HTTPTriggerList(triggerNamespace)
+	util.CheckErr(err, "get HTTP trigger list")
 
-	fmt.Printf("trigger '%v' deleted\n", htName)
+	var triggersToDelete []string
+
+	if len(fnName) > 0 {
+		for _, trigger := range triggers {
+			// TODO: delete canary http triggers as well.
+			if trigger.Spec.FunctionReference.Name == fnName {
+				triggersToDelete = append(triggersToDelete, trigger.Metadata.Name)
+			}
+		}
+	} else {
+		triggersToDelete = []string{htName}
+	}
+
+	errs := &multierror.Error{}
+
+	for _, name := range triggersToDelete {
+		err := client.HTTPTriggerDelete(&metav1.ObjectMeta{
+			Name:      name,
+			Namespace: triggerNamespace,
+		})
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		} else {
+			fmt.Printf("trigger '%v' deleted\n", name)
+		}
+	}
+
+	util.CheckErr(errs.ErrorOrNil(), "delete trigger(s)")
+
 	return nil
 }
 
 func htList(c *cli.Context) error {
 	client := util.GetApiClient(c.GlobalString("server"))
 	triggerNamespace := c.String("triggerNamespace")
+	fnName := c.String("function")
 
 	hts, err := client.HTTPTriggerList(triggerNamespace)
 	util.CheckErr(err, "list HTTP triggers")
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "HOST", "URL", "INGRESS", "FUNCTION_NAME")
+	var triggers []fv1.HTTPTrigger
 	for _, ht := range hts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
-			ht.Metadata.Name, ht.Spec.Method, ht.Spec.Host, ht.Spec.RelativeURL, ht.Spec.CreateIngress, ht.Spec.FunctionReference.Name)
+		// TODO: list canary http triggers as well.
+		if len(fnName) == 0 || (len(fnName) > 0 && fnName == ht.Spec.FunctionReference.Name) {
+			triggers = append(triggers, ht)
+		}
+	}
+
+	printHtSummary(triggers)
+	return nil
+}
+
+func printHtSummary(triggers []fv1.HTTPTrigger) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS")
+	for _, trigger := range triggers {
+		function := ""
+		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
+			function = trigger.Spec.FunctionReference.Name
+		} else {
+			for k, v := range trigger.Spec.FunctionReference.FunctionWeights {
+				function += fmt.Sprintf("%s:%v ", k, v)
+			}
+		}
+
+		host := trigger.Spec.Host
+		if len(trigger.Spec.IngressConfig.Host) > 0 {
+			host = trigger.Spec.IngressConfig.Host
+		}
+		path := trigger.Spec.RelativeURL
+		if len(trigger.Spec.IngressConfig.Path) > 0 {
+			path = trigger.Spec.IngressConfig.Path
+		}
+
+		var msg []string
+		for k, v := range trigger.Spec.IngressConfig.Annotations {
+			msg = append(msg, fmt.Sprintf("%v: %v", k, v))
+		}
+		ann := strings.Join(msg, ", ")
+
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			trigger.Metadata.Name, trigger.Spec.Method, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
 	}
 	w.Flush()
-
-	return nil
 }

@@ -21,13 +21,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,15 +33,17 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
 	DeploymentKind    = "Deployment"
-	DeploymentVersion = "extensions/v1beta1"
+	DeploymentVersion = "apps/v1"
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string, firstcreate bool) (*appsv1.Deployment, error) {
 
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
@@ -56,7 +56,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 
 	waitForDeploy := minScale > 0
 
-	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
+	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
 		if waitForDeploy {
 			err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
@@ -70,9 +70,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 		}
 		return existingDepl, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		err := deploy.setupRBACObjs(deployNamespace, fn)
 		if err != nil {
 			return nil, err
@@ -83,7 +81,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			return nil, err
 		}
 
-		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Create(deployment)
+		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(deployment)
 		if err != nil {
 			deploy.logger.Error("error while creating function deployment",
 				zap.Error(err),
@@ -145,12 +143,12 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	return nil
 }
 
-func (deploy *NewDeploy) getDeployment(ns, name string) (*v1beta1.Deployment, error) {
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Get(name, metav1.GetOptions{})
+func (deploy *NewDeploy) getDeployment(ns, name string) (*appsv1.Deployment, error) {
+	return deploy.kubernetesClient.AppsV1().Deployments(ns).Get(name, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment, ns string) error {
-	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Update(deployment)
+func (deploy *NewDeploy) updateDeployment(deployment *appsv1.Deployment, ns string) error {
+	_, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Update(deployment)
 	return err
 }
 
@@ -158,17 +156,13 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it markes for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
+	return deploy.kubernetesClient.AppsV1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
@@ -186,15 +180,63 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 	resources := deploy.getResources(env, fn)
 
+	// Set maxUnavailable and maxSurge to 20% is because we want
+	// fission to rollout newer function version gradually without
+	// affecting any online service. For example, if you set maxSurge
+	// to 100%, the new ReplicaSet scales up immediately and may
+	// consume all remaining compute resources which might be an
+	// issue if a cluster's resource is on a budget.
+	// TODO: add to ExecutionStrategy so that the user
+	// can do more fine control over different functions.
 	maxUnavailable := intstr.FromString("20%")
-	maxSurge := intstr.FromString("100%")
+	maxSurge := intstr.FromString("20%")
 
-	deployment := &v1beta1.Deployment{
+	// Newdeploy updates the environment variable "LastUpdateTimestamp" of deployment
+	// whenever a configmap/secret gets an update, but it also leaves multiple ReplicaSets for
+	// rollback purpose. Since fission always update a deployment instead of performing a
+	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
+	revisionHistoryLimit := int32(0)
+
+	container, err := util.MergeContainer(&apiv1.Container{
+		Name:                   fn.Metadata.Name,
+		Image:                  env.Spec.Runtime.Image,
+		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
+		TerminationMessagePath: "/dev/termination-log",
+		Lifecycle: &apiv1.Lifecycle{
+			PreStop: &apiv1.Handler{
+				Exec: &apiv1.ExecAction{
+					Command: []string{
+						"/bin/sleep",
+						fmt.Sprintf("%v", gracePeriodSeconds),
+					},
+				},
+			},
+		},
+		Env: []apiv1.EnvVar{
+			{
+				Name:  fv1.LastUpdateTimestamp,
+				Value: time.Now().String(),
+			},
+		},
+		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http-env",
+				ContainerPort: int32(8888),
+			},
+		},
+		Resources: resources,
+	}, env.Spec.Runtime.Container)
+	if err != nil {
+		return nil, err
+	}
+
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   deployName,
 			Labels: deployLabels,
 		},
-		Spec: v1beta1.DeploymentSpec{
+		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: deployLabels,
@@ -205,54 +247,24 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 					Annotations: podAnnotations,
 				},
 				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						util.MergeContainerSpecs(&apiv1.Container{
-							Name:                   fn.Metadata.Name,
-							Image:                  env.Spec.Runtime.Image,
-							ImagePullPolicy:        deploy.runtimeImagePullPolicy,
-							TerminationMessagePath: "/dev/termination-log",
-							Lifecycle: &apiv1.Lifecycle{
-								PreStop: &apiv1.Handler{
-									Exec: &apiv1.ExecAction{
-										Command: []string{
-											"/bin/sleep",
-											fmt.Sprintf("%v", gracePeriodSeconds),
-										},
-									},
-								},
-							},
-							Env: []apiv1.EnvVar{
-								{
-									Name:  fv1.LastUpdateTimestamp,
-									Value: time.Now().String(),
-								},
-							},
-							// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http-env",
-									ContainerPort: int32(8888),
-								},
-							},
-							Resources: resources,
-						}, env.Spec.Runtime.Container),
-					},
+					Containers:                    []apiv1.Container{*container},
 					ServiceAccountName:            "fission-fetcher",
 					TerminationGracePeriodSeconds: &gracePeriodSeconds,
 				},
 			},
-			Strategy: v1beta1.DeploymentStrategy{
-				Type: v1beta1.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &v1beta1.RollingUpdateDeployment{
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
 					MaxUnavailable: &maxUnavailable,
 					MaxSurge:       &maxSurge,
 				},
 			},
+			RevisionHistoryLimit: &revisionHistoryLimit,
 		},
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err := deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
 		fn.Metadata.Name,
 		fn,
@@ -263,10 +275,11 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 
 	if env.Spec.Runtime.PodSpec != nil {
-		err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
+		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
 		if err != nil {
 			return nil, err
 		}
+		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
 	return deployment, nil
@@ -306,7 +319,7 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 	return resources
 }
 
-func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy, depl *v1beta1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy, depl *appsv1.Deployment) (*asv1.HorizontalPodAutoscaler, error) {
 
 	minRepl := int32(execStrategy.MinScale)
 	if minRepl == 0 {
@@ -366,18 +379,14 @@ func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
 }
 
 func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
-	err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
-	return err
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
 func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
-
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return existingSvc, err
-	}
-
-	if err != nil && k8s_err.IsNotFound(err) {
+	} else if k8s_err.IsNotFound(err) {
 		service := &apiv1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   svcName,
@@ -400,29 +409,23 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 		if err != nil {
 			return nil, err
 		}
-
 		return svc, nil
 	}
-
 	return nil, err
 }
 
 func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
-	err := deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32, specializationTimeout int) (*v1beta1.Deployment, error) {
+func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (*appsv1.Deployment, error) {
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
+		latestDepl, err := deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -442,33 +445,34 @@ func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32,
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
-	var multierr *multierror.Error
+	result := &multierror.Error{}
 
 	err := deploy.deleteSvc(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting service for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteHpa(ns, name)
-	if err != nil {
-		deploy.logger.Error("error deleting service for newdeploy function",
+	if err != nil && !k8s_err.IsNotFound(err) {
+		deploy.logger.Error("error deleting HPA for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
 
 	err = deploy.deleteDeployment(ns, name)
-	if err != nil {
+	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting deployment for newdeploy function",
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		multierror.Append(multierr, err)
+		result = multierror.Append(result, err)
 	}
-	return multierr.ErrorOrNil()
+
+	return result.ErrorOrNil()
 }

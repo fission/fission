@@ -84,7 +84,8 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 		kafka.authKeys = authKeys
 	}
 
-	logger.Info("created kafka queue", zap.Any("kafka", kafka))
+	logger.Info("created kafka queue", zap.Any("kafka brokers", kafka.brokers),
+		zap.Any("kafka version", kafka.version))
 	return kafka, nil
 }
 
@@ -124,13 +125,26 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	}
 
 	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
-	kafka.logger.Info("created a new consumer", zap.Any("consumer", consumer))
+	kafka.logger.Info("created a new consumer", zap.Strings("brokers", kafka.brokers),
+		zap.String("input topic", trigger.Spec.Topic),
+		zap.String("output topic", trigger.Spec.ResponseTopic),
+		zap.String("error topic", trigger.Spec.ErrorTopic),
+		zap.String("trigger name", trigger.Metadata.Name),
+		zap.String("function namespace", trigger.Metadata.Namespace),
+		zap.String("function name", trigger.Spec.FunctionReference.Name))
 	if err != nil {
 		return nil, err
 	}
 
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
-	kafka.logger.Info("created a new producer", zap.Any("producer", producer))
+	kafka.logger.Info("created a new producer", zap.Strings("brokers", kafka.brokers),
+		zap.String("input topic", trigger.Spec.Topic),
+		zap.String("output topic", trigger.Spec.ResponseTopic),
+		zap.String("error topic", trigger.Spec.ErrorTopic),
+		zap.String("trigger name", trigger.Metadata.Name),
+		zap.String("function namespace", trigger.Metadata.Namespace),
+		zap.String("function name", trigger.Spec.FunctionReference.Name))
+
 	if err != nil {
 		return nil, err
 	}

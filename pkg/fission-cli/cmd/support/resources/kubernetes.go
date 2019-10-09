@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -38,6 +37,7 @@ const (
 	KubernetesPod        = "Pod"
 	KubernetesHPA        = "HPA"
 	KubernetesNode       = "Node"
+	KubernetesDaemonSet  = "DaemonSet"
 )
 
 // Kubernetes Version
@@ -126,6 +126,18 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 			writeToFile(f, item)
 		}
 
+	case KubernetesDaemonSet:
+		objs, err := res.client.AppsV1().DaemonSets(metav1.NamespaceAll).List(metav1.ListOptions{LabelSelector: res.selector})
+		if err != nil {
+			log.Info(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
+			return
+		}
+
+		for _, item := range objs.Items {
+			f := getFileName(dumpDir, item.ObjectMeta)
+			writeToFile(f, item)
+		}
+
 	case KubernetesNode:
 		objs, err := res.client.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
@@ -137,12 +149,12 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 			item = nodeClean(item)
 			// Node doesn't have namespace value, use name here
 			f := filepath.Clean(fmt.Sprintf("%v/%v", dumpDir, item.Name))
-			getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
 	default:
 		log.Info(fmt.Sprintf("Unknown type: %v", res.objType))
+		return
 	}
 }
 
@@ -199,11 +211,6 @@ func (res KubernetesPodLogDumper) Dump(dumpDir string) {
 		go func(pod corev1.Pod) {
 			defer wg.Done()
 
-			if !utils.IsReadyPod(&pod) {
-				log.Info(fmt.Sprintf("Pod %v is not in ready state, ignore it\n", pod.Name))
-				return
-			}
-
 			// dump logs from each containers
 			for _, container := range append(pod.Spec.Containers, pod.Spec.InitContainers...) {
 				req := res.client.CoreV1().Pods(pod.Namespace).
@@ -235,7 +242,7 @@ func (res KubernetesPodLogDumper) Dump(dumpDir string) {
 					}
 				}
 
-				f := getFileName(dumpDir, pod.ObjectMeta)
+				f := getPodFileName(dumpDir, pod.ObjectMeta, container.Name)
 				writeToFile(f, buffer.String())
 
 				stream.Close()

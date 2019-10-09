@@ -66,8 +66,6 @@ Updating Fission Repo (https://github.com/fission/fission)
 a. Test build from master branch for sanity check
 b. Make sure the master build is green
 
-7. 
-
 Updating Fission Charts (https://github.com/fission/fission-charts)
 ------------------------------
 a. Switch to fission/fission-charts repo and run `index.sh` in that repo.  (Don't edit the index.yaml in this repo manually.  index.sh generates it, using the helm repo CLI.)

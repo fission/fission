@@ -20,13 +20,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.4.1
+imageTag: 1.5.0
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 1.4.1
+fetcherImageTag: 1.5.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -60,8 +60,12 @@ logger:
 
 ## Router config
 router:
+  deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
+  ## Add annotations for router
+  # svcAnnotations:
+  #   cloud.google.com/load-balancer-type: Internal
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.

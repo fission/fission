@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -66,13 +65,18 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	parameters["time"] = timestamp
 	//the parameters above are only for the where clause and do not work with LIMIT
 
+	orderCondition := " order by \"time\" asc"
+	if filter.Reverse {
+		orderCondition = " order by \"time\" desc"
+	}
+
 	if filter.Pod != "" {
 		// wait for bug fix for fluent-bit influxdb plugin
-		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"pod\" = $pod AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"pod\" = $pod AND \"time\" > $time " + orderCondition + " LIMIT " + strconv.Itoa(filter.RecordLimit)
 		parameters["pod"] = filter.Pod
 	} else {
 		// wait for bug fix for fluent-bit influxdb plugin
-		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid  OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"time\" > $time LIMIT " + strconv.Itoa(filter.RecordLimit)
+		queryCmd = "select * from /^log*/ where (\"funcuid\" = $funcuid  OR \"kubernetes_labels_functionUid\" = $funcuid) AND \"time\" > $time " + orderCondition + " LIMIT " + strconv.Itoa(filter.RecordLimit)
 	}
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
@@ -125,16 +129,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 			}
 		}
 	}
-	sort.Slice(logEntries, func(i, j int) bool {
 
-		if logEntries[i].Timestamp.Before(logEntries[j].Timestamp) {
-			return true
-		}
-		if logEntries[j].Timestamp.Before(logEntries[i].Timestamp) {
-			return false
-		}
-		return logEntries[i].Sequence < logEntries[j].Sequence
-	})
 	return logEntries, nil
 }
 

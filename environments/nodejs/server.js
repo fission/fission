@@ -13,6 +13,12 @@ if (!argv.port) {
     argv.port = 8888;
 }
 
+// To catch unhandled exceptions thrown by user code async callbacks,
+// these exceptions cannot be catched by try-catch in user function invocation code below
+process.on('uncaughtException', (err) => {
+    console.error(`Caught exception: ${err}`);
+});
+
 // User function.  Starts out undefined.
 let userFunction;
 
@@ -91,7 +97,7 @@ function specialize(req, res) {
 
 
 // Request logger
-app.use(morgan('combined'))
+app.use(morgan('combined'));
 
 app.use(bodyParser.urlencoded({ extended: false, limit: '1mb' }));
 app.use(bodyParser.json({limit: '1mb'}));
@@ -132,10 +138,15 @@ app.all('/', function (req, res) {
     // you can do that here by adding properties to the context.
     //
 
-    let functionProm;
-    if (userFunction.length === 1) { // One argument (context)
+    if (userFunction.length <= 1) { // One or zero argument (context)
+        let result;
         // Make sure their function returns a promise
-        Promise.resolve(userFunction(context)).then(function({ status, body, headers }) {
+        if (userFunction.length === 0) {
+            result = Promise.resolve(userFunction())
+        } else {
+            result = Promise.resolve(userFunction(context))
+        }
+        result.then(function({status, body, headers}) {
             callback(status, body, headers);
         }).catch(function(err) {
             console.log(`Function error: ${err}`);

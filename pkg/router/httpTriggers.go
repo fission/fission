@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -70,7 +71,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, frmap *fun
 		kubeClient:                 kubeClient,
 		executor:                   executor,
 		crdClient:                  crdClient,
-		updateRouterRequestChannel: make(chan struct{}),
+		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		svcAddrUpdateThrottler:     actionThrottler,
@@ -94,14 +95,15 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, frmap *fun
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter, resolver *functionReferenceResolver) {
 	ts.resolver = resolver
 	ts.mutableRouter = mr
-	mr.updateRouter(ts.getRouter())
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
+		mr.updateRouter(ts.getRouter(nil))
 		ts.logger.Info("skipping continuous trigger updates")
 		return
 	}
 	go ts.updateRouter()
+	go ts.syncTriggers()
 	go ts.runWatcher(ctx, ts.funcController)
 	go ts.runWatcher(ctx, ts.triggerController)
 	if ts.recorderSet.recController != nil {
@@ -119,7 +121,7 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (ts *HTTPTriggerSet) getRouter() *mux.Router {
+func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 
 	// HTTP triggers setup by the user
@@ -162,6 +164,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:             recorderName,
 			isDebugEnv:               ts.isDebugEnv,
 			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
+			functionTimeoutMap:       fnTimeoutMap,
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -219,6 +222,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			recorderName:           recorderName,
 			isDebugEnv:             ts.isDebugEnv,
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
+			functionTimeoutMap:     fnTimeoutMap,
 		}
 		muxRouter.HandleFunc(utils.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
 	}
@@ -358,13 +362,16 @@ func (ts *HTTPTriggerSet) updateRouter() {
 
 		// get functions
 		latestFunctions := ts.funcStore.List()
+		functionTimeout := make(map[types.UID]int, len(latestFunctions))
 		functions := make([]fv1.Function, len(latestFunctions))
 		for _, f := range latestFunctions {
+			fn := *f.(*fv1.Function)
+			functionTimeout[fn.Metadata.UID] = fn.Spec.FunctionTimeout
 			functions = append(functions, *f.(*fv1.Function))
 		}
 		ts.functions = functions
 
 		// make a new router and use it
-		ts.mutableRouter.updateRouter(ts.getRouter())
+		ts.mutableRouter.updateRouter(ts.getRouter(functionTimeout))
 	}
 }
