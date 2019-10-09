@@ -73,6 +73,11 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 		kafka.tls = true
 
 		authKeys := make(map[string][]byte)
+
+		if mqCfg.Secrets == nil {
+			return nil, errors.New("no secrets were loaded")
+		}
+
 		authKeys["caCert"] = mqCfg.Secrets["caCert"]
 		authKeys["userCert"] = mqCfg.Secrets["userCert"]
 		authKeys["userKey"] = mqCfg.Secrets["userKey"]
