@@ -116,7 +116,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 		tlsConfig, err := kafka.getTLSConfig()
 
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		producerConfig.Net.TLS.Config = tlsConfig
@@ -126,13 +126,13 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
 	kafka.logger.Info("created a new consumer", zap.Any("consumer", consumer))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
 	kafka.logger.Info("created a new producer", zap.Any("producer", producer))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// consume errors
