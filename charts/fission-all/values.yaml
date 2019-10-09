@@ -114,7 +114,25 @@ azureStorageQueue:
 ## Kafka: enable and configure the details
 kafka:
   enabled: false
-  brokers: 'broker.kafka:9092'
+  # note: below link is only for reference. 
+  # Please use the brokers link for your kafka here. 
+  brokers: 'broker.kafka:9092' # or your-bootstrap-server.kafka:9092/9093
+  authentication:
+    tls:
+      enabled: false
+      caCert: '' # path to certificate containing public key of CA authority
+      userCert: '' # path to certificate containing public key of the user signed by CA authority
+      userKey: '' # path to private key of the user
+
+  # brokers: 'my-broker.kafka:9092' # or my-bootstrap-server.kafka:9092/9093
+  # Sample config for authentication
+  #   authentication:
+  #   tls:
+  #     enabled: true
+  #     caCert: 'auth/kafka/ca.crt'
+  #     userCert: 'auth/kafka/user.crt'
+  #     userKey: 'auth/kafka/user.key'
+
   ## version of Kafka broker
   ## For 0.x it must be a string in the format
   ## "major.minor.veryMinor.patch" example: 0.8.2.0
