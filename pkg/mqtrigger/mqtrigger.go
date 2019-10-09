@@ -46,10 +46,15 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 
-	// For authentication with message queue
-	secrets, err := readSecrets(logger)
-	if err != nil {
-		return err
+	secretsPath := strings.TrimSpace(os.Getenv("MESSAGE_QUEUE_SECRETS"))
+
+	var secrets map[string][]byte
+	if len(secretsPath) > 0 {
+		// For authentication with message queue
+		secrets, err = readSecrets(logger, secretsPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	mqCfg := messageQueue.MessageQueueConfig{
@@ -61,16 +66,11 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	return nil
 }
 
-func readSecrets(logger *zap.Logger) (map[string][]byte, error) {
-	secretsPath := strings.TrimSpace(os.Getenv("MESSAGE_QUEUE_SECRETS"))
-	// return if no secretsPath is present
-	if len(secretsPath) == 0 {
-		return nil, nil
-	}
+func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {
 
 	// return if no secrets exist
 	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
-		return nil, nil
+		return nil, err
 	}
 
 	secretFiles, err := ioutil.ReadDir(secretsPath)
