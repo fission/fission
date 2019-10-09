@@ -36,4 +36,10 @@ else # go version lower than go 1.12
     fi
 fi
 
-go build -buildmode=plugin -i -o ${DEPLOY_PKG} .
+# use vendor mode if the vendor dir exists when go version is greater
+# than 1.12 (the version that fission started to support go module).
+if  [ -d "vendor" ] && [ ! -z ${GOLANG_VERSION} ] && version_ge ${GOLANG_VERSION} "1.12"; then
+  go build -mod=vendor -buildmode=plugin -i -o ${DEPLOY_PKG} .
+else
+  go build -buildmode=plugin -i -o ${DEPLOY_PKG} .
+fi
