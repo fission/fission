@@ -50,8 +50,8 @@ func runRouter(logger *zap.Logger, port int, executorUrl string) {
 	logger.Fatal("router exited")
 }
 
-func runExecutor(logger *zap.Logger, port int, fissionNamespace, functionNamespace, envBuilderNamespace string) {
-	err := executor.StartExecutor(logger, fissionNamespace, functionNamespace, envBuilderNamespace, port)
+func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string) {
+	err := executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port)
 	if err != nil {
 		logger.Fatal("error starting executor", zap.Error(err))
 	}
@@ -253,7 +253,6 @@ Options:
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
-	fissionNs := getStringArgWithDefault(arguments["--fission-namespace"], "fission")
 	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
@@ -272,7 +271,7 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		runExecutor(logger, port, fissionNs, functionNs, envBuilderNs)
+		runExecutor(logger, port, functionNs, envBuilderNs)
 	}
 
 	if arguments["--kubewatcher"] == true {

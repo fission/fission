@@ -223,9 +223,9 @@ build_yamls() {
         popd
 
         # for minikube and other environments that don't support LoadBalancer
-        helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
+        helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort > ${c}-${version}-minikube.yaml
         # for environments that support LoadBalancer
-        helm template ${c} -n ${releaseName} --set analytics=false,analyticsNonHelmInstall=true > ${c}-${version}.yaml
+        helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true > ${c}-${version}.yaml
 
         # copy yaml files to build directory
         mv *.yaml ${BUILDDIR}/yamls/

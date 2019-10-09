@@ -42,8 +42,9 @@ type (
 	requestType int
 
 	MessageQueueConfig struct {
-		MQType string
-		Url    string
+		MQType  string
+		Url     string
+		Secrets map[string][]byte
 	}
 
 	MessageQueue interface {

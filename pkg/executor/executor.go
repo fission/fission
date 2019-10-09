@@ -205,7 +205,7 @@ func serveMetric(logger *zap.Logger) {
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(logger *zap.Logger, fissionNamespace string, functionNamespace string, envBuilderNamespace string, port int) error {
+func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNamespace string, port int) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
 
 	err = fissionClient.WaitForCRDs()

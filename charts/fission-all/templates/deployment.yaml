@@ -205,7 +205,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--fission-namespace", "{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
@@ -632,7 +632,50 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        # TLS authentication is TLS with authentication (2 way)
+        # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview
+        {{- if .Values.kafka.authentication.tls.enabled }}
+        - name: TLS_ENABLED
+          value: "true"
+        - name: MESSAGE_QUEUE_SECRETS
+          value: /etc/fission/secrets        
+        volumeMounts:
+        - name: kafka-secrets
+          mountPath: /etc/fission/secrets
+        {{- end }}        
       serviceAccount: fission-svc
+      {{- if .Values.kafka.authentication.tls.enabled }}
+      volumes:
+      - name: kafka-secrets
+        secret:
+          secretName: mqtrigger-kafka-secrets
+      {{- end }}
+
+---
+{{- if .Values.kafka.authentication.tls.enabled }}
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: mqtrigger-kafka-secrets
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+data:
+  {{- if .Files.Get  (printf "%s" .Values.kafka.authentication.tls.caCert) }}
+  caCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.caCert) | b64enc }}
+  {{- else }}
+  {{ fail "Invalid chart. CA Certificate not found." }}
+  {{- end }}
+  {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) }}
+  userCert: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userCert) | b64enc }}
+  {{- else }}
+  {{ fail "Invalid chart. User Certificate not found." }}
+  {{- end }}
+  {{- if .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) }}
+  userKey: {{ .Files.Get (printf "%s" .Values.kafka.authentication.tls.userKey) | b64enc }}
+  {{- else }}
+  {{ fail "Invalid chart. User Key not found." }}
+  {{- end }}
+{{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
