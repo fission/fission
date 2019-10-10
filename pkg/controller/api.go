@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"runtime/debug"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -111,11 +110,10 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 }
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
-	debug.PrintStack()
-
 	// this error type comes with an HTTP code, so just use that
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
+		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
 		http.Error(w, string(se.ErrStatus.Reason), int(se.ErrStatus.Code))
 		return
 	}

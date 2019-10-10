@@ -207,6 +207,9 @@ func serveMetric(logger *zap.Logger) {
 // deploymgr and potential future executor types
 func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNamespace string, port int) error {
 	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to get kubernetes client")
+	}
 
 	err = fissionClient.WaitForCRDs()
 	if err != nil {
@@ -219,10 +222,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	}
 
 	restClient := fissionClient.GetCrdClient()
-	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
-	}
-
 	fsCache := fscache.MakeFunctionServiceCache(logger)
 
 	poolID := strings.ToLower(uniuri.NewLen(8))
