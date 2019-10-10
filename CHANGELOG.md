@@ -25,7 +25,7 @@ filename | sha256 hash
 - Move statefulset to apps/v1 [\#1350](https://github.com/fission/fission/pull/1350) ([life1347](https://github.com/life1347))
 - Fix newdeploy failed to find serviceEntry in cache [\#1349](https://github.com/fission/fission/pull/1349) ([life1347](https://github.com/life1347))
 - Support encoded path in router [\#1347](https://github.com/fission/fission/pull/1347) ([life1347](https://github.com/life1347))
-- Support custom private go vendor [\#1346](https://github.com/fission/fission/pull/1346) ([life1347](https://github.com/life1347))
+- Support custom private go vendor [\#1346](https://github.com/fission/fission/pull/1346) ([ti](https://github.com/ti))
 - Fix the namespace mismatch problem when deploying with a single YAML file [\#1344](https://github.com/fission/fission/pull/1344) ([life1347](https://github.com/life1347))
 - Move charts executor service to the right place [\#1343](https://github.com/fission/fission/pull/1343) ([life1347](https://github.com/life1347))
 - Allow to deploy router as DaemonSet [\#1342](https://github.com/fission/fission/pull/1342) ([life1347](https://github.com/life1347))
