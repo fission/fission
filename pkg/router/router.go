@@ -77,13 +77,14 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr
 }
 
-func serve(ctx context.Context, logger *zap.Logger, port int, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) {
+func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) {
 	mr := router(ctx, logger, httpTriggerSet, resolver)
 	url := fmt.Sprintf(":%v", port)
+
 	http.ListenAndServe(url, &ochttp.Handler{
 		Handler: mr,
 		StartOptions: trace.StartOptions{
-			Sampler: trace.AlwaysSample(),
+			Sampler: trace.ProbabilitySampler(tracingSamplingRate),
 		},
 	})
 }
@@ -191,6 +192,16 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 			zap.Duration("default", svcAddrUpdateTimeout))
 	}
 
+	tracingSamplingRateStr := os.Getenv("TRACING_SAMPLING_RATE")
+	tracingSamplingRate, err := strconv.ParseFloat(tracingSamplingRateStr, 64)
+	if err != nil {
+		tracingSamplingRate = .5
+		logger.Error("failed to parse tracing sampling rate from 'TRACING_SAMPLING_RATE' - set to the default value",
+			zap.Error(err),
+			zap.String("value", tracingSamplingRateStr),
+			zap.Float64("default", tracingSamplingRate))
+	}
+
 	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, frmap, trmap, fissionClient, kubeClient, executor, restClient, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
@@ -207,5 +218,5 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 	logger.Info("starting router", zap.Int("port", port))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serve(ctx, logger, port, triggers, resolver)
+	serve(ctx, logger, port, tracingSamplingRate, triggers, resolver)
 }

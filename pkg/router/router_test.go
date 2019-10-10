@@ -96,9 +96,10 @@ func TestRouter(t *testing.T) {
 
 	// run the router
 	port := 4242
+	tracingSamplingRate := .5
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go serve(ctx, logger, port, triggers, frr)
+	go serve(ctx, logger, port, tracingSamplingRate, triggers, frr)
 	time.Sleep(100 * time.Millisecond)
 
 	// hit the router
