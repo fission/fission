@@ -162,7 +162,7 @@ build_env_builder_image() {
     else
         # variant specified - append variant to image name and assume dockerfile
         # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
-        imgname="$imgname-$imgvariant"
+        imgname="$imgnamebase-$imgvariant"
         dockerfile="Dockerfile-$imgvariant"
     fi
     echo "Building $envdir -> $imgname:$version using $dockerfile"
