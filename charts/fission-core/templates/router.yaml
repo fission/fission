@@ -53,10 +53,12 @@ spec:
             value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
           - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
             value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
-          - name: DEBUG_ENV
-            value: {{ .Values.debugEnv | quote }}
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          - name: USE_ENCODED_PATH
+            value: {{ .Values.router.useEncodedPath | default false | quote }}
+          - name: DEBUG_ENV
+            value: {{ .Values.debugEnv | quote }}
 {{- if .Values.analytics }}
           - name: ANALYTICS_URL
             value: "https://g.fission.sh/metrics"
