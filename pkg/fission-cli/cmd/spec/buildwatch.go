@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission_cli
+package spec
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		default:
 		}
 
-		// poll list of packages (TODO: convert to watch)
+		// pull list of packages (TODO: convert to watch)
 		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
 		util.CheckErr(err, "Getting list of packages")
 
