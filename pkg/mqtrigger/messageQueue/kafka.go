@@ -167,9 +167,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	go func() {
 		for msg := range consumer.Messages() {
 			kafka.logger.Debug("calling message handler", zap.String("message", string(msg.Value[:])))
-			if kafkaMsgHandler(&kafka, producer, trigger, msg) {
-				consumer.MarkOffset(msg, "") // mark message as processed
-			}
+			go kafkaMsgHandler(&kafka, producer, trigger, msg, consumer)
 		}
 	}()
 
@@ -201,7 +199,7 @@ func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
 	return subscription.(*cluster.Consumer).Close()
 }
 
-func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.MessageQueueTrigger, msg *sarama.ConsumerMessage) bool {
+func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.MessageQueueTrigger, msg *sarama.ConsumerMessage, consumer *cluster.Consumer) bool {
 	var value string = string(msg.Value[:])
 	// Support other function ref types
 	if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
@@ -318,6 +316,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 			return false
 		}
 	}
+	consumer.MarkOffset(msg, "")
 	return true
 }
 
