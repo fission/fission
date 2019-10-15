@@ -316,7 +316,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 			return false
 		}
 	}
-	consumer.MarkOffset(msg, "")
+	consumer.MarkOffset(msg, "") // mark message as processed
 	return true
 }
 
