@@ -43,10 +43,10 @@ Parameter | Description | Default
 `routerServiceType` | Type of Fission Router service to use. For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP. | `LoadBalancer`
 `repository` | Image base repository | `index.docker.io`
 `image` | Fission image repository | `fission/fission-bundle`
-`imageTag` | Fission image tag | `1.5.0`
+`imageTag` | Fission image tag | `1.6.0`
 `pullPolicy` | Image pull policy | `IfNotPresent`
 `fetcherImage` | Fission fetcher repository | `fission/fetcher`
-`fetcherImageTag` | Fission fetcher image tag | `1.5.0`
+`fetcherImageTag` | Fission fetcher image tag | `1.6.0`
 `controllerPort` | Fission Controller service port | `31313`
 `routerPort` | Fission Router service port | ` 31314`
 `functionNamespace` | Namespace in which to run fission functions (this is different from the release namespace) | `fission-function`
@@ -69,6 +69,7 @@ Parameter | Description | Default
 `router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
 `router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
 `router.svcAnnotations` | Annotations for router service | None
+`router.useEncodedPath` | For router to match encoded path. If true, "/foo%2Fbar" will match the path "/{var}"; Otherwise, it will match the path "/foo/bar". | `false`
 `router.roundTrip.disableKeepAlive` | Disable transport keep-alive for fast switching function version | `true`
 `router.roundTrip.keepAliveTime` | The keep-alive period for an active network connection to function pod | `30s`
 `router.roundTrip.timeout` | HTTP transport request timeout | `50ms`

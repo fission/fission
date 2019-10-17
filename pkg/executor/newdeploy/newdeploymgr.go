@@ -127,7 +127,6 @@ func MakeNewDeploy(
 }
 
 func (deploy *NewDeploy) Run(ctx context.Context) {
-	//go deploy.service()
 	go deploy.funcController.Run(ctx.Done())
 	go deploy.envController.Run(ctx.Done())
 	go deploy.idleObjectReaper()
@@ -138,33 +137,44 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &fv1.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			fn := obj.(*fv1.Function)
-			_, err := deploy.createFunction(fn, true)
-			if err != nil {
-				deploy.logger.Error("error eager creating function",
-					zap.Error(err),
-					zap.Any("function", fn))
-			}
+			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
+			// and worker pattern to process items instead of moving process to another goroutine.
+			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
+			go func() {
+				fn := obj.(*fv1.Function)
+				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.Metadata), zap.Any("fnspec", fn.Spec))
+				_, err := deploy.createFunction(fn, true)
+				if err != nil {
+					deploy.logger.Error("error eager creating function",
+						zap.Error(err),
+						zap.Any("function", fn))
+				}
+				deploy.logger.Debug("end create deployment for function", zap.Any("fn", fn.Metadata), zap.Any("fnspec", fn.Spec))
+			}()
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
-			err := deploy.deleteFunction(fn)
-			if err != nil {
-				deploy.logger.Error("error deleting function",
-					zap.Error(err),
-					zap.Any("function", fn))
-			}
+			go func() {
+				err := deploy.deleteFunction(fn)
+				if err != nil {
+					deploy.logger.Error("error deleting function",
+						zap.Error(err),
+						zap.Any("function", fn))
+				}
+			}()
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
-			err := deploy.updateFunction(oldFn, newFn)
-			if err != nil {
-				deploy.logger.Error("error updating function",
-					zap.Error(err),
-					zap.Any("old_function", oldFn),
-					zap.Any("new_function", newFn))
-			}
+			go func() {
+				err := deploy.updateFunction(oldFn, newFn)
+				if err != nil {
+					deploy.logger.Error("error updating function",
+						zap.Error(err),
+						zap.Any("old_function", oldFn),
+						zap.Any("new_function", newFn))
+				}
+			}()
 		},
 	})
 	return store, controller
@@ -275,7 +285,7 @@ func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fs
 	})
 
 	if err != nil {
-		e := "error updating service address entry for function"
+		e := "error creating k8s resources for function"
 		deploy.logger.Error(e,
 			zap.Error(err),
 			zap.String("function_name", fn.Metadata.Name),
@@ -315,7 +325,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 		// retrieve back the previous obj name for later use.
 		fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error getting existed function service cache")
 		}
 		objName = fsvc.Name
 	}

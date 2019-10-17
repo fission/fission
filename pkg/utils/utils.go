@@ -17,15 +17,21 @@ limitations under the License.
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 
 	"github.com/mholt/archiver"
 	uuid "github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
 func UrlForFunction(name, namespace string) string {
@@ -144,4 +150,31 @@ func GetImagePullPolicy(policy string) apiv1.PullPolicy {
 	default:
 		return apiv1.PullIfNotPresent
 	}
+}
+
+func FileSize(filePath string) (int64, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), err
+}
+
+func FileChecksum(fileName string) (*fv1.Checksum, error) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %v: %v", fileName, err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate checksum for %v", fileName)
+	}
+
+	return &fv1.Checksum{
+		Type: fv1.ChecksumTypeSHA256,
+		Sum:  hex.EncodeToString(h.Sum(nil)),
+	}, nil
 }
