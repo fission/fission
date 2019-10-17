@@ -225,7 +225,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		kafka.logger.Error("failed to create HTTP request to invoke function",
 			zap.Error(err),
 			zap.String("function_url", url))
-
+		return
 	}
 
 	// Set the headers came from Kafka record
@@ -268,6 +268,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		kafka.logger.Warn("every function invocation retry failed; final retry gave empty response",
 			zap.String("function_url", url),
 			zap.String("trigger", trigger.Metadata.Name))
+		return
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -280,12 +281,12 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	if err != nil {
 		errorHandler(kafka.logger, trigger, producer, url,
 			errors.Wrapf(err, "request body error: %v", string(body)))
-
+		return
 	}
 	if resp.StatusCode != 200 {
 		errorHandler(kafka.logger, trigger, producer, url,
 			fmt.Errorf("request returned failure: %v", resp.StatusCode))
-
+		return
 	}
 	if len(trigger.Spec.ResponseTopic) > 0 {
 		// Generate Kafka record headers
@@ -312,11 +313,10 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 				zap.Error(err),
 				zap.String("topic", trigger.Spec.Topic),
 				zap.String("function_url", url))
-
+			return
 		}
 	}
 	consumer.MarkOffset(msg, "") // mark message as processed
-
 }
 
 func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer sarama.SyncProducer, funcUrl string, err error) {
