@@ -167,9 +167,7 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 	go func() {
 		for msg := range consumer.Messages() {
 			kafka.logger.Debug("calling message handler", zap.String("message", string(msg.Value[:])))
-			if kafkaMsgHandler(&kafka, producer, trigger, msg) {
-				consumer.MarkOffset(msg, "") // mark message as processed
-			}
+			go kafkaMsgHandler(&kafka, producer, trigger, msg, consumer)
 		}
 	}()
 
@@ -201,7 +199,7 @@ func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
 	return subscription.(*cluster.Consumer).Close()
 }
 
-func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.MessageQueueTrigger, msg *sarama.ConsumerMessage) bool {
+func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.MessageQueueTrigger, msg *sarama.ConsumerMessage, consumer *cluster.Consumer) {
 	var value string = string(msg.Value[:])
 	// Support other function ref types
 	if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
@@ -227,7 +225,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		kafka.logger.Error("failed to create HTTP request to invoke function",
 			zap.Error(err),
 			zap.String("function_url", url))
-		return false
+		return
 	}
 
 	// Set the headers came from Kafka record
@@ -270,7 +268,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		kafka.logger.Warn("every function invocation retry failed; final retry gave empty response",
 			zap.String("function_url", url),
 			zap.String("trigger", trigger.Metadata.Name))
-		return false
+		return
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -283,12 +281,12 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	if err != nil {
 		errorHandler(kafka.logger, trigger, producer, url,
 			errors.Wrapf(err, "request body error: %v", string(body)))
-		return false
+		return
 	}
 	if resp.StatusCode != 200 {
 		errorHandler(kafka.logger, trigger, producer, url,
 			fmt.Errorf("request returned failure: %v", resp.StatusCode))
-		return false
+		return
 	}
 	if len(trigger.Spec.ResponseTopic) > 0 {
 		// Generate Kafka record headers
@@ -315,10 +313,10 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 				zap.Error(err),
 				zap.String("topic", trigger.Spec.Topic),
 				zap.String("function_url", url))
-			return false
+			return
 		}
 	}
-	return true
+	consumer.MarkOffset(msg, "") // mark message as processed
 }
 
 func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer sarama.SyncProducer, funcUrl string, err error) {
