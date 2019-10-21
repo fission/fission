@@ -19,7 +19,6 @@ package fission_cli
 import (
 	"encoding/json"
 	"fmt"
-	plugin2 "github.com/fission/fission/pkg/plugin"
 	"os"
 	"strings"
 	"time"
@@ -32,12 +31,13 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
-	"github.com/fission/fission/pkg/fission-cli/cmd/plugin"
+	plugincmd "github.com/fission/fission/pkg/fission-cli/cmd/plugin"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
 	"github.com/fission/fission/pkg/fission-cli/cmd/version"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/plugin"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -62,12 +62,12 @@ func NewCliApp() *cli.App {
 	app.HideVersion = true
 	app.CustomAppHelpTemplate = helpTemplate
 	app.ExtraInfo = func() map[string]string {
-		info := map[string]string{}
-		for _, pmd := range plugin2.FindAll() {
+		pluginInfo := map[string]string{}
+		for _, pmd := range plugin.FindAll() {
 			names := strings.Join(append([]string{pmd.Name}, pmd.Aliases...), ", ")
-			info[names] = pmd.Usage
+			pluginInfo[names] = pmd.Usage
 		}
-		return info
+		return pluginInfo
 	}
 
 	app.Flags = []cli.Flag{
@@ -312,7 +312,7 @@ func NewCliApp() *cli.App {
 	}
 
 	pluginSubCommands := []cli.Command{
-		{Name: "list", Usage: "List installed client plugins", Action: urfavecli.Wrapper(plugin.List)},
+		{Name: "list", Usage: "List installed client plugins", Action: urfavecli.Wrapper(plugincmd.List)},
 	}
 
 	app.Commands = []cli.Command{
@@ -340,7 +340,7 @@ func NewCliApp() *cli.App {
 
 func handleNoCommand(ctx *cli.Context) error {
 	if ctx.GlobalBool("plugin") {
-		bs, err := json.Marshal(plugin2.Metadata{
+		bs, err := json.Marshal(plugin.Metadata{
 			Version: info.Version,
 			Usage:   ctx.App.Usage,
 		})
@@ -359,11 +359,11 @@ func handleNoCommand(ctx *cli.Context) error {
 }
 
 func handleCommandNotFound(ctx *cli.Context, subCommand string) {
-	pmd, err := plugin2.Find(subCommand)
+	pmd, err := plugin.Find(subCommand)
 	if err != nil {
 		switch err {
-		case plugin2.ErrPluginNotFound:
-			url, ok := plugin2.SearchRegistries(subCommand)
+		case plugin.ErrPluginNotFound:
+			url, ok := plugin.SearchRegistries(subCommand)
 			if !ok {
 				log.Fatal("No help topic for '" + subCommand + "'")
 			}
@@ -393,7 +393,7 @@ To install it for your local Fission CLI:
 	}
 	args := append(globalArgs, ctx.Args().Tail()...)
 
-	err = plugin2.Exec(pmd, args)
+	err = plugin.Exec(pmd, args)
 	if err != nil {
 		os.Exit(1)
 	}
