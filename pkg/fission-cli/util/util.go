@@ -31,6 +31,8 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/plugin"
 )
 
 func GetApiClient(serverUrl string) *client.Client {
@@ -179,4 +181,34 @@ func CheckFunctionExistence(fissionClient *client.Client, functions []string, fn
 	}
 
 	return nil
+}
+
+func GetVersion(client *client.Client) info.Versions {
+	// Fetch client versions
+	versions := info.Versions{
+		Client: map[string]info.BuildMeta{
+			"fission/core": info.BuildInfo(),
+		},
+	}
+
+	for _, pmd := range plugin.FindAll() {
+		versions.Client[pmd.Name] = info.BuildMeta{
+			Version: pmd.Version,
+		}
+	}
+
+	serverInfo, err := client.ServerInfo()
+	if err != nil {
+		log.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+		serverInfo = &info.ServerInfo{}
+	}
+
+	// Fetch server versions
+	versions.Server = map[string]info.BuildMeta{
+		"fission/core": serverInfo.Build,
+	}
+
+	// FUTURE: fetch versions of plugins server-side
+
+	return versions
 }

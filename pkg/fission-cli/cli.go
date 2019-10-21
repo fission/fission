@@ -19,11 +19,11 @@ package fission_cli
 import (
 	"encoding/json"
 	"fmt"
+	plugin2 "github.com/fission/fission/pkg/plugin"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,11 +32,11 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
+	"github.com/fission/fission/pkg/fission-cli/cmd/plugin"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
+	"github.com/fission/fission/pkg/fission-cli/cmd/version"
 	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/fission-cli/plugin"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/types"
 )
@@ -59,12 +59,11 @@ func NewCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = info.Version
-	cli.VersionPrinter = versionPrinter
+	app.HideVersion = true
 	app.CustomAppHelpTemplate = helpTemplate
 	app.ExtraInfo = func() map[string]string {
 		info := map[string]string{}
-		for _, pmd := range plugin.FindAll() {
+		for _, pmd := range plugin2.FindAll() {
 			names := strings.Join(append([]string{pmd.Name}, pmd.Aliases...), ", ")
 			info[names] = pmd.Usage
 		}
@@ -312,6 +311,10 @@ func NewCliApp() *cli.App {
 		{Name: "list", Usage: "List all canary configs in a namespace", Flags: []cli.Flag{canaryNamespaceFlag}, Action: canaryConfigList},
 	}
 
+	pluginSubCommands := []cli.Command{
+		{Name: "list", Usage: "List installed client plugins", Action: urfavecli.Wrapper(plugin.List)},
+	}
+
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
@@ -325,8 +328,9 @@ func NewCliApp() *cli.App {
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "support", Usage: "Collect an archive of diagnostic information for support", Subcommands: supportSubCommands},
-		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
+		{Name: "plugin", Aliases: []string{"plugins"}, Usage: "Manage Fission CLI plugins", Subcommands: pluginSubCommands},
+		{Name: "version", Usage: "Version information", Action: urfavecli.Wrapper(version.Version)},
 	}
 
 	app.Before = cliHook
@@ -335,12 +339,8 @@ func NewCliApp() *cli.App {
 }
 
 func handleNoCommand(ctx *cli.Context) error {
-	if ctx.GlobalBool("version") {
-		versionPrinter(ctx)
-		return nil
-	}
 	if ctx.GlobalBool("plugin") {
-		bs, err := json.Marshal(plugin.Metadata{
+		bs, err := json.Marshal(plugin2.Metadata{
 			Version: info.Version,
 			Usage:   ctx.App.Usage,
 		})
@@ -359,11 +359,11 @@ func handleNoCommand(ctx *cli.Context) error {
 }
 
 func handleCommandNotFound(ctx *cli.Context, subCommand string) {
-	pmd, err := plugin.Find(subCommand)
+	pmd, err := plugin2.Find(subCommand)
 	if err != nil {
 		switch err {
-		case plugin.ErrPluginNotFound:
-			url, ok := plugin.SearchRegistries(subCommand)
+		case plugin2.ErrPluginNotFound:
+			url, ok := plugin2.SearchRegistries(subCommand)
 			if !ok {
 				log.Fatal("No help topic for '" + subCommand + "'")
 			}
@@ -393,20 +393,10 @@ To install it for your local Fission CLI:
 	}
 	args := append(globalArgs, ctx.Args().Tail()...)
 
-	err = plugin.Exec(pmd, args)
+	err = plugin2.Exec(pmd, args)
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-func versionPrinter(_ *cli.Context) {
-	client := util.GetApiClient(util.GetServerUrl())
-	ver := util.GetVersion(client)
-	bs, err := yaml.Marshal(ver)
-	if err != nil {
-		log.Fatal("Error formatting versions: " + err.Error())
-	}
-	fmt.Print(string(bs))
 }
 
 func flagValueParser(args []string) error {

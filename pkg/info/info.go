@@ -43,6 +43,12 @@ type (
 		Build      BuildMeta `json:"Build,omitempty"`
 		ServerTime Time      `json:"ServerTime,omitempty"`
 	}
+
+	// Versions is a container of versions of the client (and its plugins) and server (and its plugins).
+	Versions struct {
+		Client map[string]BuildMeta `json:"client"`
+		Server map[string]BuildMeta `json:"server"`
+	}
 )
 
 func BuildInfo() BuildMeta {
