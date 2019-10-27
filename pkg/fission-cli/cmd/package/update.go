@@ -132,7 +132,7 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 }
 
 func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool, downloadURL bool) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
 
 	needToBuild := false
 
@@ -152,7 +152,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, downloadURL, "", "")
+		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, downloadURL, "", "")
+		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}

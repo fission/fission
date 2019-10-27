@@ -51,7 +51,7 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 		if utils.IsURL(path) {
 			if len(includeFiles) > 1 {
 				// It's intentional to disallow the user to provide file
-				// and URL at the same time even the downloadURL is true.
+				// and URL at the same time even the keepurl is false.
 				return nil, errors.New("unable to create an archive that contains both file and URL")
 			}
 			fileURL = path
