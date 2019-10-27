@@ -39,6 +39,7 @@ type UpdateSubCommand struct {
 	srcArchiveFiles    []string
 	deployArchiveFiles []string
 	buildcmd           string
+	keepURL            bool
 }
 
 func Update(flags cli.Input) error {
@@ -68,6 +69,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	opts.srcArchiveFiles = flags.StringSlice("src")
 	opts.deployArchiveFiles = flags.StringSlice("deploy")
 	opts.buildcmd = flags.String("buildcmd")
+	opts.keepURL = flags.Bool("keepurl")
 
 	if len(opts.srcArchiveFiles) > 0 && len(opts.deployArchiveFiles) > 0 {
 		return errors.New("Need either of --src or --deploy and not both arguments.")
@@ -111,7 +113,7 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 
 	newPkgMeta, err := UpdatePackage(opts.client, pkg,
 		opts.envName, opts.envNamespace, opts.srcArchiveFiles,
-		opts.deployArchiveFiles, opts.buildcmd, false, false)
+		opts.deployArchiveFiles, opts.buildcmd, false, false, opts.keepURL)
 	if err != nil {
 		return errors.Wrap(err, "update package")
 	}
@@ -130,7 +132,7 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 }
 
 func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool, downloadURL bool) (*metav1.ObjectMeta, error) {
 
 	needToBuild := false
 
@@ -150,7 +152,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, "", "")
+		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, downloadURL, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +161,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, "", "")
+		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, downloadURL, "", "")
 		if err != nil {
 			return nil, err
 		}

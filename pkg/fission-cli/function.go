@@ -298,9 +298,11 @@ func fnCreate(c *cli.Context) error {
 		}
 
 		buildcmd := c.String("buildcmd")
+		keepURL := c.Bool("keepurl")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(c, client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+		pkgMetadata, err = _package.CreatePackage(c, client, fnNamespace, envName, envNamespace,
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, keepURL)
 		util.CheckErr(err, "create package")
 	}
 
@@ -638,7 +640,9 @@ func fnUpdate(c *cli.Context) error {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata, err = _package.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag)
+		keepURL := c.Bool("keepurl")
+
+		pkgMetadata, err = _package.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag, keepURL)
 		util.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())

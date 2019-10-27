@@ -67,17 +67,21 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	srcArchiveFiles := flags.StringSlice("src")
 	deployArchiveFiles := flags.StringSlice("deploy")
 	buildcmd := flags.String("buildcmd")
+	keepURL := flags.Bool("keepurl")
 
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
 		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
-	_, err := CreatePackage(flags, opts.client, pkgNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
+	_, err := CreatePackage(flags, opts.client, pkgNamespace, envName, envNamespace,
+		srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false, keepURL)
 
 	return err
 }
 
-func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, envName string, envNamespace string, srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) (*metav1.ObjectMeta, error) {
+func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, envName string, envNamespace string,
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
+
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
 			Namespace: envNamespace,
@@ -91,7 +95,7 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, specDir, specFile)
+		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, specDir, specFile)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +103,7 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveFiles[0]), uniuri.NewLen(4)))
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, srcArchiveFiles, false, specDir, specFile)
+		source, err := CreateArchive(client, srcArchiveFiles, false, keepURL, specDir, specFile)
 		if err != nil {
 			return nil, err
 		}
