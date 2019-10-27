@@ -172,61 +172,6 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 	return archivePath
 }
 
-//func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZip bool) string {
-//	// Unique name for the archive
-//	archiveName := archiveName(archiveNameHint, archiveInput)
-//
-//	var files []string
-//
-//	for _, f := range archiveInput {
-//		if utils.IsURL(f) {
-//			files = append(files, f)
-//		} else {
-//			// Get files from inputs as number of files decide next steps
-//			globs, err := utils.FindAllGlobs(archiveInput)
-//			if err != nil {
-//				util.CheckErr(err, "finding all globs")
-//			}
-//			files = append(files, globs...)
-//		}
-//	}
-//
-//	log.Verbose(3, "Archive files: %v", files)
-//
-//	// We have one file; if it's a zip file or a URL, no need to archive it
-//	if len(files) == 1 {
-//		file := files[0]
-//
-//		// if it's an HTTP URL, just use the URL.
-//		if utils.IsURL(file) {
-//			return file
-//		}
-//
-//		// make sure it exists
-//		if _, err := os.Stat(file); err != nil {
-//			util.CheckErr(err, fmt.Sprintf("open input file %v", file))
-//		}
-//
-//		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
-//		if archiver.Zip.Match(file) || noZip {
-//			return file
-//		}
-//	}
-//
-//	// For anything else, create a new archive
-//	tmpDir, err := utils.GetTempDir()
-//	if err != nil {
-//		util.CheckErr(err, "create temporary archive directory")
-//	}
-//
-//	archivePath, err := utils.MakeArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
-//	if err != nil {
-//		util.CheckErr(err, "create archive file")
-//	}
-//
-//	return archivePath
-//}
-
 // Name an archive
 func archiveName(givenNameHint string, includedFiles []string) string {
 	if len(givenNameHint) > 0 {
