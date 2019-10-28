@@ -152,20 +152,20 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, keepURL, "", "")
+		srcArchive, err := CreateArchive(client, srcArchiveFiles, false, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}
-		pkg.Spec.Source = *srcArchiveMetadata
+		pkg.Spec.Source = *srcArchive
 		needToBuild = true
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, "", "")
+		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}
-		pkg.Spec.Deployment = *deployArchiveMetadata
+		pkg.Spec.Deployment = *deployArchive
 		// Users may update the env, envNS and deploy archive at the same time,
 		// but without the source archive. In this case, we should set needToBuild to false
 		needToBuild = false

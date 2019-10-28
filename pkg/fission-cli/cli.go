@@ -107,7 +107,7 @@ func NewCliApp() *cli.App {
 	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for single file source code"}
 	fnDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "local path or URL for deployment archive"}
 	fnSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src, source", Usage: "local path or URL for source archive"}
-	fnKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If true, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
+	fnKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	fnPkgNameFlag := cli.StringFlag{Name: "pkgname, pkg", Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
@@ -259,7 +259,7 @@ func NewCliApp() *cli.App {
 	pkgEnvironmentFlag := cli.StringFlag{Name: "env", Usage: "Environment name"}
 	pkgSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src", Usage: "Local path or URL for source archive"}
 	pkgDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
-	pkgKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If true, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
+	pkgKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	pkgBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for builder to run with"}
 	pkgOutputFlag := cli.StringFlag{Name: "output, o", Usage: "Output filename to save archive content"}
 	pkgStatusFlag := cli.StringFlag{Name: "status", Usage: `Filter packages by status`}
