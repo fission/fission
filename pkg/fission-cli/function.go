@@ -464,9 +464,8 @@ func fnGetMeta(c *cli.Context) error {
 	util.CheckErr(err, "get function")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
-	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name)
+	fmt.Fprintf(w, "%v\t%v\n", "NAME", "ENV")
+	fmt.Fprintf(w, "%v\t%v\n", f.Metadata.Name, f.Spec.Environment.Name)
 	w.Flush()
 	return err
 }
@@ -707,12 +706,12 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
 	for _, f := range fns {
 		mincpu := f.Spec.Resources.Requests.Cpu
 		mincpu().Value()
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			f.Metadata.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
