@@ -19,12 +19,14 @@ package utils
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mholt/archiver"
 	uuid "github.com/satori/go.uuid"
@@ -110,7 +112,7 @@ func FindAllGlobs(inputList []string) ([]string, error) {
 	return files, nil
 }
 
-func MakeArchive(targetName string, globs ...string) (string, error) {
+func MakeZipArchive(targetName string, globs ...string) (string, error) {
 	files, err := FindAllGlobs(globs)
 	if err != nil {
 		return "", err
@@ -160,21 +162,39 @@ func FileSize(filePath string) (int64, error) {
 	return info.Size(), err
 }
 
-func FileChecksum(fileName string) (*fv1.Checksum, error) {
+func GetFileChecksum(fileName string) (*fv1.Checksum, error) {
 	f, err := os.Open(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %v: %v", fileName, err)
 	}
 	defer f.Close()
 
-	h := sha256.New()
-	_, err = io.Copy(h, f)
+	sum, err := GetChecksum(f)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate checksum for %v", fileName)
+	}
+
+	return sum, nil
+}
+
+func GetChecksum(src io.Reader) (*fv1.Checksum, error) {
+	if src == nil {
+		return nil, errors.New("cannot read from nil reader")
+	}
+
+	h := sha256.New()
+
+	_, err := io.Copy(h, src)
+	if err != nil {
+		return nil, err
 	}
 
 	return &fv1.Checksum{
 		Type: fv1.ChecksumTypeSHA256,
 		Sum:  hex.EncodeToString(h.Sum(nil)),
 	}, nil
+}
+
+func IsURL(str string) bool {
+	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://")
 }

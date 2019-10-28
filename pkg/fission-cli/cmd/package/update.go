@@ -39,6 +39,7 @@ type UpdateSubCommand struct {
 	srcArchiveFiles    []string
 	deployArchiveFiles []string
 	buildcmd           string
+	keepURL            bool
 }
 
 func Update(flags cli.Input) error {
@@ -68,6 +69,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	opts.srcArchiveFiles = flags.StringSlice("src")
 	opts.deployArchiveFiles = flags.StringSlice("deploy")
 	opts.buildcmd = flags.String("buildcmd")
+	opts.keepURL = flags.Bool("keepurl")
 
 	if len(opts.srcArchiveFiles) > 0 && len(opts.deployArchiveFiles) > 0 {
 		return errors.New("Need either of --src or --deploy and not both arguments.")
@@ -111,7 +113,7 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 
 	newPkgMeta, err := UpdatePackage(opts.client, pkg,
 		opts.envName, opts.envNamespace, opts.srcArchiveFiles,
-		opts.deployArchiveFiles, opts.buildcmd, false, false)
+		opts.deployArchiveFiles, opts.buildcmd, false, false, opts.keepURL)
 	if err != nil {
 		return errors.Wrap(err, "update package")
 	}
@@ -130,7 +132,7 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 }
 
 func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
 
 	needToBuild := false
 
@@ -150,20 +152,20 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchiveMetadata, err := CreateArchive(client, srcArchiveFiles, false, "", "")
+		srcArchive, err := CreateArchive(client, srcArchiveFiles, false, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}
-		pkg.Spec.Source = *srcArchiveMetadata
+		pkg.Spec.Source = *srcArchive
 		needToBuild = true
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchiveMetadata, err := CreateArchive(client, deployArchiveFiles, noZip, "", "")
+		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, "", "")
 		if err != nil {
 			return nil, err
 		}
-		pkg.Spec.Deployment = *deployArchiveMetadata
+		pkg.Spec.Deployment = *deployArchive
 		// Users may update the env, envNS and deploy archive at the same time,
 		// but without the source archive. In this case, we should set needToBuild to false
 		needToBuild = false

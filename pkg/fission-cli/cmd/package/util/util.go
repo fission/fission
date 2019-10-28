@@ -36,13 +36,8 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-func UploadArchive(ctx context.Context, client *client.Client, fileName string) (*fv1.Archive, error) {
+func UploadArchiveFile(ctx context.Context, client *client.Client, fileName string) (*fv1.Archive, error) {
 	var archive fv1.Archive
-
-	// If filename is a URL, download it first
-	if strings.HasPrefix(fileName, "http://") || strings.HasPrefix(fileName, "https://") {
-		fileName = DownloadToTempFile(fileName)
-	}
 
 	size, err := utils.FileSize(fileName)
 	if err != nil {
@@ -72,11 +67,12 @@ func UploadArchive(ctx context.Context, client *client.Client, fileName string) 
 		archive.Type = fv1.ArchiveTypeUrl
 		archive.URL = archiveURL
 
-		csum, err := utils.FileChecksum(fileName)
+		csum, err := utils.GetFileChecksum(fileName)
 		util.CheckErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
 
 		archive.Checksum = *csum
 	}
+
 	return &archive, nil
 }
 
@@ -101,8 +97,6 @@ func DownloadToTempFile(fileUrl string) string {
 
 	tmpFilename := uuid.NewV4().String()
 	destination := filepath.Join(tmpDir, tmpFilename)
-	err = os.Mkdir(tmpDir, 0744)
-	util.CheckErr(err, "create temp directory")
 
 	err = WriteArchiveToFile(destination, reader)
 	util.CheckErr(err, "write archive to file")
@@ -127,8 +121,9 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	if err != nil {
 		return err
 	}
+	tmpFileName := uuid.NewV4().String()
 
-	path := filepath.Join(tmpDir, fileName+".tmp")
+	path := filepath.Join(tmpDir, tmpFileName+".tmp")
 	w, err := os.Create(path)
 	if err != nil {
 		return err
