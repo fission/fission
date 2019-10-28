@@ -49,9 +49,9 @@ func (opts *GetSubCommand) do(flags cli.Input) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "IMAGE")
-	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		env.Metadata.Name, env.Metadata.UID, env.Spec.Runtime.Image)
+	fmt.Fprintf(w, "%v\t%v\n", "NAME", "IMAGE")
+	fmt.Fprintf(w, "%v\t%v\n",
+		env.Metadata.Name, env.Spec.Runtime.Image)
 
 	w.Flush()
 	return nil
