@@ -130,24 +130,27 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (executor *Executor) GetHandler() http.Handler {
+	r := mux.NewRouter()
+	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
+	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
+	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
+	return r
+}
+
 func (executor *Executor) Serve(port int) {
 	executor.logger.Info("starting executor", zap.Int("port", port))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	executor.ndm.Run(ctx)
 	executor.gpm.Run(ctx)
 	executor.cms.Run(ctx)
 
-	r := mux.NewRouter()
-	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
-	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
-	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
-
 	address := fmt.Sprintf(":%v", port)
-
 	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: r,
+		Handler: executor.GetHandler(),
 	})
 	executor.logger.Fatal("done listening", zap.Error(err))
 }
