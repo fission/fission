@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,7 +37,7 @@ func (c *Client) RecorderCreate(r *fv1.Recorder) (*metav1.ObjectMeta, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("recorders"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("recorders", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +61,7 @@ func (c *Client) RecorderGet(m *metav1.ObjectMeta) (*fv1.Recorder, error) {
 	relativeUrl := fmt.Sprintf("recorders/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +121,7 @@ func (c *Client) RecorderDelete(m *metav1.ObjectMeta) error {
 func (c *Client) RecorderList(ns string) ([]fv1.Recorder, error) {
 	relativeUrl := "recorders"
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +145,7 @@ func (c *Client) RecorderList(ns string) ([]fv1.Recorder, error) {
 func (c *Client) RecordsByFunction(function string) ([]*redisCache.RecordedEntry, error) {
 	relativeUrl := fmt.Sprintf("records/function/%v", function)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +168,7 @@ func (c *Client) RecordsByFunction(function string) ([]*redisCache.RecordedEntry
 func (c *Client) RecordsAll() ([]*redisCache.RecordedEntry, error) {
 	relativeUrl := "records"
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +191,7 @@ func (c *Client) RecordsAll() ([]*redisCache.RecordedEntry, error) {
 func (c *Client) RecordsByTrigger(trigger string) ([]*redisCache.RecordedEntry, error) {
 	relativeUrl := fmt.Sprintf("records/trigger/%v", trigger)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +215,7 @@ func (c *Client) RecordsByTime(from string, to string) ([]*redisCache.RecordedEn
 	relativeUrl := "records/time"
 	relativeUrl += fmt.Sprintf("?from=%v&to=%v", from, to)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

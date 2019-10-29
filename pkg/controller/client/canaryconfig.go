@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,7 +31,7 @@ func (c *Client) CanaryConfigCreate(canaryConf *fv1.CanaryConfig) (*metav1.Objec
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("canaryconfigs"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("canaryconfigs", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +55,7 @@ func (c *Client) CanaryConfigGet(m *metav1.ObjectMeta) (*fv1.CanaryConfig, error
 	relativeUrl := fmt.Sprintf("canaryconfigs/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -106,13 +104,12 @@ func (c *Client) CanaryConfigUpdate(canaryConf *fv1.CanaryConfig) (*metav1.Objec
 func (c *Client) CanaryConfigDelete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("canaryconfigs/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-
 	return c.delete(relativeUrl)
 }
 
 func (c *Client) CanaryConfigList(ns string) ([]fv1.CanaryConfig, error) {
 	relativeUrl := fmt.Sprintf("canaryconfigs?namespace=%v", ns)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

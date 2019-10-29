@@ -18,38 +18,56 @@ package client
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/info"
+)
+
+var (
+	DefaultRequestHeaders map[string]string
 )
 
 type (
 	Client struct {
-		Url string
+		Url     string
+		Headers map[string]string
 	}
 )
 
 func MakeClient(serverUrl string) *Client {
-	return &Client{Url: strings.TrimSuffix(serverUrl, "/")}
+	return &Client{
+		Url:     strings.TrimSuffix(serverUrl, "/"),
+		Headers: DefaultRequestHeaders,
+	}
+}
+
+func (c *Client) create(relativeUrl string, contentType string, payload []byte) (*http.Response, error) {
+	var reader io.Reader
+	if len(payload) > 0 {
+		reader = bytes.NewReader(payload)
+	}
+	return c.sendRequest(http.MethodPost, c.url(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+}
+
+func (c *Client) put(relativeUrl string, contentType string, payload []byte) (*http.Response, error) {
+	var reader io.Reader
+	if len(payload) > 0 {
+		reader = bytes.NewReader(payload)
+	}
+	return c.sendRequest(http.MethodPut, c.url(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+}
+
+func (c *Client) get(relativeUrl string) (*http.Response, error) {
+	return c.sendRequest(http.MethodGet, c.url(relativeUrl), nil, nil)
 }
 
 func (c *Client) delete(relativeUrl string) error {
-	req, err := http.NewRequest("DELETE", c.url(relativeUrl), nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.sendRequest(http.MethodDelete, c.url(relativeUrl), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -67,12 +85,16 @@ func (c *Client) delete(relativeUrl string) error {
 	return nil
 }
 
-func (c *Client) put(relativeUrl string, contentType string, body []byte) (*http.Response, error) {
-	req, err := http.NewRequest("PUT", c.url(relativeUrl), bytes.NewReader(body))
+func (c *Client) sendRequest(method string, relativeUrl string, headers map[string]string, reader io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, relativeUrl, reader)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-type", contentType)
+	for _, hs := range []map[string]string{headers, c.Headers} {
+		for k, v := range hs {
+			req.Header.Set(k, v)
+		}
+	}
 	return http.DefaultClient.Do(req)
 }
 
@@ -94,30 +116,4 @@ func (c *Client) handleCreateResponse(resp *http.Response) ([]byte, error) {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	return body, err
-}
-
-func (c *Client) ServerInfo() (*info.ServerInfo, error) {
-	url := fmt.Sprintf(c.Url)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	resp, err := ctxhttp.Get(ctx, &http.Client{}, url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	info := &info.ServerInfo{}
-	err = json.Unmarshal(body, info)
-	if err != nil {
-		return nil, err
-	}
-
-	return info, nil
 }

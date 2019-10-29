@@ -17,22 +17,26 @@ limitations under the License.
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/pkg/errors"
-
+	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/info"
 )
 
 func (c *Client) SecretGet(m *metav1.ObjectMeta) (*apiv1.Secret, error) {
 	relativeUrl := fmt.Sprintf("secrets/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +60,7 @@ func (c *Client) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
 	relativeUrl := fmt.Sprintf("configmaps/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -77,19 +81,17 @@ func (c *Client) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
 }
 
 func (c *Client) GetSvcURL(label string) (string, error) {
-	url := fmt.Sprintf("%s/proxy/svcname?"+label, c.Url)
+	relativeUrl := fmt.Sprintf("%s/proxy/svcname?"+label, c.Url)
 
-	resp, err := http.Get(url)
-
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return "", err
 	}
-
 	if resp == nil {
 		return "", errors.Errorf("failed to find service for given label: %v", label)
 	}
-
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -98,4 +100,30 @@ func (c *Client) GetSvcURL(label string) (string, error) {
 	storageSvc := string(body)
 
 	return storageSvc, err
+}
+
+func (c *Client) ServerInfo() (*info.ServerInfo, error) {
+	url := fmt.Sprintf(c.Url)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := ctxhttp.Get(ctx, &http.Client{}, url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &info.ServerInfo{}
+	err = json.Unmarshal(body, info)
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }

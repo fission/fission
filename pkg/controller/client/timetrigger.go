@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -38,7 +36,7 @@ func (c *Client) TimeTriggerCreate(t *fv1.TimeTrigger) (*metav1.ObjectMeta, erro
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("triggers/time"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("triggers/time", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (c *Client) TimeTriggerGet(m *metav1.ObjectMeta) (*fv1.TimeTrigger, error) 
 	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +119,7 @@ func (c *Client) TimeTriggerDelete(m *metav1.ObjectMeta) error {
 
 func (c *Client) TimeTriggerList(ns string) ([]fv1.TimeTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/time?namespace=%v", ns)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

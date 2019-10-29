@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -38,7 +36,7 @@ func (c *Client) PackageCreate(f *fv1.Package) (*metav1.ObjectMeta, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("packages"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("packages", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (c *Client) PackageGet(m *metav1.ObjectMeta) (*fv1.Package, error) {
 	relativeUrl := fmt.Sprintf("packages/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +119,7 @@ func (c *Client) PackageDelete(m *metav1.ObjectMeta) error {
 
 func (c *Client) PackageList(pkgNamespace string) ([]fv1.Package, error) {
 	relativeUrl := fmt.Sprintf("packages?namespace=%v", pkgNamespace)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

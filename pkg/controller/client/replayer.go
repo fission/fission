@@ -18,13 +18,12 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 )
 
 func (c *Client) ReplayByReqUID(reqUID string) ([]string, error) {
 	relativeUrl := fmt.Sprintf("replay/%v", reqUID)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
