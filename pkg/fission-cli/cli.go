@@ -74,6 +74,7 @@ func NewCliApp() *cli.App {
 		cli.StringFlag{Name: cmd.FISSION_SERVER, Value: "", Usage: "Fission server URL"},
 		cli.IntFlag{Name: cmd.GLOBAL_VERBOSITY, Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
 		cli.BoolFlag{Name: cmd.GLOBAL_PLUGIN, Hidden: true},
+		cli.StringFlag{Name: cmd.GLOBAL_KUBE_CONTEXT, Value: "", Usage: "Kubernetes cluster context name"},
 	}
 
 	// all resource create commands accept --spec

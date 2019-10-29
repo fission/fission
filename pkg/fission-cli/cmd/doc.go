@@ -19,8 +19,9 @@ package cmd
 import "strings"
 
 const (
-	GLOBAL_VERBOSITY = "verbosity"
-	GLOBAL_PLUGIN    = "plugin"
+	GLOBAL_VERBOSITY    = "verbosity"
+	GLOBAL_PLUGIN       = "plugin"
+	GLOBAL_KUBE_CONTEXT = "kube-context"
 
 	FISSION_SERVER = "server"
 
