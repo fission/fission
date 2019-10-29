@@ -287,7 +287,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 				return http.StatusInternalServerError, errors.New(fmt.Sprintf("%s: pkg %s.%s has a status of %s", e, pkg.Metadata.Name, pkg.Metadata.Namespace, pkg.Status.BuildStatus))
 			}
 			archive = &pkg.Spec.Deployment
+		} else {
+			return http.StatusBadRequest, fmt.Errorf("unkonwn fetch type: %v", req.FetchType)
 		}
+
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
@@ -306,18 +309,20 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 				return http.StatusBadRequest, errors.Wrapf(err, "%s %s", e, req.Url)
 			}
 
-			checksum, err := utils.FileChecksum(tmpPath)
-			if err != nil {
-				e := "failed to get checksum"
-				fetcher.logger.Error(e, zap.Error(err))
-				return http.StatusBadRequest, errors.Wrap(err, e)
-			}
-
-			err = verifyChecksum(checksum, &archive.Checksum)
-			if err != nil {
-				e := "failed to verify checksum"
-				fetcher.logger.Error(e, zap.Error(err))
-				return http.StatusBadRequest, errors.Wrap(err, e)
+			// check file integrity only if checksum is not empty.
+			if len(archive.Checksum.Sum) > 0 {
+				checksum, err := utils.GetFileChecksum(tmpPath)
+				if err != nil {
+					e := "failed to get checksum"
+					fetcher.logger.Error(e, zap.Error(err))
+					return http.StatusBadRequest, errors.Wrap(err, e)
+				}
+				err = verifyChecksum(checksum, &archive.Checksum)
+				if err != nil {
+					e := "failed to verify checksum"
+					fetcher.logger.Error(e, zap.Error(err))
+					return http.StatusBadRequest, errors.Wrap(err, e)
+				}
 			}
 		}
 	}
@@ -512,7 +517,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sum, err := utils.FileChecksum(dstFilepath)
+	sum, err := utils.GetFileChecksum(dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
 		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))

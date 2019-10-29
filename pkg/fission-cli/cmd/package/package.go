@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
@@ -41,15 +40,22 @@ import (
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func CreateArchive(client *client.Client, includeFiles []string, noZip bool, specDir string, specFile string) (*fv1.Archive, error) {
+func CreateArchive(client *client.Client, includeFiles []string, noZip bool, keepURL bool, specDir string, specFile string) (*fv1.Archive, error) {
 
 	errs := &multierror.Error{}
+	fileURL := ""
 
 	// check files existence
 	for _, path := range includeFiles {
 		// ignore http files
-		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-			continue
+		if utils.IsURL(path) {
+			if len(includeFiles) > 1 {
+				// It's intentional to disallow the user to provide file
+				// and URL at the same time even the keepurl is false.
+				return nil, errors.New("unable to create an archive that contains both file and URL")
+			}
+			fileURL = path
+			break
 		}
 
 		// Get files from inputs as number of files decide next steps
@@ -68,46 +74,67 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, spe
 	}
 
 	if len(specFile) > 0 {
-		// create an ArchiveUploadSpec and reference it from the archive
-		aus := &spectypes.ArchiveUploadSpec{
-			Name:         archiveName("", includeFiles),
-			IncludeGlobs: includeFiles,
-		}
+		var archive fv1.Archive
 
-		// check if this AUS exists in the specs; if so, don't create a new one
-		fr, err := spec.ReadSpecs(specDir)
-		util.CheckErr(err, "read specs")
-		if m := fr.SpecExists(aus, false, true); m != nil {
-			fmt.Printf("Re-using previously created archive %v\n", m.Name)
-			aus.Name = m.Name
+		if len(fileURL) > 0 {
+			archive = fv1.Archive{
+				Type: fv1.ArchiveTypeUrl,
+				URL:  fileURL,
+			}
 		} else {
-			// save the uploadspec
-			err := spec.SpecSave(*aus, specFile)
-			util.CheckErr(err, fmt.Sprintf("write spec file %v", specFile))
+			// create an ArchiveUploadSpec and reference it from the archive
+			aus := &spectypes.ArchiveUploadSpec{
+				Name:         archiveName("", includeFiles),
+				IncludeGlobs: includeFiles,
+			}
+
+			// check if this AUS exists in the specs; if so, don't create a new one
+			fr, err := spec.ReadSpecs(specDir)
+			util.CheckErr(err, "read specs")
+			if m := fr.SpecExists(aus, false, true); m != nil {
+				fmt.Printf("Re-using previously created archive %v\n", m.Name)
+				aus.Name = m.Name
+			} else {
+				// save the uploadspec
+				err := spec.SpecSave(*aus, specFile)
+				util.CheckErr(err, fmt.Sprintf("write spec file %v", specFile))
+			}
+
+			// create the archive object
+			archive = fv1.Archive{
+				Type: fv1.ArchiveTypeUrl,
+				URL:  fmt.Sprintf("%v%v", spec.ARCHIVE_URL_PREFIX, aus.Name),
+			}
 		}
 
-		// create the archive object
-		ar := &fv1.Archive{
-			Type: fv1.ArchiveTypeUrl,
-			URL:  fmt.Sprintf("%v%v", spec.ARCHIVE_URL_PREFIX, aus.Name),
-		}
-		return ar, nil
+		return &archive, nil
 	}
 
-	archivePath := makeArchiveFileIfNeeded("", includeFiles, noZip)
+	if len(fileURL) > 0 {
+		if keepURL {
+			return &fv1.Archive{
+				Type: fv1.ArchiveTypeUrl,
+				URL:  fileURL,
+			}, nil
+		}
+		// download the file before we archive it
+		dst := pkgutil.DownloadToTempFile(fileURL)
+		includeFiles = []string{dst}
+	}
 
+	archivePath := makeArchiveFile("", includeFiles, noZip)
 	ctx := context.Background()
-	return pkgutil.UploadArchive(ctx, client, archivePath)
+	return pkgutil.UploadArchiveFile(ctx, client, archivePath)
 }
 
-// Create an archive from the given list of input files, unless that
-// list has only one item and that item is either a zip file or a URL.
+// makeArchiveFile creates a zip file from the given list of input files,
+// unless that list has only one item and that item is a zip file.
 //
 // If the inputs have only one file and noZip is true, the file is
 // returned as-is with no zipping.  (This is used for compatibility
 // with v1 envs.)  noZip is IGNORED if there is more than one input
 // file.
-func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZip bool) string {
+func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) string {
 
 	// Unique name for the archive
 	archiveName := archiveName(archiveNameHint, archiveInput)
@@ -118,7 +145,7 @@ func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZi
 		util.CheckErr(err, "finding all globs")
 	}
 
-	// We have one file; if it's a zip file or a URL, no need to archive it
+	// We have one file; if it's a zip file, no need to archive it
 	if len(files) == 1 {
 		// make sure it exists
 		if _, err := os.Stat(files[0]); err != nil {
@@ -129,11 +156,6 @@ func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZi
 		if archiver.Zip.Match(files[0]) || noZip {
 			return files[0]
 		}
-
-		// if it's an HTTP URL, just use the URL.
-		if strings.HasPrefix(files[0], "http://") || strings.HasPrefix(files[0], "https://") {
-			return files[0]
-		}
 	}
 
 	// For anything else, create a new archive
@@ -142,7 +164,7 @@ func makeArchiveFileIfNeeded(archiveNameHint string, archiveInput []string, noZi
 		util.CheckErr(err, "create temporary archive directory")
 	}
 
-	archivePath, err := utils.MakeArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
+	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
 	if err != nil {
 		util.CheckErr(err, "create archive file")
 	}

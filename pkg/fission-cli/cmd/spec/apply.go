@@ -281,7 +281,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
 			ctx := context.Background()
-			uploadedAr, err := pkgutil.UploadArchive(ctx, fclient, ar.URL)
+			uploadedAr, err := pkgutil.UploadArchiveFile(ctx, fclient, ar.URL)
 			if err != nil {
 				return err
 			}
@@ -461,7 +461,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 		}, nil
 	} else {
 		// checksum
-		csum, err := utils.FileChecksum(archiveFileName)
+		csum, err := utils.GetFileChecksum(archiveFileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}
