@@ -14,45 +14,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package spec
 
 import (
-	"fmt"
-	"os"
-	"text/tabwriter"
-
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
-type GetSubCommand struct {
+type DestroySubCommand struct {
 	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	opts := GetSubCommand{
-		client: cmdutils.GetServer(flags),
+// Destroy destroys everything in the spec.
+func Destroy(flags cli.Input) error {
+	opts := &DestroySubCommand{
+		client: cmd.GetServer(flags),
 	}
 	return opts.do(flags)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	m, err := cmdutils.GetMetadata(flags)
-	if err != nil {
-		return err
-	}
+func (opts *DestroySubCommand) do(flags cli.Input) error {
+	return opts.run(flags)
+}
 
-	env, err := opts.client.EnvironmentGet(m)
-	util.CheckErr(err, "get environment")
+func (opts *DestroySubCommand) run(flags cli.Input) error {
+	// get specdir
+	specDir := cmd.GetSpecDir(flags)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	// read everything
+	fr, err := ReadSpecs(specDir)
+	util.CheckErr(err, "read specs")
 
-	fmt.Fprintf(w, "%v\t%v\n", "NAME", "IMAGE")
-	fmt.Fprintf(w, "%v\t%v\n",
-		env.Metadata.Name, env.Spec.Runtime.Image)
+	// set desired state to nothing, but keep the UID so "apply" can find it
+	emptyFr := FissionResources{}
+	emptyFr.DeploymentConfig = fr.DeploymentConfig
 
-	w.Flush()
+	// "apply" the empty state
+	_, _, err = applyResources(opts.client, specDir, &emptyFr, true)
+	util.CheckErr(err, "delete resources")
+
 	return nil
 }

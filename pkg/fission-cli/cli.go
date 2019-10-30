@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,11 +30,14 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
+	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
+	plugincmd "github.com/fission/fission/pkg/fission-cli/cmd/plugin"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
+	"github.com/fission/fission/pkg/fission-cli/cmd/version"
 	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/fission-cli/plugin"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/plugin"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -57,16 +59,15 @@ func NewCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "fission"
 	app.Usage = "Serverless functions for Kubernetes"
-	app.Version = info.Version
-	cli.VersionPrinter = versionPrinter
+	app.HideVersion = true
 	app.CustomAppHelpTemplate = helpTemplate
 	app.ExtraInfo = func() map[string]string {
-		info := map[string]string{}
+		pluginInfo := map[string]string{}
 		for _, pmd := range plugin.FindAll() {
 			names := strings.Join(append([]string{pmd.Name}, pmd.Aliases...), ", ")
-			info[names] = pmd.Usage
+			pluginInfo[names] = pmd.Usage
 		}
-		return info
+		return pluginInfo
 	}
 
 	app.Flags = []cli.Flag{
@@ -103,9 +104,10 @@ func NewCliApp() *cli.App {
 	// functions
 	fnNameFlag := cli.StringFlag{Name: "name", Usage: "function name"}
 	fnEnvNameFlag := cli.StringFlag{Name: "env", Usage: "environment name for function"}
-	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for source code"}
+	fnCodeFlag := cli.StringFlag{Name: "code", Usage: "local path or URL for single file source code"}
 	fnDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "local path or URL for deployment archive"}
 	fnSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src, source", Usage: "local path or URL for source archive"}
+	fnKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	fnPkgNameFlag := cli.StringFlag{Name: "pkgname, pkg", Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	fnPodFlag := cli.StringFlag{Name: "pod", Usage: "function pod name, optional (use latest if unspecified)"}
 	fnFollowFlag := cli.BoolFlag{Name: "follow, f", Usage: "specify if the logs should be streamed"}
@@ -123,14 +125,13 @@ func NewCliApp() *cli.App {
 	fnForceFlag := cli.BoolFlag{Name: "force", Usage: "Force update a package even if it is used by one or more functions"}
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Value: types.ExecutorTypePoolmgr, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
 	fnExecutionTimeoutFlag := cli.IntFlag{Name: "fntimeout, ft", Value: 60, Usage: "Time duration to wait for the response while executing the function. If the flag is not provided, by default it will wait of 60s for the response."}
-
 	fnTimeoutFlag := cli.DurationFlag{Name: "timeout, t", Value: 30 * time.Second, Usage: "The length of time to wait for the response. If set to zero or negative number, no timeout is set."}
 
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnCreate},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, specSaveFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnKeepURLFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnCreate},
 		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGet},
 		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGetMeta},
-		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, pkgNamespaceFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnUpdate},
+		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag, fnCodeFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnKeepURLFlag, fnEntryPointFlag, fnPkgNameFlag, pkgNamespaceFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, specializationTimeoutFlag, fnExecutionTimeoutFlag}, Action: fnUpdate},
 		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnDelete},
 		// TODO : for fnList, i feel like it's nice to allow --fns all, to list functions across all namespaces for cluster admins, although, this is against ns isolation.
 		// so, in the future, if we end up using kubeconfig in fission cli and enforcing rolebindings to be created for users by admins etc, we can add this option at the time.
@@ -258,19 +259,20 @@ func NewCliApp() *cli.App {
 	pkgEnvironmentFlag := cli.StringFlag{Name: "env", Usage: "Environment name"}
 	pkgSrcArchiveFlag := cli.StringSliceFlag{Name: "sourcearchive, src", Usage: "Local path or URL for source archive"}
 	pkgDeployArchiveFlag := cli.StringSliceFlag{Name: "deployarchive, deploy", Usage: "Local path or URL for binary archive"}
+	pkgKeepURLFlag := cli.BoolFlag{Name: "keeparchiveurl, keepurl", Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	pkgBuildCmdFlag := cli.StringFlag{Name: "buildcmd", Usage: "Build command for builder to run with"}
 	pkgOutputFlag := cli.StringFlag{Name: "output, o", Usage: "Output filename to save archive content"}
 	pkgStatusFlag := cli.StringFlag{Name: "status", Usage: `Filter packages by status`}
-	pkgOrphanFlag := cli.BoolFlag{Name: "orphan", Usage: "orphan packages that are not referenced by any function"}
+	pkgOrphanFlag := cli.BoolFlag{Name: "orphan", Usage: "Orphan packages that are not referenced by any function"}
 	pkgSubCommands := []cli.Command{
-		{Name: "create", Usage: "Create new package", Flags: []cli.Flag{pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgBuildCmdFlag}, Action: pkgCreate},
-		{Name: "update", Usage: "Update package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgBuildCmdFlag, pkgForceFlag}, Action: pkgUpdate},
-		{Name: "rebuild", Usage: "Rebuild a failed package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgRebuild},
-		{Name: "getsrc", Usage: "Get source archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgSourceGet},
-		{Name: "getdeploy", Usage: "Get deployment archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: pkgDeployGet},
-		{Name: "info", Usage: "Show package information", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: pkgInfo},
-		{Name: "list", Usage: "List all packages", Flags: []cli.Flag{pkgOrphanFlag, pkgStatusFlag, pkgNamespaceFlag}, Action: pkgList},
-		{Name: "delete", Usage: "Delete package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgForceFlag, pkgOrphanFlag}, Action: pkgDelete},
+		{Name: "create", Usage: "Create new package", Flags: []cli.Flag{pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgKeepURLFlag, pkgBuildCmdFlag}, Action: urfavecli.Wrapper(_package.Create)},
+		{Name: "update", Usage: "Update package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgEnvironmentFlag, envNamespaceFlag, pkgSrcArchiveFlag, pkgDeployArchiveFlag, pkgKeepURLFlag, pkgBuildCmdFlag, pkgForceFlag}, Action: urfavecli.Wrapper(_package.Update)},
+		{Name: "rebuild", Usage: "Rebuild a failed package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: urfavecli.Wrapper(_package.Rebuild)},
+		{Name: "getsrc", Usage: "Get source archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: urfavecli.Wrapper(_package.GetSrc)},
+		{Name: "getdeploy", Usage: "Get deployment archive content", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgOutputFlag}, Action: urfavecli.Wrapper(_package.GetDeploy)},
+		{Name: "info", Usage: "Show package information", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag}, Action: urfavecli.Wrapper(_package.Info)},
+		{Name: "list", Usage: "List all packages", Flags: []cli.Flag{pkgOrphanFlag, pkgStatusFlag, pkgNamespaceFlag}, Action: urfavecli.Wrapper(_package.List)},
+		{Name: "delete", Usage: "Delete package", Flags: []cli.Flag{pkgNameFlag, pkgNamespaceFlag, pkgForceFlag, pkgOrphanFlag}, Action: urfavecli.Wrapper(_package.Delete)},
 	}
 
 	// specs
@@ -281,11 +283,10 @@ func NewCliApp() *cli.App {
 	specWatchFlag := cli.BoolFlag{Name: "watch", Usage: "Watch local files for change, and re-apply specs as necessary"}
 	specDeleteFlag := cli.BoolFlag{Name: "delete", Usage: "Allow apply to delete resources that no longer exist in the specification"}
 	specSubCommands := []cli.Command{
-		{Name: "init", Usage: "Create an initial declarative app specification", Flags: []cli.Flag{specDirFlag, specNameFlag, specDeployIDFlag}, Action: specInit},
-		{Name: "validate", Usage: "Validate Fission app specification", Flags: []cli.Flag{specDirFlag}, Action: specValidate},
-		{Name: "apply", Usage: "Create, update, or delete Fission resources from app specification", Flags: []cli.Flag{specDirFlag, specDeleteFlag, specWaitFlag, specWatchFlag}, Action: specApply},
-		{Name: "destroy", Usage: "Delete all Fission resources in the app specification", Flags: []cli.Flag{specDirFlag}, Action: specDestroy},
-		{Name: "helm", Usage: "Create a helm chart from the app specification", Flags: []cli.Flag{specDirFlag}, Action: specHelm, Hidden: true},
+		{Name: "init", Usage: "Create an initial declarative app specification", Flags: []cli.Flag{specDirFlag, specNameFlag, specDeployIDFlag}, Action: urfavecli.Wrapper(spec.Init)},
+		{Name: "validate", Usage: "Validate Fission app specification", Flags: []cli.Flag{specDirFlag}, Action: urfavecli.Wrapper(spec.Validate)},
+		{Name: "apply", Usage: "Create, update, or delete Fission resources from app specification", Flags: []cli.Flag{specDirFlag, specDeleteFlag, specWaitFlag, specWatchFlag}, Action: urfavecli.Wrapper(spec.Apply)},
+		{Name: "destroy", Usage: "Delete all Fission resources in the app specification", Flags: []cli.Flag{specDirFlag}, Action: urfavecli.Wrapper(spec.Destroy)},
 	}
 
 	// support
@@ -311,6 +312,10 @@ func NewCliApp() *cli.App {
 		{Name: "list", Usage: "List all canary configs in a namespace", Flags: []cli.Flag{canaryNamespaceFlag}, Action: canaryConfigList},
 	}
 
+	pluginSubCommands := []cli.Command{
+		{Name: "list", Usage: "List installed client plugins", Action: urfavecli.Wrapper(plugincmd.List)},
+	}
+
 	app.Commands = []cli.Command{
 		{Name: "function", Aliases: []string{"fn"}, Usage: "Create, update and manage functions", Subcommands: fnSubcommands},
 		{Name: "httptrigger", Aliases: []string{"ht", "route"}, Usage: "Manage HTTP triggers (routes) for functions", Subcommands: htSubcommands},
@@ -324,8 +329,9 @@ func NewCliApp() *cli.App {
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
 		{Name: "spec", Aliases: []string{"specs"}, Usage: "Manage a declarative app specification", Subcommands: specSubCommands},
 		{Name: "support", Usage: "Collect an archive of diagnostic information for support", Subcommands: supportSubCommands},
-		cmdPlugin,
 		{Name: "canary-config", Aliases: []string{}, Usage: "Create, Update and manage Canary Configs", Subcommands: canarySubCommands},
+		{Name: "plugin", Aliases: []string{"plugins"}, Usage: "Manage Fission CLI plugins", Subcommands: pluginSubCommands},
+		{Name: "version", Usage: "Version information", Action: urfavecli.Wrapper(version.Version)},
 	}
 
 	app.Before = cliHook
@@ -334,10 +340,6 @@ func NewCliApp() *cli.App {
 }
 
 func handleNoCommand(ctx *cli.Context) error {
-	if ctx.GlobalBool("version") {
-		versionPrinter(ctx)
-		return nil
-	}
 	if ctx.GlobalBool("plugin") {
 		bs, err := json.Marshal(plugin.Metadata{
 			Version: info.Version,
@@ -396,16 +398,6 @@ To install it for your local Fission CLI:
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-func versionPrinter(_ *cli.Context) {
-	client := util.GetApiClient(util.GetServerUrl())
-	ver := util.GetVersion(client)
-	bs, err := yaml.Marshal(ver)
-	if err != nil {
-		log.Fatal("Error formatting versions: " + err.Error())
-	}
-	fmt.Print(string(bs))
 }
 
 func flagValueParser(args []string) error {

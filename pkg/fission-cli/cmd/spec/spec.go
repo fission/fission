@@ -26,13 +26,14 @@ import (
 	"github.com/ghodss/yaml"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generator/encoder"
 	v1generator "github.com/fission/fission/pkg/generator/v1"
 )
@@ -92,60 +93,8 @@ fission.
 
 // CLI spec types
 type (
-	// DeploymentConfig is the global configuration for a set of Fission specs.
-	DeploymentConfig struct {
-		// TypeMeta describes the type of this object. It is inlined. The Kind
-		// field should always be "DeploymentConfig".
-		TypeMeta `json:",inline"`
-
-		// Name is a user-friendly name for the deployment. It is also stored in
-		// all uploaded resources as an annotation.
-		Name string `json:"name"`
-
-		// UID uniquely identifies the deployment. It is stored as a label and
-		// used to find resources to clean up when local specs are changed.
-		UID string `json:"uid"`
-	}
-
-	// ArchiveUploadSpec specifies a set of files to be archived and uploaded.
-	//
-	// The resulting archive can be referenced as archive://<Name> in PackageSpecs,
-	// using the name specified in the archive.  The fission spec applier will
-	// replace the archive:// URL with a real HTTP URL after uploading the file.
-	ArchiveUploadSpec struct {
-		// TypeMeta describes the type of this object. It is inlined. The Kind
-		// field should always be "ArchiveUploadSpec".
-		TypeMeta `json:",inline"`
-
-		// Name is a local name that can be used to reference this archive. It
-		// must be unique; duplicate names will cause an error while handling
-		// specs.
-		Name string `json:"name"`
-
-		// RootDir specifies the root that the globs below are relative to. It
-		// is optional and defaults to the parent directory of the spec
-		// directory: for example, if the deployment config is at
-		// /path/to/project/specs/config.yaml, the RootDir is /path/to/project.
-		RootDir string `json:"rootdir,omitempty"`
-
-		// IncludeGlobs is a list of Unix shell globs to include
-		IncludeGlobs []string `json:"include,omitempty"`
-
-		// ExcludeGlobs is a list of globs to exclude from the set specified by
-		// IncludeGlobs.
-		ExcludeGlobs []string `json:"exclude,omitempty"`
-	}
-
-	// TypeMeta is the same as Kubernetes' TypeMeta, and allows us to version and
-	// unmarshal local-only objects (like ArchiveUploadSpec) the same way that
-	// Kubernetes does.
-	TypeMeta struct {
-		Kind       string `json:"kind,omitempty"`
-		APIVersion string `json:"apiVersion,omitempty"`
-	}
-
 	FissionResources struct {
-		DeploymentConfig        DeploymentConfig
+		DeploymentConfig        types.DeploymentConfig
 		Packages                []fv1.Package
 		Functions               []fv1.Function
 		Environments            []fv1.Environment
@@ -153,7 +102,7 @@ type (
 		KubernetesWatchTriggers []fv1.KubernetesWatchTrigger
 		TimeTriggers            []fv1.TimeTrigger
 		MessageQueueTriggers    []fv1.MessageQueueTrigger
-		ArchiveUploadSpecs      []ArchiveUploadSpec
+		ArchiveUploadSpecs      []types.ArchiveUploadSpec
 
 		SourceMap SourceMap
 	}
@@ -224,7 +173,7 @@ func SpecSave(resource interface{}, specFile string) error {
 	var data []byte
 	var err error
 	switch typedres := resource.(type) {
-	case ArchiveUploadSpec:
+	case types.ArchiveUploadSpec:
 		typedres.Kind = "ArchiveUploadSpec"
 		data, err = yaml.Marshal(typedres)
 	case fv1.Package:
@@ -296,7 +245,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 	return nil
 }
 
-func (fr *FissionResources) Validate(c *cli.Context) error {
+func (fr *FissionResources) Validate(flags cli.Input) error {
 	result := &multierror.Error{}
 
 	// check references: both dangling refs + garbage
@@ -398,7 +347,7 @@ func (fr *FissionResources) Validate(c *cli.Context) error {
 			packages[MapKey(pkgMeta)] = true
 		}
 
-		client := util.GetApiClient(c.GlobalString("server"))
+		client := cmd.GetServer(flags)
 		for _, cm := range f.Spec.ConfigMaps {
 			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
 				Name:      cm.Name,
@@ -532,7 +481,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 
 	// Figure out the object type by unmarshaling into the TypeMeta struct; then
 	// unmarshal again into the "real" struct once we know the type.
-	var tm TypeMeta
+	var tm types.TypeMeta
 	err := yaml.Unmarshal(b, &tm)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Failed to decode yaml %v", string(b)))
@@ -605,14 +554,14 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 	// The following are not CRDs
 
 	case "DeploymentConfig":
-		var v DeploymentConfig
+		var v types.DeploymentConfig
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		fr.DeploymentConfig = v
 	case "ArchiveUploadSpec":
-		var v ArchiveUploadSpec
+		var v types.ArchiveUploadSpec
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
@@ -644,7 +593,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 // equality check is performed.
 func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata bool, compareSpec bool) *metav1.ObjectMeta {
 	switch typedres := resource.(type) {
-	case *ArchiveUploadSpec:
+	case *types.ArchiveUploadSpec:
 		for _, aus := range fr.ArchiveUploadSpecs {
 			if compareMetadata && aus.Name != typedres.Name {
 				continue

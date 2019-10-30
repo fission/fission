@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,32 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission_cli
+package plugin
 
 import (
 	"fmt"
 	"os"
 	"text/tabwriter"
 
-	"github.com/urfave/cli"
-
-	"github.com/fission/fission/pkg/fission-cli/plugin"
+	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/plugin"
 )
 
-var cmdPlugin = cli.Command{
-	Name:    "plugin",
-	Aliases: []string{"plugins"},
-	Usage:   "Manage Fission CLI plugins",
-	Subcommands: []cli.Command{
-		{
-			Name:   "list",
-			Usage:  "List installed client plugins",
-			Action: pluginList,
-		},
-	},
+type ListSubCommand struct {
+	client *client.Client
 }
 
-func pluginList(_ *cli.Context) error {
+func List(flags cli.Input) error {
+	opts := &ListSubCommand{
+		client: cmd.GetServer(flags),
+	}
+	return opts.do(flags)
+}
+
+func (opts *ListSubCommand) do(flags cli.Input) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintln(w, "NAME\tVERSION\tPATH")
 	for _, p := range plugin.FindAll() {

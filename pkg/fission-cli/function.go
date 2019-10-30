@@ -39,6 +39,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
@@ -297,9 +298,12 @@ func fnCreate(c *cli.Context) error {
 		}
 
 		buildcmd := c.String("buildcmd")
+		keepURL := c.Bool("keepurl")
 
 		// create new package in the same namespace as the function.
-		pkgMetadata = createPackage(c, client, fnNamespace, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+		pkgMetadata, err = _package.CreatePackage(c, client, fnNamespace, envName, envNamespace,
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, keepURL)
+		util.CheckErr(err, "create package")
 	}
 
 	var secrets []fv1.SecretReference
@@ -462,9 +466,8 @@ func fnGetMeta(c *cli.Context) error {
 	util.CheckErr(err, "get function")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "UID", "ENV")
-	fmt.Fprintf(w, "%v\t%v\t%v\n",
-		f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name)
+	fmt.Fprintf(w, "%v\t%v\n", "NAME", "ENV")
+	fmt.Fprintf(w, "%v\t%v\n", f.Metadata.Name, f.Spec.Environment.Name)
 	w.Flush()
 	return err
 }
@@ -629,14 +632,16 @@ func fnUpdate(c *cli.Context) error {
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveFiles) != 0 || len(srcArchiveFiles) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+		fnList, err := _package.GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		util.CheckErr(err, "get function list")
 
 		if !force && len(fnList) > 1 {
 			log.Fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata, err = updatePackage(client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag)
+		keepURL := c.Bool("keepurl")
+
+		pkgMetadata, err = _package.UpdatePackage(client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag, keepURL)
 		util.CheckErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
@@ -705,12 +710,12 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "UID", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
 	for _, f := range fns {
 		mincpu := f.Spec.Resources.Requests.Cpu
 		mincpu().Value()
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			f.Metadata.Name, f.Metadata.UID, f.Spec.Environment.Name,
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			f.Metadata.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,

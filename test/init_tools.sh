@@ -54,6 +54,14 @@ if [ $(uname -s) == 'Darwin' ]; then
         exit 1
     fi
 
+    if command -v gsha256sum >/dev/null; then
+        sha256sum() { gsha256sum "$@"; }
+        export -f sha256sum
+    else
+        echo '"gsha256sum" command not found. Try "brew install coreutils".'
+        exit 1
+    fi
+
     find_executable() {
         path=$1; shift
         find $path -perm +111 -type f "$@"

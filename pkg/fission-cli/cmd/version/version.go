@@ -14,45 +14,37 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package version
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
+
+	"github.com/ghodss/yaml"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
-type GetSubCommand struct {
+type VersionSubCommand struct {
 	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	opts := GetSubCommand{
-		client: cmdutils.GetServer(flags),
+func Version(flags cli.Input) error {
+	opts := &VersionSubCommand{
+		client: cmd.GetServer(flags),
 	}
 	return opts.do(flags)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	m, err := cmdutils.GetMetadata(flags)
+func (opts *VersionSubCommand) do(flags cli.Input) error {
+	ver := util.GetVersion(opts.client)
+	bs, err := yaml.Marshal(ver)
 	if err != nil {
-		return err
+		log.Fatal("Error formatting versions: " + err.Error())
 	}
-
-	env, err := opts.client.EnvironmentGet(m)
-	util.CheckErr(err, "get environment")
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\n", "NAME", "IMAGE")
-	fmt.Fprintf(w, "%v\t%v\n",
-		env.Metadata.Name, env.Spec.Runtime.Image)
-
-	w.Flush()
+	fmt.Print(string(bs))
 	return nil
 }

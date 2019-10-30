@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"runtime/debug"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -111,11 +110,10 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 }
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
-	debug.PrintStack()
-
 	// this error type comes with an HTTP code, so just use that
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
+		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
 		http.Error(w, string(se.ErrStatus.Reason), int(se.ErrStatus.Code))
 		return
 	}
@@ -193,7 +191,7 @@ func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, service.Name+"."+podNamespace)
 }
 
-func (api *API) Serve(port int) {
+func (api *API) GetHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/healthz", api.HealthHandler).Methods("GET")
 	// Give a useful error message if an older CLI attempts to make a request
@@ -272,9 +270,12 @@ func (api *API) Serve(port int) {
 
 	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
 
-	address := fmt.Sprintf(":%v", port)
+	return r
+}
 
+func (api *API) Serve(port int) {
+	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
-	err := http.ListenAndServe(address, r)
+	err := http.ListenAndServe(address, api.GetHandler())
 	api.logger.Fatal("done listening", zap.Error(err))
 }

@@ -19,8 +19,6 @@ package fetcher
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -127,27 +126,6 @@ func downloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	}
 
 	return nil
-}
-
-func getChecksum(path string) (*fv1.Checksum, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	hasher := sha256.New()
-	_, err = io.Copy(hasher, f)
-	if err != nil {
-		return nil, err
-	}
-
-	c := hex.EncodeToString(hasher.Sum(nil))
-
-	return &fv1.Checksum{
-		Type: fv1.ChecksumTypeSHA256,
-		Sum:  c,
-	}, nil
 }
 
 func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
@@ -309,7 +287,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 				return http.StatusInternalServerError, errors.New(fmt.Sprintf("%s: pkg %s.%s has a status of %s", e, pkg.Metadata.Name, pkg.Metadata.Namespace, pkg.Status.BuildStatus))
 			}
 			archive = &pkg.Spec.Deployment
+		} else {
+			return http.StatusBadRequest, fmt.Errorf("unkonwn fetch type: %v", req.FetchType)
 		}
+
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
@@ -328,18 +309,20 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 				return http.StatusBadRequest, errors.Wrapf(err, "%s %s", e, req.Url)
 			}
 
-			checksum, err := getChecksum(tmpPath)
-			if err != nil {
-				e := "failed to get checksum"
-				fetcher.logger.Error(e, zap.Error(err))
-				return http.StatusBadRequest, errors.Wrap(err, e)
-			}
-
-			err = verifyChecksum(checksum, &archive.Checksum)
-			if err != nil {
-				e := "failed to verify checksum"
-				fetcher.logger.Error(e, zap.Error(err))
-				return http.StatusBadRequest, errors.Wrap(err, e)
+			// check file integrity only if checksum is not empty.
+			if len(archive.Checksum.Sum) > 0 {
+				checksum, err := utils.GetFileChecksum(tmpPath)
+				if err != nil {
+					e := "failed to get checksum"
+					fetcher.logger.Error(e, zap.Error(err))
+					return http.StatusBadRequest, errors.Wrap(err, e)
+				}
+				err = verifyChecksum(checksum, &archive.Checksum)
+				if err != nil {
+					e := "failed to verify checksum"
+					fetcher.logger.Error(e, zap.Error(err))
+					return http.StatusBadRequest, errors.Wrap(err, e)
+				}
 			}
 		}
 	}
@@ -534,7 +517,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sum, err := getChecksum(dstFilepath)
+	sum, err := utils.GetFileChecksum(dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
 		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
