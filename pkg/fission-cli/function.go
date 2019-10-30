@@ -524,54 +524,63 @@ func fnUpdate(c *cli.Context) error {
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
 
-	secretName := c.String("secret")
-	cfgMapName := c.String("configmap")
+	secretNames := c.StringSlice("secret")
+	cfgMapNames := c.StringSlice("configmap")
+
 	specializationTimeout := c.Int("specializationtimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		log.Fatal("Need either of --src or --deploy and not both arguments.")
 	}
 
-	if len(secretName) > 0 {
-		if len(function.Spec.Secrets) > 1 {
-			log.Fatal("Please use 'fission spec apply' to update list of secrets")
-		}
+	var secrets []fv1.SecretReference
+	var configMaps []fv1.ConfigMapReference
+
+	if len(secretNames) > 0 {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
-		_, err := client.SecretGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      secretName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+		for _, secretName := range secretNames {
+			_, err := client.SecretGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      secretName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+			}
 		}
 
-		newSecret := fv1.SecretReference{
-			Name:      secretName,
-			Namespace: fnNamespace,
+		for _, secretName := range secretNames {
+			newSecret := fv1.SecretReference{
+				Name:      secretName,
+				Namespace: fnNamespace,
+			}
+			secrets = append(secrets, newSecret)
 		}
-		function.Spec.Secrets = []fv1.SecretReference{newSecret}
+
+		function.Spec.Secrets = secrets
 	}
 
-	if len(cfgMapName) > 0 {
-		if len(function.Spec.ConfigMaps) > 1 {
-			log.Fatal("Please use 'fission spec apply' to update list of configmaps")
-		}
+	if len(cfgMapNames) > 0 {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
-		_, err := client.ConfigMapGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      cfgMapName,
-		})
-		if k8serrors.IsNotFound(err) {
-			log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
+		for _, cfgMapName := range cfgMapNames {
+			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      cfgMapName,
+			})
+			if k8serrors.IsNotFound(err) {
+				log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
+			}
 		}
 
-		newCfgMap := fv1.ConfigMapReference{
-			Name:      cfgMapName,
-			Namespace: fnNamespace,
+		for _, cfgMapName := range cfgMapNames {
+			newCfgMap := fv1.ConfigMapReference{
+				Name:      cfgMapName,
+				Namespace: fnNamespace,
+			}
+			configMaps = append(configMaps, newCfgMap)
 		}
-		function.Spec.ConfigMaps = []fv1.ConfigMapReference{newCfgMap}
+		function.Spec.ConfigMaps = configMaps
 	}
 
 	if len(envName) > 0 {
@@ -710,11 +719,21 @@ func fnList(c *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU", "SECRETS", "CONFIGMAPS")
 	for _, f := range fns {
+		secrets := f.Spec.Secrets
+		configMaps := f.Spec.ConfigMaps
+		var secretsList, configMapList []string
+		for _, secret := range secrets {
+			secretsList = append(secretsList, secret.Name)
+		}
+		for _, configMap := range configMaps {
+			configMapList = append(configMapList, configMap.Name)
+		}
 		mincpu := f.Spec.Resources.Requests.Cpu
 		mincpu().Value()
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.Metadata.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
@@ -723,7 +742,9 @@ func fnList(c *cli.Context) error {
 			f.Spec.Resources.Limits.Cpu().String(),
 			f.Spec.Resources.Requests.Memory().String(),
 			f.Spec.Resources.Limits.Memory().String(),
-			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
+			f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent,
+			strings.Join(secretsList, ","),
+			strings.Join(configMapList, ","))
 	}
 	w.Flush()
 
