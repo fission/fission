@@ -21,6 +21,7 @@ import (
 	"os"
 	"sort"
 	"text/tabwriter"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -88,7 +89,7 @@ func (opts *ListSubCommand) run(flags cli.Input) error {
 			show = false
 		}
 		if show {
-			fmt.Fprintf(w, "%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name)
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
 		}
 	}
 
