@@ -50,7 +50,7 @@ func (opts *UpdateSubCommand) do(flags cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	m, err := cmd.GetMetadata(flags)
+	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
 	if err != nil {
 		return err
 	}

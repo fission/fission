@@ -65,7 +65,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(flags cli.Input) error {
-	m, err := cmd.GetMetadata(flags)
+	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
 	if err != nil {
 		return err
 	}

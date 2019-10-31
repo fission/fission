@@ -125,14 +125,14 @@ func GetSpecDir(flags cli.Input) string {
 	return specDir
 }
 
-// GetMetadata returns a pointer to ObjectMeta which initialized with command line input.
-func GetMetadata(flags cli.Input) (*metav1.ObjectMeta, error) {
-	name := flags.String(RESOURCE_NAME)
+// GetMetadata returns a pointer to ObjectMeta that is populated with resource name and namespace given by the user.
+func GetMetadata(nameFlagText string, namespaceFlagText string, flags cli.Input) (*metav1.ObjectMeta, error) {
+	name := flags.String(nameFlagText)
 	if len(name) == 0 {
-		return nil, errors.New("Need a resource name, use --name.")
+		return nil, errors.New("need a resource name, use --name")
 	}
 
-	ns := flags.String(ENVIRONMENT_NAMESPACE)
+	ns := flags.String(namespaceFlagText)
 
 	m := &metav1.ObjectMeta{
 		Name:      name,

@@ -23,7 +23,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,13 +33,13 @@ type ListSubCommand struct {
 
 func List(flags cli.Input) error {
 	opts := ListSubCommand{
-		client: cmdutils.GetServer(flags),
+		client: cmd.GetServer(flags),
 	}
 	return opts.do(flags)
 }
 
 func (opts *ListSubCommand) do(flags cli.Input) error {
-	envNamespace := flags.String(cmdutils.ENVIRONMENT_NAMESPACE)
+	envNamespace := flags.String(cmd.ENVIRONMENT_NAMESPACE)
 
 	envs, err := opts.client.EnvironmentList(envNamespace)
 	util.CheckErr(err, "list environments")
