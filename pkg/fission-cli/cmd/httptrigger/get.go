@@ -22,14 +22,13 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -59,7 +58,7 @@ func (opts *GetSubCommand) complete(flags cli.Input) error {
 	opts.namespace = flags.String("fnNamespace")
 
 	if len(opts.trigger) <= 0 {
-		log.Fatal("Need a trigger name, use --name")
+		return errors.New("need a trigger name, use --name")
 	}
 	return nil
 }
@@ -70,7 +69,9 @@ func (opts *GetSubCommand) run(flags cli.Input) error {
 		Namespace: opts.namespace,
 	}
 	ht, err := opts.client.HTTPTriggerGet(m)
-	util.CheckErr(err, "get http trigger")
+	if err != nil {
+		return errors.Wrap(err, "error getting http trigger")
+	}
 
 	printHtSummary([]fv1.HTTPTrigger{*ht})
 

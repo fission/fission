@@ -17,8 +17,8 @@ limitations under the License.
 package httptrigger
 
 import (
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"net/http"
 	"strings"
 
@@ -66,7 +66,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 
 	functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
 
 	triggerName := flags.String("name")
@@ -79,15 +79,15 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 
 	htTrigger, err := opts.client.HTTPTriggerGet(m)
 	if err != nil && !ferror.IsNotFound(err) {
-		log.Fatal(err.Error())
+		return err
 	}
 	if htTrigger != nil {
-		util.CheckErr(fmt.Errorf("duplicate trigger exists"), "choose a different name or leave it empty for fission to auto-generate it")
+		return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 	}
 
 	triggerUrl := flags.String("url")
 	if len(triggerUrl) == 0 {
-		log.Fatal("Need a trigger URL, use --url")
+		return errors.New("need a trigger URL, use --url")
 	}
 	if !strings.HasPrefix(triggerUrl, "/") {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
@@ -110,7 +110,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	ingressConfig, err := GetIngressConfig(
 		flags.StringSlice("ingressannotation"), flags.String("ingressrule"),
 		flags.String("ingresstls"), triggerUrl, nil)
-	util.CheckErr(err, "parse ingress configuration")
+	if err != nil {
+		return errors.Wrap(err, "error parsing ingress configuration")
+	}
 
 	host := flags.String("host")
 	if flags.IsSet("host") {
@@ -145,12 +147,16 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 	if flags.Bool("spec") {
 		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Metadata.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
-		util.CheckErr(err, "create HTTP trigger spec")
+		if err != nil {
+			return errors.Wrap(err, "error creating HTTP trigger spec")
+		}
 		return nil
 	}
 
 	_, err := opts.client.HTTPTriggerCreate(opts.trigger)
-	util.CheckErr(err, "create HTTP trigger")
+	if err != nil {
+		return errors.Wrap(err, "create HTTP trigger")
+	}
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.Metadata.Name)
 

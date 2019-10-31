@@ -26,8 +26,6 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/log"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -57,9 +55,9 @@ func (opts *DeleteSubCommand) complete(flags cli.Input) error {
 	opts.triggerName = flags.String("name")
 	opts.functionName = flags.String("function")
 	if len(opts.triggerName) == 0 && len(opts.functionName) == 0 {
-		log.Fatal("Need --name or --function")
+		return errors.New("need --name or --function")
 	} else if len(opts.triggerName) > 0 && len(opts.functionName) > 0 {
-		log.Fatal("Need either of --name or --function and not both arguments")
+		return errors.New("need either of --name or --function and not both arguments")
 	}
 	opts.namespace = flags.String("triggerNamespace")
 	return nil
@@ -67,7 +65,9 @@ func (opts *DeleteSubCommand) complete(flags cli.Input) error {
 
 func (opts *DeleteSubCommand) run(flags cli.Input) error {
 	triggers, err := opts.client.HTTPTriggerList(opts.namespace)
-	util.CheckErr(err, "get HTTP trigger list")
+	if err != nil {
+		return errors.Wrap(err, "error getting HTTP trigger list")
+	}
 
 	var triggersToDelete []string
 
