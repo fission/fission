@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -397,10 +398,11 @@ func fnCreate(c *cli.Context) error {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
-	method := c.String("method")
-	if len(method) == 0 {
-		method = http.MethodGet
+	method, err := httptrigger.GetMethod(c.String("method"))
+	if err != nil {
+		util.CheckErr(err, "get HTTP trigger method")
 	}
+
 	triggerName := uuid.NewV4().String()
 	ht := &fv1.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -409,7 +411,7 @@ func fnCreate(c *cli.Context) error {
 		},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
-			Method:      getMethod(method),
+			Method:      method,
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
 				Name: fnName,
