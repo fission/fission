@@ -145,7 +145,7 @@ func NewCliApp() *cli.App {
 	}
 
 	// httptriggers
-	htNameFlag := cli.StringFlag{Name: "name", Value: "GET", Usage: "HTTP Trigger name"}
+	htNameFlag := cli.StringFlag{Name: "name", Usage: "HTTP Trigger name"}
 	htHostFlag := cli.StringFlag{Name: "host", Usage: "(DEPRECATED) Use --ingressrule instead"}
 	htIngressFlag := cli.BoolFlag{Name: "createingress", Usage: "Creates ingress with same URL, defaults to false"}
 	htIngressRuleFlag := cli.StringFlag{Name: "ingressrule", Usage: "Host for Ingress rule: --ingressrule host=path (the format of host/path depends on what ingress controller you used)"}
