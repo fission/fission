@@ -26,9 +26,9 @@ import (
 )
 
 type ListSubCommand struct {
-	client              *client.Client
-	triggerNamespace    string
-	fileterFunctionName string
+	client             *client.Client
+	triggerNamespace   string
+	filterFunctionName string
 }
 
 func List(flags cli.Input) error {
@@ -49,7 +49,7 @@ func (opts *ListSubCommand) do(flags cli.Input) error {
 // complete creates a environment objects and populates it with default value and CLI inputs.
 func (opts *ListSubCommand) complete(flags cli.Input) error {
 	opts.triggerNamespace = flags.String("triggerNamespace")
-	opts.fileterFunctionName = flags.String("function")
+	opts.filterFunctionName = flags.String("function")
 	return nil
 }
 
@@ -62,8 +62,8 @@ func (opts *ListSubCommand) run(flags cli.Input) error {
 	var triggers []fv1.HTTPTrigger
 	for _, ht := range hts {
 		// TODO: list canary http triggers as well.
-		if len(opts.fileterFunctionName) == 0 ||
-			(len(opts.fileterFunctionName) > 0 && opts.fileterFunctionName == ht.Spec.FunctionReference.Name) {
+		if len(opts.filterFunctionName) == 0 ||
+			(len(opts.filterFunctionName) > 0 && opts.filterFunctionName == ht.Spec.FunctionReference.Name) {
 
 			triggers = append(triggers, ht)
 		}
