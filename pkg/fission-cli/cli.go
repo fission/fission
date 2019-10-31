@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
+	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/kubewatch"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	plugincmd "github.com/fission/fission/pkg/fission-cli/cmd/plugin"
@@ -154,11 +155,11 @@ func NewCliApp() *cli.App {
 	htFnWeightFlag := cli.IntSliceFlag{Name: "weight", Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
 	htFnFilterFlag := cli.StringFlag{Name: "function", Usage: "Name of the function for trigger(s)"}
 	htSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag, htHostFlag}, Action: htCreate},
-		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: htGet},
-		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, htFnWeightFlag, htHostFlag}, Action: htUpdate},
-		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnFilterFlag}, Action: htDelete},
-		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag, htFnFilterFlag}, Action: htList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create HTTP trigger", Flags: []cli.Flag{htNameFlag, htMethodFlag, htUrlFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, fnNamespaceFlag, specSaveFlag, htFnWeightFlag, htHostFlag}, Action: urfavecli.Wrapper(httptrigger.Create)},
+		{Name: "get", Usage: "Get HTTP trigger", Flags: []cli.Flag{htNameFlag}, Action: urfavecli.Wrapper(httptrigger.Get)},
+		{Name: "update", Usage: "Update HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnNameFlag, htIngressRuleFlag, htIngressAnnotationFlag, htIngressTLSFlag, htIngressFlag, htFnWeightFlag, htHostFlag}, Action: urfavecli.Wrapper(httptrigger.Update)},
+		{Name: "delete", Usage: "Delete HTTP trigger", Flags: []cli.Flag{htNameFlag, triggerNamespaceFlag, htFnFilterFlag}, Action: urfavecli.Wrapper(httptrigger.Delete)},
+		{Name: "list", Usage: "List HTTP triggers", Flags: []cli.Flag{triggerNamespaceFlag, htFnFilterFlag}, Action: urfavecli.Wrapper(httptrigger.List)},
 	}
 
 	// timetriggers
