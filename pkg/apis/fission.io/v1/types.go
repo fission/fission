@@ -490,6 +490,9 @@ type (
 		// - ImagePullPolicy
 		// - ReadinessProbe
 		Container *apiv1.Container `json:"container,omitempty"`
+
+		// PodSpec will store the spec of the pod that will be applied to the pod created for the builder
+		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
 	// EnvironmentSpec contains with builder, runtime and some other related environment settings.
