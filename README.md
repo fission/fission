@@ -72,7 +72,7 @@ You can learn more about Fission and get started from [Fission Docs](https://doc
 # Contributing
 
 ## Building Fission
-See the [compilation guide](https://docs.fission.io/contributing/).
+See the [compilation guide](https://docs.fission.io/docs/contributing/).
 
 ## Contact
 Reach us on [slack](http://slack.fission.io) or [twitter](https://twitter.com/fissionio).
