@@ -98,10 +98,13 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	}
 
 	if flags.IsSet("ingressrule") || flags.IsSet("ingressannotation") || flags.IsSet("ingresstls") {
-		_, err = GetIngressConfig(
+		ingress, err := GetIngressConfig(
 			flags.StringSlice("ingressannotation"), flags.String("ingressrule"),
 			flags.String("ingresstls"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
-		return errors.Wrap(err, "parse ingress configuration")
+		if err != nil {
+			return errors.Wrap(err, "parse ingress configuration")
+		}
+		ht.Spec.IngressConfig = *ingress
 	}
 
 	opts.trigger = ht
