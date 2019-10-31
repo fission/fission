@@ -426,7 +426,7 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 	environments := make(map[string]struct{})
 	for _, e := range fr.Environments {
 		environments[fmt.Sprintf("%s:%s", e.Metadata.Name, e.Metadata.Namespace)] = struct{}{}
-		if (e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil) {
+		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
 			log.Warn("You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 		}
 		// Unlike CLI can change the environment version silently,
