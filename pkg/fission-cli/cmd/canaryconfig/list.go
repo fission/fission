@@ -21,10 +21,11 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -54,7 +55,9 @@ func (opts *ListSubCommand) complete(flags cli.Input) error {
 
 func (opts *ListSubCommand) run(flags cli.Input) error {
 	canaryCfgs, err := opts.client.CanaryConfigList(opts.namespace)
-	util.CheckErr(err, "list canary config")
+	if err != nil {
+		return errors.Wrap(err, "error listing canary config")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS")

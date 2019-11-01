@@ -21,16 +21,15 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
-	client    *client.Client
-	name      string
-	namespace string
+	client *client.Client
 }
 
 func Get(flags cli.Input) error {
@@ -47,7 +46,9 @@ func (opts *GetSubCommand) run(flags cli.Input) error {
 	}
 
 	canaryCfg, err := opts.client.CanaryConfigGet(m)
-	util.CheckErr(err, "get canary config")
+	if err != nil {
+		return errors.Wrap(err, "error getting canary config")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS")
