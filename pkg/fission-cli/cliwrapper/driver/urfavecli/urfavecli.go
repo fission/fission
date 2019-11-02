@@ -18,6 +18,7 @@ package urfavecli
 
 import (
 	"log"
+	"time"
 
 	"github.com/urfave/cli"
 
@@ -106,4 +107,8 @@ func (u Cli) GlobalInt64(key string) int64 {
 
 func (u Cli) GlobalInt64Slice(key string) []int64 {
 	return u.c.GlobalInt64Slice(key)
+}
+
+func (u Cli) Duration(key string) time.Duration {
+	return u.c.Duration(key)
 }

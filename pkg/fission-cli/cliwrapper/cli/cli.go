@@ -16,6 +16,8 @@ limitations under the License.
 
 package cli
 
+import "time"
+
 type (
 	Input interface {
 		//Parse(input interface{}) error
@@ -30,19 +32,19 @@ type (
 		// String returns string value of given flag.
 		String(key string) string
 
-		// StringSlice returns string slice of given flag..
+		// StringSlice returns string slice of given flag.
 		StringSlice(key string) []string
 
-		// Int returns int value of given flag.nd false.
+		// Int returns int value of given flag.
 		Int(key string) int
 
-		// IntSlice returns int slice of given flag.lse.
+		// IntSlice returns int slice of given flag.
 		IntSlice(key string) []int
 
-		// Int64 returns int64 value of given flag. false.
+		// Int64 returns int64 value of given flag.
 		Int64(key string) int64
 
-		// Int64Slice returns int64 slice of given flag.e.
+		// Int64Slice returns int64 slice of given flag.
 		Int64Slice(key string) []int64
 
 		// GlobalBool returns true if given global flag has been set;
@@ -66,5 +68,8 @@ type (
 
 		// GlobalInt64Slice returns global int64 slice of given flag.
 		GlobalInt64Slice(key string) []int64
+
+		// Duration returns time duration of given flag.
+		Duration(key string) time.Duration
 	}
 )
