@@ -176,7 +176,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		// create new package in the same namespace as the function.
 		pkgMetadata, err = _package.CreatePackage(flags, opts.client, fnNamespace, envName, envNamespace,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, keepURL)
-		return errors.Wrap(err, "error creating package")
+		if err != nil {
+			return errors.Wrap(err, "error creating package")
+		}
 	}
 
 	var secrets []fv1.SecretReference
@@ -189,8 +191,12 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 				Namespace: fnNamespace,
 				Name:      secretName,
 			})
-			if k8serrors.IsNotFound(err) {
-				log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+				} else {
+					return errors.Wrap(err, "error checking secret")
+				}
 			}
 		}
 		for _, secretName := range secretNames {
@@ -209,8 +215,12 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 				Namespace: fnNamespace,
 				Name:      cfgMapName,
 			})
-			if k8serrors.IsNotFound(err) {
-				log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+				} else {
+					return errors.Wrap(err, "error checking configmap")
+				}
 			}
 		}
 		for _, cfgMapName := range cfgMapNames {
