@@ -19,7 +19,6 @@ package function
 import (
 	"context"
 	"fmt"
-	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -32,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 

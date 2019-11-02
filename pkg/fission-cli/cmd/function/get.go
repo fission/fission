@@ -17,9 +17,9 @@ limitations under the License.
 package function
 
 import (
-	"github.com/pkg/errors"
 	"os"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"

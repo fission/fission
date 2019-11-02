@@ -19,7 +19,6 @@ package fission_cli
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fission/fission/pkg/fission-cli/cmd/function"
 	"net/http"
 	"os"
 	"strings"
@@ -33,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/canaryconfig"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
+	"github.com/fission/fission/pkg/fission-cli/cmd/function"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/kubewatch"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"

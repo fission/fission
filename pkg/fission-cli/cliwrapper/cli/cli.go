@@ -16,7 +16,9 @@ limitations under the License.
 
 package cli
 
-import "time"
+import (
+	"time"
+)
 
 type (
 	Input interface {
