@@ -489,6 +489,17 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		return nil, err
 	}
 
+	podSpec := apiv1.PodSpec{
+		Containers:         []apiv1.Container{*container},
+		ServiceAccountName: "fission-builder",
+	}
+
+	finalPodSpec, err := util.MergePodSpec(&podSpec, env.Spec.Builder.PodSpec)
+
+	if err != nil {
+		return nil, err
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
@@ -505,10 +516,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 					Labels:      sel,
 					Annotations: podAnnotations,
 				},
-				Spec: apiv1.PodSpec{
-					Containers:         []apiv1.Container{*container},
-					ServiceAccountName: "fission-builder",
-				},
+				Spec: *finalPodSpec,
 			},
 		},
 	}
