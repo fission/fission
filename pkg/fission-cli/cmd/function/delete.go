@@ -14,15 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package function
 
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -37,14 +38,16 @@ func Delete(flags cli.Input) error {
 }
 
 func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
 
-	err = opts.client.EnvironmentDelete(m)
-	util.CheckErr(err, "delete environment")
+	err = opts.client.FunctionDelete(m)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("delete function '%v'", m.Name))
+	}
 
-	fmt.Printf("environment '%v' deleted\n", m.Name)
+	fmt.Printf("function '%v' deleted\n", m.Name)
 	return nil
 }

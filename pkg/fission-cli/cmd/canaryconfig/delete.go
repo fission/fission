@@ -14,15 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package canaryconfig
 
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -33,18 +34,19 @@ func Delete(flags cli.Input) error {
 	opts := DeleteSubCommand{
 		client: cmd.GetServer(flags),
 	}
-	return opts.do(flags)
+	return opts.run(flags)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+func (opts *DeleteSubCommand) run(flags cli.Input) error {
+	metadata, err := cmd.GetMetadata("name", "canaryNamespace", flags)
 	if err != nil {
 		return err
 	}
+	err = opts.client.CanaryConfigDelete(metadata)
+	if err != nil {
+		return errors.Wrap(err, "error deleting canary config")
+	}
 
-	err = opts.client.EnvironmentDelete(m)
-	util.CheckErr(err, "delete environment")
-
-	fmt.Printf("environment '%v' deleted\n", m.Name)
+	fmt.Printf("canaryconfig '%v.%v' deleted\n", metadata.Name, metadata.Namespace)
 	return nil
 }

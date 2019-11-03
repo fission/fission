@@ -14,37 +14,50 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package function
 
 import (
-	"fmt"
+	"os"
+
+	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
-type DeleteSubCommand struct {
+type GetSubCommand struct {
 	client *client.Client
 }
 
-func Delete(flags cli.Input) error {
-	opts := DeleteSubCommand{
+func Get(flags cli.Input) error {
+	opts := GetSubCommand{
 		client: cmd.GetServer(flags),
 	}
 	return opts.do(flags)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+func (opts *GetSubCommand) do(flags cli.Input) error {
+	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
 
-	err = opts.client.EnvironmentDelete(m)
-	util.CheckErr(err, "delete environment")
+	fn, err := opts.client.FunctionGet(m)
+	if err != nil {
+		return errors.Wrap(err, "error getting function")
+	}
 
-	fmt.Printf("environment '%v' deleted\n", m.Name)
+	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
+		Name:      fn.Spec.Package.PackageRef.Name,
+		Namespace: fn.Spec.Package.PackageRef.Namespace,
+	})
+	if err != nil {
+		return errors.Wrap(err, "error getting package")
+	}
+
+	os.Stdout.Write(pkg.Spec.Deployment.Literal)
+
 	return nil
 }

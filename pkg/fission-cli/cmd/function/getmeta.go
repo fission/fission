@@ -14,37 +14,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package environment
+package function
 
 import (
 	"fmt"
+	"os"
+	"text/tabwriter"
+
+	"github.com/pkg/errors"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
-type DeleteSubCommand struct {
+type GetMetaSubCommand struct {
 	client *client.Client
 }
 
-func Delete(flags cli.Input) error {
-	opts := DeleteSubCommand{
+func GetMeta(flags cli.Input) error {
+	opts := GetMetaSubCommand{
 		client: cmd.GetServer(flags),
 	}
 	return opts.do(flags)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+func (opts *GetMetaSubCommand) do(flags cli.Input) error {
+	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
 
-	err = opts.client.EnvironmentDelete(m)
-	util.CheckErr(err, "delete environment")
+	fn, err := opts.client.FunctionGet(m)
+	if err != nil {
+		return errors.Wrap(err, "error getting function")
+	}
 
-	fmt.Printf("environment '%v' deleted\n", m.Name)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(w, "%v\t%v\n", "NAME", "ENV")
+	fmt.Fprintf(w, "%v\t%v\n", fn.Metadata.Name, fn.Spec.Environment.Name)
+	w.Flush()
+
 	return nil
 }

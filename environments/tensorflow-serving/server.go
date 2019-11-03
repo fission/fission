@@ -28,6 +28,7 @@ var (
 
 	// for tensorflow serving to use
 	MODEL_NAME = ""
+	API_TYPE   = ""
 )
 
 type (
@@ -77,8 +78,26 @@ func specializeHandlerV2(logger *zap.Logger) func(http.ResponseWriter, *http.Req
 			return
 		}
 
+		// Tensorflow-serving supports three types of API: classify, regress, predict
+		// To get the API type, we need to split the entry point with separator ":"
+		// POST http://host:port/v1/models/${MODEL_NAME}:(classify|regress:predict)
+		entrypoint := strings.Split(loadreq.FunctionName, ":")
+		modelDir, apiType := "", ""
+
+		if len(entrypoint) == 0 {
+			logger.Error("unable to load model due to empty entrypoint")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else if len(entrypoint) == 1 {
+			modelDir = entrypoint[0]
+			apiType = "predict" // assign default API type
+		} else {
+			modelDir = entrypoint[0]
+			apiType = entrypoint[1]
+		}
+
 		// To ensure we load model from the expected path
-		basePath := fmt.Sprintf("%v/%v", loadreq.FilePath, loadreq.FunctionName)
+		basePath := fmt.Sprintf("%v/%v", loadreq.FilePath, modelDir)
 		basePath, err = filepath.Abs(basePath)
 		if err != nil {
 			msg := "error getting absolute path of model"
@@ -104,6 +123,7 @@ func specializeHandlerV2(logger *zap.Logger) func(http.ResponseWriter, *http.Req
 
 		// get directory name that holds model
 		MODEL_NAME = filepath.Base(basePath)
+		API_TYPE = apiType
 
 		argModelBasePath := fmt.Sprintf("--model_base_path=%v", basePath)
 		argModelName := fmt.Sprintf("--model_name=%v", MODEL_NAME)
@@ -191,7 +211,7 @@ func main() {
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = "localhost:8501"
-			req.URL.Path = fmt.Sprintf("/v1/models/%v:predict", MODEL_NAME)
+			req.URL.Path = fmt.Sprintf("/v1/models/%v:%v", MODEL_NAME, API_TYPE)
 		}
 
 		proxy := &httputil.ReverseProxy{

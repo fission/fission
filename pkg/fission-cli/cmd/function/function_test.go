@@ -1,26 +1,41 @@
-package fission_cli
+/*
+Copyright 2019 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package function
 
 import (
-	"flag"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
 )
 
 func TestGetInvokeStrategy(t *testing.T) {
 	cases := []struct {
-		testArgs               map[string]string
+		testArgs               map[string]interface{}
 		existingInvokeStrategy *fv1.InvokeStrategy
 		expectedResult         *fv1.InvokeStrategy
 		expectError            bool
 	}{
 		{
 			// case: use default executor poolmgr
-			testArgs:               map[string]string{},
+			testArgs:               map[string]interface{}{},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -32,7 +47,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: executor type set to poolmgr
-			testArgs:               map[string]string{"executortype": fv1.ExecutorTypePoolmgr},
+			testArgs:               map[string]interface{}{"executortype": fv1.ExecutorTypePoolmgr},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -44,7 +59,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: executor type set to newdeploy
-			testArgs:               map[string]string{"executortype": fv1.ExecutorTypeNewdeploy},
+			testArgs:               map[string]interface{}{"executortype": fv1.ExecutorTypeNewdeploy},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -60,7 +75,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: executor type change from poolmgr to newdeploy
-			testArgs: map[string]string{"executortype": fv1.ExecutorTypeNewdeploy},
+			testArgs: map[string]interface{}{"executortype": fv1.ExecutorTypeNewdeploy},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -81,7 +96,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: executor type change from newdeploy to poolmgr
-			testArgs: map[string]string{"executortype": fv1.ExecutorTypePoolmgr},
+			testArgs: map[string]interface{}{"executortype": fv1.ExecutorTypePoolmgr},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -102,10 +117,10 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: minscale < maxscale
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"minscale":     "2",
-				"maxscale":     "3",
+				"minscale":     2,
+				"maxscale":     3,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -122,10 +137,10 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: minscale > maxscale
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"minscale":     "5",
-				"maxscale":     "3",
+				"minscale":     5,
+				"maxscale":     3,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -133,9 +148,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: maxscale not specified
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"minscale":     "5",
+				"minscale":     5,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -143,9 +158,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: minscale not specified
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"maxscale":     "3",
+				"maxscale":     3,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -162,9 +177,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: maxscale set to 0
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"maxscale":     "0",
+				"maxscale":     0,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -172,9 +187,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: maxscale set to 9 when existing is 5
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"maxscale":     "9",
+				"maxscale":     9,
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -200,7 +215,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: change nothing for existing strategy
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
@@ -227,9 +242,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: set target cpu percentage
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"targetcpu":    "50",
+				"targetcpu":    50,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -246,9 +261,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: change target cpu percentage
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype": fv1.ExecutorTypeNewdeploy,
-				"targetcpu":    "20",
+				"targetcpu":    20,
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -274,9 +289,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: change specializationtimeout
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype":          fv1.ExecutorTypeNewdeploy,
-				"specializationtimeout": "200",
+				"specializationtimeout": 200,
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -301,9 +316,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: specializationtimeout should not work for poolmgr
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype":          fv1.ExecutorTypePoolmgr,
-				"specializationtimeout": "10",
+				"specializationtimeout": 10,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -311,9 +326,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			// case: specializationtimeout should not be less than 120
-			testArgs: map[string]string{
+			testArgs: map[string]interface{}{
 				"executortype":          fv1.ExecutorTypeNewdeploy,
-				"specializationtimeout": "90",
+				"specializationtimeout": 90,
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -324,16 +339,13 @@ func TestGetInvokeStrategy(t *testing.T) {
 	for i, c := range cases {
 		fmt.Printf("=== Test Case %v ===\n", i)
 
-		app := NewCliApp()
-		set := flag.NewFlagSet("test-cmd", 0)
-		ctx := cli.NewContext(app, set, nil)
+		flags := dummy.TestFlagSet()
 
 		for k, v := range c.testArgs {
-			set.String(k, v, "")
-			ctx.Set(k, v)
+			flags.Set(k, v)
 		}
 
-		strategy, err := getInvokeStrategy(ctx, c.existingInvokeStrategy)
+		strategy, err := getInvokeStrategy(flags, c.existingInvokeStrategy)
 		if c.expectError {
 			assert.NotNil(t, err)
 			if err != nil {
