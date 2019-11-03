@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/function"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/kubewatch"
+	"github.com/fission/fission/pkg/fission-cli/cmd/mqtrigger"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	plugincmd "github.com/fission/fission/pkg/fission-cli/cmd/plugin"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
@@ -189,11 +190,10 @@ func NewCliApp() *cli.App {
 	mqtMaxRetries := cli.IntFlag{Name: "maxretries", Value: 0, Usage: "Maximum number of times the function will be retried upon failure (optional; default is 0)"}
 	mqtMsgContentType := cli.StringFlag{Name: "contenttype, c", Value: "application/json", Usage: "Content type of messages that publish to the topic (optional)"}
 	mqtSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create Message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, fnNamespaceFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag, mqtErrorTopicFlag, mqtMaxRetries, mqtMsgContentType, specSaveFlag}, Action: mqtCreate},
-		{Name: "get", Usage: "Get message queue trigger", Flags: []cli.Flag{triggerNamespaceFlag}, Action: mqtGet},
-		{Name: "update", Usage: "Update message queue trigger", Flags: []cli.Flag{mqtNameFlag, triggerNamespaceFlag, mqtTopicFlag, mqtRespTopicFlag, mqtErrorTopicFlag, mqtMaxRetries, mqtFnNameFlag, mqtMsgContentType}, Action: mqtUpdate},
-		{Name: "delete", Usage: "Delete message queue trigger", Flags: []cli.Flag{mqtNameFlag, triggerNamespaceFlag}, Action: mqtDelete},
-		{Name: "list", Usage: "List message queue triggers", Flags: []cli.Flag{mqtMQTypeFlag, triggerNamespaceFlag}, Action: mqtList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create Message queue trigger", Flags: []cli.Flag{mqtNameFlag, mqtFnNameFlag, fnNamespaceFlag, mqtMQTypeFlag, mqtTopicFlag, mqtRespTopicFlag, mqtErrorTopicFlag, mqtMaxRetries, mqtMsgContentType, specSaveFlag}, Action: urfavecli.Wrapper(mqtrigger.Create)},
+		{Name: "update", Usage: "Update message queue trigger", Flags: []cli.Flag{mqtNameFlag, triggerNamespaceFlag, mqtTopicFlag, mqtRespTopicFlag, mqtErrorTopicFlag, mqtMaxRetries, mqtFnNameFlag, mqtMsgContentType}, Action: urfavecli.Wrapper(mqtrigger.Update)},
+		{Name: "delete", Usage: "Delete message queue trigger", Flags: []cli.Flag{mqtNameFlag, triggerNamespaceFlag}, Action: urfavecli.Wrapper(mqtrigger.Delete)},
+		{Name: "list", Usage: "List message queue triggers", Flags: []cli.Flag{mqtMQTypeFlag, triggerNamespaceFlag}, Action: urfavecli.Wrapper(mqtrigger.List)},
 	}
 
 	// Recorders
