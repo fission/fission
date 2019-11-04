@@ -261,6 +261,8 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		a.logger.Error("failed parse url to establish proxy to database for function logs",
 			zap.Error(err),
 			zap.String("database_url", dbCnf.httpURL))
+		a.respondWithError(w, err)
+		return
 	}
 	// set up proxy server director
 	director := func(req *http.Request) {
@@ -269,6 +271,7 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = svcUrl.Scheme
 		req.URL.Host = svcUrl.Host
 		req.URL.Path = svcUrl.Path
+		req.Host = svcUrl.Host
 		// set up http basic auth for database authentication
 		req.SetBasicAuth(dbCnf.username, dbCnf.password)
 	}

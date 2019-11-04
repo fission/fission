@@ -69,6 +69,7 @@ func (api *API) StorageServiceProxy(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = ssUrl.Scheme
 		req.URL.Host = ssUrl.Host
 		req.URL.Path = "/v1/archive"
+		req.Host = ssUrl.Host
 	}
 	proxy := &httputil.ReverseProxy{
 		Director: director,

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
+	"github.com/pkg/errors"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/log"
@@ -143,7 +144,7 @@ func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Respon
 	queryURL.Path = path.Clean(fmt.Sprintf("%s/proxy/%s", queryURL.Path, INFLUXDB))
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error creating request for log proxy")
 	}
 
 	parametersBytes, err := json.Marshal(query.Parameters)
