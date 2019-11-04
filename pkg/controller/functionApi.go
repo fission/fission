@@ -18,7 +18,6 @@ package controller
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -30,6 +29,7 @@ import (
 	restfulspec "github.com/emicklei/go-restful-openapi"
 	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -258,9 +258,12 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 
 	svcUrl, err := url.Parse(dbCnf.httpURL)
 	if err != nil {
-		a.logger.Error("failed parse url to establish proxy to database for function logs",
+		msg := "failed parse url to establish proxy to database for function logs"
+		a.logger.Error(msg,
 			zap.Error(err),
 			zap.String("database_url", dbCnf.httpURL))
+		a.respondWithError(w, errors.Wrap(err, msg))
+		return
 	}
 	// set up proxy server director
 	director := func(req *http.Request) {
@@ -269,6 +272,7 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = svcUrl.Scheme
 		req.URL.Host = svcUrl.Host
 		req.URL.Path = svcUrl.Path
+		req.Host = svcUrl.Host
 		// set up http basic auth for database authentication
 		req.SetBasicAuth(dbCnf.username, dbCnf.password)
 	}

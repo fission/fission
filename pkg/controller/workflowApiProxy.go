@@ -24,6 +24,7 @@ func (api *API) WorkflowApiserverProxy(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = ssUrl.Scheme
 		req.URL.Host = ssUrl.Host
 		req.URL.Path = path
+		req.Host = ssUrl.Host
 	}
 	proxy := &httputil.ReverseProxy{
 		Director: director,

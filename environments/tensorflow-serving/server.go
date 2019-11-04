@@ -212,6 +212,7 @@ func main() {
 			req.URL.Scheme = "http"
 			req.URL.Host = "localhost:8501"
 			req.URL.Path = fmt.Sprintf("/v1/models/%v:%v", MODEL_NAME, API_TYPE)
+			req.Host = "localhost:8501"
 		}
 
 		proxy := &httputil.ReverseProxy{
