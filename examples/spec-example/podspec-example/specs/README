@@ -40,14 +40,3 @@ All resources created by 'fission spec apply' are annotated with this UID.  Reso
 the cluster that are _not_ annotated with this UID are never modified or deleted by
 fission.
 
-env-python.yaml
----------------
-
-We created the `env-python.yaml`, fission environment spec file using below command
-```
-fission env create --name python --image fission/python-env --builder fission/python-builder --spec
-```
-and changed the yaml file to have `podspec` for builder fo the environment.
-
-If we create this environment, the builder pod that will be created will have the `PodSpec` that 
-we have mentioned for builder in the environment spec.
