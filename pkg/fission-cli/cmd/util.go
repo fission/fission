@@ -129,7 +129,7 @@ func GetSpecDir(flags cli.Input) string {
 func GetMetadata(nameFlagText string, namespaceFlagText string, flags cli.Input) (*metav1.ObjectMeta, error) {
 	name := flags.String(nameFlagText)
 	if len(name) == 0 {
-		return nil, errors.New("need a resource name, use --name")
+		return nil, errors.Errorf("need a resource name, use --%v", nameFlagText)
 	}
 
 	ns := flags.String(namespaceFlagText)
