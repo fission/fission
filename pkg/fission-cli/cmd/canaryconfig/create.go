@@ -25,7 +25,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
@@ -36,8 +35,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -68,7 +71,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	}
 
 	// check that the trigger exists in the same namespace.
-	m, err := cmd.GetMetadata("httptrigger", "fnNamespace", flags)
+	m, err := util.GetMetadata("httptrigger", "fnNamespace", flags)
 	if err != nil {
 		return errors.Wrap(err, "error finding http trigger in given namespace")
 	}
@@ -101,7 +104,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		return errors.Wrap(err, "error checking functions existence")
 	}
 
-	canaryMetadata, err := cmd.GetMetadata("name", "fnNamespace", flags)
+	canaryMetadata, err := util.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}

@@ -21,9 +21,11 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,17 +34,23 @@ type ListSubCommand struct {
 }
 
 func List(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := ListSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
 
 func (opts *ListSubCommand) do(flags cli.Input) error {
-	envNamespace := flags.String(cmd.ENVIRONMENT_NAMESPACE)
+	envNamespace := flags.String(flag.ENVIRONMENT_NAMESPACE)
 
 	envs, err := opts.client.EnvironmentList(envNamespace)
-	util.CheckErr(err, "list environments")
+	if err != nil {
+		return errors.Wrap(err, "error listing environments")
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")

@@ -31,9 +31,9 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generator/encoder"
 	v1generator "github.com/fission/fission/pkg/generator/v1"
 )
@@ -347,14 +347,17 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 			packages[MapKey(pkgMeta)] = true
 		}
 
-		client := cmd.GetServer(flags)
+		client, err := util.GetServer(flags)
+		if err != nil {
+			return err
+		}
 		for _, cm := range f.Spec.ConfigMaps {
 			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
 				Name:      cm.Name,
 				Namespace: cm.Namespace,
 			})
 			if k8serrors.IsNotFound(err) {
-				log.Warn(fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
+				consolemsg.Warn(fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
 			}
 		}
 
@@ -364,7 +367,7 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 				Namespace: s.Namespace,
 			})
 			if k8serrors.IsNotFound(err) {
-				log.Warn(fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
+				consolemsg.Warn(fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
 			}
 
 		}
@@ -392,7 +395,7 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 		}
 
 		if len(t.Spec.Host) > 0 {
-			log.Warn(fmt.Sprintf("Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details"))
+			consolemsg.Warn(fmt.Sprintf("Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details"))
 		}
 
 		result = multierror.Append(result, t.Validate())
@@ -427,25 +430,25 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 	for _, e := range fr.Environments {
 		environments[fmt.Sprintf("%s:%s", e.Metadata.Name, e.Metadata.Namespace)] = struct{}{}
 		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
-			log.Warn("You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
+			consolemsg.Warn("You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 		}
 		// Unlike CLI can change the environment version silently,
 		// we have to warn the user to modify spec file when this takes place.
 		if e.Spec.Version < 3 && e.Spec.Poolsize != 0 {
-			log.Warn("Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool.")
+			consolemsg.Warn("Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool.")
 		}
 	}
 
 	for _, f := range fr.Functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-			log.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
+			consolemsg.Warn(fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
-			log.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
+			consolemsg.Warn(fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
 		}
 		if f.Spec.FunctionTimeout <= 0 {
-			log.Warn(fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
+			consolemsg.Warn(fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
 		}
 	}
 
@@ -574,7 +577,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 	default:
 		// no need to error out just because there's some extra files around;
 		// also good for compatibility.
-		log.Warn(fmt.Sprintf("Ignoring unknown type %v in %v", tm.Kind, loc))
+		consolemsg.Warn(fmt.Sprintf("Ignoring unknown type %v in %v", tm.Kind, loc))
 	}
 
 	// add to source map, check for duplicates

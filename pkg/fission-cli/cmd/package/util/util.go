@@ -26,11 +26,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
@@ -46,18 +46,25 @@ func UploadArchiveFile(ctx context.Context, client *client.Client, fileName stri
 
 	if size < types.ArchiveLiteralSizeLimit {
 		archive.Type = fv1.ArchiveTypeLiteral
-		archive.Literal = GetContents(fileName)
+		archive.Literal, err = GetContents(fileName)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
 		ssClient := storageSvcClient.MakeClient(u)
 
 		// TODO add a progress bar
 		id, err := ssClient.Upload(ctx, fileName, nil)
-		util.CheckErr(err, fmt.Sprintf("upload file %v", fileName))
+		if err != nil {
+			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
+		}
 
 		storageSvc, err := client.GetSvcURL("application=fission-storage")
 		storageSvcURL := "http://" + storageSvc
-		util.CheckErr(err, "get fission storage service name")
+		if err != nil {
+			return nil, errors.Wrapf(err, "error getting fission storage service name")
+		}
 
 		// We make a new client with actual URL of Storage service so that the URL is not
 		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
@@ -68,7 +75,9 @@ func UploadArchiveFile(ctx context.Context, client *client.Client, fileName stri
 		archive.URL = archiveURL
 
 		csum, err := utils.GetFileChecksum(fileName)
-		util.CheckErr(err, fmt.Sprintf("calculate checksum for file %v", fileName))
+		if err != nil {
+			return nil, errors.Wrapf(err, "calculate checksum for file %v", fileName)
+		}
 
 		archive.Checksum = *csum
 	}
@@ -76,32 +85,37 @@ func UploadArchiveFile(ctx context.Context, client *client.Client, fileName stri
 	return &archive, nil
 }
 
-func GetContents(filePath string) []byte {
-	var code []byte
-	var err error
-
-	code, err = ioutil.ReadFile(filePath)
-	util.CheckErr(err, fmt.Sprintf("read %v", filePath))
-	return code
+func GetContents(filePath string) ([]byte, error) {
+	code, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error reading %v", filePath)
+	}
+	return code, nil
 }
 
 // DownloadToTempFile fetches archive file from arbitrary url
 // and write it to temp file for further usage
-func DownloadToTempFile(fileUrl string) string {
+func DownloadToTempFile(fileUrl string) (string, error) {
 	reader, err := DownloadURL(fileUrl)
-	util.CheckErr(err, fmt.Sprintf("download from url: %v", fileUrl))
+	if err != nil {
+		return "", errors.Wrapf(err, "error downloading from url: %v", fileUrl)
+	}
 	defer reader.Close()
 
 	tmpDir, err := utils.GetTempDir()
-	util.CheckErr(err, "create temp directory")
+	if err != nil {
+		return "", errors.Wrapf(err, "error creating temp directory %v", tmpDir)
+	}
 
 	tmpFilename := uuid.NewV4().String()
 	destination := filepath.Join(tmpDir, tmpFilename)
 
 	err = WriteArchiveToFile(destination, reader)
-	util.CheckErr(err, "write archive to file")
+	if err != nil {
+		return "", errors.Wrapf(err, "error writing archive to file %v", destination)
+	}
 
-	return destination
+	return destination, nil
 }
 
 // DownloadURL downloads file from given url
@@ -146,16 +160,18 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 }
 
 // DownloadStoragesvcURL downloads and return archive content with given storage service url
-func DownloadStoragesvcURL(client *client.Client, fileUrl string) io.ReadCloser {
+func DownloadStoragesvcURL(client *client.Client, fileUrl string) (io.ReadCloser, error) {
 	u, err := url.ParseRequestURI(fileUrl)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	// replace in-cluster storage service host with controller server url
 	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage/" + u.RequestURI()
 	reader, err := DownloadURL(fileDownloadUrl)
+	if err != nil {
+		return nil, errors.Wrapf(err, fmt.Sprintf("error downloading from storage service url: %v", fileUrl))
+	}
 
-	util.CheckErr(err, fmt.Sprintf("download from storage service url: %v", fileUrl))
-	return reader
+	return reader, nil
 }

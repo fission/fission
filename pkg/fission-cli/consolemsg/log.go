@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package log
+package consolemsg
 
 import (
 	"fmt"
@@ -27,8 +27,8 @@ var (
 )
 
 func Fatal(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("Fatal error: %v\n", msg))
-	os.Exit(1)
+	//os.Stderr.WriteString(fmt.Sprintf("Fatal error: %v\n", msg))
+	//os.Exit(1)
 }
 
 func Warn(msg interface{}) {

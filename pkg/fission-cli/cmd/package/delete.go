@@ -24,7 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -36,8 +36,12 @@ type DeleteSubCommand struct {
 }
 
 func Delete(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := DeleteSubCommand{
-		client: cmdutils.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }

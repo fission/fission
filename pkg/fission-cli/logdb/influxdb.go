@@ -30,7 +30,6 @@ import (
 	"github.com/pkg/errors"
 
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/fission-cli/log"
 )
 
 const (
@@ -84,7 +83,7 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 	logEntries := []LogEntry{}
 	response, err := influx.query(query)
 	if err != nil {
-		return logEntries, err
+		return nil, err
 	}
 	for _, r := range response.Results {
 		for _, series := range r.Series {
@@ -108,11 +107,11 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 			for _, row := range series.Values {
 				t, err := time.Parse(time.RFC3339, row[0].(string))
 				if err != nil {
-					log.Fatal(err)
+					return nil, err
 				}
 				seqNum, err := strconv.Atoi(row[seq].(string))
 				if err != nil {
-					return logEntries, err
+					return nil, err
 				}
 				entry := LogEntry{
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response

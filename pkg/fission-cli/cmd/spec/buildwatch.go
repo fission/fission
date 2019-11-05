@@ -19,13 +19,13 @@ package spec
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -68,7 +68,10 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 
 		// pull list of packages (TODO: convert to watch)
 		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
-		util.CheckErr(err, "Getting list of packages")
+		if err != nil {
+			fmt.Printf("Getting list of packages: %v", err)
+			os.Exit(1)
+		}
 
 		// find packages that (a) are in the app spec and (b) have an interesting
 		// build status (either succeeded or failed; not "none")

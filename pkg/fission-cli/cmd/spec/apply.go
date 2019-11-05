@@ -34,10 +34,10 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
@@ -57,8 +57,12 @@ type ApplySubCommand struct {
 // etc, while doing an apply, they will get a partially applied deployment.  However,
 // they can retry their apply command once they're back online.
 func Apply(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := ApplySubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -68,7 +72,7 @@ func (opts *ApplySubCommand) do(flags cli.Input) error {
 }
 
 func (opts *ApplySubCommand) run(flags cli.Input) error {
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 
 	deleteResources := flags.Bool("delete")
 	watchResources := flags.Bool("watch")
@@ -85,35 +89,50 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 	if watchResources {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
-		util.CheckErr(err, "create file watcher")
+		if err != nil {
+			return errors.Wrap(err, "error creating file watcher")
+		}
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-			util.CheckErr(err, "scan project files")
+			if err != nil {
+				return errors.Wrap(err, "error scanning project files")
+			}
 
 			if ignoreFile(path) {
 				return nil
 			}
+
 			err = watcher.Add(path)
-			util.CheckErr(err, fmt.Sprintf("watch path %v", path))
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("error watching path %v", path))
+			}
 			return nil
 		})
-		util.CheckErr(err, "scan files to watch")
+		if err != nil {
+			return errors.Wrap(err, "error scanning files to watch")
+		}
 	}
 
 	for {
 		// read all specs
 		fr, err := ReadSpecs(specDir)
-		util.CheckErr(err, "read specs")
+		if err != nil {
+			return errors.Wrap(err, "error reading specs")
+		}
 
 		// validate
 		err = fr.Validate(flags)
-		util.CheckErr(err, "validate specs")
+		if err != nil {
+			return errors.Wrap(err, "error validating specs")
+		}
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(opts.client, specDir, fr, deleteResources)
-		util.CheckErr(err, "apply specs")
+		if err != nil {
+			return errors.Wrap(err, "error applying specs")
+		}
 		printApplyStatus(as)
 
 		if watchResources || waitForBuild {
@@ -146,7 +165,6 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 				if ignoreFile(e.Name) {
 					continue waitloop
 				}
-
 				fmt.Printf("Noticed a file change, reapplying specs...\n")
 
 				// Builds that finish after this cancellation will be
@@ -154,11 +172,17 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 				pkgWatchCancel()
 
 				err = waitForFileWatcherToSettleDown(watcher)
-				util.CheckErr(err, "watching files")
-
+				if err != nil {
+					return errors.Wrap(err, "error watching files")
+				}
 				break waitloop
+
 			case err := <-watcher.Errors:
-				util.CheckErr(err, "watching files")
+				pkgWatchCancel()
+
+				if err != nil {
+					return errors.Wrap(err, "error watching files")
+				}
 			}
 		}
 	}
@@ -406,7 +430,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 			absGlob := rootDir + "/" + relativeGlob
 			f, err := filepath.Glob(absGlob)
 			if err != nil {
-				log.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
+				consolemsg.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
 				return nil, err
 			}
 			files = append(files, f...)
@@ -454,7 +478,10 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 
 	// figure out if we're making a literal or a URL-based archive
 	if size < types.ArchiveLiteralSizeLimit {
-		contents := pkgutil.GetContents(archiveFileName)
+		contents, err := pkgutil.GetContents(archiveFileName)
+		if err != nil {
+			return nil, err
+		}
 		return &fv1.Archive{
 			Type:    fv1.ArchiveTypeLiteral,
 			Literal: contents,

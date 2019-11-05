@@ -30,11 +30,11 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -50,8 +50,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -79,10 +83,10 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		toSpec = true
 		opts.specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 
 	// check for unique function names within a namespace
-	metadata, err := cmd.GetMetadata("name", "fnNamespace", flags)
+	metadata, err := util.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
@@ -110,7 +114,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	if err != nil {
 		return err
 	}
-	resourceReq, err := cmd.GetResourceReqs(flags, &apiv1.ResourceRequirements{})
+	resourceReq, err := util.GetResourceReqs(flags, &apiv1.ResourceRequirements{})
 	if err != nil {
 		return err
 	}
@@ -129,7 +133,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		pkgMetadata = &pkg.Metadata
 		envName = pkg.Spec.Environment.Name
 		if envName != flags.String("env") {
-			log.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
+			consolemsg.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
 		}
 		envNamespace = pkg.Spec.Environment.Namespace
 	} else {
@@ -147,7 +151,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 			})
 			if err != nil {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
-					log.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
+					consolemsg.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
 				} else {
 					return errors.Wrap(err, "error retrieving environment information")
 				}
@@ -192,7 +196,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 			})
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
-					log.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+					consolemsg.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 				} else {
 					return errors.Wrap(err, "error checking secret")
 				}
@@ -216,7 +220,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 			})
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
-					log.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+					consolemsg.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 				} else {
 					return errors.Wrap(err, "error checking configmap")
 				}
@@ -353,7 +357,7 @@ func getInvokeStrategy(flags cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		}
 
 		if flags.IsSet("mincpu") || flags.IsSet("maxcpu") || flags.IsSet("minmemory") || flags.IsSet("maxmemory") {
-			log.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
+			consolemsg.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
 		}
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,

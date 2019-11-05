@@ -25,7 +25,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetMetaSubCommand struct {
@@ -33,14 +33,18 @@ type GetMetaSubCommand struct {
 }
 
 func GetMeta(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := GetMetaSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
 
 func (opts *GetMetaSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
+	m, err := util.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}

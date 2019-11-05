@@ -22,62 +22,46 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
 )
-
-func GetApiClient(serverUrl string) *client.Client {
-	if len(serverUrl) == 0 {
-		// starts local portforwarder etc.
-		serverUrl = GetServerUrl()
-	}
-
-	isHTTPS := strings.Index(serverUrl, "https://") == 0
-	isHTTP := strings.Index(serverUrl, "http://") == 0
-
-	if !(isHTTP || isHTTPS) {
-		serverUrl = "http://" + serverUrl
-	}
-
-	return client.MakeClient(serverUrl)
-}
 
 func GetFissionNamespace() string {
 	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
 	return fissionNamespace
 }
 
-func GetServerUrl() string {
-	return GetApplicationUrl("application=fission-api")
-}
-
-func GetApplicationUrl(selector string) string {
+func GetApplicationUrl(selector string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		localPort := SetupPortForward(fissionNamespace, "application=fission-api")
+		localPort, err := SetupPortForward(fissionNamespace, selector)
+		if err != nil {
+			return "", err
+		}
 		serverUrl = "http://127.0.0.1:" + localPort
 	} else {
 		serverUrl = fissionUrl
 	}
-	return serverUrl
-}
-
-func CheckErr(err error, msg string) {
-	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to %v: %v", msg, err))
-	}
+	return serverUrl, nil
 }
 
 // KubifyName make a kubernetes compliant name out of an arbitrary string
@@ -88,18 +72,15 @@ func KubifyName(old string) string {
 	newName := strings.ToLower(old)
 
 	// replace disallowed chars with '-'
-	inv, err := regexp.Compile("[^-a-z0-9]")
-	CheckErr(err, "compile regexp")
+	inv, _ := regexp.Compile("[^-a-z0-9]")
 	newName = string(inv.ReplaceAll([]byte(newName), []byte("-")))
 
 	// trim leading non-alphabetic
-	leadingnonalpha, err := regexp.Compile("^[^a-z]+")
-	CheckErr(err, "compile regexp")
+	leadingnonalpha, _ := regexp.Compile("^[^a-z]+")
 	newName = string(leadingnonalpha.ReplaceAll([]byte(newName), []byte{}))
 
 	// trim trailing
-	trailing, err := regexp.Compile("[^a-z0-9]+$")
-	CheckErr(err, "compile regexp")
+	trailing, _ := regexp.Compile("[^a-z0-9]+$")
 	newName = string(trailing.ReplaceAll([]byte(newName), []byte{}))
 
 	// truncate to length
@@ -119,7 +100,7 @@ func KubifyName(old string) string {
 // GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
 // environment variable is empty or doesn't exist, ~/.kube/config is used for
 // the kube config path
-func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
+func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")
@@ -130,7 +111,7 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
 			// In case that user.Current() may be unable to work under some circumstances and return errors like
 			// "user: Current not implemented on darwin/amd64" due to cross-compilation problem. (https://github.com/golang/go/issues/6376).
 			// Instead of doing fatal here, we fallback to get home directory from the environment $HOME.
-			log.Warn(fmt.Sprintf("Could not get the current user's directory (%s), fallback to get it from env $HOME", err))
+			consolemsg.Warn(fmt.Sprintf("Could not get the current user's directory (%s), fallback to get it from env $HOME", err))
 			homeDir = os.Getenv("HOME")
 		} else {
 			homeDir = usr.HomeDir
@@ -138,27 +119,27 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset) {
 		kubeConfigPath = filepath.Join(homeDir, ".kube", "config")
 
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
-			log.Fatal("Couldn't find kubeconfig file. " +
+			return nil, nil, errors.New("Couldn't find kubeconfig file. " +
 				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
 		}
 		loadingRules.ExplicitPath = kubeConfigPath
-		log.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
+		consolemsg.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
 	} else {
-		log.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
+		consolemsg.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
 	}
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		loadingRules, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to build Kubernetes config: %s", err))
+		return nil, nil, errors.Wrap(err, "Failed to build Kubernetes config")
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to connect to Kubernetes: %s", err))
+		return nil, nil, errors.Wrap(err, "Failed to connect to Kubernetes")
 	}
 
-	return config, clientset
+	return config, clientset, nil
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
@@ -199,7 +180,7 @@ func GetVersion(client *client.Client) info.Versions {
 
 	serverInfo, err := client.ServerInfo()
 	if err != nil {
-		log.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+		consolemsg.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
 		serverInfo = &info.ServerInfo{}
 	}
 
@@ -211,4 +192,131 @@ func GetVersion(client *client.Client) info.Versions {
 	// FUTURE: fetch versions of plugins server-side
 
 	return versions
+}
+
+func GetServer(flags cli.Input) (c *client.Client, err error) {
+	serverUrl := flags.GlobalString(flag.FISSION_SERVER)
+	if len(serverUrl) == 0 {
+		// starts local portforwarder etc.
+		serverUrl, err = GetApplicationUrl("application=fission-api")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	isHTTPS := strings.Index(serverUrl, "https://") == 0
+	isHTTP := strings.Index(serverUrl, "http://") == 0
+
+	if !(isHTTP || isHTTPS) {
+		serverUrl = "http://" + serverUrl
+	}
+
+	return client.MakeClient(serverUrl), nil
+}
+
+func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
+	r := &v1.ResourceRequirements{}
+
+	if resReqs != nil {
+		r.Requests = resReqs.Requests
+		r.Limits = resReqs.Limits
+	}
+
+	if len(r.Requests) == 0 {
+		r.Requests = make(map[v1.ResourceName]resource.Quantity)
+	}
+
+	if len(r.Limits) == 0 {
+		r.Limits = make(map[v1.ResourceName]resource.Quantity)
+	}
+
+	e := &multierror.Error{}
+
+	if flags.IsSet(flag.RUNTIME_MINCPU) {
+		mincpu := flags.Int(flag.RUNTIME_MINCPU)
+		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
+		if err != nil {
+			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
+		}
+		r.Requests[v1.ResourceCPU] = cpuRequest
+	}
+
+	if flags.IsSet(flag.RUNTIME_MINMEMORY) {
+		minmem := flags.Int(flag.RUNTIME_MINMEMORY)
+		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
+		if err != nil {
+			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
+		}
+		r.Requests[v1.ResourceMemory] = memRequest
+	}
+
+	if flags.IsSet(flag.RUNTIME_MAXCPU) {
+		maxcpu := flags.Int(flag.RUNTIME_MAXCPU)
+		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
+		if err != nil {
+			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
+		}
+		r.Limits[v1.ResourceCPU] = cpuLimit
+	}
+
+	if flags.IsSet(flag.RUNTIME_MAXMEMORY) {
+		maxmem := flags.Int(flag.RUNTIME_MAXMEMORY)
+		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
+		if err != nil {
+			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
+		}
+		r.Limits[v1.ResourceMemory] = memLimit
+	}
+
+	limitCPU := r.Limits[v1.ResourceCPU]
+	requestCPU := r.Requests[v1.ResourceCPU]
+
+	if limitCPU.IsZero() && !requestCPU.IsZero() {
+		r.Limits[v1.ResourceCPU] = requestCPU
+	} else if limitCPU.Cmp(requestCPU) < 0 {
+		e = multierror.Append(e, fmt.Errorf("MinCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+	}
+
+	limitMem := r.Limits[v1.ResourceMemory]
+	requestMem := r.Requests[v1.ResourceMemory]
+
+	if limitMem.IsZero() && !requestMem.IsZero() {
+		r.Limits[v1.ResourceMemory] = requestMem
+	} else if limitMem.Cmp(requestMem) < 0 {
+		e = multierror.Append(e, fmt.Errorf("MinMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+	}
+
+	if e.ErrorOrNil() != nil {
+		return nil, e
+	}
+
+	return &v1.ResourceRequirements{
+		Requests: r.Requests,
+		Limits:   r.Limits,
+	}, nil
+}
+
+func GetSpecDir(flags cli.Input) string {
+	specDir := flags.String(flag.SPEC_SPECDIR)
+	if len(specDir) == 0 {
+		specDir = "specs"
+	}
+	return specDir
+}
+
+// GetMetadata returns a pointer to ObjectMeta that is populated with resource name and namespace given by the user.
+func GetMetadata(nameFlagText string, namespaceFlagText string, flags cli.Input) (*metav1.ObjectMeta, error) {
+	name := flags.String(nameFlagText)
+	if len(name) == 0 {
+		return nil, errors.Errorf("need a resource name, use --%v", nameFlagText)
+	}
+
+	ns := flags.String(namespaceFlagText)
+
+	m := &metav1.ObjectMeta{
+		Name:      name,
+		Namespace: ns,
+	}
+
+	return m, nil
 }

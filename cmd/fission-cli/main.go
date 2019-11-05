@@ -17,11 +17,16 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"os"
 
 	fcli "github.com/fission/fission/pkg/fission-cli"
 )
 
 func main() {
-	fcli.NewCliApp().Run(os.Args)
+	err := fcli.NewCliApp().Run(os.Args)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err.Error())
+		os.Exit(1)
+	}
 }

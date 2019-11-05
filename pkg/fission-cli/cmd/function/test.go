@@ -30,7 +30,6 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -40,14 +39,18 @@ type TestSubCommand struct {
 }
 
 func Test(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := TestSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
 
 func (opts *TestSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
+	m, err := util.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
@@ -55,8 +58,10 @@ func (opts *TestSubCommand) do(flags cli.Input) error {
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) == 0 {
 		// Portforward to the fission router
-		localRouterPort := util.SetupPortForward(util.GetFissionNamespace(),
-			"application=fission-router")
+		localRouterPort, err := util.SetupPortForward(util.GetFissionNamespace(), "application=fission-router")
+		if err != nil {
+			return err
+		}
 		routerURL = "127.0.0.1:" + localRouterPort
 	} else {
 		routerURL = strings.TrimPrefix(routerURL, "http://")
@@ -158,7 +163,12 @@ func printPodLogs(flags cli.Input) error {
 		return errors.New("need --name argument.")
 	}
 
-	queryURL, err := url.Parse(util.GetServerUrl())
+	u, err := util.GetApplicationUrl("application=fission-api")
+	if err != nil {
+		return err
+	}
+
+	queryURL, err := url.Parse(u)
 	if err != nil {
 		return errors.Wrap(err, "error parsing the base URL")
 	}

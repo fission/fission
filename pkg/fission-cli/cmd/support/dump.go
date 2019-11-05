@@ -27,7 +27,6 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
@@ -43,8 +42,12 @@ type DumpSubCommand struct {
 }
 
 func Dump(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := &DumpSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -71,7 +74,10 @@ func (opts *DumpSubCommand) do(flags cli.Input) error {
 		panic(errors.Wrap(err, "Error creating dump directory for dumping files"))
 	}
 
-	_, k8sClient := util.GetKubernetesClient()
+	_, k8sClient, err := util.GetKubernetesClient()
+	if err != nil {
+		return err
+	}
 
 	ress := map[string]resources.Resource{
 		// kubernetes info

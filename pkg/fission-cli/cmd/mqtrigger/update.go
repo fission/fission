@@ -24,7 +24,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -33,8 +33,12 @@ type UpdateSubCommand struct {
 }
 
 func Update(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := UpdateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -48,7 +52,7 @@ func (opts *UpdateSubCommand) do(flags cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	m, err := cmd.GetMetadata("name", "triggerns", flags)
+	m, err := util.GetMetadata("name", "triggerns", flags)
 	if err != nil {
 		return err
 	}

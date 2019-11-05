@@ -26,9 +26,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -38,8 +37,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -59,7 +62,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	}
 	fnName := flags.String("function")
 	if len(fnName) == 0 {
-		log.Fatal("Need a function name to create a trigger, use --function")
+		return errors.New("Need a function name to create a trigger, use --function")
 	}
 	fnNamespace := flags.String("fnNamespace")
 
@@ -73,23 +76,21 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		mqType = types.MessageQueueTypeASQ
 	case types.MessageQueueTypeKafka:
 		mqType = types.MessageQueueTypeKafka
-
 	default:
-		log.Fatal("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
-
+		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
 	}
 
 	// TODO: check topic availability
 	topic := flags.String("topic")
 	if len(topic) == 0 {
-		log.Fatal("Topic cannot be empty")
+		return errors.New("Topic cannot be empty")
 	}
 	respTopic := flags.String("resptopic")
 
 	if topic == respTopic {
 		// TODO maybe this should just be a warning, perhaps
 		// allow it behind a --force flag
-		log.Fatal("Listen topic should not equal to response topic")
+		return errors.New("Listen topic should not equal to response topic")
 	}
 
 	errorTopic := flags.String("errortopic")
@@ -97,7 +98,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	maxRetries := flags.Int("maxretries")
 
 	if maxRetries < 0 {
-		log.Fatal("Maximum number of retries must be a natural number, default is 0")
+		return errors.New("Maximum number of retries must be a natural number, default is 0")
 	}
 
 	contentType := flags.String("contenttype")

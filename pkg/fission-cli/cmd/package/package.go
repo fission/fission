@@ -61,7 +61,7 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 		// Get files from inputs as number of files decide next steps
 		files, err := utils.FindAllGlobs([]string{path})
 		if err != nil {
-			util.CheckErr(err, "finding all globs")
+			return nil, errors.Wrap(err, "error finding all globs")
 		}
 
 		if len(files) == 0 {
@@ -90,14 +90,18 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 
 			// check if this AUS exists in the specs; if so, don't create a new one
 			fr, err := spec.ReadSpecs(specDir)
-			util.CheckErr(err, "read specs")
+			if err != nil {
+				return nil, errors.Wrap(err, "error reading specs")
+			}
 			if m := fr.SpecExists(aus, false, true); m != nil {
 				fmt.Printf("Re-using previously created archive %v\n", m.Name)
 				aus.Name = m.Name
 			} else {
 				// save the uploadspec
 				err := spec.SpecSave(*aus, specFile)
-				util.CheckErr(err, fmt.Sprintf("write spec file %v", specFile))
+				if err != nil {
+					return nil, errors.Wrapf(err, "write spec file %v", specFile)
+				}
 			}
 
 			// create the archive object
@@ -118,11 +122,18 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 			}, nil
 		}
 		// download the file before we archive it
-		dst := pkgutil.DownloadToTempFile(fileURL)
+		dst, err := pkgutil.DownloadToTempFile(fileURL)
+		if err != nil {
+			return nil, err
+		}
 		includeFiles = []string{dst}
 	}
 
-	archivePath := makeArchiveFile("", includeFiles, noZip)
+	archivePath, err := makeArchiveFile("", includeFiles, noZip)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := context.Background()
 	return pkgutil.UploadArchiveFile(ctx, client, archivePath)
 }
@@ -134,7 +145,7 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 // returned as-is with no zipping.  (This is used for compatibility
 // with v1 envs.)  noZip is IGNORED if there is more than one input
 // file.
-func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) string {
+func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
 
 	// Unique name for the archive
 	archiveName := archiveName(archiveNameHint, archiveInput)
@@ -142,34 +153,34 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput)
 	if err != nil {
-		util.CheckErr(err, "finding all globs")
+		return "", errors.Wrap(err, "error finding all globs")
 	}
 
 	// We have one file; if it's a zip file, no need to archive it
 	if len(files) == 1 {
 		// make sure it exists
 		if _, err := os.Stat(files[0]); err != nil {
-			util.CheckErr(err, fmt.Sprintf("open input file %v", files[0]))
+			return "", errors.Wrapf(err, "open input file %v", files[0])
 		}
 
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
 		if archiver.Zip.Match(files[0]) || noZip {
-			return files[0]
+			return files[0], nil
 		}
 	}
 
 	// For anything else, create a new archive
 	tmpDir, err := utils.GetTempDir()
 	if err != nil {
-		util.CheckErr(err, "create temporary archive directory")
+		return "", errors.Wrap(err, "error create temporary archive directory")
 	}
 
 	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
 	if err != nil {
-		util.CheckErr(err, "create archive file")
+		return "", errors.Wrap(err, "create archive file")
 	}
 
-	return archivePath
+	return archivePath, nil
 }
 
 // Name an archive

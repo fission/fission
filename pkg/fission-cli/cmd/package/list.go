@@ -27,7 +27,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -38,8 +38,12 @@ type ListSubCommand struct {
 }
 
 func List(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := ListSubCommand{
-		client: cmdutils.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }

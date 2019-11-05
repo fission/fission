@@ -23,11 +23,11 @@ import (
 	"path/filepath"
 
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -38,8 +38,12 @@ type InitSubCommand struct {
 }
 
 func Init(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := InitSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -54,13 +58,15 @@ func (opts *InitSubCommand) do(flags cli.Input) error {
 
 func (opts *InitSubCommand) complete(flags cli.Input) error {
 	// Figure out spec directory
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 
 	name := flags.String("name")
 	if len(name) == 0 {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
-		util.CheckErr(err, "get current working directory")
+		if err != nil {
+			return errors.Wrap(err, "error getting current working directory")
+		}
 		basename := filepath.Base(dir)
 		name = util.KubifyName(basename)
 	}
@@ -73,7 +79,9 @@ func (opts *InitSubCommand) complete(flags cli.Input) error {
 	// Create spec dir
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
-	util.CheckErr(err, fmt.Sprintf("create spec directory '%v'", specDir))
+	if err != nil {
+		return errors.Wrapf(err, "create spec directory '%v'", specDir)
+	}
 
 	// Write the deployment config
 	opts.deployConfig = &spectypes.DeploymentConfig{
@@ -94,7 +102,7 @@ func (opts *InitSubCommand) complete(flags cli.Input) error {
 // run just initializes an empty spec directory and adds some
 // sample YAMLs in there that might be useful.
 func (opts *InitSubCommand) run(flags cli.Input) error {
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 
 	// Add a bit of documentation to the spec dir here
 	err := ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)
@@ -103,7 +111,9 @@ func (opts *InitSubCommand) run(flags cli.Input) error {
 	}
 
 	err = writeDeploymentConfig(specDir, opts.deployConfig)
-	util.CheckErr(err, "write deployment config")
+	if err != nil {
+		return errors.Wrap(err, "error writing deployment config")
+	}
 
 	// Other possible things to do here:
 	// - add example specs to the dir to make it easy to manually
