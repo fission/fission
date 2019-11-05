@@ -15,7 +15,7 @@ fi
 
 # Get staticcheck
 STATICCHECK_VERSION=2019.2.3
-if [ ! -f $TOOL_DIR/staticcheck ]
+if [ ! -f $TOOL_DIR/staticcheck ] || (staticcheck -version | grep -v $STATICCHECK_VERSION)
 then
     curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64.tar.gz
     tar xzvf staticcheck_linux_amd64.tar.gz
