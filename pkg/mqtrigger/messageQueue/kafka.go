@@ -69,7 +69,7 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 		version:   kafkaVersion,
 	}
 
-	if tls, _ := strconv.ParseBool(os.Getenv("TLS_ENABLED")); tls == true {
+	if tls, _ := strconv.ParseBool(os.Getenv("TLS_ENABLED")); tls {
 		kafka.tls = true
 
 		authKeys := make(map[string][]byte)

@@ -19,7 +19,6 @@ package utils
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -29,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/mholt/archiver"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,7 +105,7 @@ func FindAllGlobs(inputList []string) ([]string, error) {
 	for _, glob := range inputList {
 		f, err := filepath.Glob(glob)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid glob %v: %v", glob, err)
+			return nil, errors.Errorf("invalid glob %v: %v", glob, err)
 		}
 		files = append(files, f...)
 	}

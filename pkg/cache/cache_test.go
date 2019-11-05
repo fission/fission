@@ -31,9 +31,9 @@ func checkErr(err error) {
 func TestCache(t *testing.T) {
 	c := MakeCache(100*time.Millisecond, 100*time.Millisecond)
 
-	err, _ := c.Set("a", "b")
+	_, err := c.Set("a", "b")
 	checkErr(err)
-	err, _ = c.Set("p", "q")
+	_, err = c.Set("p", "q")
 	checkErr(err)
 
 	val, err := c.Get("a")
@@ -55,7 +55,7 @@ func TestCache(t *testing.T) {
 		log.Panicf("found deleted element")
 	}
 
-	err, _ = c.Set("expires", "42")
+	_, err = c.Set("expires", "42")
 	checkErr(err)
 	time.Sleep(150 * time.Millisecond)
 	_, err = c.Get("expires")

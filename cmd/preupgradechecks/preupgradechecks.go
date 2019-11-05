@@ -218,5 +218,4 @@ func (client *PreUpgradeTaskClient) SetupRoleBindings() {
 
 	client.logger.Info("created rolebindings in default namespace",
 		zap.Strings("role_bindings", []string{types.PackageGetterRB, types.SecretConfigMapGetterRB}))
-	return
 }

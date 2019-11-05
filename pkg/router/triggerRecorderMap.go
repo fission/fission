@@ -50,7 +50,7 @@ func (trmap *triggerRecorderMap) lookup(trigger string) (*fv1.Recorder, error) {
 }
 
 func (trmap *triggerRecorderMap) assign(trigger string, recorder *fv1.Recorder) {
-	err, _ := trmap.cache.Set(trigger, recorder)
+	_, err := trmap.cache.Set(trigger, recorder)
 	if err != nil {
 		if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNameExists {
 			return

@@ -5,8 +5,6 @@ import (
 )
 
 var (
-	metricAddr = ":8080"
-
 	// funcname: the function's name
 	// funcuid: the function's version id
 	coldStarts = prometheus.NewCounterVec(

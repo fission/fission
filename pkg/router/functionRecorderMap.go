@@ -51,7 +51,7 @@ func (frmap *functionRecorderMap) lookup(function string) (*fv1.Recorder, error)
 }
 
 func (frmap *functionRecorderMap) assign(function string, recorder *fv1.Recorder) {
-	err, _ := frmap.cache.Set(function, recorder)
+	_, err := frmap.cache.Set(function, recorder)
 	if err != nil {
 		if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNameExists {
 			return

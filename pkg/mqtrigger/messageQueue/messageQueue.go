@@ -55,7 +55,6 @@ type (
 	MessageQueueTriggerManager struct {
 		logger        *zap.Logger
 		reqChan       chan request
-		mqCfg         MessageQueueConfig
 		triggers      map[string]*triggerSubscription
 		fissionClient *crd.FissionClient
 		messageQueue  MessageQueue

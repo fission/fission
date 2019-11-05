@@ -18,7 +18,6 @@ package storagesvc
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/gorilla/mux"
 	_ "github.com/graymeta/stow/local"
+	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 )
@@ -109,7 +109,7 @@ func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
 	values := r.URL.Query()
 	ids, ok := values["id"]
 	if !ok || len(ids) == 0 {
-		return "", errors.New("Missing `id' query param")
+		return "", errors.New("missing `id' query param")
 	}
 	return ids[0], nil
 }

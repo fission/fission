@@ -136,7 +136,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 			// someone may have deleted the object between us checking if the object is present and deciding to patch
 			// so just create the object again
 			rbObj := makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
-			rbObj, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
+			_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
 			if err == nil {
 				logger.Debug("created rolebinding",
 					zap.String("role_binding", roleBinding),
@@ -263,7 +263,7 @@ func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleB
 			zap.String("role_binding", roleBinding),
 			zap.String("role_binding_namespace", roleBindingNs))
 		rbObj = makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
-		rbObj, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
+		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(rbObj)
 		if k8serrors.IsAlreadyExists(err) {
 			logger.Debug("rolebinding already exists in namespace - adding service account to rolebinding",
 				zap.String("service_account_name", sa),

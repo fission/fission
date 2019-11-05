@@ -84,7 +84,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 
 	// Ignore duplicate build requests
 	key := fmt.Sprintf("%v-%v", srcpkg.Metadata.Name, srcpkg.Metadata.ResourceVersion)
-	err, _ := buildCache.Set(key, srcpkg)
+	_, err := buildCache.Set(key, srcpkg)
 	if err != nil {
 		return
 	}

@@ -154,16 +154,13 @@ func (gp *GenericPool) getDeployLabels() map[string]string {
 
 // choosePodService serializes the choosing of pods
 func (gp *GenericPool) choosePodService() {
-	for {
-		select {
-		case req := <-gp.requestChannel:
-			pod, err := gp._choosePod(req.newLabels)
-			if err != nil {
-				req.responseChannel <- &choosePodResponse{error: err}
-				continue
-			}
-			req.responseChannel <- &choosePodResponse{pod: pod}
+	for req := range gp.requestChannel {
+		pod, err := gp._choosePod(req.newLabels)
+		if err != nil {
+			req.responseChannel <- &choosePodResponse{error: err}
+			continue
 		}
+		req.responseChannel <- &choosePodResponse{pod: pod}
 	}
 }
 
@@ -287,11 +284,13 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 	}
 	isv6 := IsIPv6(podIP)
 	var baseUrl string
-	if isv6 == false {
-		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
-	} else if isv6 == true { // We use bracket if the IP is in IPv6.
+
+	if isv6 { // We use bracket if the IP is in IPv6.
 		baseUrl = fmt.Sprintf("http://[%v]:8000/", podIP)
+	} else {
+		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
 	}
+
 	return baseUrl
 
 }
@@ -477,7 +476,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 			pod := podList.Items[0]
 			multierr := &multierror.Error{}
 			for _, cStatus := range pod.Status.ContainerStatuses {
-				if cStatus.Ready != true {
+				if !cStatus.Ready {
 					multierr = multierror.Append(multierr, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
 				}
 			}

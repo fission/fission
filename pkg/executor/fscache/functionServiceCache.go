@@ -68,15 +68,13 @@ type (
 		requestChannel chan *fscRequest
 	}
 	fscRequest struct {
-		requestType       fscRequestType
-		address           string
-		kubernetesObjects []apiv1.ObjectReference
-		age               time.Duration
-		responseChannel   chan *fscResponse
+		requestType     fscRequestType
+		address         string
+		age             time.Duration
+		responseChannel chan *fscResponse
 	}
 	fscResponse struct {
 		objects []*FuncSvc
-		deleted bool
 		error
 	}
 )
@@ -180,7 +178,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 }
 
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
-	err, existing := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
+	existing, err := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {
 		if IsNameExistError(err) {
 			f := existing.(*FuncSvc)
@@ -199,7 +197,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 
 	// Add to byAddress cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	err, _ = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
+	_, err = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
 	if err != nil {
 		if IsNameExistError(err) {
 			err = nil
@@ -211,7 +209,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 
 	// Add to byFunctionUID cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	err, _ = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
+	_, err = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
 	if err != nil {
 		if IsNameExistError(err) {
 			err = nil
@@ -257,7 +255,7 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	fsc.byFunctionUID.Delete(fsvc.Function.UID)
 
 	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
-	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Now().Sub(fsvc.Ctime).Seconds())
+	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Since(fsvc.Ctime).Seconds())
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
 }
 

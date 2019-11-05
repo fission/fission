@@ -53,7 +53,6 @@ type (
 		builderManagerUrl string
 		workflowApiUrl    string
 		functionNamespace string
-		useIstio          bool
 		featureStatus     map[string]string
 	}
 
@@ -167,7 +166,7 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, info.ApiInfo().String())
+	w.Write([]byte(info.ApiInfo().String()))
 }
 
 func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {

@@ -159,7 +159,7 @@ func (c *Cache) Get(key interface{}) (interface{}, error) {
 
 // if key exists in the cache, the new value is NOT set; instead an
 // error and the old value are returned
-func (c *Cache) Set(key interface{}, value interface{}) (error, interface{}) {
+func (c *Cache) Set(key interface{}, value interface{}) (interface{}, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     SET,
@@ -168,7 +168,7 @@ func (c *Cache) Set(key interface{}, value interface{}) (error, interface{}) {
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.error, resp.existingValue
+	return resp.existingValue, resp.error
 }
 
 func (c *Cache) Delete(key interface{}) error {

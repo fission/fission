@@ -143,10 +143,6 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	return nil
 }
 
-func (deploy *NewDeploy) getDeployment(ns, name string) (*appsv1.Deployment, error) {
-	return deploy.kubernetesClient.AppsV1().Deployments(ns).Get(name, metav1.GetOptions{})
-}
-
 func (deploy *NewDeploy) updateDeployment(deployment *appsv1.Deployment, ns string) error {
 	_, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Update(deployment)
 	return err

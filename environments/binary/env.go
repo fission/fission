@@ -38,10 +38,8 @@ func (e *Env) ToStringEnv() []string {
 
 func NewEnv(stringEnv []string) *Env {
 	env := &Env{}
-	if stringEnv != nil {
-		for _, rawEnvVar := range stringEnv {
-			env.SetEnv(FromString(rawEnvVar))
-		}
+	for _, rawEnvVar := range stringEnv {
+		env.SetEnv(FromString(rawEnvVar))
 	}
 	return env
 }

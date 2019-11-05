@@ -28,7 +28,7 @@ import (
 type ArchivePruner struct {
 	logger        *zap.Logger
 	crdClient     *crd.FissionClient
-	archiveChan   chan (string)
+	archiveChan   chan string
 	stowClient    *StowClient
 	pruneInterval time.Duration
 }
@@ -53,18 +53,15 @@ func MakeArchivePruner(logger *zap.Logger, stowClient *StowClient, pruneInterval
 // pruneArchives listens to archiveChannel for archive ids that need to be deleted
 func (pruner *ArchivePruner) pruneArchives() {
 	pruner.logger.Debug("listening to archiveChannel to prune archives")
-	for {
-		select {
-		case archiveID := <-pruner.archiveChan:
-			pruner.logger.Info("sending delete request for archive",
+	for archiveID := range pruner.archiveChan {
+		pruner.logger.Info("sending delete request for archive",
+			zap.String("archive_id", archiveID))
+		if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
+			// logging the error and continuing with other deletions.
+			// hopefully this archive will be deleted in the next iteration.
+			pruner.logger.Error("ignoring error while deleting archive",
+				zap.Error(err),
 				zap.String("archive_id", archiveID))
-			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
-				// logging the error and continuing with other deletions.
-				// hopefully this archive will be deleted in the next iteration.
-				pruner.logger.Error("ignoring error while deleting archive",
-					zap.Error(err),
-					zap.String("archive_id", archiveID))
-			}
 		}
 	}
 }
@@ -134,8 +131,6 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 	for _, archiveID = range orphanedArchives {
 		pruner.insertArchive(archiveID)
 	}
-
-	return
 }
 
 // Start starts a go routine that listens to a channel for archive IDs that need to deleted.
@@ -144,12 +139,9 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 func (pruner *ArchivePruner) Start() {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
 	go pruner.pruneArchives()
-	for {
-		select {
-		case <-ticker.C:
-			// This method fetches unused archive IDs and sends them to archiveChannel for deletion
-			// silencing the errors, hoping they go away in next iteration.
-			pruner.getOrphanArchives()
-		}
+	for range ticker.C {
+		// This method fetches unused archive IDs and sends them to archiveChannel for deletion
+		// silencing the errors, hoping they go away in next iteration.
+		pruner.getOrphanArchives()
 	}
 }

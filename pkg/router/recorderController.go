@@ -113,7 +113,7 @@ func (rs *RecorderSet) disableRecorder(r *fv1.Recorder) {
 }
 
 func (rs *RecorderSet) updateRecorder(old *fv1.Recorder, newer *fv1.Recorder) {
-	if newer.Spec.Enabled == true {
+	if newer.Spec.Enabled {
 		rs.newRecorder(newer) // TODO: Test this
 	} else {
 		rs.disableRecorder(old)

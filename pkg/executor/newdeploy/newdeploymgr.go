@@ -61,7 +61,6 @@ type (
 		runtimeImagePullPolicy apiv1.PullPolicy
 		namespace              string
 		useIstio               bool
-		collectorEndpoint      string
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
 
@@ -523,7 +522,7 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 		}
 	}
 
-	if deployChanged == true {
+	if deployChanged {
 		env, err := deploy.fissionClient.Environments(newFn.Spec.Environment.Namespace).
 			Get(newFn.Spec.Environment.Name)
 		if err != nil {
@@ -622,20 +621,6 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 		types.FUNCTION_NAMESPACE:        fnMeta.Namespace,
 		types.FUNCTION_UID:              string(fnMeta.UID),
 	}
-}
-
-// updateKubeObjRefRV update the resource version of kubeObjectRef with
-// given kind and return error if failed to find the reference.
-func (deploy *NewDeploy) updateKubeObjRefRV(fsvc *fscache.FuncSvc, objKind string, rv string) error {
-	kubeObjs := fsvc.KubernetesObjects
-	for i, obj := range kubeObjs {
-		if obj.Kind == objKind {
-			kubeObjs[i].ResourceVersion = rv
-			return nil
-		}
-	}
-	fsvc.KubernetesObjects = kubeObjs
-	return fmt.Errorf("error finding kubernetes object reference with kind: %v", objKind)
 }
 
 // updateStatus is a function which updates status of update.
