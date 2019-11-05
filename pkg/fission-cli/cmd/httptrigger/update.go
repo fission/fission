@@ -50,7 +50,6 @@ func (opts *UpdateSubCommand) do(flags cli.Input) error {
 	return opts.run(flags)
 }
 
-// complete creates a environment objects and populates it with default value and CLI inputs.
 func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	htName := flags.String("name")
 	if len(htName) == 0 {

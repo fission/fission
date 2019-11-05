@@ -50,7 +50,6 @@ func (opts *DeleteSubCommand) do(flags cli.Input) error {
 	return opts.run(flags)
 }
 
-// complete creates a environment objects and populates it with default value and CLI inputs.
 func (opts *DeleteSubCommand) complete(flags cli.Input) error {
 	opts.triggerName = flags.String("name")
 	opts.functionName = flags.String("function")
