@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,72 +14,95 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fission_cli
+package records
 
 import (
 	"fmt"
 	"os"
 	"text/tabwriter"
 
-	"github.com/urfave/cli"
+	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/redis/build/gen"
+	redisCache "github.com/fission/fission/pkg/redis/build/gen"
 )
 
-func recordsView(c *cli.Context) error {
-	var verbosity int
-	if c.Bool("v") && c.Bool("vv") {
-		log.Fatal("conflicting verbosity levels, use either --v or --vv")
+type ViewSubCommand struct {
+	client *client.Client
+}
+
+func View(flags cli.Input) error {
+	opts := ViewSubCommand{
+		client: cmd.GetServer(flags),
 	}
-	if c.Bool("v") {
+	return opts.do(flags)
+}
+
+func (opts *ViewSubCommand) do(flags cli.Input) error {
+	return opts.run(flags)
+}
+
+func (opts *ViewSubCommand) run(flags cli.Input) error {
+	var verbosity int
+	if flags.Bool("v") && flags.Bool("vv") {
+		return errors.New("conflicting verbosity levels, use either --v or --vv")
+	}
+	if flags.Bool("v") {
 		verbosity = 1
 	}
-	if c.Bool("vv") {
+	if flags.Bool("vv") {
 		verbosity = 2
 	}
 
-	function := c.String("function")
-	trigger := c.String("trigger")
-	from := c.String("from")
-	to := c.String("to")
+	function := flags.String("function")
+	trigger := flags.String("trigger")
+	from := flags.String("from")
+	to := flags.String("to")
 
 	//Refuse multiple filters for now
 	if multipleFiltersSpecified(function, trigger, from+to) {
-		log.Fatal("maximum of one filter is currently supported, either --function, --trigger, or --from,--to")
+		return errors.New("maximum of one filter is currently supported, either --function, --trigger, or --from,--to")
 	}
 
 	if len(function) != 0 {
-		return recordsByFunction(function, verbosity, c)
+		return recordsByFunction(function, verbosity, flags)
 	}
 	if len(trigger) != 0 {
-		return recordsByTrigger(trigger, verbosity, c)
+		return recordsByTrigger(trigger, verbosity, flags)
 	}
 	if len(from) != 0 && len(to) != 0 {
-		return recordsByTime(from, to, verbosity, c)
+		return recordsByTime(from, to, verbosity, flags)
 	}
-	err := recordsAll(verbosity, c)
-	util.CheckErr(err, "view records")
+	err := recordsAll(verbosity, flags)
+	if err != nil {
+		return errors.Wrap(err, "error viewing records")
+	}
 	return nil
 }
 
-func recordsAll(verbosity int, c *cli.Context) error {
-	fc := util.GetApiClient(c.GlobalString("server"))
+func recordsAll(verbosity int, flags cli.Input) error {
+	fc := util.GetApiClient(flags.GlobalString("server"))
 
 	records, err := fc.RecordsAll()
-	util.CheckErr(err, "view records")
+	if err != nil {
+		return errors.Wrap(err, "error viewing records")
+	}
 
 	showRecords(records, verbosity)
 
 	return nil
 }
 
-func recordsByTrigger(trigger string, verbosity int, c *cli.Context) error {
-	fc := util.GetApiClient(c.GlobalString("server"))
+func recordsByTrigger(trigger string, verbosity int, flags cli.Input) error {
+	fc := util.GetApiClient(flags.GlobalString("server"))
 
 	records, err := fc.RecordsByTrigger(trigger)
-	util.CheckErr(err, "view records")
+	if err != nil {
+		return errors.Wrap(err, "error viewing records")
+	}
 
 	showRecords(records, verbosity)
 
@@ -87,22 +110,26 @@ func recordsByTrigger(trigger string, verbosity int, c *cli.Context) error {
 }
 
 // TODO: More accurate function name (function filter)
-func recordsByFunction(function string, verbosity int, c *cli.Context) error {
-	fc := util.GetApiClient(c.GlobalString("server"))
+func recordsByFunction(function string, verbosity int, flags cli.Input) error {
+	fc := util.GetApiClient(flags.GlobalString("server"))
 
 	records, err := fc.RecordsByFunction(function)
-	util.CheckErr(err, "view records")
+	if err != nil {
+		return errors.Wrap(err, "error viewing records")
+	}
 
 	showRecords(records, verbosity)
 
 	return nil
 }
 
-func recordsByTime(from string, to string, verbosity int, c *cli.Context) error {
-	fc := util.GetApiClient(c.GlobalString("server"))
+func recordsByTime(from string, to string, verbosity int, flags cli.Input) error {
+	fc := util.GetApiClient(flags.GlobalString("server"))
 
 	records, err := fc.RecordsByTime(from, to)
-	util.CheckErr(err, "view records")
+	if err != nil {
+		return errors.Wrap(err, "error viewing records")
+	}
 
 	showRecords(records, verbosity)
 

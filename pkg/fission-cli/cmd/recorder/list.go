@@ -14,21 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package httptrigger
+package recorder
 
 import (
+	"fmt"
+	"os"
+	"text/tabwriter"
+
 	"github.com/pkg/errors"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 )
 
 type ListSubCommand struct {
-	client             *client.Client
-	triggerNamespace   string
-	filterFunctionName string
+	client *client.Client
 }
 
 func List(flags cli.Input) error {
@@ -39,35 +40,23 @@ func List(flags cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
-	if err != nil {
-		return err
-	}
 	return opts.run(flags)
 }
 
-func (opts *ListSubCommand) complete(flags cli.Input) error {
-	opts.triggerNamespace = flags.String("triggerNamespace")
-	opts.filterFunctionName = flags.String("function")
-	return nil
-}
-
 func (opts *ListSubCommand) run(flags cli.Input) error {
-	hts, err := opts.client.HTTPTriggerList(opts.triggerNamespace)
+	recorders, err := opts.client.RecorderList("default")
 	if err != nil {
-		return errors.Wrap(err, "error listing HTTP triggers")
+		return errors.Wrap(err, "error listing recorders")
 	}
 
-	var triggers []fv1.HTTPTrigger
-	for _, ht := range hts {
-		// TODO: list canary http triggers as well.
-		if len(opts.filterFunctionName) == 0 ||
-			(len(opts.filterFunctionName) > 0 && opts.filterFunctionName == ht.Spec.FunctionReference.Name) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-			triggers = append(triggers, ht)
-		}
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "ENABLED", "FUNCTIONS", "TRIGGERS", "RETENTION_POLICY", "EVICTION_POLICY")
+	for _, r := range recorders {
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\n",
+			r.Metadata.Name, r.Spec.Enabled, r.Spec.Function, r.Spec.Triggers, r.Spec.RetentionPolicy, r.Spec.EvictionPolicy)
 	}
-
-	printHtSummary(triggers)
+	w.Flush()
 	return nil
 }

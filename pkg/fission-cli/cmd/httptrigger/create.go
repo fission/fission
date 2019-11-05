@@ -18,10 +18,10 @@ package httptrigger
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"net/http"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -55,7 +55,6 @@ func (opts *CreateSubCommand) do(flags cli.Input) error {
 	return opts.run(flags)
 }
 
-// complete creates a environment objects and populates it with default value and CLI inputs.
 func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	functionList := flags.StringSlice("function")
 	functionWeightsList := flags.IntSlice("weight")

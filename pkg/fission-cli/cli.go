@@ -38,6 +38,9 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/mqtrigger"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	plugincmd "github.com/fission/fission/pkg/fission-cli/cmd/plugin"
+	"github.com/fission/fission/pkg/fission-cli/cmd/recorder"
+	"github.com/fission/fission/pkg/fission-cli/cmd/records"
+	"github.com/fission/fission/pkg/fission-cli/cmd/replay"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
 	"github.com/fission/fission/pkg/fission-cli/cmd/timetrigger"
@@ -205,11 +208,11 @@ func NewCliApp() *cli.App {
 	recEnabled := cli.BoolFlag{Name: "enable", Usage: "Enable recorder"}
 	recDisabled := cli.BoolFlag{Name: "disable", Usage: "Disable recorder"}
 	recSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Create recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, specSaveFlag}, Action: recorderCreate},
-		{Name: "get", Usage: "Get recorder", Flags: []cli.Flag{recNameFlag}, Action: recorderGet},
-		{Name: "update", Usage: "Update recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, recEnabled, recDisabled}, Action: recorderUpdate},
-		{Name: "delete", Usage: "Delete recorder", Flags: []cli.Flag{recNameFlag, recorderNamespaceFlag}, Action: recorderDelete},
-		{Name: "list", Usage: "List recorders", Flags: []cli.Flag{}, Action: recorderList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Create recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, specSaveFlag}, Action: urfavecli.Wrapper(recorder.Create)},
+		{Name: "get", Usage: "Get recorder", Flags: []cli.Flag{recNameFlag}, Action: urfavecli.Wrapper(recorder.Get)},
+		{Name: "update", Usage: "Update recorder", Flags: []cli.Flag{recNameFlag, recFnFlag, recTriggersFlag, recEnabled, recDisabled}, Action: urfavecli.Wrapper(recorder.Update)},
+		{Name: "delete", Usage: "Delete recorder", Flags: []cli.Flag{recNameFlag, recorderNamespaceFlag}, Action: urfavecli.Wrapper(recorder.Delete)},
+		{Name: "list", Usage: "List recorders", Flags: []cli.Flag{}, Action: urfavecli.Wrapper(recorder.List)},
 	}
 
 	// View records
@@ -220,7 +223,7 @@ func NewCliApp() *cli.App {
 	verbosityFlag := cli.BoolFlag{Name: "v", Usage: "Toggle verbosity -- view more detailed requests/responses"}
 	vvFlag := cli.BoolFlag{Name: "vv", Usage: "Toggle verbosity -- view raw requests/responses"}
 	recViewSubcommands := []cli.Command{
-		{Name: "view", Usage: "View existing records", Flags: []cli.Flag{filterTimeTo, filterTimeFrom, filterFunction, filterTrigger, verbosityFlag, vvFlag}, Action: recordsView},
+		{Name: "view", Usage: "View existing records", Flags: []cli.Flag{filterTimeTo, filterTimeFrom, filterFunction, filterTrigger, verbosityFlag, vvFlag}, Action: urfavecli.Wrapper(records.View)},
 	}
 
 	// Replay records
@@ -327,7 +330,7 @@ func NewCliApp() *cli.App {
 		{Name: "mqtrigger", Aliases: []string{"mqt", "messagequeue"}, Usage: "Manage message queue triggers for functions", Subcommands: mqtSubcommands},
 		{Name: "recorder", Usage: "Manage recorders for functions", Subcommands: recSubcommands, Hidden: true},
 		{Name: "records", Usage: "View records with optional filters", Subcommands: recViewSubcommands, Hidden: true},
-		{Name: "replay", Usage: "Replay records", Flags: []cli.Flag{reqIDFlag}, Action: replay},
+		{Name: "replay", Usage: "Replay records", Flags: []cli.Flag{reqIDFlag}, Action: urfavecli.Wrapper(replay.Replay)},
 		{Name: "environment", Aliases: []string{"env"}, Usage: "Manage environments", Subcommands: envSubcommands},
 		{Name: "watch", Aliases: []string{"w"}, Usage: "Manage watches", Subcommands: wSubCommands},
 		{Name: "package", Aliases: []string{"pkg"}, Usage: "Manage packages", Subcommands: pkgSubCommands},
