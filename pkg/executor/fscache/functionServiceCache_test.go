@@ -74,12 +74,12 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("Failed to add fsvc: %v", err)
 	}
 
-	f, err := fsc.GetByFunction(fsvc.Function)
+	_, err = fsc.GetByFunction(fsvc.Function)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to get fsvc: %v", err)
 	}
-	f, err = fsc.GetByFunctionUID(fsvc.Function.UID)
+	f, err := fsc.GetByFunctionUID(fsvc.Function.UID)
 	if err != nil {
 		fsc.Log()
 		log.Panicf("Failed to get fsvc by function uid: %v", err)

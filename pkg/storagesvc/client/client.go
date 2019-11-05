@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -30,6 +29,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/net/context/ctxhttp"
 
@@ -127,7 +127,7 @@ func (c *Client) Download(ctx context.Context, id string, filePath string) error
 	// quit if file exists
 	_, err := os.Stat(filePath)
 	if err == nil || !os.IsNotExist(err) {
-		return errors.New(fmt.Sprintf("file already exists: %v", filePath))
+		return errors.Errorf("file already exists: %v", filePath)
 	}
 
 	// create
@@ -175,7 +175,7 @@ func (c *Client) Delete(ctx context.Context, id string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("HTTP error %v", resp.StatusCode))
+		return errors.Errorf("HTTP error %v", resp.StatusCode)
 	}
 
 	return nil

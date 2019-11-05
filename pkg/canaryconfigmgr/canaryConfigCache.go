@@ -68,7 +68,7 @@ func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f *metav1.ObjectMeta) (*C
 
 func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f *metav1.ObjectMeta, value *CanaryProcessingInfo) error {
 	mk := keyFromMetadata(f)
-	err, _ := cancelFuncMap.cache.Set(mk, value)
+	_, err := cancelFuncMap.cache.Set(mk, value)
 	return err
 }
 

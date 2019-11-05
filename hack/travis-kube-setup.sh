@@ -14,12 +14,12 @@ then
 fi
 
 # Get staticcheck
-STATICCHECK_VERSION=2019.1.1
-if [ ! -f $TOOL_DIR/staticcheck ]
+STATICCHECK_VERSION=2019.2.3
+if [ ! -f $TOOL_DIR/staticcheck ] || (staticcheck -version | grep -v $STATICCHECK_VERSION)
 then
-    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64
-    chmod +x staticcheck_linux_amd64
-    mv staticcheck_linux_amd64 $TOOL_DIR/staticcheck
+    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64.tar.gz
+    tar xzvf staticcheck_linux_amd64.tar.gz
+    mv staticcheck/staticcheck $TOOL_DIR/staticcheck
 fi
 
 K8SCLI_DIR=$HOME/k8scli

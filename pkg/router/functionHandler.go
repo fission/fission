@@ -154,8 +154,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 	roundTripper.addForwardedHostHeader(req)
 
 	// TODO: Keep? --> Needed for queries encoded in URL before they're stripped by the proxy
-	var originalUrl url.URL
-	originalUrl = *req.URL
+	originalUrl := *req.URL
 
 	// Iff this request needs to be recorded, we save the body
 	var postedBody string
@@ -245,7 +244,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
 						ContentLength: int64(len(errMsg)),
 						Request:       req,
-						Header:        make(http.Header, 0),
+						Header:        make(http.Header),
 					}, nil
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())

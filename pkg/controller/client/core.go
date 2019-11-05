@@ -22,6 +22,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -84,7 +86,7 @@ func (c *Client) GetSvcURL(label string) (string, error) {
 	}
 
 	if resp == nil {
-		return "", fmt.Errorf("Failed to find service for given label: %v", label)
+		return "", errors.Errorf("failed to find service for given label: %v", label)
 	}
 
 	defer resp.Body.Close()

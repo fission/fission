@@ -25,10 +25,8 @@ package executor
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -97,19 +95,6 @@ func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetP
 		log.Panicf("Failed to create svc: %v", err)
 	}
 	return svc
-}
-
-func httpGet(url string) string {
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Panicf("HTTP Get failed: URL %v: %v", url, err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Panicf("HTTP Get failed to read body: URL %v: %v", url, err)
-	}
-	return string(body)
 }
 
 func TestExecutor(t *testing.T) {

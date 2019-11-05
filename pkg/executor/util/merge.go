@@ -120,17 +120,9 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.Hostname = targetPodSpec.Hostname
 	}
 
-	for _, obj := range targetPodSpec.ImagePullSecrets {
-		srcPodSpec.ImagePullSecrets = append(srcPodSpec.ImagePullSecrets, obj)
-	}
-
-	for _, obj := range targetPodSpec.Tolerations {
-		srcPodSpec.Tolerations = append(srcPodSpec.Tolerations, obj)
-	}
-
-	for _, obj := range targetPodSpec.HostAliases {
-		srcPodSpec.HostAliases = append(srcPodSpec.HostAliases, obj)
-	}
+	srcPodSpec.ImagePullSecrets = append(srcPodSpec.ImagePullSecrets, targetPodSpec.ImagePullSecrets...)
+	srcPodSpec.Tolerations = append(srcPodSpec.Tolerations, targetPodSpec.Tolerations...)
+	srcPodSpec.HostAliases = append(srcPodSpec.HostAliases, targetPodSpec.HostAliases...)
 
 	err = mergo.Merge(&srcPodSpec.NodeSelector, targetPodSpec.NodeSelector)
 	if err != nil {

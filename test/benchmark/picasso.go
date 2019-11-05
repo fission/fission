@@ -72,7 +72,6 @@ func generateContinuousSeries(file string) chart.Series {
 
 	reader := bufio.NewReader(f)
 
-	var points []*MetricPoint
 	var xVals []float64
 	var yVals []float64
 
@@ -94,8 +93,6 @@ func generateContinuousSeries(file string) chart.Series {
 		if point.Type != "Point" || point.Metric != "http_req_duration" {
 			continue
 		}
-
-		points = append(points, point)
 
 		if initTime == nil {
 			initTime = &point.Data.Time
@@ -119,7 +116,7 @@ func generateContinuousSeries(file string) chart.Series {
 
 func generateChart(title string, file string, format chart.RendererProvider, series []chart.Series) error {
 	if series == nil {
-		return errors.New("Series cannot be nil")
+		return errors.New("series cannot be nil")
 	}
 
 	cs := chart.ConcatSeries(series)
@@ -190,16 +187,13 @@ func listJsonFiles(path string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-
 		if strings.HasSuffix(path, ".json") && !info.IsDir() {
 			files = append(files, path)
-			return nil
 		}
-
 		return nil
 	})
 
-	return files, nil
+	return files, err
 }
 
 func main() {

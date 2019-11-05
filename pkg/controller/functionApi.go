@@ -106,12 +106,6 @@ func RegisterFunctionRoute(ws *restful.WebService) {
 			Returns(http.StatusOK, "Only HTTP status returned", nil))
 }
 
-func (a *API) getIstioServiceLabels(fnName string) map[string]string {
-	return map[string]string{
-		"functionName": fnName,
-	}
-}
-
 func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
 	if len(ns) == 0 {
@@ -325,7 +319,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	if len(pods) > 0 {
 		podLogsReq = a.kubernetesClient.CoreV1().Pods(ns).GetLogs(pods[0].ObjectMeta.Name, &podLogOpts)
 	} else {
-		a.respondWithError(w, errors.New("No active pods found"))
+		a.respondWithError(w, errors.New("no active pods found"))
 		return
 	}
 
@@ -341,5 +335,4 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		a.respondWithError(w, err)
 		return
 	}
-	return
 }

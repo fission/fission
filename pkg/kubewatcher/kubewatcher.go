@@ -54,7 +54,6 @@ type (
 		kubernetesClient *kubernetes.Clientset
 		requestChannel   chan *kubeWatcherRequest
 		publisher        publisher.Publisher
-		routerUrl        string
 	}
 
 	watchSubscription struct {

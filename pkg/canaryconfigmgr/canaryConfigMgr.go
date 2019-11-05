@@ -443,6 +443,9 @@ func (canaryCfgMgr *canaryConfigMgr) rollback(canaryConfig *fv1.CanaryConfig, tr
 	functionWeights[canaryConfig.Spec.OldFunction] = 100
 
 	err := canaryCfgMgr.updateHttpTriggerWithRetries(trigger.Metadata.Name, trigger.Metadata.Namespace, functionWeights)
+	if err != nil {
+		return err
+	}
 
 	err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(canaryConfig.Metadata.Name, canaryConfig.Metadata.Namespace,
 		types.CanaryConfigStatusFailed)

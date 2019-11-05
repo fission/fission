@@ -47,7 +47,7 @@ func spamServer(quit chan bool) {
 	for {
 		select {
 		case <-quit:
-			break
+			return
 		default:
 			i = i + 1
 			resp, err := http.Get("http://localhost:3333")

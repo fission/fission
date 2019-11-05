@@ -99,24 +99,24 @@ type (
 	errorCode int
 )
 
-const (
-	ErrorInternal = iota
-
-	ErrorNotAuthorized
-	ErrorNotFound
-	ErrorNameExists
-	ErrorInvalidArgument
-	ErrorNoSpace
-	ErrorNotImplmented
-)
-
-// must match order and len of the above const
-var errorDescriptions = []string{
-	"Internal error",
-	"Not authorized",
-	"Resource not found",
-	"Resource exists",
-	"Invalid argument",
-	"No space",
-	"Not implemented",
-}
+//const (
+//	ErrorInternal = iota
+//
+//	ErrorNotAuthorized
+//	ErrorNotFound
+//	ErrorNameExists
+//	ErrorInvalidArgument
+//	ErrorNoSpace
+//	ErrorNotImplmented
+//)
+//
+//// must match order and len of the above const
+//var errorDescriptions = []string{
+//	"Internal error",
+//	"Not authorized",
+//	"Resource not found",
+//	"Resource exists",
+//	"Invalid argument",
+//	"No space",
+//	"Not implemented",
+//}

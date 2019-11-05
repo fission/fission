@@ -20,13 +20,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
@@ -58,9 +58,9 @@ func (c *Client) delete(relativeUrl string) error {
 	if resp.StatusCode != 200 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return errors.New("Delete failed")
+			return errors.Wrap(err, "error deleting")
 		} else {
-			return errors.New("Delete failed: " + string(body))
+			return errors.Errorf("failed to delete: %v", string(body))
 		}
 	}
 

@@ -68,7 +68,7 @@ func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
 
 func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceUrl *url.URL) {
 	mk := keyFromMetadata(f)
-	err, old := fmap.cache.Set(*mk, serviceUrl)
+	old, err := fmap.cache.Set(*mk, serviceUrl)
 	if err != nil {
 		if *serviceUrl == *(old.(*url.URL)) {
 			return

@@ -151,7 +151,7 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 
 func (fetcher *Fetcher) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, info.BuildInfo().String())
+	w.Write([]byte(info.BuildInfo().String()))
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {

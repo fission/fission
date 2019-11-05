@@ -7,8 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
+	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +15,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type Config struct {
@@ -30,9 +31,9 @@ type Config struct {
 	sharedSecretPath string
 	sharedCfgMapPath string
 
-	dockerRegistryAuthDomain string
-	dockerRegistryUsername   string
-	dockerRegistryPassword   string
+	// dockerRegistryAuthDomain string
+	// dockerRegistryUsername   string
+	// dockerRegistryPassword   string
 
 	serviceAccount string
 
@@ -289,7 +290,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		for _, existingContainer := range podSpec.Containers {
 			existingContainerNames = append(existingContainerNames, existingContainer.Name)
 		}
-		return fmt.Errorf("Could not find main container '%s' in given PodSpec. Found: %v",
+		return errors.Errorf("could not find main container '%s' in given PodSpec. Found: %v",
 			mainContainerName,
 			existingContainerNames)
 	}
