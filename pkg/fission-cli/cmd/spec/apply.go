@@ -165,7 +165,6 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 				if ignoreFile(e.Name) {
 					continue waitloop
 				}
-
 				fmt.Printf("Noticed a file change, reapplying specs...\n")
 
 				// Builds that finish after this cancellation will be
@@ -176,9 +175,11 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 				if err != nil {
 					return errors.Wrap(err, "error watching files")
 				}
-
 				break waitloop
+
 			case err := <-watcher.Errors:
+				pkgWatchCancel()
+
 				if err != nil {
 					return errors.Wrap(err, "error watching files")
 				}

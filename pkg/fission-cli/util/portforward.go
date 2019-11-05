@@ -166,7 +166,7 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	svcs, err := clientset.CoreV1().Services(podNameSpace).
 		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return errors.Wrapf(err, "Error getting %v service :%v", labelSelector)
+		return errors.Wrapf(err, "Error getting %v service", labelSelector)
 	}
 	if len(svcs.Items) == 0 {
 		return errors.Errorf("Service %v not found", labelSelector)
