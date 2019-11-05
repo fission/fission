@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -29,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/urfavecli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/canaryconfig"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	"github.com/fission/fission/pkg/fission-cli/cmd/function"
@@ -45,24 +43,17 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
 	"github.com/fission/fission/pkg/fission-cli/cmd/timetrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/version"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
 	"github.com/fission/fission/pkg/types"
 )
 
 func cliHook(c *cli.Context) error {
-	log.Verbosity = c.Int("verbosity")
-	log.Verbose(2, "Verbosity = 2")
-
-	err := flagValueParser(c.Args())
-	if err != nil {
-		// The cli package wont't print out error, as a workaround we need to
-		// fatal here instead of return it.
-		log.Fatal(err)
-	}
-
-	return nil
+	consolemsg.Verbosity = c.Int("verbosity")
+	consolemsg.Verbose(2, "Verbosity = 2")
+	return flagValueParser(c.Args())
 }
 
 func NewCliApp() *cli.App {
@@ -81,9 +72,9 @@ func NewCliApp() *cli.App {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: cmd.FISSION_SERVER, Value: "", Usage: "Fission server URL"},
-		cli.IntFlag{Name: cmd.GLOBAL_VERBOSITY, Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
-		cli.BoolFlag{Name: cmd.GLOBAL_PLUGIN, Hidden: true},
+		cli.StringFlag{Name: flag.FISSION_SERVER, Value: "", Usage: "Fission server URL"},
+		cli.IntFlag{Name: flag.GLOBAL_VERBOSITY, Value: 1, Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose.)"},
+		cli.BoolFlag{Name: flag.GLOBAL_PLUGIN, Hidden: true},
 	}
 
 	// all resource create commands accept --spec
@@ -91,7 +82,7 @@ func NewCliApp() *cli.App {
 
 	// namespace reference for all objects
 	fnNamespaceFlag := cli.StringFlag{Name: "fnNamespace, fns", Value: metav1.NamespaceDefault, Usage: "Namespace for function object"}
-	envNamespaceFlag := cli.StringFlag{Name: cmd.GetCliFlagName(cmd.ENVIRONMENT_NAMESPACE, cmd.ENVIRONMENT_NAMESPACE_ALIAS), Value: metav1.NamespaceDefault, Usage: "Namespace for environment object"}
+	envNamespaceFlag := cli.StringFlag{Name: flag.GetCliFlagName(flag.ENVIRONMENT_NAMESPACE, flag.ENVIRONMENT_NAMESPACE_ALIAS), Value: metav1.NamespaceDefault, Usage: "Namespace for environment object"}
 	pkgNamespaceFlag := cli.StringFlag{Name: "pkgNamespace, pkgns", Value: metav1.NamespaceDefault, Usage: "Namespace for package object"}
 	triggerNamespaceFlag := cli.StringFlag{Name: "triggerNamespace, triggerns", Value: metav1.NamespaceDefault, Usage: "Namespace for trigger object"}
 	recorderNamespaceFlag := cli.StringFlag{Name: "recorderNamespace, recorderns", Value: metav1.NamespaceDefault, Usage: "Namespace for recorder object"}
@@ -102,13 +93,13 @@ func NewCliApp() *cli.App {
 	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
 
 	// Resource & scale related flags (Used in env and function)
-	minCpu := cli.IntFlag{Name: cmd.RUNTIME_MINCPU, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
-	maxCpu := cli.IntFlag{Name: cmd.RUNTIME_MAXCPU, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
-	minMem := cli.IntFlag{Name: cmd.RUNTIME_MINMEMORY, Usage: "Minimum memory to be assigned to pod (In megabyte)"}
-	maxMem := cli.IntFlag{Name: cmd.RUNTIME_MAXMEMORY, Usage: "Maximum memory to be assigned to pod (In megabyte)"}
-	minScale := cli.IntFlag{Name: cmd.RUNTIME_MINSCALE, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
-	maxScale := cli.IntFlag{Name: cmd.RUNTIME_MAXSCALE, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
-	targetcpu := cli.IntFlag{Name: cmd.RUNTIME_TARGETCPU, Usage: "Target average CPU usage percentage across pods for scaling"}
+	minCpu := cli.IntFlag{Name: flag.RUNTIME_MINCPU, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
+	maxCpu := cli.IntFlag{Name: flag.RUNTIME_MAXCPU, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
+	minMem := cli.IntFlag{Name: flag.RUNTIME_MINMEMORY, Usage: "Minimum memory to be assigned to pod (In megabyte)"}
+	maxMem := cli.IntFlag{Name: flag.RUNTIME_MAXMEMORY, Usage: "Maximum memory to be assigned to pod (In megabyte)"}
+	minScale := cli.IntFlag{Name: flag.RUNTIME_MINSCALE, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)"}
+	maxScale := cli.IntFlag{Name: flag.RUNTIME_MAXSCALE, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)"}
+	targetcpu := cli.IntFlag{Name: flag.RUNTIME_TARGETCPU, Usage: "Target average CPU usage percentage across pods for scaling"}
 	specializationTimeoutFlag := cli.IntFlag{Name: "specializationtimeout, st", Value: 120, Usage: "Timeout for newdeploy to wait for function pod creation"}
 
 	// functions
@@ -230,15 +221,15 @@ func NewCliApp() *cli.App {
 	reqIDFlag := cli.StringFlag{Name: "reqUID", Usage: "Replay a particular request by providing the reqUID (to view reqUIDs, do 'fission records view')"}
 
 	// environments
-	envNameFlag := cli.StringFlag{Name: cmd.RESOURCE_NAME, Usage: "Environment name"}
-	envPoolsizeFlag := cli.IntFlag{Name: cmd.ENVIRONMENT_POOLSIZE, Value: 3, Usage: "Size of the pool"}
-	envImageFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_IMAGE, Usage: "Environment image URL"}
-	envBuilderImageFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_BUILDER, Usage: "Environment builder image URL (optional)"}
-	envBuildCmdFlag := cli.StringFlag{Name: cmd.ENVIRONMENT_BUILDCOMMAND, Usage: "Build command for environment builder to build source package (optional)"}
-	envKeepArchiveFlag := cli.BoolFlag{Name: cmd.ENVIRONMENT_KEEPARCHIVE, Usage: "Keep the archive instead of extracting it into a directory (optional, defaults to false)"}
-	envExternalNetworkFlag := cli.BoolFlag{Name: cmd.ENVIRONMENT_EXTERNAL_NETWORK, Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
-	envTerminationGracePeriodFlag := cli.Int64Flag{Name: cmd.GetCliFlagName(cmd.ENVIRONMENT_GRACE_PERIOD, cmd.ENVIRONMENT_GRACE_PERIOD_ALIAS), Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
-	envVersionFlag := cli.IntFlag{Name: cmd.ENVIRONMENT_VERSION, Value: 1, Usage: "Environment API version (1 means v1 interface)"}
+	envNameFlag := cli.StringFlag{Name: flag.RESOURCE_NAME, Usage: "Environment name"}
+	envPoolsizeFlag := cli.IntFlag{Name: flag.ENVIRONMENT_POOLSIZE, Value: 3, Usage: "Size of the pool"}
+	envImageFlag := cli.StringFlag{Name: flag.ENVIRONMENT_IMAGE, Usage: "Environment image URL"}
+	envBuilderImageFlag := cli.StringFlag{Name: flag.ENVIRONMENT_BUILDER, Usage: "Environment builder image URL (optional)"}
+	envBuildCmdFlag := cli.StringFlag{Name: flag.ENVIRONMENT_BUILDCOMMAND, Usage: "Build command for environment builder to build source package (optional)"}
+	envKeepArchiveFlag := cli.BoolFlag{Name: flag.ENVIRONMENT_KEEPARCHIVE, Usage: "Keep the archive instead of extracting it into a directory (optional, defaults to false)"}
+	envExternalNetworkFlag := cli.BoolFlag{Name: flag.ENVIRONMENT_EXTERNAL_NETWORK, Usage: "Allow environment access external network when istio feature enabled (optional, defaults to false)"}
+	envTerminationGracePeriodFlag := cli.Int64Flag{Name: flag.GetCliFlagName(flag.ENVIRONMENT_GRACE_PERIOD, flag.ENVIRONMENT_GRACE_PERIOD_ALIAS), Value: 360, Usage: "The grace time (in seconds) for pod to perform connection draining before termination (optional)"}
+	envVersionFlag := cli.IntFlag{Name: flag.ENVIRONMENT_VERSION, Value: 1, Usage: "Environment API version (1 means v1 interface)"}
 	envSubcommands := []cli.Command{
 		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, envKeepArchiveFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag, envTerminationGracePeriodFlag, specSaveFlag}, Action: urfavecli.Wrapper(environment.Create)},
 		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: urfavecli.Wrapper(environment.Get)},
@@ -353,39 +344,37 @@ func handleNoCommand(ctx *cli.Context) error {
 			Usage:   ctx.App.Usage,
 		})
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Failed to marshal plugin metadata to JSON: %v", err))
+			return errors.Errorf("Failed to marshal plugin metadata to JSON: %v", err)
 		}
 		fmt.Println(string(bs))
 		return nil
 	}
 	if len(ctx.Args()) > 0 {
-		handleCommandNotFound(ctx, ctx.Args().First())
-		return nil
+		return handleCommandNotFound(ctx, ctx.Args().First())
 	}
 
 	return cli.ShowAppHelp(ctx)
 }
 
-func handleCommandNotFound(ctx *cli.Context, subCommand string) {
+func handleCommandNotFound(ctx *cli.Context, subCommand string) error {
 	pmd, err := plugin.Find(subCommand)
 	if err != nil {
 		switch err {
 		case plugin.ErrPluginNotFound:
 			url, ok := plugin.SearchRegistries(subCommand)
 			if !ok {
-				log.Fatal("No help topic for '" + subCommand + "'")
+				return errors.New("No help topic for '" + subCommand + "'")
 			}
-			log.Fatal(fmt.Sprintf(`Command '%v' is not installed.
+			return errors.Errorf(`Command '%v' is not installed.
 It is available to download at '%v'.
 
 To install it for your local Fission CLI:
 1. Download the plugin binary for your OS from the URL
 2. Ensure that the plugin binary is executable: chmod +x <binary>
-2. Add the plugin binary to your $PATH: mv <binary> /usr/local/bin/fission-%v`, subCommand, url, subCommand))
+2. Add the plugin binary to your $PATH: mv <binary> /usr/local/bin/fission-%v`, subCommand, url, subCommand)
 		default:
-			log.Fatal("Error occurred when invoking " + subCommand + ": " + err.Error())
+			return errors.Wrap(err, "Error occurred when invoking "+subCommand)
 		}
-		os.Exit(1)
 	}
 
 	// Rebuild global arguments string (urfave/cli does not have an option to get the raw input of the global flags)
@@ -403,8 +392,10 @@ To install it for your local Fission CLI:
 
 	err = plugin.Exec(pmd, args)
 	if err != nil {
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 func flagValueParser(args []string) error {
@@ -442,8 +433,7 @@ func flagValueParser(args []string) error {
 	}
 
 	if len(errorFlags) > 0 {
-		e := fmt.Sprintf("Unable to parse flags: %v\nThe argument should have only one input value. Please quote the input value if it contains wildcard characters(*).", strings.Join(errorFlags[:], ", "))
-		return errors.New(e)
+		return errors.Errorf("Unable to parse flags: %v\nThe argument should have only one input value. Please quote the input value if it contains wildcard characters(*).", strings.Join(errorFlags[:], ", "))
 	}
 
 	return nil

@@ -25,12 +25,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -39,16 +40,16 @@ import (
 // is found by looking for a service in the same namespace and using
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
-func SetupPortForward(namespace, labelSelector string) string {
-	log.Verbose(2, "Setting up port forward to %s in namespace %s",
+func SetupPortForward(namespace, labelSelector string) (string, error) {
+	consolemsg.Verbose(2, "Setting up port forward to %s in namespace %s",
 		labelSelector, namespace)
 
 	localPort, err := findFreePort()
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Error finding unused port :%v", err.Error()))
+		return "", errors.Wrap(err, "error finding unused port")
 	}
 
-	log.Verbose(2, "Waiting for local port %v", localPort)
+	consolemsg.Verbose(2, "Waiting for local port %v", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
 			net.JoinHostPort("", localPort), time.Millisecond)
@@ -60,15 +61,16 @@ func SetupPortForward(namespace, labelSelector string) string {
 		time.Sleep(time.Millisecond * 50)
 	}
 
-	log.Verbose(2, "Starting port forward from local port %v", localPort)
+	consolemsg.Verbose(2, "Starting port forward from local port %v", localPort)
 	go func() {
 		err := runPortForward(labelSelector, localPort, namespace)
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Error forwarding to port %v: %s", localPort, err.Error()))
+			fmt.Printf("Error forwarding to port %v: %s", localPort, err.Error())
+			os.Exit(1)
 		}
 	}()
 
-	log.Verbose(2, "Waiting for port forward %v to start...", localPort)
+	consolemsg.Verbose(2, "Waiting for port forward %v to start...", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
 			net.JoinHostPort("", localPort), time.Millisecond)
@@ -79,9 +81,9 @@ func SetupPortForward(namespace, labelSelector string) string {
 		time.Sleep(time.Millisecond * 50)
 	}
 
-	log.Verbose(2, "Port forward from local port %v started", localPort)
+	consolemsg.Verbose(2, "Port forward from local port %v started", localPort)
 
-	return localPort
+	return localPort, nil
 }
 
 func findFreePort() (string, error) {
@@ -102,9 +104,12 @@ func findFreePort() (string, error) {
 
 // runPortForward creates a local port forward to the specified pod
 func runPortForward(labelSelector string, localPort string, ns string) error {
-	config, clientset := GetKubernetesClient()
+	config, clientset, err := GetKubernetesClient()
+	if err != nil {
+		return err
+	}
 
-	log.Verbose(2, "Connected to Kubernetes API")
+	consolemsg.Verbose(2, "Connected to Kubernetes API")
 
 	// if namespace is unset, try to find a pod in any namespace
 	if len(ns) == 0 {
@@ -114,8 +119,10 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	// get the pod; if there is more than one, ask the user to disambiguate
 	podList, err := clientset.CoreV1().Pods(ns).
 		List(meta_v1.ListOptions{LabelSelector: labelSelector})
-	if err != nil || len(podList.Items) == 0 {
-		log.Fatal(fmt.Sprintf("Error getting pod for port-forwarding with label selector %v: %v", labelSelector, err))
+	if err != nil {
+		return errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
+	} else if len(podList.Items) == 0 {
+		return errors.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
 	}
 
 	nsList := make([]string, 0)
@@ -131,8 +138,8 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 			namespaces[p.Namespace] = append(namespaces[p.Namespace], &p)
 		}
 		if len(nsList) > 1 {
-			log.Fatal(fmt.Sprintf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
-				len(namespaces), strings.Join(nsList, " ")))
+			return errors.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+				len(namespaces), strings.Join(nsList, " "))
 		}
 	}
 
@@ -141,7 +148,7 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	ns = nsList[0]
 	pods, ok := namespaces[ns]
 	if !ok {
-		log.Fatal(fmt.Sprintf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns))
+		return errors.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
 	}
 
 	var podName, podNameSpace string
@@ -159,10 +166,10 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	svcs, err := clientset.CoreV1().Services(podNameSpace).
 		List(meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Error getting %v service :%v", labelSelector, err.Error()))
+		return errors.Wrapf(err, "Error getting %v service :%v", labelSelector)
 	}
 	if len(svcs.Items) == 0 {
-		log.Fatal(fmt.Sprintf("Service %v not found", labelSelector))
+		return errors.Errorf("Service %v not found", labelSelector)
 	}
 	service := &svcs.Items[0]
 
@@ -170,7 +177,7 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	for _, servicePort := range service.Spec.Ports {
 		targetPort = servicePort.TargetPort.String()
 	}
-	log.Verbose(2, "Connecting to port %v on pod %v/%v", targetPort, podNameSpace, podNameSpace)
+	consolemsg.Verbose(2, "Connecting to port %v on pod %v/%v", targetPort, podNameSpace, podNameSpace)
 
 	stopChannel := make(chan struct{}, 1)
 	readyChannel := make(chan struct{})
@@ -187,21 +194,19 @@ func runPortForward(labelSelector string, localPort string, ns string) error {
 	// actually start the port-forwarding process here
 	transport, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to connect to Fission service on Kubernetes: %v", err.Error())
-		log.Fatal(msg)
+		return errors.Errorf("Failed to connect to Fission service on Kubernetes")
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
 
 	outStream := os.Stdout
-	if log.Verbosity < 2 {
+	if consolemsg.Verbosity < 2 {
 		outStream = nil
 	}
 	fw, err := portforward.New(dialer, ports, stopChannel, readyChannel, outStream, os.Stderr)
 	if err != nil {
-		msg := fmt.Sprintf("portforward.new errored out :%v", err.Error())
-		log.Fatal(msg)
+		return errors.Wrap(err, "error creating port forwarder")
 	}
 
-	log.Verbose(2, "Starting port forwarder")
+	consolemsg.Verbose(2, "Starting port forwarder")
 	return fw.ForwardPorts()
 }

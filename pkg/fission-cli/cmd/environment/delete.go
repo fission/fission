@@ -19,9 +19,11 @@ package environment
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -30,20 +32,26 @@ type DeleteSubCommand struct {
 }
 
 func Delete(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := DeleteSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
 
 func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+	m, err := util.GetMetadata(flag.RESOURCE_NAME, flag.ENVIRONMENT_NAMESPACE, flags)
 	if err != nil {
 		return err
 	}
 
 	err = opts.client.EnvironmentDelete(m)
-	util.CheckErr(err, "delete environment")
+	if err != nil {
+		return errors.Wrap(err, "error deleting environment")
+	}
 
 	fmt.Printf("environment '%v' deleted\n", m.Name)
 	return nil

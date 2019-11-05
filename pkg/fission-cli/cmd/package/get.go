@@ -27,8 +27,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -45,16 +45,24 @@ type GetSubCommand struct {
 }
 
 func GetSrc(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := GetSubCommand{
-		client:      cmdutils.GetServer(flags),
+		client:      c,
 		archiveType: sourceArchive,
 	}
 	return opts.do(flags)
 }
 
 func GetDeploy(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := GetSubCommand{
-		client:      cmdutils.GetServer(flags),
+		client:      c,
 		archiveType: deployArchive,
 	}
 	return opts.do(flags)
@@ -96,7 +104,10 @@ func (opts *GetSubCommand) run(flags cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser := pkgutil.DownloadStoragesvcURL(opts.client, archive.URL)
+		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.client, archive.URL)
+		if err != nil {
+			return err
+		}
 		defer readCloser.Close()
 		reader = readCloser
 	}

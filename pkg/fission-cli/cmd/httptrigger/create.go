@@ -29,9 +29,8 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
-	"github.com/fission/fission/pkg/fission-cli/log"
+	"github.com/fission/fission/pkg/fission-cli/consolemsg"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -41,8 +40,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -101,7 +104,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	if !flags.Bool("spec") {
 		err = util.CheckFunctionExistence(opts.client, functionList, fnNamespace)
 		if err != nil {
-			log.Warn(err.Error())
+			consolemsg.Warn(err.Error())
 		}
 	}
 
@@ -115,7 +118,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 
 	host := flags.String("host")
 	if flags.IsSet("host") {
-		log.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+		consolemsg.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
 	}
 
 	// just name triggers by uuid.

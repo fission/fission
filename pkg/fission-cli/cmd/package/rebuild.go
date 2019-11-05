@@ -25,7 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type RebuildSubCommand struct {
@@ -35,8 +35,12 @@ type RebuildSubCommand struct {
 }
 
 func Rebuild(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := RebuildSubCommand{
-		client: cmdutils.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }

@@ -17,9 +17,10 @@ limitations under the License.
 package spec
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -29,8 +30,12 @@ type DestroySubCommand struct {
 
 // Destroy destroys everything in the spec.
 func Destroy(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := &DestroySubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -41,11 +46,13 @@ func (opts *DestroySubCommand) do(flags cli.Input) error {
 
 func (opts *DestroySubCommand) run(flags cli.Input) error {
 	// get specdir
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 
 	// read everything
 	fr, err := ReadSpecs(specDir)
-	util.CheckErr(err, "read specs")
+	if err != nil {
+		return errors.Wrap(err, "error reading specs")
+	}
 
 	// set desired state to nothing, but keep the UID so "apply" can find it
 	emptyFr := FissionResources{}
@@ -53,7 +60,9 @@ func (opts *DestroySubCommand) run(flags cli.Input) error {
 
 	// "apply" the empty state
 	_, _, err = applyResources(opts.client, specDir, &emptyFr, true)
-	util.CheckErr(err, "delete resources")
+	if err != nil {
+		return errors.Wrap(err, "error deleting resources")
+	}
 
 	return nil
 }

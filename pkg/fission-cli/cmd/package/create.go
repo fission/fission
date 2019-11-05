@@ -23,16 +23,14 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
-	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -41,8 +39,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -60,7 +62,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	pkgNamespace := flags.String("pkgNamespace")
 	envName := flags.String("env")
 	if len(envName) == 0 {
-		log.Fatal("Need --env argument.")
+		return errors.New("Need --env argument.")
 	}
 	envNamespace := flags.String("envNamespace")
 	srcArchiveFiles := flags.StringSlice("src")
@@ -69,7 +71,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	keepURL := flags.Bool("keepurl")
 
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		log.Fatal("Need --src to specify source archive, or use --deploy to specify deployment archive.")
+		return errors.New("Need --src to specify source archive, or use --deploy to specify deployment archive.")
 	}
 
 	_, err := CreatePackage(flags, opts.client, pkgNamespace, envName, envNamespace,
@@ -132,19 +134,25 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 
 	if len(specFile) > 0 {
 		// if a package sith the same spec exists, don't create a new spec file
-		fr, err := spec.ReadSpecs(cmdutils.GetSpecDir(flags))
-		util.CheckErr(err, "read specs")
+		fr, err := spec.ReadSpecs(util.GetSpecDir(flags))
+		if err != nil {
+			return nil, errors.Wrap(err, "error reading specs")
+		}
 		if m := fr.SpecExists(pkg, false, true); m != nil {
 			fmt.Printf("Re-using previously created package %v\n", m.Name)
 			return m, nil
 		}
 
 		err = spec.SpecSave(*pkg, specFile)
-		util.CheckErr(err, "save package spec")
+		if err != nil {
+			return nil, errors.Wrap(err, "error saving package spec")
+		}
 		return &pkg.Metadata, nil
 	} else {
 		pkgMetadata, err := client.PackageCreate(pkg)
-		util.CheckErr(err, "create package")
+		if err != nil {
+			return nil, errors.Wrap(err, "error creating package")
+		}
 		fmt.Printf("Package '%v' created\n", pkgMetadata.GetName())
 		return pkgMetadata, nil
 	}

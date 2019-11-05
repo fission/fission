@@ -25,7 +25,6 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	redisCache "github.com/fission/fission/pkg/redis/build/gen"
 )
@@ -35,8 +34,12 @@ type ViewSubCommand struct {
 }
 
 func View(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := ViewSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -68,71 +71,55 @@ func (opts *ViewSubCommand) run(flags cli.Input) error {
 	}
 
 	if len(function) != 0 {
-		return recordsByFunction(function, verbosity, flags)
+		return recordsByFunction(opts.client, function, verbosity)
 	}
 	if len(trigger) != 0 {
-		return recordsByTrigger(trigger, verbosity, flags)
+		return recordsByTrigger(opts.client, trigger, verbosity)
 	}
 	if len(from) != 0 && len(to) != 0 {
-		return recordsByTime(from, to, verbosity, flags)
+		return recordsByTime(opts.client, from, to, verbosity)
 	}
-	err := recordsAll(verbosity, flags)
+	err := recordsAll(opts.client, verbosity)
 	if err != nil {
 		return errors.Wrap(err, "error viewing records")
 	}
 	return nil
 }
 
-func recordsAll(verbosity int, flags cli.Input) error {
-	fc := util.GetApiClient(flags.GlobalString("server"))
-
-	records, err := fc.RecordsAll()
+func recordsAll(client *client.Client, verbosity int) error {
+	records, err := client.RecordsAll()
 	if err != nil {
 		return errors.Wrap(err, "error viewing records")
 	}
-
 	showRecords(records, verbosity)
-
 	return nil
 }
 
-func recordsByTrigger(trigger string, verbosity int, flags cli.Input) error {
-	fc := util.GetApiClient(flags.GlobalString("server"))
-
-	records, err := fc.RecordsByTrigger(trigger)
+func recordsByTrigger(client *client.Client, trigger string, verbosity int) error {
+	records, err := client.RecordsByTrigger(trigger)
 	if err != nil {
 		return errors.Wrap(err, "error viewing records")
 	}
-
 	showRecords(records, verbosity)
-
 	return nil
 }
 
 // TODO: More accurate function name (function filter)
-func recordsByFunction(function string, verbosity int, flags cli.Input) error {
-	fc := util.GetApiClient(flags.GlobalString("server"))
-
-	records, err := fc.RecordsByFunction(function)
+func recordsByFunction(client *client.Client, function string, verbosity int) error {
+	records, err := client.RecordsByFunction(function)
 	if err != nil {
 		return errors.Wrap(err, "error viewing records")
 	}
-
 	showRecords(records, verbosity)
-
 	return nil
 }
 
-func recordsByTime(from string, to string, verbosity int, flags cli.Input) error {
-	fc := util.GetApiClient(flags.GlobalString("server"))
-
-	records, err := fc.RecordsByTime(from, to)
+func recordsByTime(client *client.Client, from string, to string, verbosity int) error {
+	records, err := client.RecordsByTime(from, to)
 	if err != nil {
 		return errors.Wrap(err, "error viewing records")
 	}
-
 	showRecords(records, verbosity)
-
 	return nil
 }
 

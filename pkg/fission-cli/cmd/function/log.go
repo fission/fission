@@ -25,7 +25,6 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -35,14 +34,18 @@ type LogSubCommand struct {
 }
 
 func Log(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := LogSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
 
 func (opts *LogSubCommand) do(flags cli.Input) error {
-	m, err := cmd.GetMetadata("name", "fnNamespace", flags)
+	m, err := util.GetMetadata("name", "fnNamespace", flags)
 	if err != nil {
 		return err
 	}
@@ -66,8 +69,13 @@ func (opts *LogSubCommand) do(flags cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
+	server, err := util.GetApplicationUrl("application=fission-api")
+	if err != nil {
+		return err
+	}
+
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, util.GetServerUrl())
+	logDB, err := logdb.GetLogDB(dbType, server)
 	if err != nil {
 		return errors.New("failed to connect log database")
 	}

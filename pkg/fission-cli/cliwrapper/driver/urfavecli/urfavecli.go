@@ -17,7 +17,6 @@ limitations under the License.
 package urfavecli
 
 import (
-	"log"
 	"time"
 
 	"github.com/urfave/cli"
@@ -39,13 +38,7 @@ func Parse(c *cli.Context) fCli.Input {
 
 func Wrapper(action cmd.CommandAction) func(*cli.Context) error {
 	return func(c *cli.Context) error {
-		e := action(Cli{c: c})
-		// Urfave cli doesn't exit with error code even error is not nil.
-		// We have to check whether error is empty and print error log here.
-		if e != nil {
-			log.Fatalf("%v", e)
-		}
-		return e
+		return action(Cli{c: c})
 	}
 }
 

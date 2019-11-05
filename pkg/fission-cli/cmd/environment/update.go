@@ -17,15 +17,15 @@ limitations under the License.
 package environment
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -35,8 +35,12 @@ type UpdateSubCommand struct {
 }
 
 func Update(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := UpdateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -50,13 +54,15 @@ func (opts *UpdateSubCommand) do(flags cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	m, err := cmd.GetMetadata(cmd.RESOURCE_NAME, cmd.ENVIRONMENT_NAMESPACE, flags)
+	m, err := util.GetMetadata(flag.RESOURCE_NAME, flag.ENVIRONMENT_NAMESPACE, flags)
 	if err != nil {
 		return err
 	}
 
 	env, err := opts.client.EnvironmentGet(m)
-	util.CheckErr(err, "find environment")
+	if err != nil {
+		return errors.Wrap(err, "error finding environment")
+	}
 
 	env, err = updateExistingEnvironmentWithCmd(env, flags)
 	if err != nil {
@@ -69,7 +75,9 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 
 func (opts *UpdateSubCommand) run(flags cli.Input) error {
 	_, err := opts.client.EnvironmentUpdate(opts.env)
-	util.CheckErr(err, "update environment")
+	if err != nil {
+		return errors.Wrap(err, "error updating environment")
+	}
 
 	fmt.Printf("environment '%v' updated\n", opts.env.Metadata.Name)
 	return nil
@@ -79,10 +87,10 @@ func (opts *UpdateSubCommand) run(flags cli.Input) error {
 func updateExistingEnvironmentWithCmd(env *fv1.Environment, flags cli.Input) (*fv1.Environment, error) {
 	e := &multierror.Error{}
 
-	envImg := flags.String(cmd.ENVIRONMENT_IMAGE)
-	envBuilderImg := flags.String(cmd.ENVIRONMENT_BUILDER)
-	envBuildCmd := flags.String(cmd.ENVIRONMENT_BUILDCOMMAND)
-	envExternalNetwork := flags.Bool(cmd.ENVIRONMENT_EXTERNAL_NETWORK)
+	envImg := flags.String(flag.ENVIRONMENT_IMAGE)
+	envBuilderImg := flags.String(flag.ENVIRONMENT_BUILDER)
+	envBuildCmd := flags.String(flag.ENVIRONMENT_BUILDCOMMAND)
+	envExternalNetwork := flags.Bool(flag.ENVIRONMENT_EXTERNAL_NETWORK)
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
 		e = multierror.Append(e, errors.New("need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command"))
@@ -103,23 +111,23 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, flags cli.Input) (*f
 		env.Spec.Builder.Command = envBuildCmd
 	}
 
-	if flags.IsSet(cmd.ENVIRONMENT_POOLSIZE) {
-		env.Spec.Poolsize = flags.Int(cmd.ENVIRONMENT_POOLSIZE)
+	if flags.IsSet(flag.ENVIRONMENT_POOLSIZE) {
+		env.Spec.Poolsize = flags.Int(flag.ENVIRONMENT_POOLSIZE)
 	}
 
-	if flags.IsSet(cmd.ENVIRONMENT_GRACE_PERIOD) {
-		env.Spec.TerminationGracePeriod = flags.Int64(cmd.ENVIRONMENT_GRACE_PERIOD)
+	if flags.IsSet(flag.ENVIRONMENT_GRACE_PERIOD) {
+		env.Spec.TerminationGracePeriod = flags.Int64(flag.ENVIRONMENT_GRACE_PERIOD)
 	}
 
-	if flags.IsSet(cmd.ENVIRONMENT_KEEPARCHIVE) {
-		env.Spec.KeepArchive = flags.Bool(cmd.ENVIRONMENT_KEEPARCHIVE)
+	if flags.IsSet(flag.ENVIRONMENT_KEEPARCHIVE) {
+		env.Spec.KeepArchive = flags.Bool(flag.ENVIRONMENT_KEEPARCHIVE)
 	}
 
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
-	if flags.IsSet(cmd.RUNTIME_MINCPU) || flags.IsSet(cmd.RUNTIME_MAXCPU) ||
-		flags.IsSet(cmd.RUNTIME_MINMEMORY) || flags.IsSet(cmd.RUNTIME_MAXMEMORY) ||
-		flags.IsSet(cmd.RUNTIME_MINSCALE) || flags.IsSet(cmd.RUNTIME_MAXSCALE) {
+	if flags.IsSet(flag.RUNTIME_MINCPU) || flags.IsSet(flag.RUNTIME_MAXCPU) ||
+		flags.IsSet(flag.RUNTIME_MINMEMORY) || flags.IsSet(flag.RUNTIME_MAXMEMORY) ||
+		flags.IsSet(flag.RUNTIME_MINSCALE) || flags.IsSet(flag.RUNTIME_MAXSCALE) {
 		e = multierror.Append(e, errors.New("updating resource limits/requests for existing environments is currently unsupported; re-create the environment instead"))
 	}
 

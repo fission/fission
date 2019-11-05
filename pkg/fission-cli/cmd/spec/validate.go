@@ -18,19 +18,17 @@ package spec
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -41,8 +39,12 @@ type ValidateSubCommand struct {
 // Validate parses a set of specs and checks for references to
 // resources that don't exist.
 func Validate(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := &ValidateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -54,16 +56,16 @@ func (opts *ValidateSubCommand) do(flags cli.Input) error {
 func (opts *ValidateSubCommand) run(flags cli.Input) error {
 
 	// this will error on parse errors and on duplicates
-	specDir := cmd.GetSpecDir(flags)
+	specDir := util.GetSpecDir(flags)
 	fr, err := ReadSpecs(specDir)
-	util.CheckErr(err, "read specs")
+	if err != nil {
+		return errors.Wrap(err, "error reading specs")
+	}
 
 	// this does the rest of the checks, like dangling refs
 	err = fr.Validate(flags)
 	if err != nil {
-		fmt.Printf("Error validating specs: %v", err)
-
-		return nil
+		return errors.Wrap(err, "error validating specs")
 	}
 
 	return nil
@@ -75,8 +77,8 @@ func ReadSpecs(specDir string) (*FissionResources, error) {
 
 	// make sure spec directory exists before continue
 	if _, err := os.Stat(specDir); os.IsNotExist(err) {
-		log.Fatal(fmt.Sprintf("Spec directory %v doesn't exist. "+
-			"Please check directory path or run \"fission spec init\" to create it.", specDir))
+		return nil, errors.Errorf("Spec directory %v doesn't exist. "+
+			"Please check directory path or run \"fission spec init\" to create it.", specDir)
 	}
 
 	fr := FissionResources{

@@ -21,12 +21,11 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	cmdutils "github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -37,8 +36,12 @@ type InfoSubCommand struct {
 }
 
 func Info(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := InfoSubCommand{
-		client: cmdutils.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -54,7 +57,7 @@ func (opts *InfoSubCommand) do(flags cli.Input) error {
 func (opts *InfoSubCommand) complete(flags cli.Input) error {
 	opts.name = flags.String("name")
 	if len(opts.name) == 0 {
-		log.Fatal("Need name of package, use --name")
+		return errors.New("Need name of package, use --name")
 	}
 	opts.namespace = flags.String("pkgNamespace")
 	return nil
@@ -66,7 +69,7 @@ func (opts *InfoSubCommand) run(flags cli.Input) error {
 		Name:      opts.name,
 	})
 	if err != nil {
-		util.CheckErr(err, fmt.Sprintf("find package %s", opts.name))
+		return errors.Wrapf(err, "error finding package %s", opts.name)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

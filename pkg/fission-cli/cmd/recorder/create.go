@@ -27,8 +27,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type CreateSubCommand struct {
@@ -37,8 +37,12 @@ type CreateSubCommand struct {
 }
 
 func Create(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := CreateSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }

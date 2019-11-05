@@ -20,11 +20,10 @@ import (
 	"fmt"
 
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/log"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,8 +32,12 @@ type VersionSubCommand struct {
 }
 
 func Version(flags cli.Input) error {
+	c, err := util.GetServer(flags)
+	if err != nil {
+		return err
+	}
 	opts := &VersionSubCommand{
-		client: cmd.GetServer(flags),
+		client: c,
 	}
 	return opts.do(flags)
 }
@@ -43,7 +46,7 @@ func (opts *VersionSubCommand) do(flags cli.Input) error {
 	ver := util.GetVersion(opts.client)
 	bs, err := yaml.Marshal(ver)
 	if err != nil {
-		log.Fatal("Error formatting versions: " + err.Error())
+		return errors.Wrap(err, "error formatting versions")
 	}
 	fmt.Print(string(bs))
 	return nil
