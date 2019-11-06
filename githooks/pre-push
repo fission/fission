@@ -1,0 +1,6 @@
+#!/bin/bash
+
+ROOT=`realpath $(dirname $0)/../..`
+pushd $ROOT
+make
+popd
