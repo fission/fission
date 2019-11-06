@@ -11,36 +11,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-.PHONY: test
-.DEFAULT_GOAL := build
 
-IMAGE ?= fission/fission-bundle
-VERSION ?= latest
-ARCH ?= amd64
-OS ?= linux
+.DEFAULT_GOAL := check
 
-test:
-	go test -v $(go list ./... | grep -v /examples/ | grep -v /environments/)
+check: test-run build clean
 
-build: build-bundle build-client
+# run basic check scripts
+test-run:
+	hack/verify-gofmt.sh
+	hack/verify-govet.sh
+	hack/verify-staticcheck.sh
+	hack/runtests.sh
+	@rm -f coverage.txt
 
-build-client:
+# ensure the changes are buildable
+build:
+	go build -o cmd/fission-bundle/fission-bundle ./cmd/fission-bundle/
 	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
+	go build -o cmd/fetcher/fetcher ./cmd/fetcher/
+	go build -o cmd/fetcher/builder ./cmd/builder/
 
-build-bundle:
-	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o cmd/fission-bundle/fission-bundle ./cmd/fission-bundle/
+# install CLI binary to $PATH
+install: build
+	mv cmd/fission-cli/fission $(GOPATH)/bin
 
-build-image:
-	docker build --rm --tag "$(IMAGE):$(VERSION)" cmd/fission-bundle/
-
-install:
-	go install ./cmd/fission-cli/
-
-image: build-bundle build-image
-
-image-push: image
-	docker push "$(IMAGE):$(VERSION)"
+# build images (environment images are not included)
+image:
+	docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
+	docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
+	docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
 
 clean:
-	@rm -f fission-bundle/fission-bundle
-	@rm -f fission/fission
+	@rm -f cmd/fission-bundle/fission-bundle
+	@rm -f cmd/fission-cli/fission
+	@rm -f cmd/fetcher/fetcher
+	@rm -f cmd/fetcher/builder
