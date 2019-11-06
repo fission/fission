@@ -34,9 +34,8 @@ If you choose a big chunk of work that involves design changes to
 Fission, please talk to us while planning the change; that way we can
 all be on the same page before you invest too much work into it.
 
- * Drop by the [slack channel](http://slack.fission.io)
+ * Drop by the [slack channel](http://slack.fission.io).
  * Say hi on [twitter](https://twitter.com/fissionio).
- * Email soamvasani@platform9.com
 
 ### Contribution Howto
 
