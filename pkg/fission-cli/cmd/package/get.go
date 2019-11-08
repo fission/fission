@@ -18,7 +18,6 @@ package _package
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -44,8 +44,8 @@ type GetSubCommand struct {
 	archiveType int
 }
 
-func GetSrc(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func GetSrc(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
@@ -53,11 +53,11 @@ func GetSrc(flags cli.Input) error {
 		client:      c,
 		archiveType: sourceArchive,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func GetDeploy(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func GetDeploy(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
@@ -65,28 +65,25 @@ func GetDeploy(flags cli.Input) error {
 		client:      c,
 		archiveType: deployArchive,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *GetSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *GetSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
-	if len(opts.name) == 0 {
-		return errors.New("need name of package, use --name")
-	}
-	opts.namespace = flags.String("pkgNamespace")
-	opts.output = flags.String("output")
+func (opts *GetSubCommand) complete(input cli.Input) error {
+	opts.name = input.String(flagkey.PkgName)
+	opts.namespace = input.String(flagkey.NamespacePackage)
+	opts.output = input.String(flagkey.PkgOutput)
 	return nil
 }
 
-func (opts *GetSubCommand) run(flags cli.Input) error {
+func (opts *GetSubCommand) run(input cli.Input) error {
 	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,

@@ -32,22 +32,22 @@ type ListSubCommand struct {
 	client *client.Client
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ListSubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ListSubCommand) run(flags cli.Input) error {
+func (opts *ListSubCommand) run(input cli.Input) error {
 	recorders, err := opts.client.RecorderList("default")
 	if err != nil {
 		return errors.Wrap(err, "error listing recorders")

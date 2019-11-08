@@ -38,32 +38,32 @@ type ValidateSubCommand struct {
 
 // Validate parses a set of specs and checks for references to
 // resources that don't exist.
-func Validate(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Validate(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := &ValidateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ValidateSubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ValidateSubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ValidateSubCommand) run(flags cli.Input) error {
+func (opts *ValidateSubCommand) run(input cli.Input) error {
 
 	// this will error on parse errors and on duplicates
-	specDir := util.GetSpecDir(flags)
+	specDir := util.GetSpecDir(input)
 	fr, err := ReadSpecs(specDir)
 	if err != nil {
 		return errors.Wrap(err, "error reading specs")
 	}
 
 	// this does the rest of the checks, like dangling refs
-	err = fr.Validate(flags)
+	err = fr.Validate(input)
 	if err != nil {
 		return errors.Wrap(err, "error validating specs")
 	}

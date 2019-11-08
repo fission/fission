@@ -30,10 +30,10 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.HtUrlFlag, flag.HtFnNameFlag},
-		Optional: []flag.Flag{flag.HtNameFlag, flag.HtMethodFlag, flag.HtIngressRuleFlag,
-			flag.HtIngressAnnotationFlag, flag.HtIngressTLSFlag, flag.HtIngressFlag,
-			flag.HtFnWeightFlag, flag.HtHostFlag, flag.NamespaceFunctionFlag, flag.SpecSaveFlag},
+		Required: []flag.Flag{flag.HtUrl, flag.HtFnName},
+		Optional: []flag.Flag{flag.HtName, flag.HtMethod, flag.HtIngressRule,
+			flag.HtIngressAnnotation, flag.HtIngressTLS, flag.HtIngress,
+			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave},
 	})
 
 	getCmd := &cobra.Command{
@@ -43,7 +43,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Get),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.HtNameFlag},
+		Required: []flag.Flag{flag.HtName},
 	})
 
 	updateCmd := &cobra.Command{
@@ -53,10 +53,10 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.HtNameFlag},
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag, flag.HtFnNameFlag, flag.HtUrlFlag,
-			flag.HtMethodFlag, flag.HtIngressRuleFlag, flag.HtIngressAnnotationFlag,
-			flag.HtIngressTLSFlag, flag.HtIngressFlag, flag.HtFnWeightFlag, flag.HtHostFlag},
+		Required: []flag.Flag{flag.HtName},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnName, flag.HtUrl,
+			flag.HtMethod, flag.HtIngressRule, flag.HtIngressAnnotation,
+			flag.HtIngressTLS, flag.HtIngress, flag.HtFnWeight, flag.HtHost},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -66,8 +66,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.HtNameFlag},
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag, flag.HtFnFilterFlag},
+		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.NamespaceTrigger},
 	})
 
 	listCmd := &cobra.Command{
@@ -77,7 +76,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag, flag.HtFnFilterFlag},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter},
 	})
 
 	command := &cobra.Command{

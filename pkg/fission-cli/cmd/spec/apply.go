@@ -34,10 +34,10 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
@@ -56,27 +56,27 @@ type ApplySubCommand struct {
 // Apply is *not* transactional -- if the user hits Ctrl-C, or their laptop dies
 // etc, while doing an apply, they will get a partially applied deployment.  However,
 // they can retry their apply command once they're back online.
-func Apply(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Apply(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ApplySubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ApplySubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ApplySubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ApplySubCommand) run(flags cli.Input) error {
-	specDir := util.GetSpecDir(flags)
+func (opts *ApplySubCommand) run(input cli.Input) error {
+	specDir := util.GetSpecDir(input)
 
-	deleteResources := flags.Bool("delete")
-	watchResources := flags.Bool("watch")
-	waitForBuild := flags.Bool("wait")
+	deleteResources := input.Bool(flagkey.SpecDelete)
+	watchResources := input.Bool(flagkey.SpecWatch)
+	waitForBuild := input.Bool(flagkey.SpecWait)
 
 	var watcher *fsnotify.Watcher
 	var pbw *packageBuildWatcher
@@ -123,7 +123,7 @@ func (opts *ApplySubCommand) run(flags cli.Input) error {
 		}
 
 		// validate
-		err = fr.Validate(flags)
+		err = fr.Validate(input)
 		if err != nil {
 			return errors.Wrap(err, "error validating specs")
 		}

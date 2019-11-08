@@ -83,12 +83,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	specDir := util.GetSpecDir(input)
 
 	// check for unique function names within a namespace
-	metadata, err := util.GetMetadata(flagkey.FnName, flagkey.NamespaceFunction, input)
-	if err != nil {
-		return err
-	}
-
-	fn, err := opts.client.FunctionGet(metadata)
+	fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
 	if err != nil && !ferror.IsNotFound(err) {
 		return err
 	} else if fn != nil {
@@ -174,7 +172,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		keepURL := input.Bool(flagkey.PkgKeepURL)
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.client, fnNamespace, envName, envNamespace,
+		pkgMetadata, err = _package.CreatePackage(input, opts.client, fnName, fnNamespace, envName, envNamespace,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, keepURL)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
@@ -263,9 +261,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't create the function
-	if flags.Bool(flagkey.SpecSave) {
+	if input.Bool(flagkey.SpecSave) {
 		err := spec.SpecSave(*opts.function, opts.specFile)
 		if err != nil {
 			return errors.Wrap(err, "error creating function spec")
@@ -281,7 +279,7 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 	fmt.Printf("function '%v' created\n", opts.function.Metadata.Name)
 
 	// Allow the user to specify an HTTP trigger while creating a function.
-	triggerUrl := flags.String(flagkey.HtUrl)
+	triggerUrl := input.String(flagkey.HtUrl)
 	if len(triggerUrl) == 0 {
 		return nil
 	}
@@ -289,7 +287,7 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
-	method, err := httptrigger.GetMethod(flags.String(flagkey.HtMethod))
+	method, err := httptrigger.GetMethod(input.String(flagkey.HtMethod))
 	if err != nil {
 		return errors.Wrap(err, "error getting HTTP trigger method")
 	}
@@ -318,11 +316,11 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 	return nil
 }
 
-func getInvokeStrategy(flags cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
+func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
 
 	var fnExecutor, newFnExecutor fv1.ExecutorType
 
-	switch flags.String(flagkey.FnExecutorType) {
+	switch input.String(flagkey.FnExecutorType) {
 	case "":
 		fallthrough
 	case types.ExecutorTypePoolmgr:
@@ -337,23 +335,23 @@ func getInvokeStrategy(flags cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		fnExecutor = existingInvokeStrategy.ExecutionStrategy.ExecutorType
 
 		// override the executor type if user specified a new executor type
-		if flags.IsSet(flagkey.FnExecutorType) {
+		if input.IsSet(flagkey.FnExecutorType) {
 			fnExecutor = newFnExecutor
 		}
 	} else {
 		fnExecutor = newFnExecutor
 	}
 
-	if flags.IsSet(flagkey.FnSpecializationTimeout) && fnExecutor != types.ExecutorTypeNewdeploy {
+	if input.IsSet(flagkey.FnSpecializationTimeout) && fnExecutor != types.ExecutorTypeNewdeploy {
 		return nil, errors.Errorf("%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
 	}
 
 	if fnExecutor == types.ExecutorTypePoolmgr {
-		if flags.IsSet(flagkey.RuntimeTargetcpu) || flags.IsSet(flagkey.ReplicasMinscale) || flags.IsSet(flagkey.ReplicasMaxscale) {
+		if input.IsSet(flagkey.RuntimeTargetcpu) || input.IsSet(flagkey.ReplicasMinscale) || input.IsSet(flagkey.ReplicasMaxscale) {
 			return nil, errors.New("to set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
 		}
 
-		if flags.IsSet(flagkey.RuntimeMincpu) || flags.IsSet(flagkey.RuntimeMaxcpu) || flags.IsSet(flagkey.RuntimeMinmemory) || flags.IsSet(flagkey.RuntimeMaxmemory) {
+		if input.IsSet(flagkey.RuntimeMincpu) || input.IsSet(flagkey.RuntimeMaxcpu) || input.IsSet(flagkey.RuntimeMinmemory) || input.IsSet(flagkey.RuntimeMaxmemory) {
 			console.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
 		}
 		strategy = &fv1.InvokeStrategy{
@@ -376,26 +374,26 @@ func getInvokeStrategy(flags cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 			specializationTimeout = existingInvokeStrategy.ExecutionStrategy.SpecializationTimeout
 		}
 
-		if flags.IsSet(flagkey.RuntimeTargetcpu) {
-			targetCPU, err = getTargetCPU(flags)
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err = getTargetCPU(input)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		if flags.IsSet(flagkey.ReplicasMinscale) {
-			minScale = flags.Int(flagkey.ReplicasMinscale)
+		if input.IsSet(flagkey.ReplicasMinscale) {
+			minScale = input.Int(flagkey.ReplicasMinscale)
 		}
 
-		if flags.IsSet(flagkey.ReplicasMaxscale) {
-			maxScale = flags.Int(flagkey.ReplicasMaxscale)
+		if input.IsSet(flagkey.ReplicasMaxscale) {
+			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
 				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
 			}
 		}
 
-		if flags.IsSet(flagkey.FnSpecializationTimeout) {
-			specializationTimeout = flags.Int(flagkey.FnSpecializationTimeout)
+		if input.IsSet(flagkey.FnSpecializationTimeout) {
+			specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
 			if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 				return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 			}
@@ -422,8 +420,8 @@ func getInvokeStrategy(flags cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 	return strategy, nil
 }
 
-func getTargetCPU(flags cli.Input) (int, error) {
-	targetCPU := flags.Int(flagkey.RuntimeTargetcpu)
+func getTargetCPU(input cli.Input) (int, error) {
+	targetCPU := input.Int(flagkey.RuntimeTargetcpu)
 	if targetCPU <= 0 || targetCPU > 100 {
 		return 0, errors.Errorf("%v must be a value between 1 - 100", flagkey.RuntimeTargetcpu)
 	}

@@ -24,6 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -35,42 +36,39 @@ type DeleteSubCommand struct {
 	force         bool
 }
 
-func Delete(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Delete(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := DeleteSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *DeleteSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
-	opts.namespace = flags.String("pkgNamespace")
-	opts.deleteOrphans = flags.Bool("orphan")
-	opts.force = flags.Bool("f")
+func (opts *DeleteSubCommand) complete(input cli.Input) error {
+	opts.name = input.String(flagkey.PkgName)
+	opts.namespace = input.String(flagkey.NamespacePackage)
+	opts.deleteOrphans = input.Bool(flagkey.PkgOrphan)
+	opts.force = input.Bool(flagkey.PkgForce)
 
 	if len(opts.name) == 0 && !opts.deleteOrphans {
-		return errors.New("need --name argument or --orphan flag")
-	}
-	if len(opts.name) != 0 && opts.deleteOrphans {
-		return errors.New("need either --name argument or --orphan flag")
+		return errors.Errorf("need --%v or --%v flag", flagkey.PkgName, flagkey.PkgOrphan)
 	}
 
 	return nil
 }
 
-func (opts *DeleteSubCommand) run(flags cli.Input) error {
+func (opts *DeleteSubCommand) run(input cli.Input) error {
 	if len(opts.name) != 0 {
 		_, err := opts.client.PackageGet(&metav1.ObjectMeta{
 			Namespace: opts.namespace,
@@ -93,7 +91,10 @@ func (opts *DeleteSubCommand) run(flags cli.Input) error {
 			return err
 		}
 		fmt.Printf("Package '%v' deleted\n", opts.name)
-	} else {
+	}
+
+	// TODO improve list speed when --orphan
+	if opts.deleteOrphans {
 		err := deleteOrphanPkgs(opts.client, opts.namespace)
 		if err != nil {
 			return errors.Wrap(err, "deleting orphan packages")

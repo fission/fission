@@ -32,23 +32,23 @@ type ReplaySubCommand struct {
 	client *client.Client
 }
 
-func Replay(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Replay(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ReplaySubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ReplaySubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ReplaySubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ReplaySubCommand) run(flags cli.Input) error {
-	reqUID := flags.String("reqUID")
+func (opts *ReplaySubCommand) run(input cli.Input) error {
+	reqUID := input.String("reqUID")
 	if len(reqUID) == 0 {
 		return errors.New("Need a reqUID, use --reqUID flag to specify")
 	}

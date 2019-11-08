@@ -25,6 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -34,35 +35,32 @@ type RebuildSubCommand struct {
 	namespace string
 }
 
-func Rebuild(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Rebuild(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := RebuildSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *RebuildSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *RebuildSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *RebuildSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
-	if len(opts.name) == 0 {
-		return errors.New("Need name of package, use --name")
-	}
-	opts.namespace = flags.String("pkgNamespace")
+func (opts *RebuildSubCommand) complete(input cli.Input) error {
+	opts.name = input.String(flagkey.PkgName)
+	opts.namespace = input.String(flagkey.NamespacePackage)
 	return nil
 }
 
-func (opts *RebuildSubCommand) run(flags cli.Input) error {
+func (opts *RebuildSubCommand) run(input cli.Input) error {
 	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,

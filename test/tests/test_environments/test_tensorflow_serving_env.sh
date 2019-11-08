@@ -33,7 +33,8 @@ fission env create --name $env --image $TS_RUNTIME_IMAGE --version 2 --period 5
 
 zip -r half_plus_two.zip ./half_plus_two
 
-pkgName=$(fission package create --deploy half_plus_two.zip --env $env| cut -f2 -d' '| tr -d \')
+pkgName=$(generate_test_id)
+fission package create --name $pkgName --deploy half_plus_two.zip --env $env
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"

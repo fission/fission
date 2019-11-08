@@ -34,27 +34,27 @@ type GetSubCommand struct {
 	name   string
 }
 
-func Get(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Get(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *GetSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *GetSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
+func (opts *GetSubCommand) complete(input cli.Input) error {
+	opts.name = input.String("name")
 
 	if len(opts.name) <= 0 {
 		return errors.New("need a recorder name, use --name")
@@ -62,7 +62,7 @@ func (opts *GetSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *GetSubCommand) run(flags cli.Input) error {
+func (opts *GetSubCommand) run(input cli.Input) error {
 	recorder, err := opts.client.RecorderGet(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: "default",

@@ -30,8 +30,10 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.KwFnNameFlag, flag.KwObjTypeFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.KwLabelsFlag, flag.SpecSaveFlag},
+		Required: []flag.Flag{flag.KwFnName},
+		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.NamespaceFunction, flag.SpecSave},
+		// TODO: add label selector flag
+		// flag.KwLabelsFlag
 	})
 
 	deleteCmd := &cobra.Command{
@@ -41,8 +43,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.KwFnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag},
+		Required: []flag.Flag{flag.KwFnName},
+		Optional: []flag.Flag{flag.NamespaceTrigger},
 	})
 
 	listCmd := &cobra.Command{
@@ -52,7 +54,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag},
+		Optional: []flag.Flag{flag.NamespaceTrigger},
 	})
 
 	command := &cobra.Command{

@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,31 +34,31 @@ type ListSubCommand struct {
 	namespace string
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *ListSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *ListSubCommand) complete(flags cli.Input) error {
-	opts.namespace = flags.String("triggerns")
+func (opts *ListSubCommand) complete(input cli.Input) error {
+	opts.namespace = input.String(flagkey.NamespaceTrigger)
 	return nil
 }
 
-func (opts *ListSubCommand) run(flags cli.Input) error {
+func (opts *ListSubCommand) run(input cli.Input) error {
 	ws, err := opts.client.WatchList(opts.namespace)
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatches")

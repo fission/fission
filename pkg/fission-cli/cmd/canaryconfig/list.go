@@ -53,12 +53,12 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *ListSubCommand) complete(flags cli.Input) error {
-	opts.namespace = flags.String(flagkey.NamespaceCanary)
+func (opts *ListSubCommand) complete(input cli.Input) error {
+	opts.namespace = input.String(flagkey.NamespaceCanary)
 	return nil
 }
 
-func (opts *ListSubCommand) run(flags cli.Input) error {
+func (opts *ListSubCommand) run(input cli.Input) error {
 	canaryCfgs, err := opts.client.CanaryConfigList(opts.namespace)
 	if err != nil {
 		return errors.Wrap(err, "error listing canary config")

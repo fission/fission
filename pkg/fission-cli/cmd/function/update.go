@@ -18,7 +18,6 @@ package function
 
 import (
 	"fmt"
-	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +28,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
@@ -61,18 +61,16 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	m, err := util.GetMetadata("name", "fnNamespace", input)
-	if err != nil {
-		return err
-	}
-
-	function, err := opts.client.FunctionGet(m)
+	function, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
 	}
 
-	envName := input.String("env")
-	envNamespace := input.String("envNamespace")
+	envName := input.String(flagkey.FnEnvironmentName)
+	envNamespace := input.String(flagkey.NamespaceEnvironment)
 	// if the new env specified is the same as the old one, no need to update package
 	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
@@ -86,27 +84,27 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	var deployArchiveFiles []string
 	codeFlag := false
-	code := input.String("code")
+	code := input.String(flagkey.FnCode)
 	if len(code) == 0 {
-		deployArchiveFiles = input.StringSlice("deploy")
+		deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
 	} else {
-		deployArchiveFiles = append(deployArchiveFiles, input.String("code"))
+		deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.FnCode))
 		codeFlag = true
 	}
 
-	srcArchiveFiles := input.StringSlice("src")
-	pkgName := input.String("pkg")
-	entrypoint := input.String("entrypoint")
-	buildcmd := input.String("buildcmd")
-	force := input.Bool("force")
+	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
+	pkgName := input.String(flagkey.FnPackageName)
+	entrypoint := input.String(flagkey.FnEntrypoint)
+	buildcmd := input.String(flagkey.PkgBuildCmd)
+	force := input.Bool(flagkey.PkgForce)
 
-	secretNames := input.StringSlice("secret")
-	cfgMapNames := input.StringSlice("configmap")
+	secretNames := input.StringSlice(flagkey.FnSecret)
+	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
-	specializationTimeout := input.Int("specializationtimeout")
+	specializationTimeout := input.Int(flagkey.FnSpecializationTimeout)
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
-		return errors.New("Need either of --src or --deploy and not both arguments.")
+		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
 	}
 
 	var secrets []fv1.SecretReference
@@ -171,10 +169,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
-	if input.IsSet("fntimeout") {
-		fnTimeout := input.Int("fntimeout")
+	if input.IsSet(flagkey.FnExecutionTimeout) {
+		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {
-			return errors.New("fntimeout must be greater than 0")
+			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
 	}
@@ -189,13 +187,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 	function.Spec.InvokeStrategy = *strategy
 
-	if input.IsSet("specializationtimeout") {
+	if input.IsSet(flagkey.FnSpecializationTimeout) {
 		if strategy.ExecutionStrategy.ExecutorType != types.ExecutorTypeNewdeploy {
-			return errors.New("specializationtimeout flag is only applicable for newdeploy type of executor")
+			return errors.Errorf("--%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
 		}
 
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return errors.New("specializationtimeout must be greater than or equal to 120 seconds")
+			return errors.Errorf("--%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		} else {
 			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
 		}

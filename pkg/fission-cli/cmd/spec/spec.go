@@ -246,7 +246,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 	return nil
 }
 
-func (fr *FissionResources) Validate(flags cli.Input) error {
+func (fr *FissionResources) Validate(input cli.Input) error {
 	result := utils.MultiErrorWithFormat()
 
 	// check references: both dangling refs + garbage
@@ -348,7 +348,7 @@ func (fr *FissionResources) Validate(flags cli.Input) error {
 			packages[MapKey(pkgMeta)] = true
 		}
 
-		client, err := util.GetServer(flags)
+		client, err := util.GetServer(input)
 		if err != nil {
 			return err
 		}

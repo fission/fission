@@ -29,24 +29,24 @@ type DestroySubCommand struct {
 }
 
 // Destroy destroys everything in the spec.
-func Destroy(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Destroy(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := &DestroySubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DestroySubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *DestroySubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *DestroySubCommand) run(flags cli.Input) error {
+func (opts *DestroySubCommand) run(input cli.Input) error {
 	// get specdir
-	specDir := util.GetSpecDir(flags)
+	specDir := util.GetSpecDir(input)
 
 	// read everything
 	fr, err := ReadSpecs(specDir)

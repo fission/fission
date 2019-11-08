@@ -37,7 +37,8 @@ fission env create --name $env --image $JVM_RUNTIME_IMAGE --version 2 --keeparch
 timeout 90 bash -c "wait_for_builder $env"
 
 log "Creating package from the source archive"
-pkg_name=`fission package create --sourcearchive $tmp_dir/java-src-pkg.zip --env $env|cut -d' ' -f 2|cut -d"'" -f 2`
+pkg_name=$(generate_test_id)
+fission package create --name $pkg_name --sourcearchive $tmp_dir/java-src-pkg.zip --env $env
 log "Created package $pkg_name"
 
 log "Checking the status of package"

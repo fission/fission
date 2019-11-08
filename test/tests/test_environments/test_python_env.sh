@@ -29,7 +29,6 @@ fn2=test-python-env-2-$TEST_ID
 fn3=test-python-env-3-$TEST_ID
 fn4=test-python-env-4-$TEST_ID
 fn5=test-python-env-5-$TEST_ID
-pkg=
 
 
 log "Creating v1api environment ..."
@@ -50,7 +49,8 @@ log "Creating package ..."
 pushd $ROOT/test/tests/test_environments/python_src/
 zip -r $tmp_dir/src-pkg.zip *
 popd
-pkg=$(fission package create --src $tmp_dir/src-pkg.zip --env $env_v2api | cut -f2 -d' '| tr -d \')
+pkg=$(generate_test_id)
+fission package create --name $pkg --src $tmp_dir/src-pkg.zip --env $env_v2api
 timeout 60s bash -c "waitBuild $pkg"
 
 

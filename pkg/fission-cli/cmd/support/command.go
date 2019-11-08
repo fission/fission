@@ -30,7 +30,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Dump),
 	}
 	wrapper.SetFlags(dumpCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SupportNoZipFlag, flag.SupportOutputFlag},
+		Optional: []flag.Flag{flag.SupportNoZip, flag.SupportOutput},
 	})
 
 	command := &cobra.Command{

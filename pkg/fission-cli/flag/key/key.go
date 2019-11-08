@@ -116,7 +116,7 @@ const (
 
 	KwName      = resourceName
 	KwFnName    = "function"
-	KwNamespace = "ns"
+	KwNamespace = "namespace"
 	KwObjType   = "type"
 	KwLabels    = "labels"
 

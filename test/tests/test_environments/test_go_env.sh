@@ -33,7 +33,8 @@ fission env create --name $env --image $GO_RUNTIME_IMAGE --builder $GO_BUILDER_I
 
 timeout 90 bash -c "wait_for_builder $env"
 
-pkgName=$(fission package create --src hello.go --env $env| cut -f2 -d' '| tr -d \')
+pkgName=$(generate_test_id)
+fission package create --name $pkgName --src hello.go --env $env
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"
@@ -58,7 +59,8 @@ timeout 60 bash -c "test_fn $fn_nd 'Hello'"
 # Create zip file without top level directory (module-example)
 cd module-example && zip -r $tmp_dir/module.zip *
 
-pkgName=$(fission package create --src $tmp_dir/module.zip --env $env| cut -f2 -d' '| tr -d \')
+pkgName=$(generate_test_id)
+fission package create --name $pkgName --src $tmp_dir/module.zip --env $env
 
 # wait for build to finish at most 90s
 timeout 90 bash -c "waitBuild $pkgName"

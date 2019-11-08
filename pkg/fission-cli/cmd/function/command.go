@@ -30,13 +30,13 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.NamespaceEnvironmentFlag, flag.SpecSaveFlag,
-			flag.FnEnvNameFlag, flag.FnCodeFlag, flag.PkgSrcArchiveFlag, flag.PkgDeployArchiveFlag, flag.FnKeepURLFlag,
-			flag.FnEntryPointFlag, flag.FnBuildCmdFlag, flag.FnPkgNameFlag, flag.HtUrlFlag, flag.HtMethodFlag,
-			flag.RunTimeMinCPUFlag, flag.RunTimeMaxCPUFlag, flag.RunTimeMinMemoryFlag, flag.RunTimeMaxMemoryFlag,
-			flag.ReplicasMinFlag, flag.ReplicasMaxFlag, flag.FnExecutorTypeFlag, flag.RunTimeTargetCPUFlag,
-			flag.FnCfgMapFlag, flag.FnSecretFlag, flag.FnSpecializationTimeoutFlag, flag.FnExecutionTimeoutFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave,
+			flag.FnEnvName, flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive, flag.FnKeepURL,
+			flag.FnEntryPoint, flag.FnBuildCmd, flag.FnPkgName, flag.HtUrl, flag.HtMethod,
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
+			flag.ReplicasMin, flag.ReplicasMax, flag.FnExecutorType, flag.RunTimeTargetCPU,
+			flag.FnCfgMap, flag.FnSecret, flag.FnSpecializationTimeout, flag.FnExecutionTimeout},
 	})
 
 	getCmd := &cobra.Command{
@@ -46,8 +46,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Get),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	getmetaCmd := &cobra.Command{
@@ -57,8 +57,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(GetMeta),
 	}
 	wrapper.SetFlags(getmetaCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	updateCmd := &cobra.Command{
@@ -68,14 +68,14 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.NamespaceEnvironmentFlag, flag.SpecSaveFlag,
-			flag.FnCodeFlag, flag.PkgSrcArchiveFlag, flag.PkgDeployArchiveFlag,
-			flag.FnKeepURLFlag, flag.FnEntryPointFlag, flag.FnBuildCmdFlag, flag.FnPkgNameFlag, flag.HtUrlFlag,
-			flag.HtMethodFlag, flag.RunTimeMinCPUFlag, flag.RunTimeMaxCPUFlag, flag.RunTimeMinMemoryFlag,
-			flag.RunTimeMaxMemoryFlag, flag.ReplicasMinFlag, flag.ReplicasMaxFlag, flag.FnExecutorTypeFlag,
-			flag.RunTimeTargetCPUFlag, flag.FnCfgMapFlag, flag.FnSecretFlag, flag.FnSpecializationTimeoutFlag,
-			flag.FnExecutionTimeoutFlag, flag.PkgForceFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave,
+			flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.FnKeepURL, flag.FnEntryPoint, flag.FnBuildCmd, flag.FnPkgName, flag.HtUrl,
+			flag.HtMethod, flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax, flag.FnExecutorType,
+			flag.RunTimeTargetCPU, flag.FnCfgMap, flag.FnSecret, flag.FnSpecializationTimeout,
+			flag.FnExecutionTimeout, flag.PkgForce},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -85,8 +85,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	listCmd := &cobra.Command{
@@ -96,7 +96,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag},
+		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	logsCmd := &cobra.Command{
@@ -106,9 +106,9 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Log),
 	}
 	wrapper.SetFlags(logsCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.FnLogPodFlag, flag.FnLogFollowFlag,
-			flag.FnLogDetailFlag, flag.FnLogDBTypeFlag, flag.FnLogReverseQueryFlag, flag.FnLogCountFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.FnLogPod, flag.FnLogFollow,
+			flag.FnLogDetail, flag.FnLogDBType, flag.FnLogReverseQuery, flag.FnLogCount},
 	})
 
 	testCmd := &cobra.Command{
@@ -118,9 +118,9 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Test),
 	}
 	wrapper.SetFlags(testCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnNameFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.HtMethodFlag, flag.FnTestBodyFlag,
-			flag.FnTestHeaderFlag, flag.FnTestQueryFlag, flag.FnTestTimeoutFlag},
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.HtMethod, flag.FnTestBody,
+			flag.FnTestHeader, flag.FnTestQuery, flag.FnTestTimeout},
 	})
 
 	command := &cobra.Command{

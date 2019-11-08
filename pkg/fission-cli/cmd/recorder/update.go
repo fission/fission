@@ -34,33 +34,33 @@ type UpdateSubCommand struct {
 	recorder *fv1.Recorder
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	recName := flags.String("name")
-	enable := flags.Bool("enable")
-	disable := flags.Bool("disable")
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	recName := input.String("name")
+	enable := input.Bool("enable")
+	disable := input.Bool("disable")
 	//retPolicy := flags.String("retention")
 	//evictPolicy := flags.String("eviction")
-	triggers := flags.StringSlice("trigger")
-	function := flags.String("function")
+	triggers := input.StringSlice("trigger")
+	function := input.String("function")
 
 	if enable && disable {
 		return errors.New("Cannot enable and disable a recorder simultaneously.")
@@ -134,7 +134,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.RecorderUpdate(opts.recorder)
 	if err != nil {
 		return errors.Wrap(err, "error updating recorder")

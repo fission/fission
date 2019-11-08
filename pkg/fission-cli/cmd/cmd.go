@@ -21,5 +21,5 @@ import (
 )
 
 type (
-	CommandAction func(flags cli.Input) error
+	CommandAction func(input cli.Input) error
 )

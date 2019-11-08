@@ -36,36 +36,36 @@ type CreateSubCommand struct {
 	canary *fv1.CanaryConfig
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
+func (opts *CreateSubCommand) complete(input cli.Input) error {
 	// canary configs can be created for functions in the same namespace
 
-	name := flags.String(flagkey.CanaryName)
-	ht := flags.String(flagkey.CanaryHTTPTriggerName)
-	newFunc := flags.String(flagkey.CanaryNewFunc)
-	oldFunc := flags.String(flagkey.CanaryOldFunc)
-	fnNs := flags.String(flagkey.NamespaceFunction)
-	incrementStep := flags.Int(flagkey.CanaryWeightIncrement)
-	failureThreshold := flags.Int(flagkey.CanaryFailureThreshold)
-	incrementInterval := flags.String(flagkey.CanaryIncrementInterval)
+	name := input.String(flagkey.CanaryName)
+	ht := input.String(flagkey.CanaryHTTPTriggerName)
+	newFunc := input.String(flagkey.CanaryNewFunc)
+	oldFunc := input.String(flagkey.CanaryOldFunc)
+	fnNs := input.String(flagkey.NamespaceFunction)
+	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
+	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
+	incrementInterval := input.String(flagkey.CanaryIncrementInterval)
 
 	// check for time parsing
 	_, err := time.ParseDuration(incrementInterval)
@@ -128,7 +128,7 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.CanaryConfigCreate(opts.canary)
 	if err != nil {
 		return errors.Wrap(err, "error creating canary config")

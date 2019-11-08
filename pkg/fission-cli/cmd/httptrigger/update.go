@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -34,31 +35,28 @@ type UpdateSubCommand struct {
 	trigger *fv1.HTTPTrigger
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	htName := flags.String("name")
-	if len(htName) == 0 {
-		return errors.New("need name of trigger, use --name")
-	}
-	triggerNamespace := flags.String("triggerNamespace")
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	htName := input.String(flagkey.HtName)
+	triggerNamespace := input.String(flagkey.NamespaceTrigger)
 
 	ht, err := opts.client.HTTPTriggerGet(&metav1.ObjectMeta{
 		Name:      htName,
@@ -68,17 +66,17 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		return errors.Wrap(err, "error getting HTTP trigger")
 	}
 
-	if flags.IsSet("function") {
+	if input.IsSet(flagkey.HtFnName) {
 		// get the functions and their weights if specified
-		functionList := flags.StringSlice("function")
+		functionList := input.StringSlice(flagkey.HtFnName)
 		err := util.CheckFunctionExistence(opts.client, functionList, triggerNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
 
 		var functionWeightsList []int
-		if flags.IsSet("weight") {
-			functionWeightsList = flags.IntSlice("weight")
+		if input.IsSet(flagkey.HtFnWeight) {
+			functionWeightsList = input.IntSlice(flagkey.HtFnWeight)
 		}
 
 		// set function reference
@@ -90,21 +88,20 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		ht.Spec.FunctionReference = *functionRef
 	}
 
-	if flags.IsSet("createingress") {
-		ht.Spec.CreateIngress = flags.Bool("createingress")
+	if input.IsSet(flagkey.HtIngress) {
+		ht.Spec.CreateIngress = input.Bool(flagkey.HtIngress)
 	}
 
-	if flags.IsSet("host") {
-		ht.Spec.Host = flags.String("host")
-		console.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
+	if input.IsSet(flagkey.HtHost) {
+		ht.Spec.Host = input.String(flagkey.HtHost)
 	}
 
-	if flags.IsSet("ingressrule") || flags.IsSet("ingressannotation") || flags.IsSet("ingresstls") {
+	if input.IsSet(flagkey.HtIngressRule) || input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
 		ingress, err := GetIngressConfig(
-			flags.StringSlice("ingressannotation"), flags.String("ingressrule"),
-			flags.String("ingresstls"), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+			input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
+			input.String(flagkey.HtIngressTLS), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
 		if err != nil {
-			return errors.Wrap(err, "parse ingress configuration")
+			return errors.Wrap(err, "error parsing ingress configuration")
 		}
 		ht.Spec.IngressConfig = *ingress
 	}
@@ -114,7 +111,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.HTTPTriggerUpdate(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating the HTTP trigger")

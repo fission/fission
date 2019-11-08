@@ -31,18 +31,18 @@ type ListSubCommand struct {
 	client *client.Client
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := &ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
+func (opts *ListSubCommand) do(input cli.Input) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintln(w, "NAME\tVERSION\tPATH")
 	for _, p := range plugin.FindAll() {

@@ -26,6 +26,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -42,51 +43,39 @@ type UpdateSubCommand struct {
 	keepURL            bool
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	opts.pkgName = flags.String("name")
-	if len(opts.pkgName) == 0 {
-		return errors.New("Need --name argument.")
-	}
-	opts.pkgNamespace = flags.String("pkgNamespace")
-	opts.force = flags.Bool("f")
-	opts.envName = flags.String("env")
-	opts.envNamespace = flags.String("envNamespace")
-	opts.srcArchiveFiles = flags.StringSlice("src")
-	opts.deployArchiveFiles = flags.StringSlice("deploy")
-	opts.buildcmd = flags.String("buildcmd")
-	opts.keepURL = flags.Bool("keepurl")
-
-	if len(opts.srcArchiveFiles) > 0 && len(opts.deployArchiveFiles) > 0 {
-		return errors.New("Need either of --src or --deploy and not both arguments.")
-	}
-
-	if len(opts.srcArchiveFiles) == 0 && len(opts.deployArchiveFiles) == 0 &&
-		len(opts.envName) == 0 && len(opts.buildcmd) == 0 {
-		return errors.New("Need --env or --src or --deploy or --buildcmd argument.")
-	}
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	opts.pkgName = input.String(flagkey.PkgName)
+	opts.pkgNamespace = input.String(flagkey.NamespacePackage)
+	opts.force = input.Bool(flagkey.PkgForce)
+	opts.envName = input.String(flagkey.PkgEnvironment)
+	opts.envNamespace = input.String(flagkey.NamespaceEnvironment)
+	opts.srcArchiveFiles = input.StringSlice(flagkey.PkgSrcArchive)
+	opts.deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
+	opts.buildcmd = input.String(flagkey.PkgBuildCmd)
+	opts.keepURL = input.Bool(flagkey.PkgKeepURL)
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
 		Namespace: opts.pkgNamespace,
 		Name:      opts.pkgName,

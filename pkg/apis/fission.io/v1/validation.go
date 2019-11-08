@@ -339,7 +339,7 @@ func (es ExecutionStrategy) Validate() error {
 
 	if es.ExecutorType == ExecutorTypeNewdeploy {
 		if es.MinScale < 0 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater or equal to 0"))
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater than or equal to 0"))
 		}
 
 		if es.MaxScale <= 0 {
@@ -347,7 +347,7 @@ func (es ExecutionStrategy) Validate() error {
 		}
 
 		if es.MaxScale < es.MinScale {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater or equal to minimum scale"))
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than or equal to minimum scale"))
 		}
 
 		if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
@@ -421,11 +421,11 @@ func (spec EnvironmentSpec) Validate() error {
 	}
 
 	if spec.Poolsize < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater or equal to 0"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater than or equal to 0"))
 	}
 
 	if spec.TerminationGracePeriod < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater or equal to 0"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater than or equal to 0"))
 	}
 
 	return result.ErrorOrNil()

@@ -18,13 +18,13 @@ package function
 
 import (
 	"fmt"
-	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
 func TestGetInvokeStrategy(t *testing.T) {
