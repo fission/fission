@@ -67,17 +67,21 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, k
 			} else if strings.Contains(envVar, "PROMETHEUS_SERVER_SERVICE_PORT") {
 				prometheusSvcPort = getEnvValue(envVar)
 			}
-
 			if len(prometheusSvcHost) > 0 && len(prometheusSvcPort) > 0 {
 				break
 			}
 		}
+		if len(prometheusSvcHost) == 0 && len(prometheusSvcPort) == 0 {
+			return nil, errors.New("unable to get prometheus service url")
+		}
 		prometheusSvc = fmt.Sprintf("http://%v:%v", prometheusSvcHost, prometheusSvcPort)
 	}
 
+	logger.Info("try to start canary config manager with prometheus service url", zap.String("prometheus", prometheusSvc))
+
 	_, err := url.Parse(prometheusSvc)
 	if err != nil {
-		return nil, fmt.Errorf("prometheus service url not found/invalid, cant create canary config manager: %v", prometheusSvc)
+		return nil, errors.Errorf("prometheus service url not found/invalid, cant create canary config manager: %v", prometheusSvc)
 	}
 
 	promClient, err := MakePrometheusClient(logger, prometheusSvc)
