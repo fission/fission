@@ -421,7 +421,11 @@ func (spec EnvironmentSpec) Validate() error {
 	}
 
 	if spec.Poolsize < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "Poolsize must be greater or equal to 0"))
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater or equal to 0"))
+	}
+
+	if spec.TerminationGracePeriod < 0 {
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater or equal to 0"))
 	}
 
 	return result.ErrorOrNil()

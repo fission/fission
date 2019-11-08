@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -38,21 +39,21 @@ type TestSubCommand struct {
 	client *client.Client
 }
 
-func Test(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Test(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := TestSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *TestSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "fnNamespace", flags)
-	if err != nil {
-		return err
+func (opts *TestSubCommand) do(input cli.Input) error {
+	m := &metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
 	}
 
 	routerURL := os.Getenv("FISSION_ROUTER")
@@ -76,7 +77,7 @@ func (opts *TestSubCommand) do(flags cli.Input) error {
 	if err != nil {
 		return err
 	}
-	queryParams := flags.StringSlice("query")
+	queryParams := input.StringSlice(flagkey.FnTestQuery)
 	if len(queryParams) > 0 {
 		query := url.Values{}
 		for _, q := range queryParams {
@@ -97,15 +98,15 @@ func (opts *TestSubCommand) do(flags cli.Input) error {
 	}
 
 	ctx := context.Background()
-	if deadline := flags.Duration("timeout"); deadline > 0 {
+	if deadline := input.Duration(flagkey.FnTestTimeout); deadline > 0 {
 		var closeCtx func()
 		ctx, closeCtx = context.WithTimeout(ctx, deadline)
 		defer closeCtx()
 	}
 
-	headers := flags.StringSlice("header")
+	headers := input.StringSlice(flagkey.FnTestHeader)
 
-	resp, err := doHTTPRequest(ctx, flags.String("method"), functionUrl.String(), flags.String("body"), headers)
+	resp, err := doHTTPRequest(ctx, input.String(flagkey.HtMethod), functionUrl.String(), input.String(flagkey.FnTestBody), headers)
 	if err != nil {
 		return err
 	}
@@ -123,9 +124,9 @@ func (opts *TestSubCommand) do(flags cli.Input) error {
 	}
 
 	fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", m.Name, resp.StatusCode, string(body))
-	err = printPodLogs(flags)
+	err = printPodLogs(input)
 	if err != nil {
-		return Log(flags)
+		return Log(input)
 	}
 
 	return nil
@@ -157,8 +158,8 @@ func doHTTPRequest(ctx context.Context, method, url, body string, headers []stri
 	return resp, nil
 }
 
-func printPodLogs(flags cli.Input) error {
-	fnName := flags.String("name")
+func printPodLogs(input cli.Input) error {
+	fnName := input.String(flagkey.FnName)
 	if len(fnName) == 0 {
 		return errors.New("need --name argument.")
 	}
@@ -174,7 +175,7 @@ func printPodLogs(flags cli.Input) error {
 	}
 	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
 
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "error creating logs request")
 	}

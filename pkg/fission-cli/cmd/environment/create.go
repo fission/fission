@@ -27,9 +27,10 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
-	"github.com/fission/fission/pkg/fission-cli/consolemsg"
-	"github.com/fission/fission/pkg/fission-cli/flag"
+	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type CreateSubCommand struct {
@@ -37,28 +38,28 @@ type CreateSubCommand struct {
 	env    *fv1.Environment
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
 // complete creates a environment objects and populates it with default value and CLI inputs.
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	env, err := createEnvironmentFromCmd(flags)
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	env, err := createEnvironmentFromCmd(input)
 	if err != nil {
 		return err
 	}
@@ -68,23 +69,21 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
-func (opts *CreateSubCommand) run(flags cli.Input) error {
-	m, err := util.GetMetadata(flag.RESOURCE_NAME, flag.ENVIRONMENT_NAMESPACE, flags)
-	if err != nil {
-		return err
-	}
+func (opts *CreateSubCommand) run(input cli.Input) error {
+	m := opts.env.Metadata
+
 	envList, err := opts.client.EnvironmentList(m.Namespace)
 	if err != nil {
 		return err
 	} else if len(envList) > 0 {
-		consolemsg.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
+		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
 			len(envList), m.Namespace)
 	}
 
 	// if we're writing a spec, don't call the API
 	// save to spec file
-	if flags.Bool(flag.SPEC_SPEC) {
+	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
 		err = spec.SpecSave(*opts.env, specFile)
 		if err != nil {
@@ -103,39 +102,33 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 }
 
 // createEnvironmentFromCmd creates environment initialized with CLI input.
-func createEnvironmentFromCmd(flags cli.Input) (*fv1.Environment, error) {
-	e := &multierror.Error{}
+func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
+	e := utils.MultiErrorWithFormat()
 
-	envNamespace := flags.String(flag.ENVIRONMENT_NAMESPACE)
-	envBuildCmd := flags.String(flag.ENVIRONMENT_BUILDCOMMAND)
-	envExternalNetwork := flags.Bool(flag.ENVIRONMENT_EXTERNAL_NETWORK)
-	keepArchive := flags.Bool(flag.ENVIRONMENT_KEEPARCHIVE)
+	envName := input.String(flagkey.EnvName)
+	envImg := input.String(flagkey.EnvImage)
+	envNamespace := input.String(flagkey.NamespaceEnvironment)
+	envBuildCmd := input.String(flagkey.EnvBuildcommand)
+	envExternalNetwork := input.Bool(flagkey.EnvExternalNetwork)
+	keepArchive := input.Bool(flagkey.EnvKeeparchive)
+	envGracePeriod := input.Int64(flagkey.EnvGracePeriod)
 
-	envName := flags.String(flag.RESOURCE_NAME)
-	if len(envName) == 0 {
-		e = multierror.Append(e, errors.New("Need a name, use --name."))
-	}
-
-	envImg := flags.String(flag.ENVIRONMENT_IMAGE)
-	if len(envImg) == 0 {
-		e = multierror.Append(e, errors.New("Need an image, use --image."))
-	}
-
-	envGracePeriod := flags.Int64(flag.ENVIRONMENT_GRACE_PERIOD)
-	if envGracePeriod <= 0 {
-		envGracePeriod = 360
-	}
-
-	envVersion := flags.Int(flag.ENVIRONMENT_VERSION)
+	envVersion := input.Int(flagkey.EnvVersion)
 	// Environment API interface version is not specified and
 	// builder image is empty, set default interface version
 	if envVersion == 0 {
 		envVersion = 1
 	}
 
-	envBuilderImg := flags.String(flag.ENVIRONMENT_BUILDER)
+	poolsize := input.Int(flagkey.EnvPoolsize)
+	if input.IsSet(flagkey.EnvPoolsize) {
+		// TODO: remove silently version 3 assignment, we need to warn user to set it explicitly.
+		envVersion = 3
+	}
+
+	envBuilderImg := input.String(flagkey.EnvBuilderImage)
 	if len(envBuilderImg) > 0 {
-		if !flags.IsSet(flag.ENVIRONMENT_VERSION) {
+		if !input.IsSet(flagkey.EnvVersion) {
 			// TODO: remove set env version to 2 silently, we need to warn user to set it explicitly.
 			envVersion = 2
 		}
@@ -144,14 +137,7 @@ func createEnvironmentFromCmd(flags cli.Input) (*fv1.Environment, error) {
 		}
 	}
 
-	poolsize := 3
-	if flags.IsSet(flag.ENVIRONMENT_POOLSIZE) {
-		poolsize = flags.Int(flag.ENVIRONMENT_POOLSIZE)
-		// TODO: remove silently version 3 assignment, we need to warn user to set it explicitly.
-		envVersion = 3
-	}
-
-	resourceReq, err := util.GetResourceReqs(flags, nil)
+	resourceReq, err := util.GetResourceReqs(input, nil)
 	if err != nil {
 		e = multierror.Append(e, err)
 	}

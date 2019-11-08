@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 #
 # Simple end-to-end test of record with GET

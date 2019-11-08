@@ -18,6 +18,7 @@ package function
 
 import (
 	"fmt"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,7 +28,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
-	"github.com/fission/fission/pkg/fission-cli/consolemsg"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
@@ -37,41 +38,30 @@ type UpdateSubCommand struct {
 	function *fv1.Function
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	if len(flags.String("package")) > 0 {
-		return errors.New("--package is deprecated, please use --deploy instead")
-	}
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	fnName := input.String(flagkey.FnName)
+	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	if len(flags.String("srcpkg")) > 0 {
-		return errors.New("--srcpkg is deprecated, please use --src instead.")
-	}
-
-	fnName := flags.String("name")
-	if len(fnName) == 0 {
-		return errors.New("Need name of function, use --name")
-	}
-	fnNamespace := flags.String("fnNamespace")
-
-	m, err := util.GetMetadata("name", "fnNamespace", flags)
+	m, err := util.GetMetadata("name", "fnNamespace", input)
 	if err != nil {
 		return err
 	}
@@ -81,8 +71,8 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
 	}
 
-	envName := flags.String("env")
-	envNamespace := flags.String("envNamespace")
+	envName := input.String("env")
+	envNamespace := input.String("envNamespace")
 	// if the new env specified is the same as the old one, no need to update package
 	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
@@ -96,24 +86,24 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 
 	var deployArchiveFiles []string
 	codeFlag := false
-	code := flags.String("code")
+	code := input.String("code")
 	if len(code) == 0 {
-		deployArchiveFiles = flags.StringSlice("deploy")
+		deployArchiveFiles = input.StringSlice("deploy")
 	} else {
-		deployArchiveFiles = append(deployArchiveFiles, flags.String("code"))
+		deployArchiveFiles = append(deployArchiveFiles, input.String("code"))
 		codeFlag = true
 	}
 
-	srcArchiveFiles := flags.StringSlice("src")
-	pkgName := flags.String("pkg")
-	entrypoint := flags.String("entrypoint")
-	buildcmd := flags.String("buildcmd")
-	force := flags.Bool("force")
+	srcArchiveFiles := input.StringSlice("src")
+	pkgName := input.String("pkg")
+	entrypoint := input.String("entrypoint")
+	buildcmd := input.String("buildcmd")
+	force := input.Bool("force")
 
-	secretNames := flags.StringSlice("secret")
-	cfgMapNames := flags.StringSlice("configmap")
+	secretNames := input.StringSlice("secret")
+	cfgMapNames := input.StringSlice("configmap")
 
-	specializationTimeout := flags.Int("specializationtimeout")
+	specializationTimeout := input.Int("specializationtimeout")
 
 	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
 		return errors.New("Need either of --src or --deploy and not both arguments.")
@@ -131,7 +121,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 				Name:      secretName,
 			})
 			if k8serrors.IsNotFound(err) {
-				consolemsg.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+				console.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 			}
 		}
 
@@ -155,7 +145,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 				Name:      cfgMapName,
 			})
 			if k8serrors.IsNotFound(err) {
-				consolemsg.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
+				console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
 			}
 		}
 
@@ -181,8 +171,8 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		function.Spec.Package.FunctionName = entrypoint
 	}
 
-	if flags.IsSet("fntimeout") {
-		fnTimeout := flags.Int("fntimeout")
+	if input.IsSet("fntimeout") {
+		fnTimeout := input.Int("fntimeout")
 		if fnTimeout <= 0 {
 			return errors.New("fntimeout must be greater than 0")
 		}
@@ -193,13 +183,13 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
 
-	strategy, err := getInvokeStrategy(flags, &function.Spec.InvokeStrategy)
+	strategy, err := getInvokeStrategy(input, &function.Spec.InvokeStrategy)
 	if err != nil {
 		return err
 	}
 	function.Spec.InvokeStrategy = *strategy
 
-	if flags.IsSet("specializationtimeout") {
+	if input.IsSet("specializationtimeout") {
 		if strategy.ExecutionStrategy.ExecutorType != types.ExecutorTypeNewdeploy {
 			return errors.New("specializationtimeout flag is only applicable for newdeploy type of executor")
 		}
@@ -211,7 +201,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 		}
 	}
 
-	resReqs, err := util.GetResourceReqs(flags, &function.Spec.Resources)
+	resReqs, err := util.GetResourceReqs(input, &function.Spec.Resources)
 	if err != nil {
 		return err
 	}
@@ -238,7 +228,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 			return errors.New("package is used by multiple functions, use --force to force update")
 		}
 
-		keepURL := flags.Bool("keepurl")
+		keepURL := input.Bool("keepurl")
 
 		pkgMetadata, err = _package.UpdatePackage(opts.client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag, keepURL)
 		if err != nil {
@@ -271,7 +261,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	}
 
 	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
-		consolemsg.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
+		console.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
 		function.Spec.Environment.Name = pkg.Spec.Environment.Name
 		function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
 	}
@@ -281,7 +271,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.FunctionUpdate(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error updating function")

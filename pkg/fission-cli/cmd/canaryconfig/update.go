@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,43 +35,43 @@ type UpdateSubCommand struct {
 	canary *fv1.CanaryConfig
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// get the current config
-	m, err := util.GetMetadata("name", "canaryNamespace", flags)
-	if err != nil {
-		return err
-	}
-
-	incrementStep := flags.Int("increment-step")
-	failureThreshold := flags.Int("failure-threshold")
-	incrementInterval := flags.String("increment-interval")
+	name := input.String(flagkey.CanaryName)
+	ns := input.String(flagkey.NamespaceCanary)
+	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
+	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
+	incrementInterval := input.String(flagkey.CanaryIncrementInterval)
 
 	// check for time parsing
-	_, err = time.ParseDuration(incrementInterval)
+	_, err := time.ParseDuration(incrementInterval)
 	if err != nil {
 		return errors.Wrap(err, "error parsing time duration")
 	}
 
-	canaryCfg, err := opts.client.CanaryConfigGet(m)
+	canaryCfg, err := opts.client.CanaryConfigGet(&metav1.ObjectMeta{
+		Name:      name,
+		Namespace: ns,
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting canary config")
 	}
@@ -97,7 +99,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.CanaryConfigUpdate(opts.canary)
 	if err != nil {
 		return errors.Wrap(err, "error updating canary config")
