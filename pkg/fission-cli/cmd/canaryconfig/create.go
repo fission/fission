@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
@@ -56,13 +58,14 @@ func (opts *CreateSubCommand) do(flags cli.Input) error {
 func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	// canary configs can be created for functions in the same namespace
 
-	trigger := flags.String("httptrigger")
-	newFunc := flags.String("newfunction")
-	oldFunc := flags.String("oldfunction")
-	ns := flags.String("fnNamespace")
-	incrementStep := flags.Int("increment-step")
-	failureThreshold := flags.Int("failure-threshold")
-	incrementInterval := flags.String("increment-interval")
+	name := flags.String(flagkey.CanaryName)
+	ht := flags.String(flagkey.CanaryHTTPTriggerName)
+	newFunc := flags.String(flagkey.CanaryNewFunc)
+	oldFunc := flags.String(flagkey.CanaryOldFunc)
+	fnNs := flags.String(flagkey.NamespaceFunction)
+	incrementStep := flags.Int(flagkey.CanaryWeightIncrement)
+	failureThreshold := flags.Int(flagkey.CanaryFailureThreshold)
+	incrementInterval := flags.String(flagkey.CanaryIncrementInterval)
 
 	// check for time parsing
 	_, err := time.ParseDuration(incrementInterval)
@@ -71,14 +74,12 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	}
 
 	// check that the trigger exists in the same namespace.
-	m, err := util.GetMetadata("httptrigger", "fnNamespace", flags)
+	htTrigger, err := opts.client.HTTPTriggerGet(&metav1.ObjectMeta{
+		Name:      ht,
+		Namespace: fnNs,
+	})
 	if err != nil {
-		return errors.Wrap(err, "error finding http trigger in given namespace")
-	}
-
-	htTrigger, err := opts.client.HTTPTriggerGet(m)
-	if err != nil {
-		return errors.Wrap(err, "error finding trigger referenced in the canary config")
+		return errors.Wrap(err, "error finding http trigger referenced in the canary config")
 	}
 
 	// check that the trigger has function reference type function weights
@@ -99,21 +100,19 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 
 	// check that the functions exist in the same namespace
 	fnList := []string{newFunc, oldFunc}
-	err = util.CheckFunctionExistence(opts.client, fnList, ns)
+	err = util.CheckFunctionExistence(opts.client, fnList, fnNs)
 	if err != nil {
 		return errors.Wrap(err, "error checking functions existence")
 	}
 
-	canaryMetadata, err := util.GetMetadata("name", "fnNamespace", flags)
-	if err != nil {
-		return err
-	}
-
 	// finally create canaryCfg in the same namespace as the functions referenced
 	opts.canary = &fv1.CanaryConfig{
-		Metadata: *canaryMetadata,
+		Metadata: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: fnNs,
+		},
 		Spec: fv1.CanaryConfigSpec{
-			Trigger:                 trigger,
+			Trigger:                 ht,
 			NewFunction:             newFunc,
 			OldFunction:             oldFunc,
 			WeightIncrement:         incrementStep,

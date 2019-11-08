@@ -24,6 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -31,24 +32,22 @@ type GetSubCommand struct {
 	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Get(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "fnNamespace", flags)
-	if err != nil {
-		return err
-	}
-
-	fn, err := opts.client.FunctionGet(m)
+func (opts *GetSubCommand) do(input cli.Input) error {
+	fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}

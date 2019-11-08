@@ -1,4 +1,5 @@
 #!/bin/bash
+#test:disabled
 
 #
 # Simple test of recorder updates

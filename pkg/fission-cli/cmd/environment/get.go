@@ -22,10 +22,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/flag"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,21 +34,21 @@ type GetSubCommand struct {
 	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Get(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata(flag.RESOURCE_NAME, flag.ENVIRONMENT_NAMESPACE, flags)
-	if err != nil {
-		return err
+func (opts *GetSubCommand) do(input cli.Input) error {
+	m := &metav1.ObjectMeta{
+		Name:      input.String(flagkey.EnvName),
+		Namespace: input.String(flagkey.NamespaceEnvironment),
 	}
 
 	env, err := opts.client.EnvironmentGet(m)
