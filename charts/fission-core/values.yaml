@@ -125,7 +125,7 @@ persistence:
 ##               operator: In
 ##               values:
 ##                 - app
-extraCoreComponentPodConfig:
+#extraCoreComponentPodConfig:
 #  affinity:
 #  tolerations:
 #  nodeSelector:
