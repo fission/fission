@@ -70,7 +70,8 @@ func Commands() *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
-		Short:   "List all canary configs in a namespace if specified, else, list canary configs across all namespaces",
+		Short:   "List canary configs",
+		Long:    "List all canary configs in a namespace if specified, else, list canary configs across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{

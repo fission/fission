@@ -19,6 +19,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/version"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/flag"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
 const (
@@ -36,7 +37,7 @@ func App() *cobra.Command {
 		//SilenceUsage: true,
 		PreRunE: wrapper.Wrapper(
 			func(flags cli.Input) error {
-				console.Verbosity = flags.Int(flag.Verbosity)
+				console.Verbosity = flags.Int(flagkey.Verbosity)
 				return nil
 			},
 		),

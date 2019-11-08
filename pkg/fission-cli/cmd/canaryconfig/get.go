@@ -22,9 +22,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,24 +34,22 @@ type GetSubCommand struct {
 	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Get(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetSubCommand{
 		client: c,
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *GetSubCommand) run(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "canaryNamespace", flags)
-	if err != nil {
-		return err
-	}
-
-	canaryCfg, err := opts.client.CanaryConfigGet(m)
+func (opts *GetSubCommand) run(input cli.Input) error {
+	canaryCfg, err := opts.client.CanaryConfigGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.CanaryName),
+		Namespace: input.String(flagkey.NamespaceCanary),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting canary config")
 	}

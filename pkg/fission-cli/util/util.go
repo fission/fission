@@ -37,7 +37,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/console"
-	"github.com/fission/fission/pkg/fission-cli/flag"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
 	"github.com/fission/fission/pkg/utils"
@@ -196,7 +196,7 @@ func GetVersion(client *client.Client) info.Versions {
 }
 
 func GetServer(flags cli.Input) (c *client.Client, err error) {
-	serverUrl := flags.GlobalString(flag.Server)
+	serverUrl := flags.GlobalString(flagkey.Server)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
 		serverUrl, err = GetApplicationUrl("application=fission-api")
@@ -233,8 +233,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 
 	e := utils.MultiErrorWithFormat()
 
-	if flags.IsSet(flag.RuntimeMincpu) {
-		mincpu := flags.Int(flag.RuntimeMincpu)
+	if flags.IsSet(flagkey.RuntimeMincpu) {
+		mincpu := flags.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
@@ -242,8 +242,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
 
-	if flags.IsSet(flag.RuntimeMinmemory) {
-		minmem := flags.Int(flag.RuntimeMinmemory)
+	if flags.IsSet(flagkey.RuntimeMinmemory) {
+		minmem := flags.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
@@ -251,8 +251,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
 
-	if flags.IsSet(flag.RuntimeMaxcpu) {
-		maxcpu := flags.Int(flag.RuntimeMaxcpu)
+	if flags.IsSet(flagkey.RuntimeMaxcpu) {
+		maxcpu := flags.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
@@ -260,8 +260,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
 
-	if flags.IsSet(flag.RuntimeMaxmemory) {
-		maxmem := flags.Int(flag.RuntimeMaxmemory)
+	if flags.IsSet(flagkey.RuntimeMaxmemory) {
+		maxmem := flags.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
@@ -298,7 +298,7 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 }
 
 func GetSpecDir(flags cli.Input) string {
-	specDir := flags.String(flag.SpecDir)
+	specDir := flags.String(flagkey.SpecDir)
 	if len(specDir) == 0 {
 		specDir = "specs"
 	}

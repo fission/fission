@@ -22,9 +22,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -33,38 +35,32 @@ type LogSubCommand struct {
 	client *client.Client
 }
 
-func Log(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Log(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := LogSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *LogSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "fnNamespace", flags)
-	if err != nil {
-		return err
-	}
+func (opts *LogSubCommand) do(input cli.Input) error {
+	dbType := input.String(flagkey.FnLogDBType)
+	fnPod := input.String(flagkey.FnLogPod)
 
-	dbType := flags.String("dbtype")
-	if len(dbType) == 0 {
-		dbType = logdb.INFLUXDB
-	}
+	logReverseQuery := !input.Bool(flagkey.FnLogFollow) && input.Bool(flagkey.FnLogReverseQuery)
 
-	fnPod := flags.String("pod")
-
-	logReverseQuery := !flags.Bool("f") && flags.Bool("r")
-
-	recordLimit := flags.Int("recordcount")
+	recordLimit := input.Int(flagkey.FnLogCount)
 	if recordLimit <= 0 {
 		recordLimit = 1000
 	}
 
-	f, err := opts.client.FunctionGet(m)
+	f, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}
@@ -104,7 +100,7 @@ func (opts *LogSubCommand) do(flags cli.Input) error {
 					return
 				}
 				for _, logEntry := range logEntries {
-					if flags.Bool("d") {
+					if input.Bool(flagkey.FnLogDetail) {
 						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
 							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
 					} else {
@@ -124,7 +120,7 @@ func (opts *LogSubCommand) do(flags cli.Input) error {
 		time.Sleep(1 * time.Second)
 
 		<-responseChan
-		if !flags.Bool("f") {
+		if !input.Bool(flagkey.FnLogFollow) {
 			ctx.Done()
 			break
 		}

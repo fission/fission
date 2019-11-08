@@ -25,7 +25,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/flag"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,21 +33,19 @@ type ListSubCommand struct {
 	client *client.Client
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
-	envNamespace := flags.String(flag.NamespaceEnvironment)
-
-	envs, err := opts.client.EnvironmentList(envNamespace)
+func (opts *ListSubCommand) do(input cli.Input) error {
+	envs, err := opts.client.EnvironmentList(input.String(flagkey.NamespaceEnvironment))
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}

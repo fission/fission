@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package flag
+package flagkey
 
 const (
 	Verbosity = "verbosity"
@@ -107,7 +107,7 @@ const (
 	EnvName            = resourceName
 	EnvPoolsize        = "poolsize"
 	EnvImage           = "image"
-	EnvBuilder         = "builder"
+	EnvBuilderImage    = "builder"
 	EnvBuildcommand    = "buildcmd"
 	EnvKeeparchive     = "keeparchive"
 	EnvExternalNetwork = "externalnetwork"
@@ -143,19 +143,12 @@ const (
 	SupportNoZip  = "nozip"
 
 	CanaryName              = resourceName
-	CanaryTriggerName       = "httptrigger"
+	CanaryHTTPTriggerName   = "httptrigger"
 	CanaryNewFunc           = "newfunction"
 	CanaryOldFunc           = "oldfunction"
 	CanaryWeightIncrement   = "increment-step"
 	CanaryIncrementInterval = "increment-interval"
 	CanaryFailureThreshold  = "failure-threshold"
 
-	SPEC_SPEC = "spec"
-
 	DefaultSpecOutputDir = "fission-dump"
 )
-
-// GetCliFlagName concatenates flag and its alias into a command flag name.
-//func GetCliFlagName(flags ...string) string {
-//	return strings.Join(flags, ", ")
-//}

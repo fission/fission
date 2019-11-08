@@ -273,7 +273,7 @@ func toFitUsagePadding(u string, pad int) (usage string) {
 	length := pad
 
 	for _, chunk := range us {
-		if length+len(chunk) > pad+100 {
+		if length+len(chunk) > 100 {
 			usage = usage + "\n" + lpad(chunk, pad+len(chunk)+4) // 4 for whitespace in format
 			length = pad
 			continue

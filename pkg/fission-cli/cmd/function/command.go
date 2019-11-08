@@ -95,7 +95,6 @@ func Commands() *cobra.Command {
 		Short:   "List all functions in a namespace if specified, else, list functions across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
-
 	wrapper.SetFlags(listCmd, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceFunctionFlag},
 	})
