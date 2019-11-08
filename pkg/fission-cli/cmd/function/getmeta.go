@@ -22,9 +22,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,24 +34,22 @@ type GetMetaSubCommand struct {
 	client *client.Client
 }
 
-func GetMeta(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func GetMeta(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetMetaSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetMetaSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "fnNamespace", flags)
-	if err != nil {
-		return err
-	}
-
-	fn, err := opts.client.FunctionGet(m)
+func (opts *GetMetaSubCommand) do(input cli.Input) error {
+	fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}

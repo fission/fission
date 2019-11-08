@@ -26,6 +26,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,19 +34,19 @@ type ListSubCommand struct {
 	client *client.Client
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
-	ns := flags.String("fnNamespace")
+func (opts *ListSubCommand) do(input cli.Input) error {
+	ns := input.String(flagkey.NamespaceFunction)
 
 	fns, err := opts.client.FunctionList(ns)
 	if err != nil {
