@@ -70,7 +70,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave,
-			flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive, flag.FnEnvName,
 			flag.FnKeepURL, flag.FnEntryPoint, flag.FnBuildCmd, flag.FnPkgName, flag.HtUrl,
 			flag.HtMethod, flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax, flag.FnExecutorType,

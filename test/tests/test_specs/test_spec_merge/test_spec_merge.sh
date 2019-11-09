@@ -9,8 +9,8 @@ fn_nd=nodehellond
 
 cleanup() {
     echo "Cleaning up..."
-    popd
     fission spec destroy || true
+    popd
 }
 
 trap cleanup EXIT
