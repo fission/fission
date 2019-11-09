@@ -139,7 +139,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 		return err
 	}
 
-	gp, err := gpm.GetPool(env)
+	gp, err := gpm.getPool(env)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (gpm *GenericPoolManager) service() {
 	}
 }
 
-func (gpm *GenericPoolManager) GetPool(env *fv1.Environment) (*GenericPool, error) {
+func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, error) {
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
 		requestType:     GET_POOL,
@@ -239,61 +239,58 @@ func (gpm *GenericPoolManager) GetPool(env *fv1.Environment) (*GenericPool, erro
 	return resp.pool, resp.error
 }
 
-func (gpm *GenericPoolManager) CleanupPools(envs []fv1.Environment) {
+func (gpm *GenericPoolManager) cleanupPools(envs []fv1.Environment) {
 	gpm.requestChannel <- &request{
 		requestType: CLEANUP_POOLS,
 		envList:     envs,
 	}
 }
 
-func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	// from Func -> get Env
-	gpm.logger.Debug("getting environment for function", zap.String("function", metadata.Name))
-	env, err := gpm.getFunctionEnv(metadata)
+	gpm.logger.Debug("getting environment for function", zap.String("function", fn.Metadata.Name))
+	env, err := gpm.getFunctionEnv(fn)
 	if err != nil {
 		return nil, err
 	}
 
-	pool, err := gpm.GetPool(env)
+	pool, err := gpm.getPool(env)
 	if err != nil {
 		return nil, err
 	}
+
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Debug("getting function service from pool", zap.String("function", metadata.Name))
-	return pool.GetFuncSvc(ctx, metadata)
+	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.Metadata.Name))
+	return pool.getFuncSvc(ctx, fn)
 }
 
-func (gpm *GenericPoolManager) getFunctionEnv(m *metav1.ObjectMeta) (*fv1.Environment, error) {
+func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environment, error) {
 	var env *fv1.Environment
 
 	// Cached ?
-	result, err := gpm.functionEnv.Get(crd.CacheKey(m))
+	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
+	result, err := gpm.functionEnv.Get(crd.CacheKey(&fn.Metadata))
 	if err == nil {
 		env = result.(*fv1.Environment)
 		return env, nil
 	}
 
-	// Cache miss -- get func from controller
-	f, err := gpm.fissionClient.Functions(m.Namespace).Get(m.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get env from metadata
-	env, err = gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	// Get env from controller
+	env, err = gpm.fissionClient.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	// cache for future lookups
-	gpm.functionEnv.Set(crd.CacheKey(m), env)
+	m := fn.Metadata
+	gpm.functionEnv.Set(crd.CacheKey(&m), env)
 
 	return env, nil
 }
 
 func (gpm *GenericPoolManager) eagerPoolCreator() {
-	pollSleep := time.Duration(2 * time.Second)
+	pollSleep := 2 * time.Second
 	for {
 		// get list of envs from controller
 		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
@@ -303,7 +300,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			gpm.logger.Fatal("failed to get environment list", zap.Error(err))
+			gpm.logger.Error("failed to get environment list", zap.Error(err))
 		}
 
 		// Create pools for all envs.  TODO: we should make this a bit less eager, only
@@ -314,7 +311,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 			env := envs.Items[i]
 			// Create pool only if poolsize greater than zero
 			if gpm.getEnvPoolsize(&env) > 0 {
-				_, err := gpm.GetPool(&envs.Items[i])
+				_, err := gpm.getPool(&envs.Items[i])
 				if err != nil {
 					gpm.logger.Error("eager-create pool failed", zap.Error(err))
 				}
@@ -322,7 +319,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		}
 
 		// Clean up pools whose env was deleted
-		gpm.CleanupPools(envs.Items)
+		gpm.cleanupPools(envs.Items)
 		time.Sleep(pollSleep)
 	}
 }

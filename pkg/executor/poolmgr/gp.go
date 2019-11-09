@@ -298,7 +298,7 @@ func (gp *GenericPool) getFetcherUrl(podIP string) string {
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
-func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metadata *metav1.ObjectMeta) error {
+func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
@@ -306,28 +306,21 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, metada
 	}
 	// specialize pod with service
 	if gp.useIstio {
-		svc := utils.GetFunctionIstioServiceName(metadata.Name, metadata.Namespace)
+		svc := utils.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
 		podIP = fmt.Sprintf("%v.%v", svc, gp.namespace)
 	}
 
 	// tell fetcher to get the function.
 	fetcherUrl := gp.getFetcherUrl(podIP)
-	gp.logger.Info("calling fetcher to copy function", zap.String("function", metadata.Name), zap.String("url", fetcherUrl))
-
-	fn, err := gp.fissionClient.
-		Functions(metadata.Namespace).
-		Get(metadata.Name)
-	if err != nil {
-		return err
-	}
+	gp.logger.Info("calling fetcher to copy function", zap.String("function", fn.Metadata.Name), zap.String("url", fetcherUrl))
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
 
-	gp.logger.Info("specializing pod", zap.String("function", metadata.Name))
+	gp.logger.Info("specializing pod", zap.String("function", fn.Metadata.Name))
 
 	// Fetcher will download user function to share volume of pod, and
 	// invoke environment specialize api for pod specialization.
-	err = fetcherClient.MakeClient(gp.logger, fetcherUrl).Specialize(ctx, &specializeReq)
+	err := fetcherClient.MakeClient(gp.logger, fetcherUrl).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
 	}
@@ -508,9 +501,9 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 	return svc, err
 }
 
-func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
-	gp.logger.Info("choosing pod from pool", zap.String("function", m.Name))
-	newLabels := gp.labelsForFunction(m)
+func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	gp.logger.Info("choosing pod from pool", zap.Any("function", fn.Metadata))
+	newLabels := gp.labelsForFunction(&fn.Metadata)
 
 	if gp.useIstio {
 		// Istio only allows accessing pod through k8s service, and requests come to
@@ -536,8 +529,8 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		// and make sure that there is only one pod behind the service
 
 		sel := map[string]string{
-			"functionName": m.Name,
-			"functionUid":  string(m.UID),
+			"functionName": fn.Metadata.Name,
+			"functionUid":  string(fn.Metadata.UID),
 		}
 		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
@@ -558,22 +551,21 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		return nil, err
 	}
 
-	err = gp.specializePod(ctx, pod, m)
+	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
-	gp.logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("function", m.Name))
+	gp.logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.Any("function", fn.Metadata))
 
 	var svcHost string
 	if gp.useSvc && !gp.useIstio {
-		svcName := fmt.Sprintf("svc-%v", m.Name)
-		if len(m.UID) > 0 {
-			svcName = fmt.Sprintf("%s-%v", svcName, m.UID)
+		svcName := fmt.Sprintf("svc-%v", fn.Metadata.Name)
+		if len(fn.Metadata.UID) > 0 {
+			svcName = fmt.Sprintf("%s-%v", svcName, fn.Metadata.UID)
 		}
 
-		labels := gp.labelsForFunction(m)
-		svc, err := gp.createSvc(svcName, labels)
+		svc, err := gp.createSvc(svcName, newLabels)
 		if err != nil {
 			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, err
@@ -587,7 +579,7 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		// namespace-qualified hostname
 		svcHost = fmt.Sprintf("%v.%v", svcName, gp.namespace)
 	} else if gp.useIstio {
-		svc := utils.GetFunctionIstioServiceName(m.Name, m.Namespace)
+		svc := utils.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
 		svcHost = fmt.Sprintf("%v.%v:8888", svc, gp.namespace)
 	} else {
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
@@ -596,8 +588,8 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 	gp.logger.Info("specialized pod",
 		zap.String("pod", pod.ObjectMeta.Name),
 		zap.String("podNamespace", pod.ObjectMeta.Namespace),
-		zap.String("function", m.Name),
-		zap.String("functionNamespace", m.Namespace),
+		zap.String("function", fn.Metadata.Name),
+		zap.String("functionNamespace", fn.Metadata.Namespace),
 		zap.String("specialization_host", svcHost))
 
 	kubeObjRefs := []apiv1.ObjectReference{
@@ -611,9 +603,10 @@ func (gp *GenericPool) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta) (*f
 		},
 	}
 
+	m := fn.Metadata // only cache necessary part
 	fsvc := &fscache.FuncSvc{
 		Name:              pod.ObjectMeta.Name,
-		Function:          m,
+		Function:          &m,
 		Environment:       gp.env,
 		Address:           svcHost,
 		KubernetesObjects: kubeObjRefs,

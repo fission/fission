@@ -27,8 +27,10 @@ import (
 	"github.com/gorilla/mux"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -47,7 +49,17 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
-	serviceName, err := executor.getServiceForFunction(r.Context(), &m)
+	fn, err := executor.fissionClient.Functions(m.Namespace).Get(m.Name)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			http.Error(w, "Failed to find function", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to get function", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	serviceName, err := executor.getServiceForFunction(fn)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
@@ -70,21 +82,21 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 // stale addresses are not returned to the router.
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
-func (executor *Executor) getServiceForFunction(ctx context.Context, m *metav1.ObjectMeta) (string, error) {
+func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
 	// Check function -> svc cache
 	executor.logger.Debug("checking for cached function service",
-		zap.String("function_name", m.Name),
-		zap.String("function_namespace", m.Namespace))
+		zap.String("function_name", fn.Metadata.Name),
+		zap.String("function_namespace", fn.Metadata.Namespace))
 
-	fsvc, err := executor.fsCache.GetByFunction(m)
+	fsvc, err := executor.fsCache.GetByFunction(&fn.Metadata)
 	if err == nil {
 		if executor.isValidAddress(fsvc) {
 			// Cached, return svc address
 			return fsvc.Address, nil
 		} else {
 			executor.logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", m.Name),
-				zap.String("function_namespace", m.Namespace),
+				zap.String("function_name", fn.Metadata.Name),
+				zap.String("function_namespace", fn.Metadata.Namespace),
 				zap.String("address", fsvc.Address))
 			executor.fsCache.DeleteEntry(fsvc)
 		}
@@ -92,8 +104,7 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, m *metav1.O
 
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
-		ctx:      ctx,
-		funcMeta: m,
+		function: fn,
 		respChan: respChan,
 	}
 	resp := <-respChan
