@@ -226,7 +226,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 			return errors.New("package is used by multiple functions, use --force to force update")
 		}
 
-		keepURL := input.Bool("keepurl")
+		keepURL := input.Bool(flagkey.PkgKeepURL)
 
 		pkgMetadata, err = _package.UpdatePackage(opts.client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag, keepURL)
 		if err != nil {

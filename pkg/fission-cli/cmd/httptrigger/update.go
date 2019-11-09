@@ -66,6 +66,14 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error getting HTTP trigger")
 	}
 
+	if input.IsSet(flagkey.HtUrl) {
+		ht.Spec.RelativeURL = input.String(flagkey.HtUrl)
+	}
+
+	if input.IsSet(flagkey.HtMethod) {
+		ht.Spec.Method = input.String(flagkey.HtMethod)
+	}
+
 	if input.IsSet(flagkey.HtFnName) {
 		// get the functions and their weights if specified
 		functionList := input.StringSlice(flagkey.HtFnName)

@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.KwFnName},
-		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.NamespaceFunction, flag.SpecSave},
+		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.KwNamespace, flag.NamespaceFunction, flag.SpecSave},
 		// TODO: add label selector flag
 		// flag.KwLabelsFlag
 	})
@@ -50,7 +50,8 @@ func Commands() *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
-		Short:   "List all kube watchers in a namespace if specified, else, list kube watchers across all namespaces",
+		Short:   "List kube watchers",
+		Long:    "List all kube watchers in a namespace if specified, else, list kube watchers across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{

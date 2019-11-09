@@ -31,8 +31,8 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgEnvironment},
-		Optional: []flag.Flag{flag.PkgName, flag.NamespacePackage, flag.NamespaceEnvironment,
-			flag.PkgSrcArchive, flag.PkgDeployArchive, flag.PkgKeepURL, flag.PkgBuildCmd},
+		Optional: []flag.Flag{flag.PkgName, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgKeepURL, flag.PkgBuildCmd, flag.NamespacePackage, flag.NamespaceEnvironment},
 	})
 
 	getSrcCmd := &cobra.Command{
@@ -62,9 +62,8 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.PkgEnvironment, flag.NamespaceEnvironment,
-			flag.PkgSrcArchive, flag.PkgDeployArchive, flag.PkgKeepURL,
-			flag.PkgBuildCmd, flag.PkgForce},
+		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgKeepURL, flag.PkgBuildCmd, flag.PkgForce, flag.NamespacePackage, flag.NamespaceEnvironment},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -73,12 +72,13 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgName, flag.NamespacePackage, flag.PkgForce, flag.PkgOrphan},
+		Optional: []flag.Flag{flag.PkgName, flag.PkgForce, flag.PkgOrphan, flag.NamespacePackage},
 	})
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all packages in a namespace if specified, else, list packages across all namespaces",
+		Short: "List packages",
+		Long:  "List all packages in a namespace if specified, else, list packages across all namespaces",
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{

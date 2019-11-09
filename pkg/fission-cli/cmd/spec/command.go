@@ -30,7 +30,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Init),
 	}
 	wrapper.SetFlags(initCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir, flag.SpecName, flag.SpecDeployID},
+		Optional: []flag.Flag{flag.SpecName, flag.SpecDeployID, flag.SpecDir},
 	})
 
 	validateCmd := &cobra.Command{
@@ -48,7 +48,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Apply),
 	}
 	wrapper.SetFlags(applyCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir, flag.SpecDeployID, flag.SpecWait},
+		Optional: []flag.Flag{flag.SpecDir, flag.SpecDelete, flag.SpecWait, flag.SpecWatch},
 	})
 
 	destroyCmd := &cobra.Command{

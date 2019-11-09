@@ -30,7 +30,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.TtName, flag.TtFnName, flag.NamespaceFunction, flag.TtCron, flag.SpecSave},
+		Optional: []flag.Flag{flag.TtName, flag.TtFnName,
+			flag.TtCron, flag.NamespaceFunction, flag.SpecSave},
 	})
 
 	updateCmd := &cobra.Command{
@@ -41,7 +42,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
-		Optional: []flag.Flag{flag.TtFnName, flag.NamespaceFunction, flag.TtCron},
+		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.NamespaceTrigger},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -58,7 +59,8 @@ func Commands() *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
-		Short:   "List all time triggers in a namespace if specified, else, list time triggers across all namespaces",
+		Short:   "List time triggers",
+		Long:    "List all time triggers in a namespace if specified, else, list time triggers across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{

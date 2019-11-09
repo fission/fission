@@ -31,8 +31,8 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.HtUrl, flag.HtFnName},
-		Optional: []flag.Flag{flag.HtName, flag.HtMethod, flag.HtIngressRule,
-			flag.HtIngressAnnotation, flag.HtIngressTLS, flag.HtIngress,
+		Optional: []flag.Flag{flag.HtName, flag.HtMethod, flag.HtIngress,
+			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
 			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave},
 	})
 
@@ -54,9 +54,9 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnName, flag.HtUrl,
-			flag.HtMethod, flag.HtIngressRule, flag.HtIngressAnnotation,
-			flag.HtIngressTLS, flag.HtIngress, flag.HtFnWeight, flag.HtHost},
+		Optional: []flag.Flag{flag.HtUrl, flag.HtFnName,
+			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
+			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -72,7 +72,8 @@ func Commands() *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
-		Short:   "List all HTTP triggers in a namespace if specified, else, list HTTP triggers across all namespaces",
+		Short:   "List HTTP triggers",
+		Long:    "List all HTTP triggers in a namespace if specified, else, list HTTP triggers across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
