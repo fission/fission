@@ -425,7 +425,7 @@ func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, 
 		if err != nil {
 			return nil, err
 		}
-		//TODO check for imagePullerror
+		// TODO check for imagePullerror
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
 		if latestDepl.Status.AvailableReplicas >= replicas {

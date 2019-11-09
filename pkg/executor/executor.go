@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -55,8 +54,7 @@ type (
 		fsCreateWg  map[string]*sync.WaitGroup
 	}
 	createFuncServiceRequest struct {
-		ctx      context.Context
-		funcMeta *metav1.ObjectMeta
+		function *fv1.Function
 		respChan chan *createFuncServiceResponse
 	}
 
@@ -92,43 +90,57 @@ func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newd
 func (executor *Executor) serveCreateFuncServices() {
 	for {
 		req := <-executor.requestChan
-		m := req.funcMeta
+		fnMetadata := &req.function.Metadata
 
 		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg[crd.CacheKey(m)]
+		wg, found := executor.fsCreateWg[crd.CacheKey(fnMetadata)]
 		if !found {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
-			executor.fsCreateWg[crd.CacheKey(m)] = wg
+			executor.fsCreateWg[crd.CacheKey(fnMetadata)] = wg
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
 			go func() {
-				fsvc, err := executor.createServiceForFunction(req.ctx, m)
+				// Control overall specialization time by setting function
+				// specialization time to context. The reason not to use
+				// context from router requests is because a request maybe
+				// canceled for unknown reasons and let executor keeps
+				// spawning pods that never finish specialization process.
+				// Also, even a request failed, a specialized function pod
+				// still can serve other subsequent requests.
+
+				buffer := 10 // add some buffer time for specialization
+				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
+					time.Duration(req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout+buffer)*time.Second)
+
+				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
 				}
-				delete(executor.fsCreateWg, crd.CacheKey(m))
+				delete(executor.fsCreateWg, crd.CacheKey(fnMetadata))
+
+				cancel()
 				wg.Done()
 			}()
 		} else {
 			// There's an existing request for this function, wait for it to finish
 			go func() {
 				executor.logger.Debug("waiting for concurrent request for the same function",
-					zap.Any("function", m))
+					zap.Any("function", fnMetadata))
 				wg.Wait()
 
 				// get the function service from the cache
-				fsvc, err := executor.fsCache.GetByFunction(m)
+				fsvc, err := executor.fsCache.GetByFunction(fnMetadata)
 
 				// fsCache return error when the entry does not exist/expire.
 				// It normally happened if there are multiple requests are
 				// waiting for the same function and executor failed to cre-
 				// ate service for function.
-				err = errors.Wrapf(err, "error getting service for function %v in namespace %v", m.Name, m.Namespace)
+				err = errors.Wrapf(err, "error getting service for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
@@ -138,49 +150,38 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
-func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (fv1.ExecutorType, error) {
-	fn, err := executor.fissionClient.Functions(meta.Namespace).Get(meta.Name)
-	if err != nil {
-		return "", err
-	}
-	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, nil
-}
-
-func (executor *Executor) createServiceForFunction(ctx context.Context, meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
+func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	executor.logger.Debug("no cached function service found, creating one",
-		zap.String("function_name", meta.Name),
-		zap.String("function_namespace", meta.Namespace))
+		zap.String("function_name", fn.Metadata.Name),
+		zap.String("function_namespace", fn.Metadata.Namespace))
 
-	executorType, err := executor.getFunctionExecutorType(meta)
-	if err != nil {
-		return nil, err
-	}
+	executorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 
 	var fsvc *fscache.FuncSvc
 	var fsvcErr error
 
 	switch executorType {
 	case fv1.ExecutorTypeNewdeploy:
-		fsvc, fsvcErr = executor.ndm.GetFuncSvc(ctx, meta)
+		fsvc, fsvcErr = executor.ndm.GetFuncSvc(ctx, fn)
 	default:
-		fsvc, fsvcErr = executor.gpm.GetFuncSvc(ctx, meta)
+		fsvc, fsvcErr = executor.gpm.GetFuncSvc(ctx, fn)
 	}
 
 	if fsvcErr != nil {
 		e := "error creating service for function"
 		executor.logger.Error(e,
 			zap.Error(fsvcErr),
-			zap.String("function_name", meta.Name),
-			zap.String("function_namespace", meta.Namespace))
-		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%s] %s", meta.Name, e))
+			zap.String("function_name", fn.Metadata.Name),
+			zap.String("function_namespace", fn.Metadata.Namespace))
+		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%s] %s", fn.Metadata.Name, e))
 	} else if fsvc != nil {
-		_, err = executor.fsCache.Add(*fsvc)
+		_, err := executor.fsCache.Add(*fsvc)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	executor.fsCache.IncreaseColdStarts(meta.Name, string(meta.UID))
+	executor.fsCache.IncreaseColdStarts(fn.Metadata.Name, string(fn.Metadata.UID))
 
 	return fsvc, fsvcErr
 }

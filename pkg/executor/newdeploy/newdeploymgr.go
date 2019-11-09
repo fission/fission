@@ -224,11 +224,7 @@ func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
 	return relatedFunctions
 }
 
-func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, metadata *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
-	fn, err := deploy.fissionClient.Functions(metadata.Namespace).Get(metadata.Name)
-	if err != nil {
-		return nil, err
-	}
+func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return deploy.createFunction(fn, false)
 }
 
