@@ -24,6 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,40 +33,39 @@ type DeleteSubCommand struct {
 	metadata *metav1.ObjectMeta
 }
 
-func Delete(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Delete(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := DeleteSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *DeleteSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "triggerns", flags)
-	if err != nil {
-		return err
+func (opts *DeleteSubCommand) complete(input cli.Input) error {
+	opts.metadata = &metav1.ObjectMeta{
+		Name:      input.String(flagkey.MqtName),
+		Namespace: input.String(flagkey.NamespaceTrigger),
 	}
-	opts.metadata = m
 	return nil
 }
 
-func (opts *DeleteSubCommand) run(flags cli.Input) error {
-	err := opts.client.WatchDelete(opts.metadata)
+func (opts *DeleteSubCommand) run(input cli.Input) error {
+	err := opts.client.MessageQueueTriggerDelete(opts.metadata)
 	if err != nil {
 		return errors.Wrap(err, "error deleting message queue trigger")
 	}
 
-	fmt.Printf("message queue trigger '%v' deleted\n", opts.metadata.Name)
+	fmt.Printf("trigger '%v' deleted\n", opts.metadata.Name)
 	return nil
 }

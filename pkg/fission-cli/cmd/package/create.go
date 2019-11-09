@@ -31,6 +31,8 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -38,49 +40,49 @@ type CreateSubCommand struct {
 	client *client.Client
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.run(input)
 	if err != nil {
 		return err
 	}
-	//return opts.run(flags)
 	return nil
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	pkgNamespace := flags.String("pkgNamespace")
-	envName := flags.String("env")
-	if len(envName) == 0 {
-		return errors.New("Need --env argument.")
+func (opts *CreateSubCommand) run(input cli.Input) error {
+	pkgName := input.String(flagkey.PkgName)
+	if len(pkgName) == 0 {
+		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
 	}
-	envNamespace := flags.String("envNamespace")
-	srcArchiveFiles := flags.StringSlice("src")
-	deployArchiveFiles := flags.StringSlice("deploy")
-	buildcmd := flags.String("buildcmd")
-	keepURL := flags.Bool("keepurl")
+	pkgNamespace := input.String(flagkey.NamespacePackage)
+	envName := input.String(flagkey.PkgEnvironment)
+	envNamespace := input.String(flagkey.NamespaceEnvironment)
+	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
+	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
+	buildcmd := input.String(flagkey.PkgBuildCmd)
+	keepURL := input.Bool(flagkey.PkgKeepURL)
 
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		return errors.New("Need --src to specify source archive, or use --deploy to specify deployment archive.")
+		return errors.Errorf("need --%v or --%v flag", flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
 	}
 
-	_, err := CreatePackage(flags, opts.client, pkgNamespace, envName, envNamespace,
+	_, err := CreatePackage(input, opts.client, pkgName, pkgNamespace, envName, envNamespace,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false, keepURL)
 
 	return err
 }
 
-func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, envName string, envNamespace string,
+func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNamespace string, envName string, envNamespace string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
 
 	pkgSpec := fv1.PackageSpec{
@@ -91,7 +93,6 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 	}
 	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
 
-	var pkgName string
 	if len(deployArchiveFiles) > 0 {
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
@@ -101,7 +102,9 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 			return nil, err
 		}
 		pkgSpec.Deployment = *deployment
-		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveFiles[0]), uniuri.NewLen(4)))
+		if len(pkgName) == 0 {
+			pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(deployArchiveFiles[0]), uniuri.NewLen(4)))
+		}
 	}
 	if len(srcArchiveFiles) > 0 {
 		source, err := CreateArchive(client, srcArchiveFiles, false, keepURL, specDir, specFile)
@@ -110,7 +113,9 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 		}
 		pkgSpec.Source = *source
 		pkgStatus = fv1.BuildStatusPending // set package build status to pending
-		pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveFiles[0]), uniuri.NewLen(4)))
+		if len(pkgName) == 0 {
+			pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(srcArchiveFiles[0]), uniuri.NewLen(4)))
+		}
 	}
 
 	if len(buildcmd) > 0 {
@@ -134,7 +139,7 @@ func CreatePackage(flags cli.Input, client *client.Client, pkgNamespace string, 
 
 	if len(specFile) > 0 {
 		// if a package sith the same spec exists, don't create a new spec file
-		fr, err := spec.ReadSpecs(util.GetSpecDir(flags))
+		fr, err := spec.ReadSpecs(util.GetSpecDir(input))
 		if err != nil {
 			return nil, errors.Wrap(err, "error reading specs")
 		}

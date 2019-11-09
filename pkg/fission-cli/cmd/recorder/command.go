@@ -30,7 +30,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.RecorderNameFlag, flag.RecorderFnFlag, flag.RecorderTriggersFlag, flag.SpecSaveFlag},
+		Optional: []flag.Flag{flag.RecorderName, flag.RecorderFn, flag.RecorderTriggers, flag.SpecSave},
 	})
 
 	getCmd := &cobra.Command{
@@ -39,7 +39,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Get),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.RecorderNameFlag},
+		Required: []flag.Flag{flag.RecorderName},
 	})
 
 	updateCmd := &cobra.Command{
@@ -48,8 +48,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.RecorderNameFlag},
-		Optional: []flag.Flag{flag.RecorderFnFlag, flag.RecorderTriggersFlag, flag.RecorderEnabledFlag, flag.RecorderDisabledFlag},
+		Required: []flag.Flag{flag.RecorderName},
+		Optional: []flag.Flag{flag.RecorderFn, flag.RecorderTriggers, flag.RecorderEnabled, flag.RecorderDisabled},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -58,8 +58,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.RecorderNameFlag},
-		Optional: []flag.Flag{flag.NamespaceRecorderFlag},
+		Required: []flag.Flag{flag.RecorderName},
+		Optional: []flag.Flag{flag.NamespaceRecorder},
 	})
 
 	listCmd := &cobra.Command{
@@ -68,7 +68,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceRecorderFlag},
+		Optional: []flag.Flag{flag.NamespaceRecorder},
 	})
 
 	command := &cobra.Command{

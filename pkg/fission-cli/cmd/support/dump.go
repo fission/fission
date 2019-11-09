@@ -28,6 +28,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -41,22 +42,22 @@ type DumpSubCommand struct {
 	client *client.Client
 }
 
-func Dump(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Dump(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := &DumpSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DumpSubCommand) do(flags cli.Input) error {
+func (opts *DumpSubCommand) do(input cli.Input) error {
 	fmt.Println("Start dumping process...")
 
-	nozip := flags.Bool("nozip")
-	outputDir := flags.String("output")
+	nozip := input.Bool(flagkey.SupportNoZip)
+	outputDir := input.String(flagkey.SupportOutput)
 
 	// check whether the dump directory exists.
 	_, err := os.Stat(outputDir)

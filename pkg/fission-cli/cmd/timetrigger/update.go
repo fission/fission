@@ -20,10 +20,12 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,38 +34,36 @@ type UpdateSubCommand struct {
 	trigger *fv1.TimeTrigger
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "triggerns", flags)
-	if err != nil {
-		return err
-	}
-
-	tt, err := opts.client.TimeTriggerGet(m)
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	tt, err := opts.client.TimeTriggerGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.TtName),
+		Namespace: input.String(flagkey.NamespaceTrigger),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting time trigger")
 	}
 
 	updated := false
-	newCron := flags.String("cron")
+	newCron := input.String("cron")
 	if len(newCron) != 0 {
 		tt.Spec.Cron = newCron
 		updated = true
@@ -72,7 +72,7 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	// TODO : During update, function has to be in the same ns as the trigger object
 	// but since we are not checking this for other triggers too, not sure if we need a check here.
 
-	fnName := flags.String("function")
+	fnName := input.String("function")
 	if len(fnName) > 0 {
 		tt.Spec.FunctionReference.Name = fnName
 		updated = true
@@ -87,13 +87,13 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.TimeTriggerUpdate(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating Time trigger")
 	}
 
-	fmt.Printf("Time trigger '%v' updated\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%v' updated\n", opts.trigger.Metadata.Name)
 
 	t, err := getAPITimeInfo(opts.client)
 	if err != nil {

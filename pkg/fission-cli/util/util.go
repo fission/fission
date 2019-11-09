@@ -195,8 +195,8 @@ func GetVersion(client *client.Client) info.Versions {
 	return versions
 }
 
-func GetServer(flags cli.Input) (c *client.Client, err error) {
-	serverUrl := flags.GlobalString(flagkey.Server)
+func GetServer(input cli.Input) (c *client.Client, err error) {
+	serverUrl := input.GlobalString(flagkey.Server)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
 		serverUrl, err = GetApplicationUrl("application=fission-api")
@@ -215,7 +215,7 @@ func GetServer(flags cli.Input) (c *client.Client, err error) {
 	return client.MakeClient(serverUrl), nil
 }
 
-func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
+func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
 	r := &v1.ResourceRequirements{}
 
 	if resReqs != nil {
@@ -233,8 +233,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 
 	e := utils.MultiErrorWithFormat()
 
-	if flags.IsSet(flagkey.RuntimeMincpu) {
-		mincpu := flags.Int(flagkey.RuntimeMincpu)
+	if input.IsSet(flagkey.RuntimeMincpu) {
+		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
@@ -242,8 +242,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
 
-	if flags.IsSet(flagkey.RuntimeMinmemory) {
-		minmem := flags.Int(flagkey.RuntimeMinmemory)
+	if input.IsSet(flagkey.RuntimeMinmemory) {
+		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
@@ -251,8 +251,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
 
-	if flags.IsSet(flagkey.RuntimeMaxcpu) {
-		maxcpu := flags.Int(flagkey.RuntimeMaxcpu)
+	if input.IsSet(flagkey.RuntimeMaxcpu) {
+		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
@@ -260,8 +260,8 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
 
-	if flags.IsSet(flagkey.RuntimeMaxmemory) {
-		maxmem := flags.Int(flagkey.RuntimeMaxmemory)
+	if input.IsSet(flagkey.RuntimeMaxmemory) {
+		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
@@ -297,27 +297,10 @@ func GetResourceReqs(flags cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	}, nil
 }
 
-func GetSpecDir(flags cli.Input) string {
-	specDir := flags.String(flagkey.SpecDir)
+func GetSpecDir(input cli.Input) string {
+	specDir := input.String(flagkey.SpecDir)
 	if len(specDir) == 0 {
 		specDir = "specs"
 	}
 	return specDir
-}
-
-// GetMetadata returns a pointer to ObjectMeta that is populated with resource name and namespace given by the user.
-func GetMetadata(nameFlagText string, namespaceFlagText string, flags cli.Input) (*metav1.ObjectMeta, error) {
-	name := flags.String(nameFlagText)
-	if len(name) == 0 {
-		return nil, errors.Errorf("need a resource name, use --%v", nameFlagText)
-	}
-
-	ns := flags.String(namespaceFlagText)
-
-	m := &metav1.ObjectMeta{
-		Name:      name,
-		Namespace: ns,
-	}
-
-	return m, nil
 }

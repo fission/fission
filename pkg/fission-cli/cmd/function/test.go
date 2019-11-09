@@ -160,9 +160,6 @@ func doHTTPRequest(ctx context.Context, method, url, body string, headers []stri
 
 func printPodLogs(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	if len(fnName) == 0 {
-		return errors.New("need --name argument.")
-	}
 
 	u, err := util.GetApplicationUrl("application=fission-api")
 	if err != nil {

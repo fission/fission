@@ -30,7 +30,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Replay),
 	}
 	wrapper.SetFlags(replayCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.RecordsReqIDFlag},
+		Required: []flag.Flag{flag.RecordsReqID},
 	})
 
 	command := &cobra.Command{

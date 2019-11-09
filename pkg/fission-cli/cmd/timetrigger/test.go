@@ -21,6 +21,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -28,24 +29,24 @@ type ShowSubCommand struct {
 	client *client.Client
 }
 
-func Show(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Show(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ShowSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ShowSubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ShowSubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ShowSubCommand) run(flags cli.Input) error {
-	round := flags.Int("round")
-	cronSpec := flags.String("cron")
+func (opts *ShowSubCommand) run(flaginput cli.Input) error {
+	round := flaginput.Int(flagkey.TtName)
+	cronSpec := flaginput.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}

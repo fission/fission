@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -36,38 +37,38 @@ type DeleteSubCommand struct {
 	namespace    string
 }
 
-func Delete(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Delete(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := DeleteSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *DeleteSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(flags cli.Input) error {
-	opts.triggerName = flags.String("name")
-	opts.functionName = flags.String("function")
+func (opts *DeleteSubCommand) complete(input cli.Input) error {
+	opts.triggerName = input.String(flagkey.HtName)
+	opts.functionName = input.String(flagkey.HtFnName)
 	if len(opts.triggerName) == 0 && len(opts.functionName) == 0 {
-		return errors.New("need --name or --function")
+		return errors.Errorf("need --%v or --%v", flagkey.HtName, flagkey.HtFnName)
 	} else if len(opts.triggerName) > 0 && len(opts.functionName) > 0 {
-		return errors.New("need either of --name or --function and not both arguments")
+		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
 	}
-	opts.namespace = flags.String("triggerNamespace")
+	opts.namespace = input.String(flagkey.NamespaceTrigger)
 	return nil
 }
 
-func (opts *DeleteSubCommand) run(flags cli.Input) error {
+func (opts *DeleteSubCommand) run(input cli.Input) error {
 	triggers, err := opts.client.HTTPTriggerList(opts.namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting HTTP trigger list")

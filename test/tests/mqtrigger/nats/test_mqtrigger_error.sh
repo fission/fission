@@ -73,4 +73,8 @@ if [[ "$response" != "$expectedRespOutput" ]]; then
 else
     log "Responses match."
 fi
+
+log "Deleting  message queue trigger"
+fission mqtrigger delete --name $mqt
+
 log "Test PASSED"

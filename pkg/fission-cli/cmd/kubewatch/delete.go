@@ -24,6 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -33,35 +34,32 @@ type DeleteSubCommand struct {
 	namespace string
 }
 
-func Delete(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Delete(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := DeleteSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *DeleteSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
-	if len(opts.name) == 0 {
-		return errors.New("need name of watch to delete, use --name")
-	}
-	opts.namespace = flags.String("triggerns")
+func (opts *DeleteSubCommand) complete(input cli.Input) error {
+	opts.name = input.String(flagkey.KwName)
+	opts.namespace = input.String(flagkey.NamespaceTrigger)
 	return nil
 }
 
-func (opts *DeleteSubCommand) run(flags cli.Input) error {
+func (opts *DeleteSubCommand) run(input cli.Input) error {
 	err := opts.client.WatchDelete(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,
@@ -70,6 +68,6 @@ func (opts *DeleteSubCommand) run(flags cli.Input) error {
 		return errors.Wrap(err, "error deleting kubewatch")
 	}
 
-	fmt.Printf("watch '%v' deleted\n", opts.name)
+	fmt.Printf("trigger '%v' deleted\n", opts.name)
 	return nil
 }

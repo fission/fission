@@ -65,5 +65,8 @@ if [[ "$response" != "$expectedRespOutput" ]]; then
     exit 1
 fi
 
+log "Deleting  message queue trigger"
+fission mqtrigger delete --name $mqt
+
 log "Subscriber received expected response: $response"
 log "Test PASSED"

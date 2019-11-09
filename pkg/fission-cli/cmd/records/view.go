@@ -33,37 +33,37 @@ type ViewSubCommand struct {
 	client *client.Client
 }
 
-func View(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func View(flaginput cli.Input) error {
+	c, err := util.GetServer(flaginput)
 	if err != nil {
 		return err
 	}
 	opts := ViewSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(flaginput)
 }
 
-func (opts *ViewSubCommand) do(flags cli.Input) error {
-	return opts.run(flags)
+func (opts *ViewSubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *ViewSubCommand) run(flags cli.Input) error {
+func (opts *ViewSubCommand) run(input cli.Input) error {
 	var verbosity int
-	if flags.Bool("v") && flags.Bool("vv") {
+	if input.Bool("v") && input.Bool("vv") {
 		return errors.New("conflicting verbosity levels, use either --v or --vv")
 	}
-	if flags.Bool("v") {
+	if input.Bool("v") {
 		verbosity = 1
 	}
-	if flags.Bool("vv") {
+	if input.Bool("vv") {
 		verbosity = 2
 	}
 
-	function := flags.String("function")
-	trigger := flags.String("trigger")
-	from := flags.String("from")
-	to := flags.String("to")
+	function := input.String("function")
+	trigger := input.String("trigger")
+	from := input.String("from")
+	to := input.String("to")
 
 	//Refuse multiple filters for now
 	if multipleFiltersSpecified(function, trigger, from+to) {

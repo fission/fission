@@ -36,7 +36,7 @@ create_archive() {
 
 create_package() {
     log "Creating package"
-    pkg=$(fission package create --deploy "$tmp_dir/test-deploy-pkg.zip" --env $env| cut -f2 -d' '| tr -d \')
+    fission package create --name $1 --deploy "$tmp_dir/test-deploy-pkg.zip" --env $env
 }
 
 delete_package() {
@@ -74,14 +74,14 @@ main() {
     log "created archive test-deploy-pkg.zip"
 
     # create packages with the huge archive
-    create_package
-    pkg_1=$pkg
+    pkg_1=$(generate_test_id)
+    create_package $pkg_1
     get_archive_url_from_package $pkg_1
     url_1=$url
     log "pkg: $pkg_1, archive_url : $url_1"
 
-    create_package
-    pkg_2=$pkg
+    pkg_2=$(generate_test_id)
+    create_package $pkg_2
     get_archive_url_from_package $pkg_2
     url_2=$url
     log "pkg: $pkg_2, archive_url : $url_2"

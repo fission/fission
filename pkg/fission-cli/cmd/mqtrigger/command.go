@@ -30,10 +30,10 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.MqtFnNameFlag, flag.MqtTopicFlag},
-		Optional: []flag.Flag{flag.MqtNameFlag, flag.NamespaceFunctionFlag, flag.MqtMQTypeFlag,
-			flag.MqtRespTopicFlag, flag.MqtErrorTopicFlag, flag.MqtMaxRetriesFlag, flag.MqtMsgContentTypeFlag,
-			flag.SpecSaveFlag},
+		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
+		Optional: []flag.Flag{flag.MqtName, flag.NamespaceFunction, flag.MqtMQType,
+			flag.MqtRespTopic, flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
+			flag.SpecSave},
 	})
 
 	updateCmd := &cobra.Command{
@@ -43,9 +43,9 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.MqtNameFlag},
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag, flag.MqtTopicFlag, flag.MqtRespTopicFlag,
-			flag.MqtErrorTopicFlag, flag.MqtMaxRetriesFlag, flag.MqtFnNameFlag, flag.MqtMsgContentTypeFlag},
+		Required: []flag.Flag{flag.MqtName},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.MqtTopic, flag.MqtRespTopic,
+			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtFnName, flag.MqtMsgContentType},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -55,8 +55,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.MqtNameFlag},
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag},
+		Required: []flag.Flag{flag.MqtName},
+		Optional: []flag.Flag{flag.NamespaceTrigger},
 	})
 
 	listCmd := &cobra.Command{
@@ -66,7 +66,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTriggerFlag},
+		Optional: []flag.Flag{flag.NamespaceTrigger},
 	})
 
 	command := &cobra.Command{

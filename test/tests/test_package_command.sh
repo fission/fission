@@ -59,7 +59,8 @@ timeout 180s bash -c "wait_for_builder $env"
 # 1) Multiple source files (multiple inputs, Using * expression, from a directory)
 # Currently only * expression implemented as a test
 pushd $ROOT/examples/python/
-pkg1=$(fission package create --src "sourcepkg/*" --env $env --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
+pkg1="pkg1-${TEST_ID}"
+fission package create --name $pkg1 --src "sourcepkg/*" --env $env --buildcmd "./build.sh"
 popd
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkg1"
@@ -77,7 +78,8 @@ checkFunctionResponse $fn1 'a: 1 b: {c: 3, d: 4}'
 # 2) Source archive file
 log "Creating pacakage with source archive"
 zip -jr $tmp_dir/demo-src-pkg.zip $ROOT/examples/python/sourcepkg/
-pkg2=$(fission package create --src $tmp_dir/demo-src-pkg.zip --env $env --buildcmd "./build.sh"| cut -f2 -d' '| tr -d \')
+pkg2="pkg2-${TEST_ID}"
+fission package create --name $pkg2 --src $tmp_dir/demo-src-pkg.zip --env $env --buildcmd "./build.sh"
 
 # wait for build to finish at most 60s
 timeout 60s bash -c "waitBuild $pkg2"
@@ -98,7 +100,8 @@ checkFunctionResponse $fn2 'a: 1 b: {c: 3, d: 4}'
 
 # 4) Deployment files from a directory
 pushd $ROOT/examples/python/
-pkg4=$(fission package create --deploy "multifile/*" --env $env| cut -f2 -d' '| tr -d \')
+pkg4="pkg4-${TEST_ID}"
+fission package create --name $pkg4 --deploy "multifile/*" --env $env
 popd
 log "Creating function " $fn4
 fission fn create --name $fn4 --pkg $pkg4 --entrypoint "main.main"
@@ -118,7 +121,8 @@ mkdir $tmp_dir/deploypkg
 touch $tmp_dir/deploypkg/__init__.py
 printf 'def main():\n    return "Hello, world!"' > $tmp_dir/deploypkg/hello.py
 zip -jr $tmp_dir/demo-deploy-pkg.zip $tmp_dir/deploypkg/
-pkg5=$(fission package create --deploy $tmp_dir/demo-deploy-pkg.zip --env $env| cut -f2 -d' '| tr -d \')
+pkg5="pkg5-${TEST_ID}"
+fission package create --name $pkg5 --deploy $tmp_dir/demo-deploy-pkg.zip --env $env
 
 
 log "Updating function " $fn5

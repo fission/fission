@@ -30,11 +30,11 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.EnvNameFlag, flag.EnvImageFlag},
-		Optional: []flag.Flag{flag.NamespaceEnvironmentFlag, flag.EnvPoolsizeFlag,
-			flag.EnvBuilderImageFlag, flag.EnvBuildCmdFlag, flag.EnvKeepArchiveFlag,
-			flag.RunTimeMinCPUFlag, flag.RunTimeMaxCPUFlag, flag.RunTimeMinMemoryFlag, flag.RunTimeMaxMemoryFlag,
-			flag.EnvVersionFlag, flag.EnvExternalNetworkFlag, flag.EnvTerminationGracePeriodFlag, flag.SpecSaveFlag},
+		Required: []flag.Flag{flag.EnvName, flag.EnvImage},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.EnvPoolsize,
+			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvKeepArchive,
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
+			flag.EnvVersion, flag.EnvExternalNetwork, flag.EnvTerminationGracePeriod, flag.SpecSave},
 	})
 
 	getCmd := &cobra.Command{
@@ -43,8 +43,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Get),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.EnvNameFlag},
-		Optional: []flag.Flag{flag.NamespaceEnvironmentFlag},
+		Required: []flag.Flag{flag.EnvName},
+		Optional: []flag.Flag{flag.NamespaceEnvironment},
 	})
 
 	updateCmd := &cobra.Command{
@@ -53,10 +53,10 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.EnvNameFlag},
-		Optional: []flag.Flag{flag.EnvImageFlag, flag.NamespaceEnvironmentFlag, flag.EnvPoolsizeFlag,
-			flag.EnvBuilderImageFlag, flag.EnvBuildCmdFlag, flag.EnvKeepArchiveFlag,
-			flag.EnvExternalNetworkFlag, flag.EnvTerminationGracePeriodFlag, flag.SpecSaveFlag},
+		Required: []flag.Flag{flag.EnvName},
+		Optional: []flag.Flag{flag.EnvImage, flag.NamespaceEnvironment, flag.EnvPoolsize,
+			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvKeepArchive,
+			flag.EnvExternalNetwork, flag.EnvTerminationGracePeriod, flag.SpecSave},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -65,8 +65,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.EnvNameFlag},
-		Optional: []flag.Flag{flag.NamespaceEnvironmentFlag},
+		Required: []flag.Flag{flag.EnvName},
+		Optional: []flag.Flag{flag.NamespaceEnvironment},
 	})
 
 	listCmd := &cobra.Command{
@@ -76,7 +76,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceEnvironmentFlag},
+		Optional: []flag.Flag{flag.NamespaceEnvironment},
 	})
 
 	command := &cobra.Command{

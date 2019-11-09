@@ -28,48 +28,33 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
-	client    *client.Client
-	trigger   string
-	namespace string
+	client *client.Client
 }
 
-func Get(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Get(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := GetSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *GetSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
-	if err != nil {
-		return err
-	}
-	return opts.run(flags)
+func (opts *GetSubCommand) do(input cli.Input) error {
+	return opts.run(input)
 }
 
-func (opts *GetSubCommand) complete(flags cli.Input) error {
-	opts.trigger = flags.String("name")
-	opts.namespace = flags.String("fnNamespace")
-
-	if len(opts.trigger) <= 0 {
-		return errors.New("need a trigger name, use --name")
-	}
-	return nil
-}
-
-func (opts *GetSubCommand) run(flags cli.Input) error {
+func (opts *GetSubCommand) run(input cli.Input) error {
 	m := &metav1.ObjectMeta{
-		Name:      opts.trigger,
-		Namespace: opts.namespace,
+		Name:      input.String(flagkey.HtName),
+		Namespace: input.String(flagkey.NamespaceFunction),
 	}
 	ht, err := opts.client.HTTPTriggerGet(m)
 	if err != nil {

@@ -31,18 +31,18 @@ type VersionSubCommand struct {
 	client *client.Client
 }
 
-func Version(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Version(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := &VersionSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *VersionSubCommand) do(flags cli.Input) error {
+func (opts *VersionSubCommand) do(input cli.Input) error {
 	ver := util.GetVersion(opts.client)
 	bs, err := yaml.Marshal(ver)
 	if err != nil {

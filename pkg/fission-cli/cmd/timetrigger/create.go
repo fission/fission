@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -37,39 +38,39 @@ type CreateSubCommand struct {
 	trigger *fv1.TimeTrigger
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	name := flags.String("name")
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	name := input.String(flagkey.TtName)
 	if len(name) == 0 {
 		name = uuid.NewV4().String()
 	}
 
-	fnName := flags.String("function")
+	fnName := input.String(flagkey.TtFnName)
 	if len(fnName) == 0 {
 		return errors.New("Need a function name to create a trigger, use --function")
 	}
 
-	fnNamespace := flags.String("fnNamespace")
+	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	cronSpec := flags.String("cron")
+	cronSpec := input.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
 		return errors.New("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
@@ -91,9 +92,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if flags.Bool("spec") {
+	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.Metadata.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {

@@ -30,8 +30,8 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.CanaryNameFlag, flag.CanaryTriggerNameFlag, flag.CanaryNewFuncFlag, flag.CanaryOldFuncFlag},
-		Optional: []flag.Flag{flag.NamespaceFunctionFlag, flag.CanaryWeightIncrementFlag, flag.CanaryIncrementIntervalFlag, flag.CanaryFailureThresholdFlag},
+		Required: []flag.Flag{flag.CanaryName, flag.CanaryTriggerName, flag.CanaryNewFunc, flag.CanaryOldFunc},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
 	})
 
 	getCmd := &cobra.Command{
@@ -41,8 +41,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Get),
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.CanaryNameFlag},
-		Optional: []flag.Flag{flag.NamespaceCanaryFlag},
+		Required: []flag.Flag{flag.CanaryName},
+		Optional: []flag.Flag{flag.NamespaceCanary},
 	})
 
 	updateCmd := &cobra.Command{
@@ -52,8 +52,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Update),
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.CanaryNameFlag},
-		Optional: []flag.Flag{flag.NamespaceCanaryFlag, flag.CanaryWeightIncrementFlag, flag.CanaryIncrementIntervalFlag, flag.CanaryFailureThresholdFlag},
+		Required: []flag.Flag{flag.CanaryName},
+		Optional: []flag.Flag{flag.NamespaceCanary, flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -63,8 +63,8 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.CanaryNameFlag},
-		Optional: []flag.Flag{flag.NamespaceCanaryFlag},
+		Required: []flag.Flag{flag.CanaryName},
+		Optional: []flag.Flag{flag.NamespaceCanary},
 	})
 
 	listCmd := &cobra.Command{
@@ -75,7 +75,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceCanaryFlag},
+		Optional: []flag.Flag{flag.NamespaceCanary},
 	})
 
 	command := &cobra.Command{

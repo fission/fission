@@ -23,6 +23,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/pkg/errors"
 )
@@ -31,19 +32,19 @@ type ListSubCommand struct {
 	client *client.Client
 }
 
-func List(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func List(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := ListSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *ListSubCommand) do(flags cli.Input) error {
-	ttNs := flags.String("triggerns")
+func (opts *ListSubCommand) do(input cli.Input) error {
+	ttNs := input.String(flagkey.NamespaceTrigger)
 	tts, err := opts.client.TimeTriggerList(ttNs)
 	if err != nil {
 		return errors.Wrap(err, "list Time triggers")

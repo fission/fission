@@ -27,6 +27,8 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -35,55 +37,35 @@ type CreateSubCommand struct {
 	watcher *fv1.KubernetesWatchTrigger
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	fnName := flags.String("function")
-	if len(fnName) == 0 {
-		return errors.New("Need a function name to create a watch, use --function")
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	watchName := input.String(flagkey.KwName)
+	if len(watchName) == 0 {
+		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
+		watchName = uuid.NewV4().String()
 	}
-	fnNamespace := flags.String("fnNamespace")
-
-	namespace := flags.String("ns")
-	if len(namespace) == 0 {
-		fmt.Println("Watch 'default' namespace. Use --ns <namespace> to override.")
-		namespace = "default"
-	}
-
-	objType := flags.String("type")
-	if len(objType) == 0 {
-		fmt.Println("Object type unspecified, will watch pods.  Use --type <type> to override.")
-		objType = "pod"
-	}
-
-	labels := flags.String("labels")
-	// empty 'labels' selects everything
-	if len(labels) == 0 {
-		fmt.Printf("Watching all objects of type '%v', use --labels to refine selection.\n", objType)
-	} else {
-		// TODO
-		fmt.Printf("Label selector not implemented, watching all objects")
-	}
-
-	// automatically name watches
-	watchName := uuid.NewV4().String()
+	fnName := input.String(flagkey.KwFnName)
+	fnNamespace := input.String(flagkey.NamespaceFunction)
+	namespace := input.String(flagkey.KwNamespace)
+	objType := input.String(flagkey.KwObjType)
 
 	opts.watcher = &fv1.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -104,9 +86,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if flags.Bool("spec") {
+	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Metadata.Name)
 		err := spec.SpecSave(*opts.watcher, specFile)
 		if err != nil {
@@ -120,6 +102,6 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 		return errors.Wrap(err, "error creating kubewatch")
 	}
 
-	fmt.Printf("kubewatch '%v' created\n", opts.watcher.Metadata.Name)
+	fmt.Printf("trigger '%v' created\n", opts.watcher.Metadata.Name)
 	return nil
 }

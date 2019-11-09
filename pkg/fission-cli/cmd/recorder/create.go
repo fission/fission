@@ -36,32 +36,32 @@ type CreateSubCommand struct {
 	recorder *fv1.Recorder
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	recName := flags.String("name")
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	recName := input.String("name")
 	if len(recName) == 0 {
 		recName = uuid.NewV4().String()
 	}
-	fnName := flags.String("function")
-	triggersOriginal := flags.StringSlice("trigger")
+	fnName := input.String("function")
+	triggersOriginal := input.StringSlice("trigger")
 
 	// Function XOR triggers can be given
 	if len(fnName) == 0 && len(triggersOriginal) == 0 {
@@ -104,9 +104,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// If we're writing a spec, don't call the API
-	if flags.Bool("spec") {
+	if input.Bool("spec") {
 		specFile := fmt.Sprintf("recorder-%v.yaml", opts.recorder.Metadata.Name)
 		err := spec.SpecSave(*opts.recorder, specFile)
 		if err != nil {

@@ -24,7 +24,8 @@ import (
 )
 
 // GetIngressConfig returns an IngressConfig based on user inputs; return error if any.
-func GetIngressConfig(annotations []string, rule string, tls string, fallbackRelativeURL string, oldIngressConfig *fv1.IngressConfig) (*fv1.IngressConfig, error) {
+func GetIngressConfig(annotations []string, rule string, tls string,
+	fallbackRelativeURL string, oldIngressConfig *fv1.IngressConfig) (*fv1.IngressConfig, error) {
 
 	removeAnns, anns, err := getIngressAnnotations(annotations)
 	if err != nil {

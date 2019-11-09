@@ -20,10 +20,12 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -32,42 +34,40 @@ type UpdateSubCommand struct {
 	trigger *fv1.MessageQueueTrigger
 }
 
-func Update(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Update(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := UpdateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *UpdateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *UpdateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "triggerns", flags)
-	if err != nil {
-		return err
-	}
-
-	mqt, err := opts.client.MessageQueueTriggerGet(m)
+func (opts *UpdateSubCommand) complete(input cli.Input) error {
+	mqt, err := opts.client.MessageQueueTriggerGet(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.MqtName),
+		Namespace: input.String(flagkey.NamespaceTrigger),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error getting message queue trigger")
 	}
 
-	topic := flags.String("topic")
-	respTopic := flags.String("resptopic")
-	errorTopic := flags.String("errortopic")
-	maxRetries := flags.Int("maxretries")
-	fnName := flags.String("function")
-	contentType := flags.String("contenttype")
+	topic := input.String(flagkey.MqtTopic)
+	respTopic := input.String(flagkey.MqtRespTopic)
+	errorTopic := input.String(flagkey.MqtErrorTopic)
+	maxRetries := input.Int(flagkey.MqtMaxRetries)
+	fnName := input.String(flagkey.MqtFnName)
+	contentType := input.String(flagkey.MqtMsgContentType)
 
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
@@ -103,14 +103,14 @@ func (opts *UpdateSubCommand) complete(flags cli.Input) error {
 	}
 
 	if !updated {
-		return errors.New("Nothing to update. Use --topic, --resptopic, --errortopic, --maxretries or --function.")
+		return errors.New("Nothing changed, see 'help' for more details")
 	}
 	opts.trigger = mqt
 
 	return nil
 }
 
-func (opts *UpdateSubCommand) run(flags cli.Input) error {
+func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.client.MessageQueueTriggerUpdate(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating message queue trigger")

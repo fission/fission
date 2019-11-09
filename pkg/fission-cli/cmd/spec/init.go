@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -37,30 +38,30 @@ type InitSubCommand struct {
 	deployConfig *spectypes.DeploymentConfig
 }
 
-func Init(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Init(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := InitSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *InitSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *InitSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *InitSubCommand) complete(flags cli.Input) error {
+func (opts *InitSubCommand) complete(input cli.Input) error {
 	// Figure out spec directory
-	specDir := util.GetSpecDir(flags)
+	specDir := util.GetSpecDir(input)
 
-	name := flags.String("name")
+	name := input.String(flagkey.SpecName)
 	if len(name) == 0 {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
@@ -71,7 +72,7 @@ func (opts *InitSubCommand) complete(flags cli.Input) error {
 		name = util.KubifyName(basename)
 	}
 
-	deployID := flags.String("deployid")
+	deployID := input.String(flagkey.SpecDeployID)
 	if len(deployID) == 0 {
 		deployID = uuid.NewV4().String()
 	}
@@ -101,8 +102,8 @@ func (opts *InitSubCommand) complete(flags cli.Input) error {
 
 // run just initializes an empty spec directory and adds some
 // sample YAMLs in there that might be useful.
-func (opts *InitSubCommand) run(flags cli.Input) error {
-	specDir := util.GetSpecDir(flags)
+func (opts *InitSubCommand) run(input cli.Input) error {
+	specDir := util.GetSpecDir(input)
 
 	// Add a bit of documentation to the spec dir here
 	err := ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)

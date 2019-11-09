@@ -20,9 +20,11 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -30,24 +32,24 @@ type DeleteSubCommand struct {
 	client *client.Client
 }
 
-func Delete(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Delete(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := DeleteSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *DeleteSubCommand) do(flags cli.Input) error {
-	m, err := util.GetMetadata("name", "triggerns", flags)
-	if err != nil {
-		return err
+func (opts *DeleteSubCommand) do(input cli.Input) error {
+	m := &metav1.ObjectMeta{
+		Name:      input.String(flagkey.TtName),
+		Namespace: input.String(flagkey.NamespaceTrigger),
 	}
 
-	err = opts.client.TimeTriggerDelete(m)
+	err := opts.client.TimeTriggerDelete(m)
 	if err != nil {
 		return errors.Wrap(err, "error deleting trigger")
 	}

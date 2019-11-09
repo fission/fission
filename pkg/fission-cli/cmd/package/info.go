@@ -26,6 +26,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -35,35 +36,32 @@ type InfoSubCommand struct {
 	namespace string
 }
 
-func Info(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Info(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := InfoSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *InfoSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *InfoSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *InfoSubCommand) complete(flags cli.Input) error {
-	opts.name = flags.String("name")
-	if len(opts.name) == 0 {
-		return errors.New("Need name of package, use --name")
-	}
-	opts.namespace = flags.String("pkgNamespace")
+func (opts *InfoSubCommand) complete(input cli.Input) error {
+	opts.name = input.String(flagkey.PkgName)
+	opts.namespace = input.String("pkgNamespace")
 	return nil
 }
 
-func (opts *InfoSubCommand) run(flags cli.Input) error {
+func (opts *InfoSubCommand) run(input cli.Input) error {
 	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,

@@ -30,9 +30,9 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(View),
 	}
 	wrapper.SetFlags(viewCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.RecordsFilterTimeToFlag, flag.RecordsFilterTimeFromFlag,
-			flag.RecordsFilterFunctionFlag, flag.RecordsFilterTriggerFlag, flag.RecordsVerbosityFlag,
-			flag.RecordsVvFlag},
+		Optional: []flag.Flag{flag.RecordsFilterTimeTo, flag.RecordsFilterTimeFrom,
+			flag.RecordsFilterFunction, flag.RecordsFilterTrigger, flag.RecordsVerbosity,
+			flag.RecordsVv},
 	})
 
 	command := &cobra.Command{

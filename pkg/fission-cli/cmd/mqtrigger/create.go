@@ -27,6 +27,8 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/types"
 )
@@ -36,38 +38,36 @@ type CreateSubCommand struct {
 	trigger *fv1.MessageQueueTrigger
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	mqtName := flags.String("name")
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	mqtName := input.String(flagkey.MqtName)
 	if len(mqtName) == 0 {
+		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
 		mqtName = uuid.NewV4().String()
 	}
-	fnName := flags.String("function")
-	if len(fnName) == 0 {
-		return errors.New("Need a function name to create a trigger, use --function")
-	}
-	fnNamespace := flags.String("fnNamespace")
+	fnName := input.String(flagkey.MqtFnName)
+	fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	var mqType fv1.MessageQueueType
-	switch flags.String("mqtype") {
+	switch input.String(flagkey.MqtMQType) {
 	case "":
 		mqType = types.MessageQueueTypeNats
 	case types.MessageQueueTypeNats:
@@ -80,28 +80,26 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
 	}
 
-	// TODO: check topic availability
-	topic := flags.String("topic")
+	topic := input.String(flagkey.MqtTopic)
 	if len(topic) == 0 {
-		return errors.New("Topic cannot be empty")
+		return errors.New("topic cannot be empty")
 	}
-	respTopic := flags.String("resptopic")
 
+	respTopic := input.String(flagkey.MqtRespTopic)
 	if topic == respTopic {
 		// TODO maybe this should just be a warning, perhaps
 		// allow it behind a --force flag
-		return errors.New("Listen topic should not equal to response topic")
+		return errors.New("listen topic should not equal to response topic")
 	}
 
-	errorTopic := flags.String("errortopic")
-
-	maxRetries := flags.Int("maxretries")
+	errorTopic := input.String(flagkey.MqtErrorTopic)
+	maxRetries := input.Int(flagkey.MqtMaxRetries)
 
 	if maxRetries < 0 {
-		return errors.New("Maximum number of retries must be a natural number, default is 0")
+		return errors.New("Maximum number of retries must be greater than or equal to 0")
 	}
 
-	contentType := flags.String("contenttype")
+	contentType := input.String(flagkey.MqtMsgContentType)
 	if len(contentType) == 0 {
 		contentType = "application/json"
 	}
@@ -133,9 +131,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if flags.Bool("spec") {
+	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Metadata.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
@@ -149,14 +147,14 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 		return errors.Wrap(err, "create message queue trigger")
 	}
 
-	fmt.Printf("message queue trigger '%s' created\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%s' created\n", opts.trigger.Metadata.Name)
 	return nil
 }
 
 func checkMQTopicAvailability(mqType fv1.MessageQueueType, topics ...string) error {
 	for _, t := range topics {
 		if len(t) > 0 && !fv1.IsTopicValid(mqType, t) {
-			return errors.Errorf("Invalid topic for %s: %s", mqType, t)
+			return errors.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}
 	return nil

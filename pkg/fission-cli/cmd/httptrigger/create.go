@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -39,28 +40,28 @@ type CreateSubCommand struct {
 	trigger *fv1.HTTPTrigger
 }
 
-func Create(flags cli.Input) error {
-	c, err := util.GetServer(flags)
+func Create(input cli.Input) error {
+	c, err := util.GetServer(input)
 	if err != nil {
 		return err
 	}
 	opts := CreateSubCommand{
 		client: c,
 	}
-	return opts.do(flags)
+	return opts.do(input)
 }
 
-func (opts *CreateSubCommand) do(flags cli.Input) error {
-	err := opts.complete(flags)
+func (opts *CreateSubCommand) do(input cli.Input) error {
+	err := opts.complete(input)
 	if err != nil {
 		return err
 	}
-	return opts.run(flags)
+	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(flags cli.Input) error {
-	functionList := flags.StringSlice("function")
-	functionWeightsList := flags.IntSlice("weight")
+func (opts *CreateSubCommand) complete(input cli.Input) error {
+	functionList := input.StringSlice(flagkey.HtFnName)
+	functionWeightsList := input.IntSlice(flagkey.HtFnWeight)
 
 	if len(functionList) == 0 {
 		return errors.New("need a function name to create a trigger, use --function")
@@ -71,8 +72,13 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		return err
 	}
 
-	triggerName := flags.String("name")
-	fnNamespace := flags.String("fnNamespace")
+	triggerName := input.String(flagkey.HtName)
+	// just name triggers by uuid.
+	if triggerName == "" {
+		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
+		triggerName = uuid.NewV4().String()
+	}
+	fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	m := &metav1.ObjectMeta{
 		Name:      triggerName,
@@ -87,44 +93,35 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 		return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 	}
 
-	triggerUrl := flags.String("url")
-	if len(triggerUrl) == 0 {
-		return errors.New("need a trigger URL, use --url")
-	}
-	if !strings.HasPrefix(triggerUrl, "/") {
+	triggerUrl := input.String(flagkey.HtUrl)
+	if triggerUrl == "/" {
+		return errors.New("url with only root path is not allowed")
+	} else if !strings.HasPrefix(triggerUrl, "/") {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
-	method, err := GetMethod(flags.String("method"))
+	method, err := GetMethod(input.String(flagkey.HtMethod))
 	if err != nil {
 		return err
 	}
 
 	// For Specs, the spec validate checks for function reference
-	if !flags.Bool("spec") {
+	if !input.Bool(flagkey.SpecSave) {
 		err = util.CheckFunctionExistence(opts.client, functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
 	}
 
-	createIngress := flags.Bool("createingress")
+	createIngress := input.Bool(flagkey.HtIngress)
 	ingressConfig, err := GetIngressConfig(
-		flags.StringSlice("ingressannotation"), flags.String("ingressrule"),
-		flags.String("ingresstls"), triggerUrl, nil)
+		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
+		input.String(flagkey.HtIngressTLS), triggerUrl, nil)
 	if err != nil {
 		return errors.Wrap(err, "error parsing ingress configuration")
 	}
 
-	host := flags.String("host")
-	if flags.IsSet("host") {
-		console.Warn(fmt.Sprintf("--host is now marked as deprecated, see 'help' for details"))
-	}
-
-	// just name triggers by uuid.
-	if triggerName == "" {
-		triggerName = uuid.NewV4().String()
-	}
+	host := input.String(flagkey.HtHost)
 
 	opts.trigger = &fv1.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -144,9 +141,9 @@ func (opts *CreateSubCommand) complete(flags cli.Input) error {
 	return nil
 }
 
-func (opts *CreateSubCommand) run(flags cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if flags.Bool("spec") {
+	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Metadata.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
@@ -168,23 +165,23 @@ func (opts *CreateSubCommand) run(flags cli.Input) error {
 // GetMethod returns one of HTTP method
 func GetMethod(method string) (string, error) {
 	switch strings.ToUpper(method) {
-	case "GET":
+	case http.MethodGet:
 		return http.MethodGet, nil
-	case "HEAD":
+	case http.MethodHead:
 		return http.MethodHead, nil
-	case "POST":
+	case http.MethodPost:
 		return http.MethodPost, nil
-	case "PUT":
+	case http.MethodPut:
 		return http.MethodPut, nil
-	case "PATCH":
+	case http.MethodPatch:
 		return http.MethodPatch, nil
-	case "DELETE":
+	case http.MethodDelete:
 		return http.MethodDelete, nil
-	case "CONNECT":
+	case http.MethodConnect:
 		return http.MethodConnect, nil
-	case "OPTIONS":
+	case http.MethodOptions:
 		return http.MethodOptions, nil
-	case "TRACE":
+	case http.MethodTrace:
 		return http.MethodTrace, nil
 	default:
 		return "", fmt.Errorf("invalid or unsupported HTTP Method %v", method)
