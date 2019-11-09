@@ -17,9 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"os"
+
 	"github.com/fission/fission/cmd/fission-cli/app"
 )
 
 func main() {
-	app.App().Execute()
+	err := app.App().Execute()
+	if err != nil {
+		// let program exit with non-zero code when error occurs
+		os.Exit(1)
+	}
 }
