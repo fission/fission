@@ -86,7 +86,6 @@ func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
 func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	client.logger.Info("verifying function spec references for all functions in the cluster")
 
-	result := &multierror.Error{}
 	var err error
 	var fList *fv1.FunctionList
 
@@ -103,28 +102,30 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 			zap.Int("max_retries", maxRetries))
 	}
 
+	errs := &multierror.Error{}
+
 	// check that all secrets, configmaps, packages are in the same namespace
 	for _, fn := range fList.Items {
 		secrets := fn.Spec.Secrets
 		for _, secret := range secrets {
 			if secret.Namespace != fn.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, secret.Name, secret.Namespace))
+				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, secret.Name, secret.Namespace))
 			}
 		}
 
 		configmaps := fn.Spec.ConfigMaps
 		for _, configmap := range configmaps {
 			if configmap.Namespace != fn.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, configmap.Name, configmap.Namespace))
+				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, configmap.Name, configmap.Namespace))
 			}
 		}
 
 		if fn.Spec.Package.PackageRef.Namespace != fn.Metadata.Namespace {
-			result = multierror.Append(result, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+			errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
 		}
 	}
 
-	if result != nil {
+	if errs.ErrorOrNil() != nil {
 		client.logger.Fatal("installation failed",
 			zap.Error(err),
 			zap.String("summary", "a function cannot reference secrets, configmaps and packages outside it's own namespace"))
