@@ -319,7 +319,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 			if strings.HasPrefix(ar.URL, ARCHIVE_URL_PREFIX) {
 				availableAr, ok := archiveFiles[ar.URL]
 				if !ok {
-					return fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
+					return errors.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
 				ar.Literal = availableAr.Literal
@@ -368,7 +368,7 @@ func applyResources(fclient *client.Client, specDir string, fr *FissionResources
 			// spec. It may exist outside the spec, but we're going to treat
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
-			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
+			return nil, nil, errors.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
 				f.Metadata.Namespace, f.Metadata.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
@@ -430,8 +430,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 			absGlob := rootDir + "/" + relativeGlob
 			f, err := filepath.Glob(absGlob)
 			if err != nil {
-				console.Info(fmt.Sprintf("Invalid glob in archive %v: %v", aus.Name, relativeGlob))
-				return nil, err
+				return nil, errors.Wrapf(err, "Invalid glob in archive %v: %v", aus.Name, relativeGlob)
 			}
 			files = append(files, f...)
 			// xxx handle excludeGlobs here
@@ -439,7 +438,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("archive '%v' is empty", aus.Name)
+		return nil, errors.Errorf("archive '%v' is empty", aus.Name)
 	}
 
 	// if it's just one file, use its path directly
@@ -490,7 +489,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 		// checksum
 		csum, err := utils.GetFileChecksum(archiveFileName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
+			return nil, errors.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}
 
 		// archive object
@@ -535,7 +534,7 @@ func waitForPackageBuild(fclient *client.Client, pkg *fv1.Package) (*fv1.Package
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.Metadata.Name)
+			return nil, errors.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.Metadata.Name)
 		}
 
 		// TODO watch instead
@@ -612,7 +611,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 				pkg, err := waitForPackageBuild(fclient, &o)
 				if err != nil {
 					// log and ignore
-					fmt.Printf("Error waiting for package '%v' build, ignoring\n", o.Metadata.Name)
+					console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.Metadata.Name))
 					pkg = &o
 				}
 

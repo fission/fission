@@ -45,7 +45,7 @@ func getPodFileName(dumpdir string, pod metav1.ObjectMeta, containerName string)
 func writeToFile(file string, obj interface{}) {
 	bs, err := yaml.Marshal(obj)
 	if err != nil {
-		console.Info(fmt.Sprintf("Error encoding object: %v", err))
+		console.Error(fmt.Sprintf("Error encoding object: %v", err))
 		return
 	}
 
@@ -57,6 +57,6 @@ func writeToFile(file string, obj interface{}) {
 
 	err = ioutil.WriteFile(file, bs, 0644)
 	if err != nil {
-		console.Info(fmt.Sprintf("Error writing file %v: %v", file, err))
+		console.Error(fmt.Sprintf("Error writing file %v: %v", file, err))
 	}
 }
