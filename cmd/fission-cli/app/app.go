@@ -31,6 +31,8 @@ const (
 )
 
 func App() *cobra.Command {
+	cobra.EnableCommandSorting = false
+
 	rootCmd := &cobra.Command{
 		Use:  "fission",
 		Long: usage,

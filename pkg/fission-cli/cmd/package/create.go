@@ -82,6 +82,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	return err
 }
 
+// TODO: get all necessary value from CLI input directly
 func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNamespace string, envName string, envNamespace string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
 

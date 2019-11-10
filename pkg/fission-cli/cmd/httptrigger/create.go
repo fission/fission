@@ -74,7 +74,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	triggerName := input.String(flagkey.HtName)
 	// just name triggers by uuid.
-	if triggerName == "" {
+	if len(triggerName) == 0 {
 		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
 		triggerName = uuid.NewV4().String()
 	}

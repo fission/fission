@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName, flag.CanaryTriggerName, flag.CanaryNewFunc, flag.CanaryOldFunc},
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
+		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceFunction},
 	})
 
 	getCmd := &cobra.Command{
@@ -53,7 +53,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
+		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceCanary},
 	})
 
 	deleteCmd := &cobra.Command{

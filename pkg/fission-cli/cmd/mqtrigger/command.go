@@ -31,9 +31,9 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
-		Optional: []flag.Flag{flag.MqtName, flag.NamespaceFunction, flag.MqtMQType,
-			flag.MqtRespTopic, flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
-			flag.SpecSave},
+		Optional: []flag.Flag{flag.MqtName, flag.MqtMQType, flag.MqtRespTopic,
+			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
+			flag.NamespaceFunction, flag.SpecSave},
 	})
 
 	updateCmd := &cobra.Command{
@@ -44,8 +44,8 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.MqtTopic, flag.MqtRespTopic,
-			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtFnName, flag.MqtMsgContentType},
+		Optional: []flag.Flag{flag.MqtFnName, flag.MqtTopic, flag.MqtRespTopic, flag.MqtErrorTopic,
+			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.NamespaceTrigger},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -62,7 +62,8 @@ func Commands() *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
-		Short:   "List all message queue triggers in a namespace if specified, else, list message queue triggers across all namespaces",
+		Short:   "List message queue triggers",
+		Long:    "List all message queue triggers in a namespace if specified, else, list message queue triggers across all namespaces",
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
