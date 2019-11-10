@@ -19,6 +19,7 @@ package console
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/life1347/color"
 )
@@ -28,16 +29,24 @@ var (
 	Verbosity int
 )
 
+func Error(msg interface{}) {
+	os.Stderr.WriteString(fmt.Sprintf("%v: %v\n", color.RedString("Error"), trimNewline(msg)))
+}
+
 func Warn(msg interface{}) {
-	os.Stdout.WriteString(fmt.Sprintf("%v: %v\n", color.YellowString("Warning"), msg))
+	os.Stdout.WriteString(fmt.Sprintf("%v: %v\n", color.YellowString("Warning"), trimNewline(msg)))
 }
 
 func Info(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v\n", msg))
+	os.Stderr.WriteString(fmt.Sprintf("%v\n", trimNewline(msg)))
 }
 
 func Verbose(verbosityLevel int, format string, args ...interface{}) {
 	if Verbosity >= verbosityLevel {
 		fmt.Printf(format+"\n", args...)
 	}
+}
+
+func trimNewline(m interface{}) string {
+	return strings.TrimSuffix(fmt.Sprintf("%v", m), "\n")
 }
