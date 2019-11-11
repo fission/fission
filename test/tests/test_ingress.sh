@@ -75,9 +75,11 @@ createFn() {
 
     log "Creating function"
     fission fn create --name $functionName --env $env --code $ROOT/examples/nodejs/hello.js
+    sleep 3
 
     log "Doing an HTTP GET on the function's route"
     response=$(fission fn test --name $functionName)
+    echo $response
 
     log "Checking for valid response"
     echo $response | grep -i hello

@@ -119,13 +119,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	if resp.StatusCode < 400 {
 		fmt.Print(string(body))
-
 		return nil
 	}
 
 	fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", m.Name, resp.StatusCode, string(body))
 	err = printPodLogs(input)
 	if err != nil {
+		fmt.Printf("Error getting function logs from pod: %v. Try to get logs from log database", err)
 		return Log(input)
 	}
 

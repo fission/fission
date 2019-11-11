@@ -138,7 +138,11 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(testCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction},
+			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction,
+			// for getting log from log database if
+			// we failed to get logs from function pod.
+			flag.FnLogDBType,
+		},
 	})
 
 	command := &cobra.Command{
