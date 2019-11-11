@@ -63,6 +63,12 @@ router:
   deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
+  
+  ## Display endpoint access logs
+  ## To be aware of enabling logging endpoint access log, it increases
+  ## router resource utilization when under heavy workloads.
+  displayAccessLog: false
+  
   ## Add annotations for router
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
