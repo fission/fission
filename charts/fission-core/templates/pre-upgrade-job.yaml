@@ -30,4 +30,4 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         args: ["--fn-pod-namespace", "{{ .Values.functionNamespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc

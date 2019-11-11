@@ -168,7 +168,7 @@ spec:
         ports:
           - containerPort: 8888
             name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       volumes:
       - name: config-volume
         configMap:
@@ -243,7 +243,7 @@ spec:
             name: metrics
           - containerPort: 8888
             name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -293,7 +293,7 @@ spec:
           value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}          
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -325,7 +325,7 @@ spec:
         env:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -357,7 +357,7 @@ spec:
         env:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -400,7 +400,7 @@ spec:
         ports:
           - containerPort: 8000
             name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       volumes:
       - name: fission-storage
       {{- if .Values.persistence.enabled }}   

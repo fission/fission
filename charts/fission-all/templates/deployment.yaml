@@ -169,7 +169,7 @@ spec:
         ports:
           - containerPort: 8888
             name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       volumes:
       - name: config-volume
         configMap:
@@ -247,7 +247,7 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -299,7 +299,7 @@ spec:
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -333,7 +333,7 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -438,7 +438,7 @@ spec:
         command: 
         - /heapster
         - --source=kubernetes:https://kubernetes.default
-      serviceAccount: {{ .Release.Namespace }}/fission-svc
+      serviceAccountName: {{ .Release.Namespace }}/fission-svc
 {{- end }}
 ---
 apiVersion: apps/v1
@@ -467,7 +467,7 @@ spec:
         env:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -498,7 +498,7 @@ spec:
 #      - name: kubectl-proxy
 #        image: {{ .Values.repository }}/lachlanevenson/k8s-kubectl
 #        args: ["proxy", "--port", "8001", "--address", "127.0.0.1"]
-#      serviceAccount: fission-svc
+#      serviceAccountName: fission-svc
 
 {{- if .Values.nats.enabled }}
 ---
@@ -587,7 +587,7 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -643,7 +643,7 @@ spec:
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
         {{- end }}        
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:
       - name: kafka-secrets
@@ -723,7 +723,7 @@ spec:
               key: key
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
@@ -781,7 +781,7 @@ spec:
         ports:
           - containerPort: 8000
             name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       volumes:
       - name: fission-storage
       {{- if .Values.persistence.enabled }}

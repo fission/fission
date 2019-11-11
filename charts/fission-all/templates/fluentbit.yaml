@@ -106,7 +106,7 @@ spec:
             - name: fluentbit-config
               mountPath: /fluent-bit/etc/
               readOnly: true
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
       volumes:
         - name: container-log
           hostPath:

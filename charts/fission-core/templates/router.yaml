@@ -84,7 +84,7 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
-      serviceAccount: fission-svc
+      serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
