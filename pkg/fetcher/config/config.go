@@ -96,7 +96,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		sharedMountPath:         sharedMountPath,
 		sharedSecretPath:        "/secrets",
 		sharedCfgMapPath:        "/configs",
-		jaegerCollectorEndpoint: os.Getenv("OPENCENSUS_TRACE_JAEGER_COLLECTOR_ENDPOINT"),
+		jaegerCollectorEndpoint: os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"),
 		serviceAccount:          types.FissionFetcherSA,
 	}, nil
 }

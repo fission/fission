@@ -33,7 +33,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
         env:
           - name: POD_NAMESPACE
             valueFrom:
@@ -53,6 +53,8 @@ spec:
             value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
           - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
             value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
+          - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+            value: "{{ .Values.traceCollectorEndpoint }}"
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.router.traceSamplingRate | default "0.5" | quote }}
           - name: USE_ENCODED_PATH

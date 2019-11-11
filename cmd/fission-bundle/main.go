@@ -118,8 +118,8 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 }
 
 func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{}) error {
-	collectorEndpoint := getStringArgWithDefault(arguments["--collectorEndpoint"], "")
-	if collectorEndpoint == "" {
+	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
+	if len(collectorEndpoint) == 0 {
 		logger.Info("skipping trace exporter registration")
 		return nil
 	}
@@ -196,18 +196,17 @@ Use it to start one or more of the fission servers:
  backends.
 
 Usage:
-  fission-bundle --controllerPort=<port> [--collectorEndpoint=<url>]
-  fission-bundle --routerPort=<port> [--executorUrl=<url>] [--collectorEndpoint=<url>]
-  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>] [--collectorEndpoint=<url>]
-  fission-bundle --kubewatcher [--routerUrl=<url>] [--collectorEndpoint=<url>]
-  fission-bundle --storageServicePort=<port> --filePath=<filePath> [--collectorEndpoint=<url>]
-  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>] [--collectorEndpoint=<url>]
-  fission-bundle --timer [--routerUrl=<url>] [--collectorEndpoint=<url>]
-  fission-bundle --mqt   [--routerUrl=<url>] [--collectorEndpoint=<url>]
+  fission-bundle --controllerPort=<port>
+  fission-bundle --routerPort=<port> [--executorUrl=<url>]
+  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
+  fission-bundle --kubewatcher [--routerUrl=<url>]
+  fission-bundle --storageServicePort=<port> --filePath=<filePath>
+  fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
+  fission-bundle --timer [--routerUrl=<url>]
+  fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --logger
   fission-bundle --version
 Options:
-  --collectorEndpoint=<url> Jaeger HTTP Thrift collector URL.
   --controllerPort=<port>         Port that the controller should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
