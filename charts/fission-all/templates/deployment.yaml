@@ -137,10 +137,12 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--controllerPort", "8888", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--controllerPort", "8888"]
         env:
         - name: FISSION_FUNCTION_NAMESPACE
           value: "{{ .Values.functionNamespace }}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
@@ -205,7 +207,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
@@ -213,10 +215,12 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: RUNTIME_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcherMinCpu | default "10m" | quote }}
         - name: FETCHER_MINMEM
@@ -225,8 +229,6 @@ spec:
           value: {{ .Values.fetcherMaxCpu | default "1000m" | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcherMaxMem | default "128Mi" | quote }}
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         readinessProbe:
@@ -275,7 +277,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
           value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
@@ -283,10 +285,10 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
@@ -327,8 +329,10 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
@@ -577,12 +581,14 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: nats-streaming
         - name: MESSAGE_QUEUE_URL
           value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
@@ -620,7 +626,7 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: kafka
@@ -628,6 +634,8 @@ spec:
           value: "{{.Values.kafka.brokers}}"
         - name: MESSAGE_QUEUE_KAFKA_VERSION
           value: "{{.Values.kafka.version}}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
@@ -708,8 +716,10 @@ spec:
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}        
         - name: MESSAGE_QUEUE_TYPE
@@ -754,8 +764,10 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--storageServicePort", "8000", "--filePath", "/fission", "--collectorEndpoint", "{{ .Values.traceCollectorEndpoint }}"]
+        args: ["--storageServicePort", "8000", "--filePath", "/fission"]
         env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: PRUNE_INTERVAL
