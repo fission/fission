@@ -17,15 +17,13 @@ limitations under the License.
 package _package
 
 import (
-	"fmt"
-	"os"
-	"text/tabwriter"
-
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -57,7 +55,7 @@ func (opts *InfoSubCommand) do(input cli.Input) error {
 
 func (opts *InfoSubCommand) complete(input cli.Input) error {
 	opts.name = input.String(flagkey.PkgName)
-	opts.namespace = input.String("pkgNamespace")
+	opts.namespace = input.String(flagkey.NamespacePackage)
 	return nil
 }
 
@@ -69,13 +67,6 @@ func (opts *InfoSubCommand) run(input cli.Input) error {
 	if err != nil {
 		return errors.Wrapf(err, "error finding package %s", opts.name)
 	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Metadata.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
-	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
-	fmt.Fprintf(w, "%v\n%v", "Build Logs:", pkg.Status.BuildLog)
-	w.Flush()
-
+	pkgutil.PrintPackageSummary(os.Stdout, pkg)
 	return nil
 }
