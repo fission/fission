@@ -40,7 +40,7 @@ spec:
         - name: init
           image: busybox
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ['mkdir', '-p', '/var/log/fission']
+          command: ['mkdir', '-p', '/fission']
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
@@ -62,9 +62,12 @@ spec:
           command: ["/fission-bundle"]
           args: ["--logger"]
           volumeMounts:
+            - name: function-pod-log
+              mountPath: /fission
+              readOnly: false
             - name: container-log
               mountPath: /var/log/
-              readOnly: false
+              readOnly: true
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true
@@ -95,19 +98,28 @@ spec:
                   name: influxdb
                   key: password
             - name: LOG_PATH
-              value: /var/log/fission/*.log
+              value: /fission/*.log
           volumeMounts:
+            - name: function-pod-log
+              mountPath: /fission
+              readOnly: false
             - name: container-log
               mountPath: /var/log/
-              readOnly: false
+              readOnly: true
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true
             - name: fluentbit-config
               mountPath: /fluent-bit/etc/
               readOnly: true
+            - name: fluentbit-db
+              mountPath: /fluent-bit/db/
+              readOnly: false
       serviceAccountName: fission-svc
       volumes:
+        # for log symlink
+        - name: function-pod-log
+          emptyDir: {}
         - name: container-log
           hostPath:
             path: /var/log/
@@ -118,5 +130,36 @@ spec:
         - name: fluentbit-config
           configMap:
             name: {{ .Release.Name }}-fission-fluentbit
+        - name: fluentbit-db
+        {{- if .Values.logger.fluentdPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.logger.fluentdPersistence.existingClaim | default "fission-fluentbit-pvc" }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
   updateStrategy:
     type: RollingUpdate
+---
+{{- if and .Values.logger.fluentdPersistence.enabled (not .Values.logger.fluentdPersistence.existingClaim) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: fission-fluentbit-pvc
+  labels:
+    app: fission-fluentbit
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+spec:
+  accessModes:
+    - {{ .Values.logger.fluentdPersistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.logger.fluentdPersistence.size | quote }}
+  {{- if .Values.logger.fluentdPersistence.storageClass }}
+  {{- if (eq "-" .Values.logger.fluentdPersistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.logger.fluentdPersistence.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

@@ -40,7 +40,7 @@ var nodeName = os.Getenv("NODE_NAME")
 
 const (
 	originalContainerLogPath = "/var/log/containers"
-	fissionSymlinkPath       = "/var/log/fission"
+	fissionSymlinkPath       = "/fission"
 )
 
 func makePodLoggerController(zapLogger *zap.Logger, k8sClientSet *kubernetes.Clientset) k8sCache.Controller {
