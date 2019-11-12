@@ -26,6 +26,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/types"
 )
 
@@ -98,15 +99,12 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 			if _, printed := w.finished[k]; printed {
 				continue
 			}
-			if pkg.Status.BuildStatus == types.BuildStatusFailed {
+			if pkg.Status.BuildStatus == types.BuildStatusFailed ||
+				pkg.Status.BuildStatus == types.BuildStatusSucceeded {
 				w.finished[k] = true
-				fmt.Printf("--- Build FAILED: ---\n%v\n------\n", pkg.Status.BuildLog)
-			} else if pkg.Status.BuildStatus == types.BuildStatusSucceeded {
-				w.finished[k] = true
-				fmt.Printf("--- Build SUCCEEDED ---\n")
-				if len(pkg.Status.BuildLog) > 0 {
-					fmt.Printf("%v\n------\n", pkg.Status.BuildLog)
-				}
+				fmt.Printf("------\n")
+				util.PrintPackageSummary(os.Stdout, &pkg)
+				fmt.Printf("------\n")
 			}
 		}
 

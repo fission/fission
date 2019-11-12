@@ -88,7 +88,7 @@ func Commands() *cobra.Command {
 	infoCmd := &cobra.Command{
 		Use:   "info",
 		Short: "Show package information",
-		RunE:  wrapper.Wrapper(List),
+		RunE:  wrapper.Wrapper(Info),
 	}
 	wrapper.SetFlags(infoCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
@@ -98,7 +98,7 @@ func Commands() *cobra.Command {
 	rebuildCmd := &cobra.Command{
 		Use:   "rebuild",
 		Short: "Rebuild a failed package",
-		RunE:  wrapper.Wrapper(List),
+		RunE:  wrapper.Wrapper(Rebuild),
 	}
 	wrapper.SetFlags(rebuildCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
