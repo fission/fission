@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -38,7 +36,7 @@ func (c *Client) FunctionCreate(f *fv1.Function) (*metav1.ObjectMeta, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("functions"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("functions", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (c *Client) FunctionGet(m *metav1.ObjectMeta) (*fv1.Function, error) {
 	relativeUrl := fmt.Sprintf("functions/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +85,7 @@ func (c *Client) FunctionGetRawDeployment(m *metav1.ObjectMeta) ([]byte, error) 
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 	relativeUrl += fmt.Sprintf("&deploymentraw=1")
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +133,7 @@ func (c *Client) FunctionDelete(m *metav1.ObjectMeta) error {
 
 func (c *Client) FunctionList(functionNamespace string) ([]fv1.Function, error) {
 	relativeUrl := fmt.Sprintf("functions?namespace=%v", functionNamespace)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

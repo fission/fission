@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,7 +37,7 @@ func (c *Client) WatchCreate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta,
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("watches"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("watches", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +61,7 @@ func (c *Client) WatchGet(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, er
 	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +82,7 @@ func (c *Client) WatchGet(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, er
 }
 
 func (c *Client) WatchUpdate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
-	return nil, ferror.MakeError(ferror.ErrorNotImplmented,
-		"watch update not implemented")
+	return nil, ferror.MakeError(ferror.ErrorNotImplmented, "watch update not implemented")
 }
 
 func (c *Client) WatchDelete(m *metav1.ObjectMeta) error {
@@ -96,7 +93,7 @@ func (c *Client) WatchDelete(m *metav1.ObjectMeta) error {
 
 func (c *Client) WatchList(ns string) ([]fv1.KubernetesWatchTrigger, error) {
 	relativeUrl := fmt.Sprintf("watches?namespace=%v", ns)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

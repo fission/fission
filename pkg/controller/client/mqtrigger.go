@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -38,7 +36,7 @@ func (c *Client) MessageQueueTriggerCreate(t *fv1.MessageQueueTrigger) (*metav1.
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("triggers/messagequeue"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("triggers/messagequeue", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*fv1.MessageQueue
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +124,7 @@ func (c *Client) MessageQueueTriggerList(mqType string, ns string) ([]fv1.Messag
 		relativeUrl += fmt.Sprintf("?mqtype=%v&namespace=%v", mqType, ns)
 	}
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}

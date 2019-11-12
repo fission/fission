@@ -17,10 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -38,7 +36,7 @@ func (c *Client) HTTPTriggerCreate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, erro
 		return nil, err
 	}
 
-	resp, err := http.Post(c.url("triggers/http"), "application/json", bytes.NewReader(reqbody))
+	resp, err := c.create("triggers/http", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*fv1.HTTPTrigger, error) 
 	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +119,7 @@ func (c *Client) HTTPTriggerDelete(m *metav1.ObjectMeta) error {
 
 func (c *Client) HTTPTriggerList(triggerNamespace string) ([]fv1.HTTPTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/http?namespace=%v", triggerNamespace)
-	resp, err := http.Get(c.url(relativeUrl))
+	resp, err := c.get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
