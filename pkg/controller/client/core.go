@@ -81,9 +81,7 @@ func (c *Client) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
 }
 
 func (c *Client) GetSvcURL(label string) (string, error) {
-	relativeUrl := fmt.Sprintf("%s/proxy/svcname?"+label, c.Url)
-
-	resp, err := c.get(relativeUrl)
+	resp, err := c.proxy(http.MethodGet, "svcname?"+label, nil)
 	if err != nil {
 		return "", err
 	}
@@ -103,12 +101,10 @@ func (c *Client) GetSvcURL(label string) (string, error) {
 }
 
 func (c *Client) ServerInfo() (*info.ServerInfo, error) {
-	url := fmt.Sprintf(c.Url)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	resp, err := ctxhttp.Get(ctx, &http.Client{}, url)
+	resp, err := ctxhttp.Get(ctx, &http.Client{}, c.Url)
 	if err != nil {
 		return nil, err
 	}

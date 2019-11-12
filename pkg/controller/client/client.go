@@ -51,7 +51,7 @@ func (c *Client) create(relativeUrl string, contentType string, payload []byte) 
 	if len(payload) > 0 {
 		reader = bytes.NewReader(payload)
 	}
-	return c.sendRequest(http.MethodPost, c.url(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+	return c.sendRequest(http.MethodPost, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
 }
 
 func (c *Client) put(relativeUrl string, contentType string, payload []byte) (*http.Response, error) {
@@ -59,15 +59,15 @@ func (c *Client) put(relativeUrl string, contentType string, payload []byte) (*h
 	if len(payload) > 0 {
 		reader = bytes.NewReader(payload)
 	}
-	return c.sendRequest(http.MethodPut, c.url(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+	return c.sendRequest(http.MethodPut, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
 }
 
 func (c *Client) get(relativeUrl string) (*http.Response, error) {
-	return c.sendRequest(http.MethodGet, c.url(relativeUrl), nil, nil)
+	return c.sendRequest(http.MethodGet, c.v2CrdUrl(relativeUrl), nil, nil)
 }
 
 func (c *Client) delete(relativeUrl string) error {
-	resp, err := c.sendRequest(http.MethodDelete, c.url(relativeUrl), nil, nil)
+	resp, err := c.sendRequest(http.MethodDelete, c.v2CrdUrl(relativeUrl), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -85,6 +85,14 @@ func (c *Client) delete(relativeUrl string) error {
 	return nil
 }
 
+func (c *Client) proxy(method string, relativeUrl string, payload []byte) (*http.Response, error) {
+	var reader io.Reader
+	if len(payload) > 0 {
+		reader = bytes.NewReader(payload)
+	}
+	return c.sendRequest(method, c.proxyUrl(relativeUrl), nil, reader)
+}
+
 func (c *Client) sendRequest(method string, relativeUrl string, headers map[string]string, reader io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, relativeUrl, reader)
 	if err != nil {
@@ -98,8 +106,12 @@ func (c *Client) sendRequest(method string, relativeUrl string, headers map[stri
 	return http.DefaultClient.Do(req)
 }
 
-func (c *Client) url(relativeUrl string) string {
-	return c.Url + "/v2/" + relativeUrl
+func (c *Client) v2CrdUrl(relativeUrl string) string {
+	return c.Url + "/v2/" + strings.TrimPrefix(relativeUrl, "/")
+}
+
+func (c *Client) proxyUrl(relativeUrl string) string {
+	return c.Url + "/proxy/" + strings.TrimPrefix(relativeUrl, "/")
 }
 
 func (c *Client) handleResponse(resp *http.Response) ([]byte, error) {
