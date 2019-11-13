@@ -157,13 +157,6 @@ func configureClient(config *rest.Config) {
 			)
 			scheme.AddKnownTypes(
 				groupversion,
-				&fv1.Recorder{},
-				&fv1.RecorderList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
 				&fv1.CanaryConfig{},
 				&fv1.CanaryConfigList{},
 				&metav1.ListOptions{},
@@ -223,9 +216,6 @@ func (fc *FissionClient) TimeTriggers(ns string) TimeTriggerInterface {
 }
 func (fc *FissionClient) MessageQueueTriggers(ns string) MessageQueueTriggerInterface {
 	return MakeMessageQueueTriggerInterface(fc.crdClient, ns)
-}
-func (fc *FissionClient) Recorders(ns string) RecorderInterface {
-	return MakeRecorderInterface(fc.crdClient, ns)
 }
 func (fc *FissionClient) Packages(ns string) PackageInterface {
 	return MakePackageInterface(fc.crdClient, ns)

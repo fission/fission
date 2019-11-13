@@ -74,7 +74,6 @@ var (
 	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", DefaultValue: metav1.NamespaceDefault}
 	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", DefaultValue: metav1.NamespaceDefault}
 	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", DefaultValue: metav1.NamespaceDefault}
-	NamespaceRecorder    = Flag{Type: String, Name: flagkey.NamespaceRecorder, Aliases: []string{"recorderns"}, Usage: "Namespace for recorder object", DefaultValue: metav1.NamespaceDefault}
 	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", DefaultValue: metav1.NamespaceDefault}
 
 	RunTimeMinCPU    = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
@@ -134,22 +133,6 @@ var (
 	MqtErrorTopic     = Flag{Type: String, Name: flagkey.MqtErrorTopic, Usage: "Topic that the function error messages are sent to (errors discarded if unspecified"}
 	MqtMaxRetries     = Flag{Type: Int, Name: flagkey.MqtMaxRetries, Usage: "Maximum number of times the function will be retried upon failure", DefaultValue: 0}
 	MqtMsgContentType = Flag{Type: String, Name: flagkey.MqtMsgContentType, Short: "c", Usage: "Content type of messages that publish to the topic", DefaultValue: "application/json"}
-
-	RecorderName            = Flag{Type: String, Name: flagkey.RecorderName, Usage: "Recorder name"}
-	RecorderFn              = Flag{Type: String, Name: flagkey.RecorderFn, Usage: "Record Function name(s): --function=fnA"}
-	RecorderTriggers        = Flag{Type: StringSlice, Name: flagkey.RecorderTriggers, Usage: "Record Trigger name(s): --trigger=trigger1,trigger2,trigger3"}
-	RecorderRetentionPolicy = Flag{Type: String, Name: flagkey.RecorderRetentionPolicy, Usage: "Retention policy (number of days)"}
-	RecorderEvictionPolicy  = Flag{Type: String, Name: flagkey.RecorderEvictionPolcy, Usage: "Eviction policy (default LRU)"}
-	RecorderEnabled         = Flag{Type: Bool, Name: flagkey.RecorderEnabled, Usage: "Enable recorder"}
-	RecorderDisabled        = Flag{Type: Bool, Name: flagkey.RecorderDisabled, Usage: "Disable recorder"}
-
-	RecordsFilterTimeFrom = Flag{Type: String, Name: flagkey.RecordsFilterTimeFrom, Usage: "Filter records by time interval; specify start of interval"}
-	RecordsFilterTimeTo   = Flag{Type: String, Name: flagkey.RecordsFilterTimeTo, Usage: "Filter records by time interval; specify end of interval"}
-	RecordsFilterFunction = Flag{Type: String, Name: flagkey.RecordsFilterFunction, Usage: "Filter records by function"}
-	RecordsFilterTrigger  = Flag{Type: String, Name: flagkey.RecordsFilterTrigger, Usage: "Filter records by trigger"}
-	RecordsVerbosity      = Flag{Type: Bool, Name: flagkey.RecordsVerbosity, Usage: "Toggle verbosity -- view more detailed requests/responses"}
-	RecordsVv             = Flag{Type: Bool, Name: flagkey.RecordsVv, Usage: "Toggle verbosity -- view raw requests/responses"}
-	RecordsReqID          = Flag{Type: String, Name: flagkey.RecordsReqID, Usage: "Replay a particular request by providing the reqUID (to view reqUIDs, do 'fission records view')"}
 
 	EnvName                   = Flag{Type: String, Name: flagkey.EnvName, Usage: "Environment name"}
 	EnvPoolsize               = Flag{Type: Int, Name: flagkey.EnvPoolsize, Usage: "Size of the pool", DefaultValue: 3}

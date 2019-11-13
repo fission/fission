@@ -28,7 +28,6 @@ const (
 	NamespaceEnvironment = "envNamespace"
 	NamespacePackage     = "pkgNamespace"
 	NamespaceTrigger     = "triggerNamespace"
-	NamespaceRecorder    = "recorderNamespace"
 	NamespaceCanary      = "canaryNamespace"
 
 	RuntimeMincpu    = "mincpu"
@@ -88,21 +87,6 @@ const (
 	MqtErrorTopic     = "errortopic"
 	MqtMaxRetries     = "maxretries"
 	MqtMsgContentType = "contenttype"
-
-	RecorderName            = resourceName
-	RecorderFn              = "function"
-	RecorderTriggers        = "trigger"
-	RecorderRetentionPolicy = "retention"
-	RecorderEvictionPolcy   = "eviction"
-	RecorderEnabled         = "enable"
-	RecorderDisabled        = "disable"
-	RecordsFilterTimeFrom   = "from"
-	RecordsFilterTimeTo     = "to"
-	RecordsFilterFunction   = "function"
-	RecordsFilterTrigger    = "trigger"
-	RecordsVerbosity        = "v"
-	RecordsVv               = "vv"
-	RecordsReqID            = "reqUID"
 
 	EnvName            = resourceName
 	EnvPoolsize        = "poolsize"

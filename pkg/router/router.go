@@ -116,10 +116,6 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
-	frmap := makeFunctionRecorderMap(logger, time.Minute)
-
-	trmap := makeTriggerRecorderMap(logger, time.Minute)
-
 	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		logger.Fatal("error connecting to kubernetes API", zap.Error(err))
@@ -226,7 +222,7 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 			zap.Bool("default", displayAccessLog))
 	}
 
-	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, frmap, trmap, fissionClient, kubeClient, executor, restClient, &tsRoundTripperParams{
+	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, restClient, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,
