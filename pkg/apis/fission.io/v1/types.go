@@ -157,23 +157,6 @@ type (
 		Items           []MessageQueueTrigger `json:"items"`
 	}
 
-	// Recorder allows user to record all traffic payload to a certain function.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	Recorder struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            RecorderSpec      `json:"spec"`
-	}
-
-	// RecorderList is a list of Recorders.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	RecorderList struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-
-		Items []Recorder `json:"items"`
-	}
-
 	// CanaryConfig is for canary deployment of two functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	CanaryConfig struct {
@@ -640,22 +623,6 @@ type (
 
 		// Content type of payload
 		ContentType string `json:"contentType"`
-	}
-
-	// RecorderSpec defines a policy for recording requests and responses
-	// to a function, that can be later inspected or replayed.
-	RecorderSpec struct {
-		// Name of recorder resource
-		Name string `json:"name"`
-
-		// Function to collect requests/responses
-		Function string `json:"function"`
-
-		// HTTP trigger to record the requests and responses.
-		Triggers        []string `json:"triggers"`
-		RetentionPolicy string   `json:"-"` // `json:"retentionPolicy"`
-		EvictionPolicy  string   `json:"-"` // `json:"evictionPolicy"`
-		Enabled         bool     `json:"enabled"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or

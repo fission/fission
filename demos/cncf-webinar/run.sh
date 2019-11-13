@@ -82,11 +82,6 @@ clear
 popd
 
 #
-# Record replay
-#
-clear
-
-#
 # Canary Deployments
 #
 clear

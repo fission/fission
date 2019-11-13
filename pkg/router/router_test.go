@@ -51,12 +51,8 @@ func TestRouter(t *testing.T) {
 	fmap := makeFunctionServiceMap(logger, 0)
 	fmap.assign(fn, testServiceUrl)
 
-	frmap := makeFunctionRecorderMap(logger, time.Minute)
-
-	trmap := makeTriggerRecorderMap(logger, time.Minute)
-
 	// HTTP trigger set with a trigger for this function
-	triggers, _, _ := makeHTTPTriggerSet(logger, fmap, frmap, trmap, nil, nil, nil, nil,
+	triggers, _, _ := makeHTTPTriggerSet(logger, fmap, nil, nil, nil, nil,
 		&tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
 			timeoutExponent: 2,

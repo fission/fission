@@ -209,10 +209,6 @@ func SpecSave(resource interface{}, specFile string) error {
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "TimeTrigger"
 		data, err = yaml.Marshal(typedres)
-	case fv1.Recorder:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "Recorder"
-		data, err = yaml.Marshal(typedres)
 	default:
 		return fmt.Errorf("can't save resource %#v", resource)
 	}

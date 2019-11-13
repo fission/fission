@@ -56,10 +56,6 @@ func (c *CanaryConfig) GetObjectKind() schema.ObjectKind {
 	return &c.TypeMeta
 }
 
-func (r *Recorder) GetObjectKind() schema.ObjectKind {
-	return &r.TypeMeta
-}
-
 func (f *Function) GetObjectMeta() metav1.Object {
 	return &f.Metadata
 }
@@ -85,10 +81,6 @@ func (c *CanaryConfig) GetObjectMeta() metav1.Object {
 	return &c.Metadata
 }
 
-func (r *Recorder) GetObjectMeta() metav1.Object {
-	return &r.Metadata
-}
-
 func (fl *FunctionList) GetObjectKind() schema.ObjectKind {
 	return &fl.TypeMeta
 }
@@ -109,9 +101,6 @@ func (ml *MessageQueueTriggerList) GetObjectKind() schema.ObjectKind {
 }
 func (pl *PackageList) GetObjectKind() schema.ObjectKind {
 	return &pl.TypeMeta
-}
-func (rl *RecorderList) GetObjectKind() schema.ObjectKind {
-	return &rl.TypeMeta
 }
 
 func (cl *CanaryConfigList) GetObjectKind() schema.ObjectKind {
@@ -138,10 +127,6 @@ func (ml *MessageQueueTriggerList) GetListMeta() metav1.ListInterface {
 }
 func (pl *PackageList) GetListMeta() metav1.ListInterface {
 	return &pl.Metadata
-}
-
-func (rl *RecorderList) GetListMeta() metav1.ListInterface {
-	return &rl.Metadata
 }
 
 func (cl *CanaryConfigList) GetListMeta() metav1.ListInterface {
@@ -277,15 +262,5 @@ func (ml *MessageQueueTriggerList) Validate() error {
 	for _, m := range ml.Items {
 		result = multierror.Append(result, m.Validate())
 	}
-	return result.ErrorOrNil()
-}
-
-func (r *Recorder) Validate() error {
-	result := &multierror.Error{}
-
-	result = multierror.Append(result,
-		validateMetadata("Recorder", r.Metadata),
-		r.Spec.Validate())
-
 	return result.ErrorOrNil()
 }
