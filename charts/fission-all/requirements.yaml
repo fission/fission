@@ -1,5 +1,5 @@
 dependencies:
   - name: prometheus
-    version: 7.1.0
+    version: 9.3.1
     repository: https://kubernetes-charts.storage.googleapis.com
-    condition: prometheusDeploy
+    condition: prometheus.enabled

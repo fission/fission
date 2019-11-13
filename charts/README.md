@@ -62,7 +62,8 @@ Parameter | Description | Default
 `pruneInterval` | The frequency of archive pruner (in minutes) | `60`
 `preUpgradeChecksImage` | Fission pre-install/pre-upgrade checks live in this image | `fission/pre-upgrade-checks`
 `debugEnv` | If there are any pod specialization errors when a function is triggered and this flag is set to true, the error summary is returned as part of http response | `true`
-`prometheusDeploy` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
+`prometheus.enabled` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
+`prometheus.serviceEndpoint` | If prometheus.enabled is false, please assign the prometheus service URL that is accessible by components. | `nil`
 `canaryDeployment.enabled` | Set to true if you need canary deployment feature | `true` in `fission-all`, `false` in `fission-core`
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 `router.deployAsDaemonSet` | Deploy router as DaemonSet instead of Deployment | `false`

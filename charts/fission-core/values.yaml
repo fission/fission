@@ -155,8 +155,14 @@ preUpgradeChecksImage: fission/pre-upgrade-checks
 ## summary is returned as part of http response
 debugEnv: false
 
-## set this flag to true if prometheus needs to be deployed along with fission
-prometheusDeploy: false
+## Prometheus for scrapping service metrics
+prometheus:
+  ## set this flag to true if prometheus needs to be deployed along with fission
+  enabled: true
+  
+  ## If enabled is false, please assign the prometheus service URL
+  ## that is accessible by components.
+  serviceEndpoint: ""
 
 ## set this flag to false if you dont need canary deployment feature
 canaryDeployment:
