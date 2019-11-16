@@ -86,7 +86,7 @@ var (
 	ReplicasMax = Flag{Type: Int, Name: flagkey.ReplicasMaxscale, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)", DefaultValue: 1}
 
 	FnName                  = Flag{Type: String, Name: flagkey.FnName, Usage: "Function name"}
-	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for newdeploy to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
+	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
 	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
 	FnCode                  = Flag{Type: String, Name: flagkey.FnCode, Usage: "Local path or URL for single file source code"}
 	FnKeepURL               = Flag{Type: Bool, Name: flagkey.PkgKeepURL, Aliases: []string{"keepurl"}, Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
