@@ -53,7 +53,7 @@ func Commands() *cobra.Command {
 
 	destroyCmd := &cobra.Command{
 		Use:   "destroy",
-		Short: "Delete an environment",
+		Short: "Delete all Fission resources in the application specification",
 		RunE:  wrapper.Wrapper(Destroy),
 	}
 	wrapper.SetFlags(destroyCmd, flag.FlagSet{
