@@ -37,7 +37,7 @@ func Commands() *cobra.Command {
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 
 			// TODO retired pkg related flag from function cmd
-			flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.HtUrl, flag.HtMethod,
 
 			// flag for newdeploy to use.
@@ -83,7 +83,7 @@ func Commands() *cobra.Command {
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 
-			flag.FnCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.FnBuildCmd, flag.PkgForce,
 
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
@@ -41,6 +42,17 @@ import (
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
 func CreateArchive(client *client.Client, includeFiles []string, noZip bool, specDir string, specFile string) (*fv1.Archive, error) {
+	// get root dir
+	var rootDir string
+	var err error
+
+	if len(specFile) > 0 {
+		rootDir, err = filepath.Abs(specDir + "/..")
+		if err != nil {
+			return nil, errors.Wrapf(err, "error getting root directory of spec directory")
+		}
+	}
+
 	errs := utils.MultiErrorWithFormat()
 	fileURL := ""
 
@@ -57,9 +69,22 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, spe
 		}
 
 		// Get files from inputs as number of files decide next steps
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			errs = multierror.Append(errs, errors.Wrapf(err, "error converting path to the absolute path \"%v\"", path))
+			continue
+		}
+
+		if !strings.HasPrefix(absPath, rootDir) {
+			errs = multierror.Append(errs, errors.Errorf("The files (%v) should be put under the same parent directory (%v) of spec directory; otherwise, the archive will be empty when applying spec files", path, rootDir))
+			continue
+		}
+
+		path := filepath.Join(rootDir, path)
 		files, err := utils.FindAllGlobs([]string{path})
 		if err != nil {
-			return nil, errors.Wrap(err, "error finding all globs")
+			errs = multierror.Append(errs, errors.Wrap(err, "error finding all globs"))
+			continue
 		}
 
 		if len(files) == 0 {
@@ -89,9 +114,12 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, spe
 			if err != nil {
 				return nil, errors.Wrap(err, "error reading specs")
 			}
-			if m := fr.SpecExists(aus, false, true); m != nil {
-				fmt.Printf("Re-using previously created archive %v\n", m.Name)
-				aus.Name = m.Name
+
+			obj := fr.SpecExists(aus, true, true)
+			if obj != nil {
+				oldAus := obj.(*spectypes.ArchiveUploadSpec)
+				fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
+				aus.Name = oldAus.Name
 			} else {
 				// save the uploadspec
 				err := spec.SpecSave(*aus, specFile)

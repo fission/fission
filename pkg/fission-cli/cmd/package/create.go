@@ -62,7 +62,11 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	pkgName := input.String(flagkey.PkgName)
 	if len(pkgName) == 0 {
-		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
+		if input.Bool(flagkey.SpecSave) && len(input.String(flagkey.PkgName)) == 0 {
+			return errors.Errorf("--%v is necessary when creating spec file", flagkey.PkgName)
+		} else {
+			console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
+		}
 	}
 	pkgNamespace := input.String(flagkey.NamespacePackage)
 	envName := input.String(flagkey.PkgEnvironment)
@@ -71,12 +75,27 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)
 
+	noZip := false
+	code := input.String(flagkey.PkgCode)
+	if len(code) == 0 {
+		deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
+	} else {
+		deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
+		noZip = true
+	}
+
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		return errors.Errorf("need --%v or --%v flag", flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+		return errors.Errorf("need --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+	}
+
+	var specDir, specFile string
+	if input.Bool(flagkey.SpecSave) {
+		specDir = util.GetSpecDir(input)
+		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
 	}
 
 	_, err := CreatePackage(input, opts.client, pkgName, pkgNamespace, envName, envNamespace,
-		srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
+		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 
 	return err
 }
@@ -138,14 +157,17 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 	}
 
 	if len(specFile) > 0 {
-		// if a package sith the same spec exists, don't create a new spec file
+		// if a package with the same spec exists, don't create a new spec file
 		fr, err := spec.ReadSpecs(util.GetSpecDir(input))
 		if err != nil {
 			return nil, errors.Wrap(err, "error reading specs")
 		}
-		if m := fr.SpecExists(pkg, false, true); m != nil {
-			fmt.Printf("Re-using previously created package %v\n", m.Name)
-			return m, nil
+
+		obj := fr.SpecExists(pkg, true, true)
+		if obj != nil {
+			pkg := obj.(*fv1.Package)
+			fmt.Printf("Re-using previously created package %v\n", pkg.Metadata.Name)
+			return &pkg.Metadata, nil
 		}
 
 		err = spec.SpecSave(*pkg, specFile)
