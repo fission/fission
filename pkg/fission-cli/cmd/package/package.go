@@ -40,7 +40,7 @@ import (
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func CreateArchive(client *client.Client, includeFiles []string, noZip bool, keepURL bool, specDir string, specFile string) (*fv1.Archive, error) {
+func CreateArchive(client *client.Client, includeFiles []string, noZip bool, specDir string, specFile string) (*fv1.Archive, error) {
 	errs := utils.MultiErrorWithFormat()
 	fileURL := ""
 
@@ -49,8 +49,7 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 		// ignore http files
 		if utils.IsURL(path) {
 			if len(includeFiles) > 1 {
-				// It's intentional to disallow the user to provide file
-				// and URL at the same time even the keepurl is false.
+				// It's intentional to disallow the user to provide file and URL at the same time.
 				return nil, errors.New("unable to create an archive that contains both file and URL")
 			}
 			fileURL = path
@@ -73,13 +72,11 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 	}
 
 	if len(specFile) > 0 {
-		var archive fv1.Archive
-
 		if len(fileURL) > 0 {
-			archive = fv1.Archive{
+			return &fv1.Archive{
 				Type: fv1.ArchiveTypeUrl,
 				URL:  fileURL,
-			}
+			}, nil
 		} else {
 			// create an ArchiveUploadSpec and reference it from the archive
 			aus := &spectypes.ArchiveUploadSpec{
@@ -102,30 +99,20 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, kee
 					return nil, errors.Wrapf(err, "write spec file %v", specFile)
 				}
 			}
-
 			// create the archive object
-			archive = fv1.Archive{
+			archive := fv1.Archive{
 				Type: fv1.ArchiveTypeUrl,
 				URL:  fmt.Sprintf("%v%v", spec.ARCHIVE_URL_PREFIX, aus.Name),
 			}
+			return &archive, nil
 		}
-
-		return &archive, nil
 	}
 
 	if len(fileURL) > 0 {
-		if keepURL {
-			return &fv1.Archive{
-				Type: fv1.ArchiveTypeUrl,
-				URL:  fileURL,
-			}, nil
-		}
-		// download the file before we archive it
-		dst, err := pkgutil.DownloadToTempFile(fileURL)
-		if err != nil {
-			return nil, err
-		}
-		includeFiles = []string{dst}
+		return &fv1.Archive{
+			Type: fv1.ArchiveTypeUrl,
+			URL:  fileURL,
+		}, nil
 	}
 
 	archivePath, err := makeArchiveFile("", includeFiles, noZip)

@@ -51,21 +51,4 @@ response=$(curl --retry 5 http://$FISSION_ROUTER/$fn)
 log "Checking for valid response"
 echo $response | grep -i hello
 
-log "Update function with file URL"
-fission fn update --name $fn --env $env --code ${code_url} --keepurl
-
-pkg=$(kubectl -n default get functions ${fn} -o yaml|grep hello-js|awk '{print $2}')
-url=$(kubectl -n default get packages ${pkg} -o yaml|grep "://"|awk '{print $2}')
-
-if [ ${url} != ${code_url} ]; then
-    log "have different code url: ${url} vs. ${code_url}"
-    exit 1
-fi
-
-log "Doing an HTTP GET on the function's route"
-response=$(curl --retry 5 http://$FISSION_ROUTER/$fn)
-
-log "Checking for valid response"
-echo $response | grep -i hello
-
 log "All done."

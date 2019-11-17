@@ -169,11 +169,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		buildcmd := input.String(flagkey.PkgBuildCmd)
-		keepURL := input.Bool(flagkey.PkgKeepURL)
+		pkgName := fmt.Sprintf("%v-%v", fnName, uuid.NewV4().String())
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.client, fnName, fnNamespace, envName, envNamespace,
-			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, keepURL)
+		pkgMetadata, err = _package.CreatePackage(input, opts.client, pkgName, fnNamespace, envName, envNamespace,
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
 		}

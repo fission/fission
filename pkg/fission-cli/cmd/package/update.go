@@ -40,7 +40,6 @@ type UpdateSubCommand struct {
 	srcArchiveFiles    []string
 	deployArchiveFiles []string
 	buildcmd           string
-	keepURL            bool
 }
 
 func Update(input cli.Input) error {
@@ -71,7 +70,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	opts.srcArchiveFiles = input.StringSlice(flagkey.PkgSrcArchive)
 	opts.deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
 	opts.buildcmd = input.String(flagkey.PkgBuildCmd)
-	opts.keepURL = input.Bool(flagkey.PkgKeepURL)
 	return nil
 }
 
@@ -106,7 +104,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 	newPkgMeta, err := UpdatePackage(opts.client, pkg,
 		opts.envName, opts.envNamespace, opts.srcArchiveFiles,
-		opts.deployArchiveFiles, opts.buildcmd, false, false, opts.keepURL)
+		opts.deployArchiveFiles, opts.buildcmd, false, false)
 	if err != nil {
 		return errors.Wrap(err, "update package")
 	}
@@ -125,7 +123,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 }
 
 func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool) (*metav1.ObjectMeta, error) {
 
 	needToBuild := false
 
@@ -145,7 +143,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(srcArchiveFiles) > 0 {
-		srcArchive, err := CreateArchive(client, srcArchiveFiles, false, keepURL, "", "")
+		srcArchive, err := CreateArchive(client, srcArchiveFiles, false, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +152,7 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 	}
 
 	if len(deployArchiveFiles) > 0 {
-		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, "", "")
+		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, "", "")
 		if err != nil {
 			return nil, err
 		}

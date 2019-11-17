@@ -70,21 +70,20 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)
-	keepURL := input.Bool(flagkey.PkgKeepURL)
 
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
 		return errors.Errorf("need --%v or --%v flag", flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
 	}
 
 	_, err := CreatePackage(input, opts.client, pkgName, pkgNamespace, envName, envNamespace,
-		srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false, keepURL)
+		srcArchiveFiles, deployArchiveFiles, buildcmd, "", "", false)
 
 	return err
 }
 
 // TODO: get all necessary value from CLI input directly
 func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNamespace string, envName string, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, keepURL bool) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) (*metav1.ObjectMeta, error) {
 
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
@@ -98,7 +97,7 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, keepURL, specDir, specFile)
+		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, specDir, specFile)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +107,7 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, srcArchiveFiles, false, keepURL, specDir, specFile)
+		source, err := CreateArchive(client, srcArchiveFiles, false, specDir, specFile)
 		if err != nil {
 			return nil, err
 		}
