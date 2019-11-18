@@ -12,9 +12,9 @@ BUILDDIR=$(realpath $DIR)/build
 check_branch() {
     local version=$1
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
-    if [ $curr_branch != "v${version}" ]
+    if [ $curr_branch != "release-${version}" ]
     then
-	echo "Not on v${version} branch."
+	echo "Not on release-${version} branch."
 	exit 1
     fi
 }
@@ -150,7 +150,7 @@ push_all() {
 
 tag_and_release() {
     local version=$1
-    local gittag=$version
+    local gittag="v${version}"
 
     # tag the release
     git tag $gittag

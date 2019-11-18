@@ -44,7 +44,7 @@ Updating Fission Repo (https://github.com/fission/fission)
 
 1. cd to the top of the fission repo, create a branch:
 
-   git checkout -b vX.Y.Z
+   git checkout -b release-X.Y.Z
 
 2. Change references of old version to new version in charts directory. You use replace and find all with a quick preview in your IDE.
 
@@ -52,7 +52,7 @@ Updating Fission Repo (https://github.com/fission/fission)
 
    `./hack/release.sh <VERSION>`
 
-   This script checks to make sure you're releasing from the vX.Y.Z
+   This script checks to make sure you're releasing from the release-X.Y.Z
    branch, and that your repo is clean (no modified/staged files).
 
    This will take a while as it builds and pushes all images (Approx ~2-3 hours)
