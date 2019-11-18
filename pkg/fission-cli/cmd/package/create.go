@@ -89,8 +89,9 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	var specDir, specFile string
+
 	if input.Bool(flagkey.SpecSave) {
-		specDir := util.GetSpecDir(input)
+		specDir = util.GetSpecDir(input)
 		fr, err := spec.ReadSpecs(specDir)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
