@@ -170,7 +170,7 @@ tag_and_release() {
 
 attach_github_release_cli() {
     local version=$1
-    local gittag=$version
+    local gittag="v${version}"
     # cli
     echo "Uploading osx cli"
     gothub upload \
@@ -202,7 +202,7 @@ attach_github_release_cli() {
 
 attach_github_release_charts() {
     local version=$1
-    local gittag=$version
+    local gittag="v${version}"
 
     # helm charts
     gothub upload \
@@ -225,7 +225,7 @@ attach_github_release_charts() {
 
 attach_github_release_yamls() {
     local version=$1
-    local gittag=$version
+    local gittag="v${version}"
 
     for c in fission-all fission-core
     do

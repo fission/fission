@@ -61,10 +61,13 @@ Updating Fission Repo (https://github.com/fission/fission)
 
 5. As part of release script, changelog.md has been modified. Take a look at it, correct it if you want and then commit it, discard other directories etc. produced by builders after inspection.
 
-6. Now push this vx.y.z branch to remote repo. Create a PR and merge it into master branch. 
+6. Push this release-x.y.z branch to remote repo. Create a PR and wait for CI passed.
 
-a. Test build from master branch for sanity check
-b. Make sure the master build is green
+7. Now manually merge the release-x.y.z branch into master branch with Git command to prevent the commit SHA from being changed.
+
+    `git checkout master && git merge --ff-only release-<VERSION>`
+
+8. Test build from master branch for sanity check and make sure the master build is green
 
 Updating Fission Charts (https://github.com/fission/fission-charts)
 ------------------------------
@@ -85,7 +88,7 @@ Before you save the release - UNCHECK the "This is a pre-release" checkbox. This
 Updating Fission Docs (https://github.com/fission/docs.fission.io)
 ------------------------------
 
-9. Documentatin Update 
+9. Documentation Update
 
 a. Merge documentation PRs that are peer reviewed and get latest master locally.
 
