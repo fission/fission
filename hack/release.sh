@@ -3,10 +3,10 @@
 set -e
 #set -x
 
-source $(realpath $(dirname $BASH_SOURCE)/../test/init_tools.sh)
-
 DIR=$(realpath $(dirname $0))/../
 BUILDDIR=$(realpath $DIR)/build
+
+source $(realpath ${DIR}/test/init_tools.sh)
 
 # Ensure we're on the master branch
 check_branch() {
