@@ -34,11 +34,8 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/generator/encoder"
 	"github.com/fission/fission/pkg/utils"
 )
-
-var specDefaultEncoder = encoder.DefaultYAMLEncoder()
 
 const (
 	FISSION_DEPLOYMENT_NAME_KEY = "fission-name"
