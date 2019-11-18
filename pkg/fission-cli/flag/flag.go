@@ -88,7 +88,6 @@ var (
 	FnName                  = Flag{Type: String, Name: flagkey.FnName, Usage: "Function name"}
 	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
 	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
-	FnCode                  = Flag{Type: String, Name: flagkey.FnCode, Usage: "Local path or URL for single file source code"}
 	FnPkgName               = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
 	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
@@ -156,8 +155,9 @@ var (
 	PkgOutput        = Flag{Type: String, Name: flagkey.PkgOutput, Short: "o", Usage: "Output filename to save archive content"}
 	PkgStatus        = Flag{Type: String, Name: flagkey.PkgStatus, Usage: `Filter packages by status`}
 	PkgOrphan        = Flag{Type: Bool, Name: flagkey.PkgOrphan, Usage: "Orphan packages that are not referenced by any function"}
-	PkgDeployArchive = Flag{Type: StringSlice, Name: flagkey.PkgDeployArchive, Aliases: []string{"deploy"}, Usage: "Local path or URL for binary archive"}
-	PkgSrcArchive    = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "Local path or URL for source archive"}
+	PkgCode          = Flag{Type: String, Name: flagkey.PkgCode, Usage: "URL or local path for single file source code"}
+	PkgDeployArchive = Flag{Type: StringSlice, Name: flagkey.PkgDeployArchive, Aliases: []string{"deploy"}, Usage: "URL or local paths for binary archive"}
+	PkgSrcArchive    = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "URL or local paths for source archive"}
 
 	SpecSave     = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}
 	SpecDir      = Flag{Type: String, Name: flagkey.SpecDir, Usage: "Directory to store specs, defaults to ./specs"}

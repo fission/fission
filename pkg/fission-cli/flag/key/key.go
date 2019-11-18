@@ -42,7 +42,6 @@ const (
 	FnName                  = resourceName
 	FnSpecializationTimeout = "specializationtimeout"
 	FnEnvironmentName       = "env"
-	FnCode                  = "code"
 	FnPackageName           = "pkgname"
 	FnEntrypoint            = "entrypoint"
 	FnBuildCmd              = "buildcmd"
@@ -107,6 +106,7 @@ const (
 	PkgName          = resourceName
 	PkgForce         = force
 	PkgEnvironment   = "env"
+	PkgCode          = "code"
 	PkgSrcArchive    = "sourcearchive"
 	PkgDeployArchive = "deployarchive"
 	PkgBuildCmd      = "buildcmd"

@@ -34,12 +34,8 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/generator/encoder"
-	v1generator "github.com/fission/fission/pkg/generator/v1"
 	"github.com/fission/fission/pkg/utils"
 )
-
-var specDefaultEncoder = encoder.DefaultYAMLEncoder()
 
 const (
 	FISSION_DEPLOYMENT_NAME_KEY = "fission-name"
@@ -129,8 +125,8 @@ func MapKey(m *metav1.ObjectMeta) string {
 	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
 }
 
-// Save saves object encoded value to spec file under given spec directory
-func Save(data []byte, specDir string, specFile string) error {
+// save saves object encoded value to spec file under given spec directory
+func save(data []byte, specDir string, specFile string) error {
 	// verify
 	if _, err := os.Stat(filepath.Join(specDir, "fission-deployment-config.yaml")); os.IsNotExist(err) {
 		return errors.Wrap(err, "Couldn't find specs, run `fission spec init` first")
@@ -168,6 +164,7 @@ func Save(data []byte, specDir string, specFile string) error {
 
 // called from `fission * create --spec`
 func SpecSave(resource interface{}, specFile string) error {
+	var meta metav1.ObjectMeta
 	specDir := "specs"
 
 	// make sure we're writing a known type
@@ -177,38 +174,44 @@ func SpecSave(resource interface{}, specFile string) error {
 	case types.ArchiveUploadSpec:
 		typedres.Kind = "ArchiveUploadSpec"
 		data, err = yaml.Marshal(typedres)
+		meta = metav1.ObjectMeta{
+			Name: typedres.Name,
+		}
 	case fv1.Package:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Package"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.Function:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Function"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.Environment:
-		env := resource.(fv1.Environment)
-		var generator *v1generator.EnvironmentGenerator
-		generator, err = v1generator.CreateEnvironmentGeneratorFromObj(&env)
-		if err != nil {
-			return err
-		}
-		data, err = generator.StructuredGenerate(specDefaultEncoder)
+		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
+		typedres.TypeMeta.Kind = "Environment"
+		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.HTTPTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "HTTPTrigger"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.KubernetesWatchTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "KubernetesWatchTrigger"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.MessageQueueTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "MessageQueueTrigger"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	case fv1.TimeTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "TimeTrigger"
 		data, err = yaml.Marshal(typedres)
+		meta = typedres.Metadata
 	default:
 		return fmt.Errorf("can't save resource %#v", resource)
 	}
@@ -216,7 +219,28 @@ func SpecSave(resource interface{}, specFile string) error {
 		return errors.Wrap(err, "Couldn't marshal YAML")
 	}
 
-	return Save(data, specDir, specFile)
+	fr, err := ReadSpecs(specDir)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+	}
+
+	exists, err := fr.existsInSpecs(resource)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return errors.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
+	}
+
+	err = save(data, specDir, specFile)
+	if err != nil {
+		return err
+	}
+
+	console.Info(fmt.Sprintf("Saving %v/%v to %v", meta.Namespace, meta.Name, specFile))
+
+	return nil
 }
 
 // validateFunctionReference checks a function reference
@@ -263,32 +287,36 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 	for _, p := range fr.Packages {
 		packages[MapKey(&p.Metadata)] = false
 
-		// check archive refs from package
-		aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
-		if len(aname) > 0 {
-			if _, ok := archives[aname]; !ok {
-				result = multierror.Append(result, fmt.Errorf(
-					"%v: package '%v' references unknown source archive %v%v",
-					fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-					p.Metadata.Name,
-					ARCHIVE_URL_PREFIX,
-					aname))
-			} else {
-				archives[aname] = true
+		if strings.HasPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX) {
+			// check archive refs from package
+			aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
+			if len(aname) > 0 {
+				if _, ok := archives[aname]; !ok {
+					result = multierror.Append(result, fmt.Errorf(
+						"%v: package '%v' references unknown source archive %v%v",
+						fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+						p.Metadata.Name,
+						ARCHIVE_URL_PREFIX,
+						aname))
+				} else {
+					archives[aname] = true
+				}
 			}
 		}
 
-		aname = strings.TrimPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX)
-		if len(aname) > 0 {
-			if _, ok := archives[aname]; !ok {
-				result = multierror.Append(result, fmt.Errorf(
-					"%v: package '%v' references unknown deployment archive %v%v",
-					fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-					p.Metadata.Name,
-					ARCHIVE_URL_PREFIX,
-					aname))
-			} else {
-				archives[aname] = true
+		if strings.HasPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX) {
+			aname := strings.TrimPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX)
+			if len(aname) > 0 {
+				if _, ok := archives[aname]; !ok {
+					result = multierror.Append(result, fmt.Errorf(
+						"%v: package '%v' references unknown deployment archive %v%v",
+						fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+						p.Metadata.Name,
+						ARCHIVE_URL_PREFIX,
+						aname))
+				} else {
+					archives[aname] = true
+				}
 			}
 		}
 
@@ -377,7 +405,7 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 		ks := strings.Split(key, ":")
 		namespace, name := ks[0], ks[1]
 		if !referenced {
-			result = multierror.Append(result, fmt.Errorf(
+			console.Warn(fmt.Sprintf(
 				"%v: package '%v' is not used in any function",
 				fr.SourceMap.Locations["Package"][namespace][name],
 				name))
@@ -431,7 +459,7 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 		}
 		// Unlike CLI can change the environment version silently,
 		// we have to warn the user to modify spec file when this takes place.
-		if e.Spec.Version < 3 && e.Spec.Poolsize != 0 {
+		if e.Spec.Poolsize != 3 && e.Spec.Version < 3 {
 			console.Warn("Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool.")
 		}
 	}
@@ -591,7 +619,8 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 // Returns metadata if the given resource exists in the specs, nil
 // otherwise.  compareMetadata and compareSpec control how the
 // equality check is performed.
-func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata bool, compareSpec bool) *metav1.ObjectMeta {
+// TODO: deprecated SpecExists
+func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata bool, compareSpec bool) interface{} {
 	switch typedres := resource.(type) {
 	case *types.ArchiveUploadSpec:
 		for _, aus := range fr.ArchiveUploadSpecs {
@@ -604,7 +633,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 					reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
 				continue
 			}
-			return &metav1.ObjectMeta{Name: aus.Name}
+			return &aus
 		}
 		return nil
 	case *fv1.Package:
@@ -615,7 +644,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 			if compareSpec && !reflect.DeepEqual(p.Spec, typedres.Spec) {
 				continue
 			}
-			return &p.Metadata
+			return &p
 		}
 		return nil
 
@@ -623,6 +652,70 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 		// XXX not implemented
 		return nil
 	}
+}
+
+func (fr *FissionResources) existsInSpecs(resource interface{}) (bool, error) {
+	switch typedres := resource.(type) {
+	case types.ArchiveUploadSpec:
+		for _, obj := range fr.ArchiveUploadSpecs {
+			if obj.Name == typedres.Name {
+				return true, nil
+			}
+		}
+	case fv1.Package:
+		for _, obj := range fr.Packages {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.Function:
+		for _, obj := range fr.Functions {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.Environment:
+		for _, obj := range fr.Environments {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.HTTPTrigger:
+		for _, obj := range fr.HttpTriggers {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.KubernetesWatchTrigger:
+		for _, obj := range fr.KubernetesWatchTriggers {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.MessageQueueTrigger:
+		for _, obj := range fr.MessageQueueTriggers {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.TimeTrigger:
+		for _, obj := range fr.TimeTriggers {
+			if obj.Metadata.Name == typedres.Metadata.Name &&
+				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+				return true, nil
+			}
+		}
+	default:
+		return false, fmt.Errorf("unknown resource type %#v", typedres)
+	}
+
+	return false, nil
 }
 
 func (loc Location) String() string {

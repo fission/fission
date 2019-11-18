@@ -31,8 +31,8 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgEnvironment},
-		Optional: []flag.Flag{flag.PkgName, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgBuildCmd, flag.NamespacePackage, flag.NamespaceEnvironment},
+		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgBuildCmd, flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave},
 	})
 
 	getSrcCmd := &cobra.Command{

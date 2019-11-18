@@ -84,11 +84,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	var deployArchiveFiles []string
 	codeFlag := false
-	code := input.String(flagkey.FnCode)
+	code := input.String(flagkey.PkgCode)
 	if len(code) == 0 {
 		deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
 	} else {
-		deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.FnCode))
+		deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
 		codeFlag = true
 	}
 

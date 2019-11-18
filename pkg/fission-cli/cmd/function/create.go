@@ -116,16 +116,38 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
+
 	if len(pkgName) > 0 {
-		// use existing package
-		pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
-			Namespace: fnNamespace,
-			Name:      pkgName,
-		})
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+		var pkg *fv1.Package
+
+		if toSpec {
+			fr, err := spec.ReadSpecs(specDir)
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			}
+			obj := fr.SpecExists(&fv1.Package{
+				Metadata: metav1.ObjectMeta{
+					Name:      pkgName,
+					Namespace: fnNamespace,
+				},
+			}, true, false)
+			if obj == nil {
+				return errors.Errorf("please create package %v spec file before referencing it", pkgName)
+			}
+			pkg = obj.(*fv1.Package)
+			pkgMetadata = &pkg.Metadata
+		} else {
+			// use existing package
+			pkg, err = opts.client.PackageGet(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      pkgName,
+			})
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+			}
+			pkgMetadata = &pkg.Metadata
 		}
-		pkgMetadata = &pkg.Metadata
+
 		envName = pkg.Spec.Environment.Name
 		if envName != input.String(flagkey.FnEnvironmentName) {
 			console.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
@@ -156,11 +178,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 		var deployArchiveFiles []string
 		noZip := false
-		code := input.String(flagkey.FnCode)
+		code := input.String(flagkey.PkgCode)
 		if len(code) == 0 {
 			deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
 		} else {
-			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.FnCode))
+			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
 			noZip = true
 		}
 		// return error when both src & deploy archive are empty
