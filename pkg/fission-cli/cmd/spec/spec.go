@@ -165,7 +165,8 @@ func save(data []byte, specDir string, specFile string) error {
 // called from `fission * create --spec`
 func SpecSave(resource interface{}, specFile string) error {
 	var meta metav1.ObjectMeta
-	specDir := "specs"
+	var kind string
+	var specDir = "specs"
 
 	// make sure we're writing a known type
 	var data []byte
@@ -173,45 +174,53 @@ func SpecSave(resource interface{}, specFile string) error {
 	switch typedres := resource.(type) {
 	case types.ArchiveUploadSpec:
 		typedres.Kind = "ArchiveUploadSpec"
-		data, err = yaml.Marshal(typedres)
 		meta = metav1.ObjectMeta{
 			Name: typedres.Name,
 		}
+		kind = typedres.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.Package:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Package"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.Function:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Function"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.Environment:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Environment"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.HTTPTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "HTTPTrigger"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.KubernetesWatchTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "KubernetesWatchTrigger"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.MessageQueueTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "MessageQueueTrigger"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	case fv1.TimeTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "TimeTrigger"
-		data, err = yaml.Marshal(typedres)
 		meta = typedres.Metadata
+		kind = typedres.TypeMeta.Kind
+		data, err = yaml.Marshal(typedres)
 	default:
 		return fmt.Errorf("can't save resource %#v", resource)
 	}
@@ -238,7 +247,8 @@ func SpecSave(resource interface{}, specFile string) error {
 		return err
 	}
 
-	console.Info(fmt.Sprintf("Saving %v/%v to %v", meta.Namespace, meta.Name, specFile))
+	console.Info(fmt.Sprintf("Saving %v '%v/%v' to '%v/%v'",
+		kind, meta.Namespace, meta.Name, specDir, specFile))
 
 	return nil
 }
