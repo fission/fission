@@ -82,15 +82,17 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	specDir := util.GetSpecDir(input)
 
-	// check for unique function names within a namespace
-	fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
-	})
-	if err != nil && !ferror.IsNotFound(err) {
-		return err
-	} else if fn != nil {
-		return errors.New("a function with the same name already exists")
+	if !toSpec {
+		// check for unique function names within a namespace
+		fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+			Name:      input.String(flagkey.FnName),
+			Namespace: input.String(flagkey.NamespaceFunction),
+		})
+		if err != nil && !ferror.IsNotFound(err) {
+			return err
+		} else if fn != nil {
+			return errors.New("a function with the same name already exists")
+		}
 	}
 
 	entrypoint := input.String(flagkey.FnEntrypoint)
@@ -160,8 +162,26 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			return errors.New("need --env argument")
 		}
 
-		// examine existence of given environment. If specs - then spec validate will do it, don't check here.
-		if !toSpec {
+		if toSpec {
+			specDir := util.GetSpecDir(input)
+			fr, err := spec.ReadSpecs(specDir)
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			}
+			exists, err := fr.ExistsInSpecs(fv1.Environment{
+				Metadata: metav1.ObjectMeta{
+					Name:      envName,
+					Namespace: envNamespace,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				console.Warn(fmt.Sprintf("Function '%v' references unknown Environment '%v', please create it before applying spec",
+					fnName, envName))
+			}
+		} else {
 			_, err := opts.client.EnvironmentGet(&metav1.ObjectMeta{
 				Namespace: envNamespace,
 				Name:      envName,
@@ -206,16 +226,18 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	if len(secretNames) > 0 {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
-		for _, secretName := range secretNames {
-			_, err := opts.client.SecretGet(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      secretName,
-			})
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
-				} else {
-					return errors.Wrap(err, "error checking secret")
+		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
+			for _, secretName := range secretNames {
+				_, err := opts.client.SecretGet(&metav1.ObjectMeta{
+					Namespace: fnNamespace,
+					Name:      secretName,
+				})
+				if err != nil {
+					if k8serrors.IsNotFound(err) {
+						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
+					} else {
+						return errors.Wrap(err, "error checking secret")
+					}
 				}
 			}
 		}
@@ -230,16 +252,18 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	if len(cfgMapNames) > 0 {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		for _, cfgMapName := range cfgMapNames {
-			_, err := opts.client.ConfigMapGet(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      cfgMapName,
-			})
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
-				} else {
-					return errors.Wrap(err, "error checking configmap")
+		if !toSpec {
+			for _, cfgMapName := range cfgMapNames {
+				_, err := opts.client.ConfigMapGet(&metav1.ObjectMeta{
+					Namespace: fnNamespace,
+					Name:      cfgMapName,
+				})
+				if err != nil {
+					if k8serrors.IsNotFound(err) {
+						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
+					} else {
+						return errors.Wrap(err, "error checking configmap")
+					}
 				}
 			}
 		}

@@ -233,7 +233,7 @@ func SpecSave(resource interface{}, specFile string) error {
 		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 	}
 
-	exists, err := fr.existsInSpecs(resource)
+	exists, err := fr.ExistsInSpecs(resource)
 	if err != nil {
 		return err
 	}
@@ -664,7 +664,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 	}
 }
 
-func (fr *FissionResources) existsInSpecs(resource interface{}) (bool, error) {
+func (fr *FissionResources) ExistsInSpecs(resource interface{}) (bool, error) {
 	switch typedres := resource.(type) {
 	case types.ArchiveUploadSpec:
 		for _, obj := range fr.ArchiveUploadSpecs {

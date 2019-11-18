@@ -106,7 +106,28 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	// For Specs, the spec validate checks for function reference
-	if !input.Bool(flagkey.SpecSave) {
+	if input.Bool(flagkey.SpecSave) {
+		specDir := util.GetSpecDir(input)
+		fr, err := spec.ReadSpecs(specDir)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+		}
+		for _, fn := range functionList {
+			exists, err := fr.ExistsInSpecs(fv1.Function{
+				Metadata: metav1.ObjectMeta{
+					Name:      fn,
+					Namespace: fnNamespace,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				console.Warn(fmt.Sprintf("HTTPTrigger '%v' references unknown Function '%v', please create it before applying spec",
+					triggerName, fn))
+			}
+		}
+	} else {
 		err = util.CheckFunctionExistence(opts.client, functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
