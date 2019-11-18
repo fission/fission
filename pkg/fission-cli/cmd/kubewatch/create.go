@@ -85,7 +85,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 		if !exists {
 			console.Warn(fmt.Sprintf("KubernetesWatchTrigger '%v' references unknown Function '%v', please create it before applying spec",
-				 watchName, fnName))
+				watchName, fnName))
 		}
 	}
 
