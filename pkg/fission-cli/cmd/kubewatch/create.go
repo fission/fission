@@ -67,6 +67,28 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	namespace := input.String(flagkey.KwNamespace)
 	objType := input.String(flagkey.KwObjType)
 
+	if input.Bool(flagkey.SpecSave) {
+		specDir := util.GetSpecDir(input)
+		fr, err := spec.ReadSpecs(specDir)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+		}
+
+		exists, err := fr.ExistsInSpecs(fv1.Function{
+			Metadata: metav1.ObjectMeta{
+				Name:      fnName,
+				Namespace: fnNamespace,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if !exists {
+			console.Warn(fmt.Sprintf("KubernetesWatchTrigger '%v' references unknown Function '%v', please create it before applying spec",
+				watchName, fnName))
+		}
+	}
+
 	opts.watcher = &fv1.KubernetesWatchTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      watchName,

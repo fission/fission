@@ -89,7 +89,27 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	var specDir, specFile string
+
 	if input.Bool(flagkey.SpecSave) {
+		specDir = util.GetSpecDir(input)
+		fr, err := spec.ReadSpecs(specDir)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+		}
+		exists, err := fr.ExistsInSpecs(fv1.Environment{
+			Metadata: metav1.ObjectMeta{
+				Name:      envName,
+				Namespace: envNamespace,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if !exists {
+			console.Warn(fmt.Sprintf("Package '%v' references unknown Environment '%v', please create it before applying spec",
+				pkgName, envName))
+		}
+
 		specDir = util.GetSpecDir(input)
 		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
 	}

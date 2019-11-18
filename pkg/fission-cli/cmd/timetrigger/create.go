@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -73,6 +74,28 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	cronSpec := input.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
 		return errors.New("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+	}
+
+	if input.Bool(flagkey.SpecSave) {
+		specDir := util.GetSpecDir(input)
+		fr, err := spec.ReadSpecs(specDir)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+		}
+
+		exists, err := fr.ExistsInSpecs(fv1.Function{
+			Metadata: metav1.ObjectMeta{
+				Name:      fnName,
+				Namespace: fnNamespace,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if !exists {
+			console.Warn(fmt.Sprintf("TimeTrigger '%v' references unknown Function '%v', please create it before applying spec",
+				name, fnName))
+		}
 	}
 
 	opts.trigger = &fv1.TimeTrigger{
