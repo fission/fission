@@ -89,7 +89,6 @@ var (
 	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
 	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
 	FnCode                  = Flag{Type: String, Name: flagkey.FnCode, Usage: "Local path or URL for single file source code"}
-	FnKeepURL               = Flag{Type: Bool, Name: flagkey.PkgKeepURL, Aliases: []string{"keepurl"}, Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	FnPkgName               = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
 	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
@@ -153,7 +152,6 @@ var (
 	PkgName          = Flag{Type: String, Name: flagkey.PkgName, Usage: "Package name"}
 	PkgForce         = Flag{Type: Bool, Name: flagkey.PkgForce, Short: "f", Usage: "Force update a package even if it is used by one or more functions"}
 	PkgEnvironment   = Flag{Type: String, Name: flagkey.PkgEnvironment, Usage: "Environment name"}
-	PkgKeepURL       = Flag{Type: Bool, Name: flagkey.PkgKeepURL, Aliases: []string{"keepurl"}, Usage: "Keep the providing URL in archive instead of downloading file from it. (If set, no checksum will be generated for file integrity check. You must ensure the file won't be changed.)"}
 	PkgBuildCmd      = Flag{Type: String, Name: flagkey.PkgBuildCmd, Usage: "Build command for builder to run with"}
 	PkgOutput        = Flag{Type: String, Name: flagkey.PkgOutput, Short: "o", Usage: "Output filename to save archive content"}
 	PkgStatus        = Flag{Type: String, Name: flagkey.PkgStatus, Usage: `Filter packages by status`}

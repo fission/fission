@@ -109,7 +109,6 @@ const (
 	PkgEnvironment   = "env"
 	PkgSrcArchive    = "sourcearchive"
 	PkgDeployArchive = "deployarchive"
-	PkgKeepURL       = "keeparchiveurl"
 	PkgBuildCmd      = "buildcmd"
 	PkgOutput        = Output
 	PkgStatus        = "status"
