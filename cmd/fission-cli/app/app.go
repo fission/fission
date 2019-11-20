@@ -37,7 +37,7 @@ func App() *cobra.Command {
 		Use:  "fission",
 		Long: usage,
 		//SilenceUsage: true,
-		PreRunE: wrapper.Wrapper(
+		PersistentPreRunE: wrapper.Wrapper(
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
 				return nil
@@ -53,7 +53,7 @@ func App() *cobra.Command {
 	})
 
 	wrapper.SetFlags(rootCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity},
+		Global: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity},
 	})
 
 	groups := helptemplate.CommandGroups{}

@@ -53,6 +53,14 @@ func Wrapper(action cmd.CommandAction) func(*cobra.Command, []string) error {
 func SetFlags(cmd *cobra.Command, flagSet flag.FlagSet) {
 	aliases := make(map[string]string)
 
+	// set global flags
+	for _, f := range flagSet.Global {
+		globalFlags(cmd, f)
+		for _, alias := range f.Aliases {
+			aliases[alias] = f.Name
+		}
+	}
+
 	// set required flags
 	for _, f := range flagSet.Required {
 		requiredFlags(cmd, f)
@@ -84,7 +92,7 @@ func SetFlags(cmd *cobra.Command, flagSet flag.FlagSet) {
 
 func optionalFlags(cmd *cobra.Command, flags ...flag.Flag) {
 	for _, f := range flags {
-		toCobraFlag(cmd, f)
+		toCobraFlag(cmd, f, false)
 		if f.Deprecated {
 			usage := fmt.Sprintf("Use --%v instead. The flag still works for now and will be removed in future", f.Substitute)
 			cmd.Flags().MarkDeprecated(f.Name, usage)
@@ -96,12 +104,18 @@ func optionalFlags(cmd *cobra.Command, flags ...flag.Flag) {
 
 func requiredFlags(cmd *cobra.Command, flags ...flag.Flag) {
 	for _, f := range flags {
-		toCobraFlag(cmd, f)
+		toCobraFlag(cmd, f, false)
 		cmd.MarkFlagRequired(f.Name)
 	}
 }
 
-func toCobraFlag(cmd *cobra.Command, f flag.Flag) {
+func globalFlags(cmd *cobra.Command, flags ...flag.Flag) {
+	for _, f := range flags {
+		toCobraFlag(cmd, f, true)
+	}
+}
+
+func toCobraFlag(cmd *cobra.Command, f flag.Flag, global bool) {
 	// Workaround to pass aliases to templater for generating flag aliases.
 	if len(f.Aliases) > 0 {
 		var aliases []string
@@ -119,67 +133,72 @@ func toCobraFlag(cmd *cobra.Command, f flag.Flag) {
 			helptemplate.AliasSeparator, f.Usage)
 	}
 
+	flagset := cmd.Flags()
+	if global {
+		flagset = cmd.PersistentFlags()
+	}
+
 	switch f.Type {
 	case flag.Bool:
 		val, ok := f.DefaultValue.(bool)
 		if !ok {
 			val = false
 		}
-		cmd.Flags().BoolP(f.Name, f.Short, val, f.Usage)
+		flagset.BoolP(f.Name, f.Short, val, f.Usage)
 	case flag.String:
 		val, ok := f.DefaultValue.(string)
 		if !ok {
 			val = ""
 		}
-		cmd.Flags().StringP(f.Name, f.Short, val, f.Usage)
+		flagset.StringP(f.Name, f.Short, val, f.Usage)
 	case flag.StringSlice:
 		val, ok := f.DefaultValue.([]string)
 		if !ok {
 			val = []string{}
 		}
-		cmd.Flags().StringArrayP(f.Name, f.Short, val, f.Usage)
+		flagset.StringArrayP(f.Name, f.Short, val, f.Usage)
 	case flag.Int:
 		val, ok := f.DefaultValue.(int)
 		if !ok {
 			val = 0
 		}
-		cmd.Flags().IntP(f.Name, f.Short, val, f.Usage)
+		flagset.IntP(f.Name, f.Short, val, f.Usage)
 	case flag.IntSlice:
 		val, ok := f.DefaultValue.([]int)
 		if !ok {
 			val = []int{}
 		}
-		cmd.Flags().IntSliceP(f.Name, f.Short, val, f.Usage)
+		flagset.IntSliceP(f.Name, f.Short, val, f.Usage)
 	case flag.Int64:
 		val, ok := f.DefaultValue.(int64)
 		if !ok {
 			val = 0
 		}
-		cmd.Flags().Int64P(f.Name, f.Short, val, f.Usage)
+		flagset.Int64P(f.Name, f.Short, val, f.Usage)
 	case flag.Int64Slice:
 		val, ok := f.DefaultValue.([]int64)
 		if !ok {
 			val = []int64{}
 		}
-		cmd.Flags().Int64SliceP(f.Name, f.Short, val, f.Usage)
+		flagset.Int64SliceP(f.Name, f.Short, val, f.Usage)
 	case flag.Float32:
 		val, ok := f.DefaultValue.(float32)
 		if !ok {
 			val = 0
 		}
-		cmd.Flags().Float32P(f.Name, f.Short, val, f.Usage)
+		flagset.Float32P(f.Name, f.Short, val, f.Usage)
 	case flag.Float64:
 		val, ok := f.DefaultValue.(float64)
 		if !ok {
 			val = 0
 		}
-		cmd.Flags().Float64P(f.Name, f.Short, val, f.Usage)
+		flagset.Float64P(f.Name, f.Short, val, f.Usage)
 	case flag.Duration:
 		val, ok := f.DefaultValue.(time.Duration)
 		if !ok {
 			val = 0
 		}
-		cmd.Flags().DurationP(f.Name, f.Short, val, f.Usage)
+		flagset.DurationP(f.Name, f.Short, val, f.Usage)
 	}
 }
 

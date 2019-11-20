@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -65,6 +66,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		}
 		routerURL = "127.0.0.1:" + localRouterPort
 	} else {
+		console.Verbose(2, "Env FISSION_ROUTER: %v", routerURL)
 		routerURL = strings.TrimPrefix(routerURL, "http://")
 	}
 
@@ -77,6 +79,9 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
+
+	console.Verbose(2, "Function test url: %v", functionUrl.String())
+
 	queryParams := input.StringSlice(flagkey.FnTestQuery)
 	if len(queryParams) > 0 {
 		query := url.Values{}
