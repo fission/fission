@@ -425,12 +425,12 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	rrt := &RetryingRoundTripper{
 		logger:      fh.logger.Named("roundtripper"),
 		funcHandler: &fh,
-		funcTimeout: time.Duration(fnTimeout)*time.Second,
+		funcTimeout: time.Duration(fnTimeout) * time.Second,
 	}
 
 	proxy := &httputil.ReverseProxy{
-		Director: director,
-		Transport: rrt,
+		Director:     director,
+		Transport:    rrt,
 		ErrorHandler: getProxyErrorHandler(fh.logger, fh.function),
 	}
 
