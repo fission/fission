@@ -64,7 +64,9 @@ func App() *cobra.Command {
 	groups = append(groups, helptemplate.CreateCmdGroup("Other Commands", support.Commands(), version.Commands()))
 	groups.Add(rootCmd)
 
-	helptemplate.ActsAsRootCommand(rootCmd, nil, groups...)
+	flagExposer := helptemplate.ActsAsRootCommand(rootCmd, nil, groups...)
+	// show global options in usage
+	flagExposer.ExposeFlags(rootCmd, flagkey.Server, flagkey.Verbosity)
 
 	return rootCmd
 }
