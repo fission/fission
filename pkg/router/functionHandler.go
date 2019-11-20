@@ -184,6 +184,8 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 	}()
 
+	roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
+
 	// The reason for request failure may vary from case to case.
 	// After some investigation, found most of the failure are due to
 	// network timeout or target function is under heavy workload. In
@@ -266,11 +268,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		overhead := time.Since(startTime)
 
-		roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
+		// Do NOT assign returned request to "req"
+		// because the request used in the last round
+		// will be canceled when calling setContext.
+		newReq := roundTripper.setContext(req)
 
 		// forward the request to the function service
-		req = roundTripper.setContext(req)
-		resp, err = ocRoundTripper.RoundTrip(req)
+		resp, err = ocRoundTripper.RoundTrip(newReq)
 
 		if err == nil {
 			// Track metrics
@@ -362,6 +366,7 @@ func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
 	}
 }
 
+// setContext returns a shallow copy of request with a new timeout context.
 func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Request {
 	if roundTripper.closeContextFunc != nil {
 		(*roundTripper.closeContextFunc)()
@@ -376,6 +381,7 @@ func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Re
 	return req.WithContext(ctx)
 }
 
+// closeContext closes the context to release resources.
 func (roundTripper *RetryingRoundTripper) closeContext() {
 	if roundTripper.closeContextFunc != nil {
 		(*roundTripper.closeContextFunc)()
