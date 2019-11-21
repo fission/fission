@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
@@ -316,14 +315,6 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 	}
 
 	objName := deploy.getObjName(fn)
-	if !firstcreate {
-		// retrieve back the previous obj name for later use.
-		fsvc, err := deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
-		if err != nil {
-			return nil, errors.Wrap(err, "error getting existed function service cache")
-		}
-		objName = fsvc.Name
-	}
 	deployLabels := deploy.getDeployLabels(fn.Metadata, env.Metadata)
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
@@ -603,7 +594,9 @@ func (deploy *NewDeploy) fnDelete(fn *fv1.Function) error {
 
 // getObjName returns a unique name for kubernetes objects of function
 func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
-	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v", fn.Metadata.Name, fn.Metadata.Namespace, uniuri.NewLen(8)))
+	// use meta uuid of function, this ensure we always get the same name for the same function.
+	uid := fn.Metadata.UID[len(fn.Metadata.UID)-17:]
+	return strings.ToLower(fmt.Sprintf("newdeploy-%v-%v-%v", fn.Metadata.Name, fn.Metadata.Namespace, uid))
 }
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {

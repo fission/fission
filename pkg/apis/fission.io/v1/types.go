@@ -381,7 +381,6 @@ type (
 		TargetCPUPercent int
 
 		// This is the timeout setting for executor to wait for pod specialization.
-		// Currently, only newdeploy utilizes this value.
 		SpecializationTimeout int
 	}
 
