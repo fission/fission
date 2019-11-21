@@ -31,6 +31,7 @@ type (
 	FlagType = int
 
 	FlagSet struct {
+		Global   []Flag
 		Required []Flag
 		Optional []Flag
 	}

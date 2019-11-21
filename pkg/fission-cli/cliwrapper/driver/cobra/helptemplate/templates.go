@@ -50,7 +50,7 @@ const (
 {{end}}`
 
 	// SectionFlags is the help template section that displays the command's flags.
-	SectionFlags = `{{ if or $visibleFlags.HasFlags $explicitlyExposedFlags.HasFlags}}Options:
+	SectionFlags = `{{ if or $visibleFlags.HasFlags $explicitlyExposedFlags.HasFlags}}Options
 {{ if $visibleFlags.HasFlags}}{{trimRight (flagsUsages $visibleFlags)}}{{end}}{{ if $explicitlyExposedFlags.HasFlags}}{{ if $visibleFlags.HasFlags}}
 {{end}}{{trimRight (flagsUsages $explicitlyExposedFlags)}}{{end}}
 
