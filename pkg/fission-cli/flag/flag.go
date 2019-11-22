@@ -150,19 +150,19 @@ var (
 	KwObjType   = Flag{Type: String, Name: flagkey.KwObjType, Usage: "Type of resource to watch (Pod, Service, etc.)", DefaultValue: "pod"}
 	KwLabels    = Flag{Type: String, Name: flagkey.KwLabels, Usage: "Label selector of the form a=b,c=d"}
 
-	PkgName          = Flag{Type: String, Name: flagkey.PkgName, Usage: "Package name"}
-	PkgForce         = Flag{Type: Bool, Name: flagkey.PkgForce, Short: "f", Usage: "Force update a package even if it is used by one or more functions"}
-	PkgEnvironment   = Flag{Type: String, Name: flagkey.PkgEnvironment, Usage: "Environment name"}
-	PkgBuildCmd      = Flag{Type: String, Name: flagkey.PkgBuildCmd, Usage: "Build command for builder to run with"}
-	PkgOutput        = Flag{Type: String, Name: flagkey.PkgOutput, Short: "o", Usage: "Output filename to save archive content"}
-	PkgStatus        = Flag{Type: String, Name: flagkey.PkgStatus, Usage: `Filter packages by status`}
-	PkgOrphan        = Flag{Type: Bool, Name: flagkey.PkgOrphan, Usage: "Orphan packages that are not referenced by any function"}
-	PkgCode          = Flag{Type: String, Name: flagkey.PkgCode, Usage: "URL or local path for single file source code"}
-	PkgDeployArchive = Flag{Type: StringSlice, Name: flagkey.PkgDeployArchive, Aliases: []string{"deploy"}, Usage: "URL or local paths for binary archive"}
-	PkgDeployChecksum    = Flag{Type: String, Name: flagkey.PkgDeployChecksum, Usage: "SHA256 checksum of deploy archive when providing URL"}
-	PkgSrcArchive    = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "URL or local paths for source archive"}
-	PkgSrcChecksum   = Flag{Type: String, Name: flagkey.PkgSrcChecksum, Usage: "SHA256 checksum of source archive when providing URL"}
-	PkgInsecure      = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
+	PkgName           = Flag{Type: String, Name: flagkey.PkgName, Usage: "Package name"}
+	PkgForce          = Flag{Type: Bool, Name: flagkey.PkgForce, Short: "f", Usage: "Force update a package even if it is used by one or more functions"}
+	PkgEnvironment    = Flag{Type: String, Name: flagkey.PkgEnvironment, Usage: "Environment name"}
+	PkgBuildCmd       = Flag{Type: String, Name: flagkey.PkgBuildCmd, Usage: "Build command for builder to run with"}
+	PkgOutput         = Flag{Type: String, Name: flagkey.PkgOutput, Short: "o", Usage: "Output filename to save archive content"}
+	PkgStatus         = Flag{Type: String, Name: flagkey.PkgStatus, Usage: `Filter packages by status`}
+	PkgOrphan         = Flag{Type: Bool, Name: flagkey.PkgOrphan, Usage: "Orphan packages that are not referenced by any function"}
+	PkgCode           = Flag{Type: String, Name: flagkey.PkgCode, Usage: "URL or local path for single file source code"}
+	PkgDeployArchive  = Flag{Type: StringSlice, Name: flagkey.PkgDeployArchive, Aliases: []string{"deploy"}, Usage: "URL or local paths for binary archive"}
+	PkgDeployChecksum = Flag{Type: String, Name: flagkey.PkgDeployChecksum, Usage: "SHA256 checksum of deploy archive when providing URL"}
+	PkgSrcArchive     = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "URL or local paths for source archive"}
+	PkgSrcChecksum    = Flag{Type: String, Name: flagkey.PkgSrcChecksum, Usage: "SHA256 checksum of source archive when providing URL"}
+	PkgInsecure       = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
 
 	SpecSave     = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}
 	SpecDir      = Flag{Type: String, Name: flagkey.SpecDir, Usage: "Directory to store specs, defaults to ./specs"}

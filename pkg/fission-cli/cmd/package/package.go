@@ -29,16 +29,16 @@ import (
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/fission-cli/console"
-	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	uuid "github.com/satori/go.uuid"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
+	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
+	uuid "github.com/satori/go.uuid"
 )
 
 // CreateArchive returns a fv1.Archive made from an archive .  If specFile, then
@@ -137,8 +137,8 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, ins
 		}
 
 		return &fv1.Archive{
-			Type: fv1.ArchiveTypeUrl,
-			URL:  fileURL,
+			Type:     fv1.ArchiveTypeUrl,
+			URL:      fileURL,
 			Checksum: *csum,
 		}, nil
 	}

@@ -31,10 +31,10 @@ import (
 )
 
 type UpdateSubCommand struct {
-	client             *client.Client
-	pkgName            string
-	pkgNamespace       string
-	force              bool
+	client       *client.Client
+	pkgName      string
+	pkgNamespace string
+	force        bool
 }
 
 func Update(input cli.Input) error {
@@ -121,7 +121,7 @@ func UpdatePackage(input cli.Input, client *client.Client, pkg *fv1.Package) (*m
 	}
 
 	if input.IsSet(flagkey.PkgSrcArchive) {
-		srcArchive, err := CreateArchive(client, srcArchiveFiles, noZip, insecure, srcChecksum,"", "")
+		srcArchive, err := CreateArchive(client, srcArchiveFiles, noZip, insecure, srcChecksum, "", "")
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating source archive")
 		}
