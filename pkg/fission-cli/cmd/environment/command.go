@@ -33,8 +33,8 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.EnvName, flag.EnvImage},
 		Optional: []flag.Flag{flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
-			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvExternalNetwork, flag.EnvKeepArchive,
-			flag.NamespaceEnvironment, flag.SpecSave},
+			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret,
+			flag.EnvExternalNetwork, flag.EnvKeepArchive, flag.NamespaceEnvironment, flag.SpecSave},
 	})
 
 	getCmd := &cobra.Command{
@@ -55,8 +55,8 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
 		Optional: []flag.Flag{flag.EnvImage, flag.EnvPoolsize,
-			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvExternalNetwork,
-			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.NamespaceEnvironment},
+			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret, flag.EnvTerminationGracePeriod,
+			flag.EnvKeepArchive, flag.NamespaceEnvironment, flag.EnvExternalNetwork},
 	})
 
 	deleteCmd := &cobra.Command{

@@ -389,6 +389,27 @@ func (gp *GenericPool) createPool() error {
 		return err
 	}
 
+	pod := apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      gp.labelsForPool,
+			Annotations: podAnnotations,
+		},
+		Spec: apiv1.PodSpec{
+			Containers:         []apiv1.Container{*container},
+			ServiceAccountName: "fission-fetcher",
+			// TerminationGracePeriodSeconds should be equal to the
+			// sleep time of preStop to make sure that SIGTERM is sent
+			// to pod after 6 mins.
+			TerminationGracePeriodSeconds: &gracePeriodSeconds,
+		},
+	}
+
+	podspec, err := util.ApplyImagePullSecret(gp.kubernetesClient, gp.env.Spec.ImagePullSecret, gp.namespace, pod.Spec)
+	if err != nil {
+		return errors.Wrapf(err, "failed to apply image pull secret for env '%v'", gp.env.Metadata.Name)
+	}
+	pod.Spec = *podspec
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   gp.getPoolName(),
@@ -399,20 +420,7 @@ func (gp *GenericPool) createPool() error {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: gp.labelsForPool,
 			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      gp.labelsForPool,
-					Annotations: podAnnotations,
-				},
-				Spec: apiv1.PodSpec{
-					Containers:         []apiv1.Container{*container},
-					ServiceAccountName: "fission-fetcher",
-					// TerminationGracePeriodSeconds should be equal to the
-					// sleep time of preStop to make sure that SIGTERM is sent
-					// to pod after 6 mins.
-					TerminationGracePeriodSeconds: &gracePeriodSeconds,
-				},
-			},
+			Template: pod,
 		},
 	}
 

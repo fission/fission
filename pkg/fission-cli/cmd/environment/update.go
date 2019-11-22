@@ -123,6 +123,10 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		env.Spec.KeepArchive = input.Bool(flagkey.EnvKeeparchive)
 	}
 
+	if input.IsSet(flagkey.EnvImagePullSecret) {
+		env.Spec.ImagePullSecret = input.String(flagkey.EnvImagePullSecret)
+	}
+
 	env.Spec.AllowAccessToExternalNetwork = envExternalNetwork
 
 	// TODO: allow to update resource.

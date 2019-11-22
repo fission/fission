@@ -112,6 +112,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	envExternalNetwork := input.Bool(flagkey.EnvExternalNetwork)
 	keepArchive := input.Bool(flagkey.EnvKeeparchive)
 	envGracePeriod := input.Int64(flagkey.EnvGracePeriod)
+	pullSecret := input.String(flagkey.EnvImagePullSecret)
 
 	envVersion := input.Int(flagkey.EnvVersion)
 	// Environment API interface version is not specified and
@@ -169,6 +170,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			AllowAccessToExternalNetwork: envExternalNetwork,
 			TerminationGracePeriod:       envGracePeriod,
 			KeepArchive:                  keepArchive,
+			ImagePullSecret:              pullSecret,
 		},
 	}
 

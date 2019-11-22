@@ -535,17 +535,17 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 	deploy.logger.Info("updating deployment due to function/environment update",
 		zap.String("deployment", fnObjName), zap.Any("function", fn.Metadata.Name))
 
-	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, deployLabels)
-	if err != nil {
-		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
-		return err
-	}
-
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
 	ns := deploy.namespace
 	if fn.Metadata.Namespace != metav1.NamespaceDefault {
 		ns = fn.Metadata.Namespace
+	}
+
+	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, ns, deployLabels)
+	if err != nil {
+		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
+		return err
 	}
 
 	err = deploy.updateDeployment(newDeployment, ns)

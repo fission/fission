@@ -96,6 +96,7 @@ const (
 	EnvExternalNetwork = "externalnetwork"
 	EnvGracePeriod     = "graceperiod"
 	EnvVersion         = "version"
+	EnvImagePullSecret = "imagepullsecret"
 
 	KwName      = resourceName
 	KwFnName    = "function"
