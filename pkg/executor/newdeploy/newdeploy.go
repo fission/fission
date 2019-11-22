@@ -17,11 +17,11 @@ limitations under the License.
 package newdeploy
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	asv1 "k8s.io/api/autoscaling/v1"
@@ -76,7 +76,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			return nil, err
 		}
 
-		deployment, err := deploy.getDeploymentSpec(fn, env, deployName, deployLabels)
+		deployment, err := deploy.getDeploymentSpec(fn, env, deployName, deployNamespace, deployLabels)
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +158,7 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string) (*appsv1.Deployment, error) {
+	deployName string, deployNamespace string, deployLabels map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
@@ -227,6 +227,24 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		return nil, err
 	}
 
+	pod := apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      deployLabels,
+			Annotations: podAnnotations,
+		},
+		Spec: apiv1.PodSpec{
+			Containers:                    []apiv1.Container{*container},
+			ServiceAccountName:            "fission-fetcher",
+			TerminationGracePeriodSeconds: &gracePeriodSeconds,
+		},
+	}
+
+	podspec, err := util.ApplyImagePullSecret(deploy.kubernetesClient, env.Spec.ImagePullSecret, deployNamespace, pod.Spec)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to apply image pull secret for env '%v'", env.Metadata.Name)
+	}
+	pod.Spec = *podspec
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   deployName,
@@ -237,17 +255,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 			Selector: &metav1.LabelSelector{
 				MatchLabels: deployLabels,
 			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      deployLabels,
-					Annotations: podAnnotations,
-				},
-				Spec: apiv1.PodSpec{
-					Containers:                    []apiv1.Container{*container},
-					ServiceAccountName:            "fission-fetcher",
-					TerminationGracePeriodSeconds: &gracePeriodSeconds,
-				},
-			},
+			Template: pod,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{

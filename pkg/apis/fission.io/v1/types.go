@@ -528,6 +528,10 @@ type (
 		// or unarchived file should be placed, which is then used by specialize handler.
 		// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
 		KeepArchive bool `json:"keeparchive"`
+
+		// ImagePullSecret is the secret for Kubernetes to pull an image from a
+		// private registry.
+		ImagePullSecret string `json:"imagepullsecret"`
 	}
 
 	AllowedFunctionsPerContainer string
