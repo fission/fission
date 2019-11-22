@@ -110,6 +110,9 @@ const (
 	PkgCode          = "code"
 	PkgSrcArchive    = "sourcearchive"
 	PkgDeployArchive = "deployarchive"
+	PkgSrcChecksum    = "srcchecksum"
+	PkgDeployChecksum = "deploychecksum"
+	PkgInsecure       = "insecure"
 	PkgBuildCmd      = "buildcmd"
 	PkgOutput        = Output
 	PkgStatus        = "status"

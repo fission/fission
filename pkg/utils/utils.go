@@ -17,12 +17,15 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"golang.org/x/net/context/ctxhttp"
 	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,4 +200,36 @@ func GetChecksum(src io.Reader) (*fv1.Checksum, error) {
 
 func IsURL(str string) bool {
 	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://")
+}
+
+func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
+	resp, err := ctxhttp.Get(ctx, httpClient, url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	w, err := os.Create(localPath)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// flushing write buffer to file
+	err = w.Sync()
+	if err != nil {
+		return err
+	}
+
+	err = os.Chmod(localPath, 0600)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

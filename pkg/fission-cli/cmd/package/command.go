@@ -32,7 +32,8 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgBuildCmd, flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave},
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgBuildCmd,
+			flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave},
 	})
 
 	getSrcCmd := &cobra.Command{
@@ -62,8 +63,9 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgBuildCmd, flag.PkgForce, flag.NamespacePackage, flag.NamespaceEnvironment},
+		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgBuildCmd, flag.PkgForce,
+			flag.NamespacePackage, flag.NamespaceEnvironment},
 	})
 
 	deleteCmd := &cobra.Command{
