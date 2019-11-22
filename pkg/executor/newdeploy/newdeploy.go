@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	asv1 "k8s.io/api/autoscaling/v1"

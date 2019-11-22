@@ -19,8 +19,8 @@ package util
 import (
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec. An error will be returned if failed to get secret.
