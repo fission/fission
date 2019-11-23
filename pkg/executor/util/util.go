@@ -17,22 +17,14 @@ limitations under the License.
 package util
 
 import (
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
-// ApplyImagePullSecret applies image pull secret to the give pod spec. An error will be returned if failed to get secret.
-func ApplyImagePullSecret(client *kubernetes.Clientset, secret string, secretNS string, podspec apiv1.PodSpec) (*apiv1.PodSpec, error) {
-	if len(secret) > 0 && client != nil {
-		_, err := client.CoreV1().Secrets(secretNS).Get(secret, metav1.GetOptions{})
-		if err != nil {
-			err = errors.Wrapf(err, "unable to get image pull secret '%v' under namespace '%v'",
-				secret, secretNS)
-			return nil, err
-		}
-		podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
-	}
-	return &podspec, nil
+// ApplyImagePullSecret applies image pull secret to the give pod spec.
+// It's intentional not to check the existence of secret here, Kubernetes
+// will set Pod status to "ImagePullBackOff" once kubelet failed to pull
+// image so that users will know what's happening.
+func ApplyImagePullSecret(secret string, podspec apiv1.PodSpec) *apiv1.PodSpec {
+	podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
+	return &podspec
 }
