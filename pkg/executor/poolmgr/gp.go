@@ -404,11 +404,7 @@ func (gp *GenericPool) createPool() error {
 		},
 	}
 
-	podspec, err := util.ApplyImagePullSecret(gp.kubernetesClient, gp.env.Spec.ImagePullSecret, gp.namespace, pod.Spec)
-	if err != nil {
-		return errors.Wrapf(err, "failed to apply image pull secret for env '%v'", gp.env.Metadata.Name)
-	}
-	pod.Spec = *podspec
+	pod.Spec = *(util.ApplyImagePullSecret(gp.env.Spec.ImagePullSecret, pod.Spec))
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

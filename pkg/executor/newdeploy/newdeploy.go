@@ -239,11 +239,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		},
 	}
 
-	podspec, err := util.ApplyImagePullSecret(deploy.kubernetesClient, env.Spec.ImagePullSecret, deployNamespace, pod.Spec)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to apply image pull secret for env '%v'", env.Metadata.Name)
-	}
-	pod.Spec = *podspec
+	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

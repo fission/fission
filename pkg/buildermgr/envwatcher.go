@@ -495,7 +495,6 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 	}
 
 	finalPodSpec, err := util.MergePodSpec(&podSpec, env.Spec.Builder.PodSpec)
-
 	if err != nil {
 		return nil, err
 	}
@@ -516,7 +515,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 					Labels:      sel,
 					Annotations: podAnnotations,
 				},
-				Spec: *finalPodSpec,
+				Spec: *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, *finalPodSpec)),
 			},
 		},
 	}
