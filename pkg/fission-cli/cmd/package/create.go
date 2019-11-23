@@ -124,6 +124,10 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNamespace string, envName string, envNamespace string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) (*metav1.ObjectMeta, error) {
 
+	insecure := input.Bool(flagkey.PkgInsecure)
+	deployChecksum := input.String(flagkey.PkgDeployChecksum)
+	srcChecksum := input.String(flagkey.PkgSrcChecksum)
+
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
 			Namespace: envNamespace,
@@ -136,9 +140,9 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, specDir, specFile)
+		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating source archive")
 		}
 		pkgSpec.Deployment = *deployment
 		if len(pkgName) == 0 {
@@ -146,9 +150,9 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, srcArchiveFiles, false, specDir, specFile)
+		source, err := CreateArchive(client, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating deploy archive")
 		}
 		pkgSpec.Source = *source
 		pkgStatus = fv1.BuildStatusPending // set package build status to pending
@@ -164,6 +168,7 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 	if len(pkgName) == 0 {
 		pkgName = strings.ToLower(uuid.NewV4().String())
 	}
+
 	pkg := &fv1.Package{
 		Metadata: metav1.ObjectMeta{
 			Name:      pkgName,

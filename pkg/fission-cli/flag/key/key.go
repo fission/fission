@@ -104,16 +104,19 @@ const (
 	KwObjType   = "type"
 	KwLabels    = "labels"
 
-	PkgName          = resourceName
-	PkgForce         = force
-	PkgEnvironment   = "env"
-	PkgCode          = "code"
-	PkgSrcArchive    = "sourcearchive"
-	PkgDeployArchive = "deployarchive"
-	PkgBuildCmd      = "buildcmd"
-	PkgOutput        = Output
-	PkgStatus        = "status"
-	PkgOrphan        = "orphan"
+	PkgName           = resourceName
+	PkgForce          = force
+	PkgEnvironment    = "env"
+	PkgCode           = "code"
+	PkgSrcArchive     = "sourcearchive"
+	PkgDeployArchive  = "deployarchive"
+	PkgSrcChecksum    = "srcchecksum"
+	PkgDeployChecksum = "deploychecksum"
+	PkgInsecure       = "insecure"
+	PkgBuildCmd       = "buildcmd"
+	PkgOutput         = Output
+	PkgStatus         = "status"
+	PkgOrphan         = "orphan"
 
 	SpecSave     = "spec"
 	SpecDir      = "specdir"

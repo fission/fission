@@ -44,6 +44,10 @@ clean_resource_by_id() {
 }
 
 test_fn() {
+    if [ -z $FISSION_ROUTER ]; then
+        log "Environment FISSION_ROUTER not set"
+        exit 1
+    fi
     url="http://$FISSION_ROUTER/$1"
     expect=$2
     test_response $url $expect

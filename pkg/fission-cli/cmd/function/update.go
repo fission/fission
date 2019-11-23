@@ -82,30 +82,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		envNamespace = ""
 	}
 
-	var deployArchiveFiles []string
-	codeFlag := false
-	code := input.String(flagkey.PkgCode)
-	if len(code) == 0 {
-		deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
-	} else {
-		deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
-		codeFlag = true
-	}
-
-	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	pkgName := input.String(flagkey.FnPackageName)
 	entrypoint := input.String(flagkey.FnEntrypoint)
-	buildcmd := input.String(flagkey.PkgBuildCmd)
-	force := input.Bool(flagkey.PkgForce)
 
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
 	specializationTimeout := input.Int(flagkey.FnSpecializationTimeout)
-
-	if len(srcArchiveFiles) > 0 && len(deployArchiveFiles) > 0 {
-		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
-	}
 
 	var secrets []fv1.SecretReference
 	var configMaps []fv1.ConfigMapReference
@@ -214,35 +197,37 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
 	}
 
-	pkgMetadata := &pkg.Metadata
+	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	if len(deployArchiveFiles) != 0 || len(srcArchiveFiles) != 0 || len(buildcmd) != 0 || len(envName) != 0 || len(envNamespace) != 0 {
-		fnList, err := _package.GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-		if err != nil {
-			return errors.Wrap(err, "error getting function list")
-		}
+	fnList, err := _package.GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "error getting function list")
+	}
 
-		if !force && len(fnList) > 1 {
-			return errors.New("package is used by multiple functions, use --force to force update")
-		}
+	if !forceUpdate && len(fnList) > 1 {
+		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+	}
 
-		pkgMetadata, err = _package.UpdatePackage(opts.client, pkg, envName, envNamespace, srcArchiveFiles, deployArchiveFiles, buildcmd, false, codeFlag)
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
-		}
+	newPkgMeta, err := _package.UpdatePackage(input, opts.client, pkg)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
+	}
 
-		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
-
-		// update resource version of package reference of functions that shared the same package
+	// the package resource version of function has been changed,
+	// we need to update function resource version to prevent conflict.
+	// TODO: remove this block when deprecating pkg flags of function command.
+	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+		var fns []fv1.Function
+		// don't update the package resource version of the function we are currently
+		// updating to prevent update conflict.
 		for _, fn := range fnList {
-			// ignore the update for current function here, it will be updated later.
-			if fn.Metadata.Name != fnName {
-				fn.Spec.Package.PackageRef.ResourceVersion = pkgMetadata.ResourceVersion
-				_, err := opts.client.FunctionUpdate(&fn)
-				if err != nil {
-					return errors.Wrap(err, "error updating function")
-				}
+			if fn.Metadata.UID != function.Metadata.UID {
+				fns = append(fns, fn)
 			}
+		}
+		err = _package.UpdateFunctionPackageResourceVersion(opts.client, newPkgMeta, fns...)
+		if err != nil {
+			return errors.Wrap(err, "error updating function package reference resource version")
 		}
 	}
 
@@ -251,9 +236,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	// update function spec with new package metadata
 	function.Spec.Package.PackageRef = fv1.PackageRef{
-		Namespace:       pkgMetadata.Namespace,
-		Name:            pkgMetadata.Name,
-		ResourceVersion: pkgMetadata.ResourceVersion,
+		Namespace:       newPkgMeta.Namespace,
+		Name:            newPkgMeta.Name,
+		ResourceVersion: newPkgMeta.ResourceVersion,
 	}
 
 	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
@@ -273,6 +258,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating function")
 	}
 
-	fmt.Printf("function '%v' updated\n", opts.function.Metadata.Name)
+	fmt.Printf("Function '%v' updated\n", opts.function.Metadata.Name)
 	return nil
 }

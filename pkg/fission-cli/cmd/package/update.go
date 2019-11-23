@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -31,15 +32,10 @@ import (
 )
 
 type UpdateSubCommand struct {
-	client             *client.Client
-	pkgName            string
-	pkgNamespace       string
-	force              bool
-	envName            string
-	envNamespace       string
-	srcArchiveFiles    []string
-	deployArchiveFiles []string
-	buildcmd           string
+	client       *client.Client
+	pkgName      string
+	pkgNamespace string
+	force        bool
 }
 
 func Update(input cli.Input) error {
@@ -65,11 +61,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	opts.pkgName = input.String(flagkey.PkgName)
 	opts.pkgNamespace = input.String(flagkey.NamespacePackage)
 	opts.force = input.Bool(flagkey.PkgForce)
-	opts.envName = input.String(flagkey.PkgEnvironment)
-	opts.envNamespace = input.String(flagkey.NamespaceEnvironment)
-	opts.srcArchiveFiles = input.StringSlice(flagkey.PkgSrcArchive)
-	opts.deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
-	opts.buildcmd = input.String(flagkey.PkgBuildCmd)
 	return nil
 }
 
@@ -82,88 +73,111 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "get package")
 	}
 
-	// if the new env specified is the same as the old one, no need to update package
-	// same is true for all update parameters, but, for now, we dont check all of them - because, its ok to
-	// re-write the object with same old values, we just end up getting a new resource version for the object.
-	if len(opts.envName) > 0 && opts.envName == pkg.Spec.Environment.Name {
-		opts.envName = ""
-	}
-
-	if opts.envNamespace == pkg.Spec.Environment.Namespace {
-		opts.envNamespace = ""
-	}
+	forceUpdate := input.Bool(flagkey.PkgForce)
 
 	fnList, err := GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "get function list")
+		return errors.Wrap(err, "error getting function list")
 	}
 
-	if !opts.force && len(fnList) > 1 {
-		return errors.New("Package is used by multiple functions, use --force to force update")
+	if !forceUpdate && len(fnList) > 1 {
+		return errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
-	newPkgMeta, err := UpdatePackage(opts.client, pkg,
-		opts.envName, opts.envNamespace, opts.srcArchiveFiles,
-		opts.deployArchiveFiles, opts.buildcmd, false, false)
+	newPkgMeta, err := UpdatePackage(input, opts.client, pkg)
 	if err != nil {
-		return errors.Wrap(err, "update package")
+		return errors.Wrap(err, "error updating package")
 	}
 
-	// update resource version of package reference of functions that shared the same package
-	for _, fn := range fnList {
-		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
-		_, err := opts.client.FunctionUpdate(&fn)
+	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+		err = UpdateFunctionPackageResourceVersion(opts.client, newPkgMeta, fnList...)
 		if err != nil {
-			return errors.Wrap(err, "update function")
+			return errors.Wrap(err, "error updating function package reference resource version")
 		}
 	}
 
-	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
 	return nil
 }
 
-func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, forceRebuild bool, noZip bool) (*metav1.ObjectMeta, error) {
+func UpdatePackage(input cli.Input, client *client.Client, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
+	envName := input.String(flagkey.PkgEnvironment)
+	envNamespace := input.String(flagkey.NamespaceEnvironment)
+	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
+	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
+	buildcmd := input.String(flagkey.PkgBuildCmd)
+	insecure := input.Bool(flagkey.PkgInsecure)
+	deployChecksum := input.String(flagkey.PkgDeployChecksum)
+	srcChecksum := input.String(flagkey.PkgSrcChecksum)
+	code := input.String(flagkey.PkgCode)
 
-	needToBuild := false
+	noZip := false
+	needToRebuild := false
+	needToUpdate := false
 
-	if len(envName) > 0 {
+	if input.IsSet(flagkey.PkgCode) {
+		deployArchiveFiles = append(deployArchiveFiles, code)
+		noZip = true
+		needToUpdate = true
+	}
+
+	if input.IsSet(flagkey.PkgEnvironment) {
 		pkg.Spec.Environment.Name = envName
-		needToBuild = true
+		needToRebuild = true
+		needToUpdate = true
 	}
 
-	if len(envNamespace) > 0 {
+	if input.IsSet(flagkey.NamespaceEnvironment) {
 		pkg.Spec.Environment.Namespace = envNamespace
-		needToBuild = true
+		needToRebuild = true
+		needToUpdate = true
 	}
 
-	if len(buildcmd) > 0 {
+	if input.IsSet(flagkey.PkgBuildCmd) {
 		pkg.Spec.BuildCommand = buildcmd
-		needToBuild = true
+		needToRebuild = true
+		needToUpdate = true
 	}
 
-	if len(srcArchiveFiles) > 0 {
-		srcArchive, err := CreateArchive(client, srcArchiveFiles, false, "", "")
+	if input.IsSet(flagkey.PkgSrcArchive) {
+		srcArchive, err := CreateArchive(client, srcArchiveFiles, noZip, insecure, srcChecksum, "", "")
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating source archive")
 		}
 		pkg.Spec.Source = *srcArchive
-		needToBuild = true
+		needToRebuild = true
+		needToUpdate = true
+	} else if input.IsSet(flagkey.PkgSrcChecksum) {
+		pkg.Spec.Source.Checksum = fv1.Checksum{
+			Type: fv1.ChecksumTypeSHA256,
+			Sum:  srcChecksum,
+		}
+		needToUpdate = true
 	}
 
-	if len(deployArchiveFiles) > 0 {
-		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, "", "")
+	if input.IsSet(flagkey.PkgDeployArchive) || input.IsSet(flagkey.PkgCode) {
+		deployArchive, err := CreateArchive(client, deployArchiveFiles, noZip, insecure, deployChecksum, "", "")
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating deploy archive")
 		}
 		pkg.Spec.Deployment = *deployArchive
 		// Users may update the env, envNS and deploy archive at the same time,
 		// but without the source archive. In this case, we should set needToBuild to false
-		needToBuild = false
+		needToRebuild = false
+		needToUpdate = true
+	} else if input.IsSet(flagkey.PkgDeployChecksum) {
+		pkg.Spec.Deployment.Checksum = fv1.Checksum{
+			Type: fv1.ChecksumTypeSHA256,
+			Sum:  srcChecksum,
+		}
+		needToUpdate = true
+	}
+
+	if !needToUpdate {
+		return &pkg.Metadata, nil
 	}
 
 	// Set package as pending status when needToBuild is true
-	if needToBuild || forceRebuild {
+	if needToRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         fv1.BuildStatusPending,
@@ -176,7 +190,24 @@ func UpdatePackage(client *client.Client, pkg *fv1.Package, envName, envNamespac
 		return nil, errors.Wrap(err, "update package")
 	}
 
+	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
+
 	return newPkgMeta, err
+}
+
+func UpdateFunctionPackageResourceVersion(client *client.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
+	errs := &multierror.Error{}
+
+	// update resource version of package reference of functions that shared the same package
+	for _, fn := range fnList {
+		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
+		_, err := client.FunctionUpdate(&fn)
+		if err != nil {
+			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.Metadata.Name))
+		}
+	}
+
+	return errs.ErrorOrNil()
 }
 
 func updatePackageStatus(client *client.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {

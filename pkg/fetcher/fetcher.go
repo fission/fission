@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -33,7 +32,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
-	"golang.org/x/net/context/ctxhttp"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -94,38 +92,6 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 			Transport: &ochttp.Transport{},
 		},
 	}, nil
-}
-
-func downloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
-	resp, err := ctxhttp.Get(ctx, httpClient, url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	w, err := os.Create(localPath)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		return err
-	}
-
-	// flushing write buffer to file
-	err = w.Sync()
-	if err != nil {
-		return err
-	}
-
-	err = os.Chmod(localPath, 0600)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
@@ -263,7 +229,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 
 	if req.FetchType == types.FETCH_URL {
 		// fetch the file and save it to the tmp path
-		err := downloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
+		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
 		if err != nil {
 			e := "failed to download url"
 			fetcher.logger.Error(e, zap.Error(err), zap.String("url", req.Url))
@@ -302,7 +268,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 			}
 		} else {
 			// download and verify
-			err := downloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
+			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url"
 				fetcher.logger.Error(e, zap.Error(err), zap.String("url", req.Url))
