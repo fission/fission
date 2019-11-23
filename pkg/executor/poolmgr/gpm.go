@@ -297,10 +297,11 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
-				time.Sleep(5 * time.Second)
-				continue
+			} else {
+				gpm.logger.Error("failed to get environment list", zap.Error(err))
 			}
-			gpm.logger.Error("failed to get environment list", zap.Error(err))
+			time.Sleep(5 * time.Second)
+			continue
 		}
 
 		// Create pools for all envs.  TODO: we should make this a bit less eager, only
