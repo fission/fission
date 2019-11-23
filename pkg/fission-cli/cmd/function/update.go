@@ -197,7 +197,18 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
 	}
 
-	pkgMetadata, err := _package.UpdatePackage(input, opts.client, pkg)
+	forceUpdate := input.Bool(flagkey.PkgForce)
+
+	fnList, err := _package.GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "error getting function list")
+	}
+
+	if !forceUpdate && len(fnList) > 1 {
+		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+	}
+
+	newPkgMeta, err := _package.UpdatePackage(input, opts.client, pkg)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
 	}
@@ -205,15 +216,19 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// the package resource version of function has been changed,
 	// we need to update function resource version to prevent conflict.
 	// TODO: remove this block when deprecating pkg flags of function command.
-	if pkgMetadata.ResourceVersion != pkg.Metadata.ResourceVersion {
-		fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
-			Name:      input.String(flagkey.FnName),
-			Namespace: input.String(flagkey.NamespaceFunction),
-		})
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+		var fns []fv1.Function
+		// don't update the package resource version of the function we are currently
+		// updating to prevent update conflict.
+		for _, fn := range fnList {
+			if fn.Metadata.UID != function.Metadata.UID {
+				fns = append(fns, fn)
+			}
 		}
-		function.Metadata.ResourceVersion = fn.Metadata.ResourceVersion
+		err = _package.UpdateFunctionPackageResourceVersion(opts.client, newPkgMeta, fns...)
+		if err != nil {
+			return errors.Wrap(err, "error updating function package reference resource version")
+		}
 	}
 
 	// TODO : One corner case where user just updates the pkg reference with fnUpdate, but internally this new pkg reference
@@ -221,9 +236,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	// update function spec with new package metadata
 	function.Spec.Package.PackageRef = fv1.PackageRef{
-		Namespace:       pkgMetadata.Namespace,
-		Name:            pkgMetadata.Name,
-		ResourceVersion: pkgMetadata.ResourceVersion,
+		Namespace:       newPkgMeta.Namespace,
+		Name:            newPkgMeta.Name,
+		ResourceVersion: newPkgMeta.ResourceVersion,
 	}
 
 	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -72,9 +73,27 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "get package")
 	}
 
-	_, err = UpdatePackage(input, opts.client, pkg)
+	forceUpdate := input.Bool(flagkey.PkgForce)
+
+	fnList, err := GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "update package")
+		return errors.Wrap(err, "error getting function list")
+	}
+
+	if !forceUpdate && len(fnList) > 1 {
+		return errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+	}
+
+	newPkgMeta, err := UpdatePackage(input, opts.client, pkg)
+	if err != nil {
+		return errors.Wrap(err, "error updating package")
+	}
+
+	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+		err = UpdateFunctionPackageResourceVersion(opts.client, newPkgMeta, fnList...)
+		if err != nil {
+			return errors.Wrap(err, "error updating function package reference resource version")
+		}
 	}
 
 	return nil
@@ -89,7 +108,6 @@ func UpdatePackage(input cli.Input, client *client.Client, pkg *fv1.Package) (*m
 	insecure := input.Bool(flagkey.PkgInsecure)
 	deployChecksum := input.String(flagkey.PkgDeployChecksum)
 	srcChecksum := input.String(flagkey.PkgSrcChecksum)
-	forceUpdate := input.Bool(flagkey.PkgForce)
 	code := input.String(flagkey.PkgCode)
 
 	noZip := false
@@ -158,17 +176,8 @@ func UpdatePackage(input cli.Input, client *client.Client, pkg *fv1.Package) (*m
 		return &pkg.Metadata, nil
 	}
 
-	fnList, err := GetFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
-	if err != nil {
-		return nil, errors.Wrap(err, "error getting function list")
-	}
-
-	if !forceUpdate && len(fnList) > 1 {
-		return nil, errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
-	}
-
 	// Set package as pending status when needToBuild is true
-	if needToRebuild && forceUpdate {
+	if needToRebuild {
 		// change into pending state to trigger package build
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         fv1.BuildStatusPending,
@@ -183,17 +192,22 @@ func UpdatePackage(input cli.Input, client *client.Client, pkg *fv1.Package) (*m
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
 
+	return newPkgMeta, err
+}
+
+func UpdateFunctionPackageResourceVersion(client *client.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
+	errs := &multierror.Error{}
+
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
-		fn.Spec.Package.PackageRef.ResourceVersion = newPkgMeta.ResourceVersion
+		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
 		_, err := client.FunctionUpdate(&fn)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.Metadata.Name)
+			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.Metadata.Name))
 		}
-		fmt.Printf("Package resource version of function '%v' updated\n", fn.Metadata.Name)
 	}
 
-	return newPkgMeta, err
+	return errs.ErrorOrNil()
 }
 
 func updatePackageStatus(client *client.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
