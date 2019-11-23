@@ -21,9 +21,12 @@ import (
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
-// It's intentional not to check the existence of secret here, Kubernetes
-// will set Pod status to "ImagePullBackOff" once kubelet failed to pull
-// image so that users will know what's happening.
+// It's intentional not to check the existence of secret here.
+// First, Kubernetes will set Pod status to "ImagePullBackOff" once
+// kubelet failed to pull image so that users will know what's happening.
+// Second, Fission no longer need to handle "secret not found" error
+// when creating the environment deployment since kubelet will retry to
+// pull image until successes.
 func ApplyImagePullSecret(secret string, podspec apiv1.PodSpec) *apiv1.PodSpec {
 	podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
 	return &podspec
