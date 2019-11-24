@@ -55,7 +55,7 @@ func MakeClient(logger *zap.Logger, executorUrl string) *Client {
 		logger:      logger.Named("executor_client"),
 		executorUrl: strings.TrimSuffix(executorUrl, "/"),
 		tappedByUrl: make(map[string]TapServiceRequest),
-		requestChan: make(chan TapServiceRequest),
+		requestChan: make(chan TapServiceRequest, 100),
 		httpClient: &http.Client{
 			Transport: &ochttp.Transport{},
 		},
