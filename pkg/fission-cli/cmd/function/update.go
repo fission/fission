@@ -30,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/types"
 )
 
 type UpdateSubCommand struct {
@@ -171,7 +170,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	function.Spec.InvokeStrategy = *strategy
 
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
-		if strategy.ExecutionStrategy.ExecutorType != types.ExecutorTypeNewdeploy {
+		if strategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
 			return errors.Errorf("--%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
 		}
 

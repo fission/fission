@@ -144,7 +144,7 @@ func MakeGenericPool(
 func (gp *GenericPool) getDeployLabels() map[string]string {
 	return map[string]string{
 		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		types.EXECUTOR_TYPE:           fv1.ExecutorTypePoolmgr,
+		types.EXECUTOR_TYPE:           string(fv1.ExecutorTypePoolmgr),
 		types.ENVIRONMENT_NAME:        gp.env.Metadata.Name,
 		types.ENVIRONMENT_NAMESPACE:   gp.env.Metadata.Namespace,
 		types.ENVIRONMENT_UID:         string(gp.env.Metadata.UID),
@@ -471,14 +471,17 @@ func (gp *GenericPool) waitForReadyPod() error {
 
 			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
 			pod := podList.Items[0]
-			multierr := &multierror.Error{}
+			errs := &multierror.Error{}
 			for _, cStatus := range pod.Status.ContainerStatuses {
 				if !cStatus.Ready {
-					multierr = multierror.Append(multierr, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
+					errs = multierror.Append(errs, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
 				}
 			}
-			return errors.Wrapf(multierr, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
-				gp.deployment.ObjectMeta.Name, gp.namespace)
+			if errs.ErrorOrNil() != nil {
+				return errors.Wrapf(errs, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
+					gp.deployment.ObjectMeta.Name, gp.namespace)
+			}
+			return nil
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
@@ -614,7 +617,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Environment:       gp.env,
 		Address:           svcHost,
 		KubernetesObjects: kubeObjRefs,
-		Executor:          fscache.POOLMGR,
+		Executor:          fv1.ExecutorTypePoolmgr,
 		Ctime:             time.Now(),
 		Atime:             time.Now(),
 	}
@@ -623,6 +626,9 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		return nil, err
 	}
+
+	gp.fsCache.IncreaseColdStarts(fn.Metadata.Name, string(fn.Metadata.UID))
+
 	return fsvc, nil
 }
 

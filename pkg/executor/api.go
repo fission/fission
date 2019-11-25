@@ -20,13 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -91,9 +91,15 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 		zap.String("function_name", fn.Metadata.Name),
 		zap.String("function_namespace", fn.Metadata.Namespace))
 
-	fsvc, err := executor.fsCache.GetByFunction(&fn.Metadata)
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	et, exists := executor.executorTypes[t]
+	if !exists {
+		return "", errors.Errorf("Unknown executor type '%v'", t)
+	}
+
+	fsvc, err := et.GetFuncSvcFromCache(fn)
 	if err == nil {
-		if executor.isValidAddress(fsvc) {
+		if et.IsValid(fsvc) {
 			// Cached, return svc address
 			return fsvc.Address, nil
 		} else {
@@ -101,7 +107,7 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 				zap.String("function_name", fn.Metadata.Name),
 				zap.String("function_namespace", fn.Metadata.Namespace),
 				zap.String("address", fsvc.Address))
-			executor.fsCache.DeleteEntry(fsvc)
+			et.DeleteFuncSvcFromCache(fsvc)
 		}
 	}
 
@@ -120,24 +126,7 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 // find funcSvc and update its atime
 // TODO: Deprecated tapService
 func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		executor.logger.Error("failed to read tap service request", zap.Error(err))
-		http.Error(w, "Failed to read request", http.StatusInternalServerError)
-		return
-	}
-	svcName := string(body)
-	svcHost := strings.TrimPrefix(svcName, "http://")
-
-	err = executor.fsCache.TouchByAddress(svcHost)
-	if err != nil {
-		executor.logger.Error("error tapping function service",
-			zap.Error(err),
-			zap.String("service", svcName),
-			zap.String("host", svcHost))
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
+	// only for upgrade compatibility
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -163,7 +152,16 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	errs := &multierror.Error{}
 	for _, req := range tapSvcReqs {
 		svcHost := strings.TrimPrefix(req.ServiceUrl, "http://")
-		err = executor.fsCache.TouchByAddress(svcHost)
+
+		et, exists := executor.executorTypes[req.FnExecutorType]
+		if !exists {
+			errs = multierror.Append(errs,
+				errors.Errorf("error tapping service due to unknown executor type '%v' found",
+					req.FnExecutorType))
+			continue
+		}
+
+		err = et.TapService(svcHost)
 		if err != nil {
 			errs = multierror.Append(errs,
 				errors.Wrapf(err, "'%v' failed to tap function '%v/%v' with service url '%v'",
@@ -199,10 +197,11 @@ func (executor *Executor) Serve(port int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	executor.ndm.Run(ctx)
-	executor.gpm.Run(ctx)
-	executor.cms.Run(ctx)
+	for _, et := range executor.executorTypes {
+		et.Run(ctx)
+	}
 
+	executor.cms.Run(ctx)
 	address := fmt.Sprintf(":%v", port)
 	err := http.ListenAndServe(address, &ochttp.Handler{
 		Handler: executor.GetHandler(),

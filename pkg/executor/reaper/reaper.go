@@ -26,6 +26,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/types"
 )
@@ -294,7 +295,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 						break
 					}
 
-					if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
+					if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
 						ndmFunc = true
 						break
 					}

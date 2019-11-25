@@ -35,11 +35,14 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/types"
 )
+
+var _ executortype.ExecutorType = &GenericPoolManager{}
 
 type requestType int
 
@@ -90,7 +93,7 @@ func MakeGenericPoolManager(
 	kubernetesClient *kubernetes.Clientset,
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
-	instanceId string) *GenericPoolManager {
+	instanceId string) executortype.ExecutorType {
 
 	gpmLogger := logger.Named("generic_pool_manager")
 
@@ -130,6 +133,67 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
 	go gpm.idleObjectReaper()
+}
+
+func (gpm *GenericPoolManager) GetTypeName() fv1.ExecutorType {
+	return fv1.ExecutorTypePoolmgr
+}
+
+func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	// from Func -> get Env
+	gpm.logger.Debug("getting environment for function", zap.String("function", fn.Metadata.Name))
+	env, err := gpm.getFunctionEnv(fn)
+	if err != nil {
+		return nil, err
+	}
+
+	pool, err := gpm.getPool(env)
+	if err != nil {
+		return nil, err
+	}
+
+	// from GenericPool -> get one function container
+	// (this also adds to the cache)
+	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.Metadata.Name))
+	return pool.getFuncSvc(ctx, fn)
+}
+
+func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+	return gpm.fsCache.GetByFunction(&fn.Metadata)
+}
+
+func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+	gpm.fsCache.DeleteEntry(fsvc)
+}
+
+func (gpm *GenericPoolManager) TapService(svcHost string) error {
+	err := gpm.fsCache.TouchByAddress(svcHost)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
+// containers in it are reporting a ready status for the healthCheck.
+func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
+	for _, obj := range fsvc.KubernetesObjects {
+		if obj.Kind == "pod" {
+			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+			if err == nil && utils.IsReadyPod(pod) {
+				// Normally, the address format is http://[pod-ip]:[port], however, if the
+				// Istio is enabled the address format changes to http://[svc-name]:[port].
+				// So if the Istio is enabled and pod is in ready state, we return true directly;
+				// Otherwise, we need to ensure that the address contains pod ip.
+				if gpm.enableIstio ||
+					(!gpm.enableIstio && strings.Contains(fsvc.Address, pod.Status.PodIP)) {
+					gpm.logger.Debug("valid address", zap.String("address", fsvc.Address))
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
@@ -246,25 +310,6 @@ func (gpm *GenericPoolManager) cleanupPools(envs []fv1.Environment) {
 	}
 }
 
-func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	// from Func -> get Env
-	gpm.logger.Debug("getting environment for function", zap.String("function", fn.Metadata.Name))
-	env, err := gpm.getFunctionEnv(fn)
-	if err != nil {
-		return nil, err
-	}
-
-	pool, err := gpm.getPool(env)
-	if err != nil {
-		return nil, err
-	}
-
-	// from GenericPool -> get one function container
-	// (this also adds to the cache)
-	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.Metadata.Name))
-	return pool.getFuncSvc(ctx, fn)
-}
-
 func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environment, error) {
 	var env *fv1.Environment
 
@@ -335,28 +380,6 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *fv1.Environment) int32 {
 	return poolsize
 }
 
-// IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
-// containers in it are reporting a ready status for the healthCheck.
-func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
-	for _, obj := range fsvc.KubernetesObjects {
-		if obj.Kind == "pod" {
-			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
-			if err == nil && utils.IsReadyPod(pod) {
-				// Normally, the address format is http://[pod-ip]:[port], however, if the
-				// Istio is enabled the address format changes to http://[svc-name]:[port].
-				// So if the Istio is enabled and pod is in ready state, we return true directly;
-				// Otherwise, we need to ensure that the address contains pod ip.
-				if gpm.enableIstio ||
-					(!gpm.enableIstio && strings.Contains(fsvc.Address, pod.Status.PodIP)) {
-					gpm.logger.Debug("valid address", zap.String("address", fsvc.Address))
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper() {
 
@@ -380,8 +403,10 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			continue
 		}
 
-		for _, fsvc := range funcSvcs {
-			if fsvc.Executor != fscache.POOLMGR {
+		for i := range funcSvcs {
+			fsvc := funcSvcs[i]
+
+			if fsvc.Executor != fv1.ExecutorTypePoolmgr {
 				continue
 			}
 
@@ -397,20 +422,23 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				continue
 			}
 
-			deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
-			if err != nil {
-				gpm.logger.Error("error deleting Kubernetes objects for function service",
-					zap.Error(err),
-					zap.Any("service", fsvc))
-			}
-
-			if !deleted {
-				continue
-			}
-
-			for _, kubeobj := range fsvc.KubernetesObjects {
-				reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &kubeobj)
-			}
+			go func() {
+				deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
+				if err != nil {
+					gpm.logger.Error("error deleting Kubernetes objects for function service",
+						zap.Error(err),
+						zap.Any("service", fsvc))
+				}
+				if deleted {
+					for i := range fsvc.KubernetesObjects {
+						gpm.logger.Debug("release idle function resources",
+							zap.String("function", fsvc.Name), zap.String("address", fsvc.Address),
+							zap.String("executor", string(fsvc.Executor)))
+						reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+						time.Sleep(50 * time.Millisecond)
+					}
+				}
+			}()
 		}
 	}
 }

@@ -41,7 +41,7 @@ timeout 60 bash -c "test_fn ${fn}-gpm 'world'"
 log "Waiting for idle pod reaper to recycle resources"
 # the LIST_OLD function list fsvc older than 2 mins
 # so in worst case, we need to wait for up to 4 mins + some buffer
-sleep 260
+sleep 300
 
 # The replicas of function deployment should be 0 due to minScale = 0
 ndDeployReplicas=$(kubectl -n $FUNCTION_NAMESPACE get deploy -l functionName=${fn}-nd -ojsonpath='{.items[0].spec.replicas}')

@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,8 +30,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
-	nd "github.com/fission/fission/pkg/executor/newdeploy"
-	gpm "github.com/fission/fission/pkg/executor/poolmgr"
+	"github.com/fission/fission/pkg/executor/executortype"
 )
 
 type (
@@ -46,10 +46,10 @@ type (
 
 //MakeConfigSecretController makes a controller for configmaps and secrets which changes related functions
 func MakeConfigSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) *ConfigSecretController {
+	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) *ConfigSecretController {
 	logger.Debug("Creating ConfigMap & Secret Controller")
-	_, cmcontroller := initConfigmapController(logger, fissionClient, kubernetesClient, ndm, gpm)
-	_, scontroller := initSecretController(logger, fissionClient, kubernetesClient, ndm, gpm)
+	_, cmcontroller := initConfigmapController(logger, fissionClient, kubernetesClient, types)
+	_, scontroller := initSecretController(logger, fissionClient, kubernetesClient, types)
 	cmsController := &ConfigSecretController{
 		logger:              logger,
 		configmapController: cmcontroller,
@@ -66,7 +66,7 @@ func (csController *ConfigSecretController) Run(ctx context.Context) {
 }
 
 func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) (cache.Store, cache.Controller) {
+	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) (cache.Store, cache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := cache.NewListWatchFromClient(kubernetesClient.CoreV1().RESTClient(), "configmaps", metav1.NamespaceAll, fields.Everything())
 	store, controller := cache.NewInformer(listWatch, &apiv1.ConfigMap{}, resyncPeriod, cache.ResourceEventHandlerFuncs{
@@ -81,12 +81,11 @@ func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClien
 						zap.String("configmap_name", newCm.ObjectMeta.Name),
 						zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				}
-
 				funcs, err := getConfigmapRelatedFuncs(logger, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newCm.ObjectMeta.Name), zap.String("secret_namespace", newCm.ObjectMeta.Namespace))
 				}
-				recyclePods(logger, funcs, ndm, gpm)
+				recyclePods(logger, funcs, types)
 			}
 		},
 	})
@@ -112,7 +111,7 @@ func getConfigmapRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionC
 }
 
 func initSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) (cache.Store, cache.Controller) {
+	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) (cache.Store, cache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := cache.NewListWatchFromClient(kubernetesClient.CoreV1().RESTClient(), "secrets", metav1.NamespaceAll, fields.Everything())
 	store, controller := cache.NewInformer(listWatch, &apiv1.Secret{}, resyncPeriod, cache.ResourceEventHandlerFuncs{
@@ -128,14 +127,12 @@ func initSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
 						zap.String("configmap_namespace", newS.ObjectMeta.Namespace))
 
 				}
-
 				funcs, err := getSecretRelatedFuncs(logger, &newS.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				}
-				recyclePods(logger, funcs, ndm, gpm)
+				recyclePods(logger, funcs, types)
 			}
-
 		},
 	})
 	return store, controller
@@ -160,19 +157,19 @@ func getSecretRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClie
 	return relatedFunctions, nil
 }
 
-func recyclePods(logger *zap.Logger, funcs []fv1.Function, ndm *nd.NewDeploy, gpm *gpm.GenericPoolManager) {
+func recyclePods(logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
 	for _, f := range funcs {
 		var err error
 
-		switch f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
-		case fv1.ExecutorTypeNewdeploy:
-			err = ndm.RefreshFuncPods(logger, f)
-		case fv1.ExecutorTypePoolmgr:
-			err = gpm.RefreshFuncPods(logger, f)
+		et, exists := types[f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
+		if exists {
+			err = et.RefreshFuncPods(logger, f)
+		} else {
+			err = errors.Errorf("Unknown executor type '%v'", f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 		}
 
 		if err != nil {
-			logger.Error("Failed to recycle pods for function after configmap changed",
+			logger.Error("Failed to recycle pods for function after configmap/secret changed",
 				zap.Error(err),
 				zap.Any("function", f))
 		}
