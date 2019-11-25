@@ -363,14 +363,13 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
 	var fnExecutor, newFnExecutor fv1.ExecutorType
-	executorType := fv1.ExecutorType(input.String(flagkey.FnExecutorType))
 
-	switch executorType {
+	switch input.String(flagkey.FnExecutorType) {
 	case "":
 		fallthrough
-	case fv1.ExecutorTypePoolmgr:
+	case string(fv1.ExecutorTypePoolmgr):
 		newFnExecutor = fv1.ExecutorTypePoolmgr
-	case fv1.ExecutorTypeNewdeploy:
+	case string(fv1.ExecutorTypeNewdeploy):
 		newFnExecutor = fv1.ExecutorTypeNewdeploy
 	default:
 		return nil, errors.Errorf("executor type must be one of '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy)
