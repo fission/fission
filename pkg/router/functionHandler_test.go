@@ -78,8 +78,8 @@ func TestFunctionProxying(t *testing.T) {
 	}
 
 	fh := &functionHandler{
-		logger:   logger,
-		fmap:     fmap,
+		logger: logger,
+		fmap:   fmap,
 		function: &fv1.Function{
 			Metadata: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
 		},
