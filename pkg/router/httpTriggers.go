@@ -142,7 +142,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			fmap:                     ts.functionServiceMap,
 			executor:                 ts.executor,
 			httpTrigger:              &trigger,
-			functionMetadataMap:      rr.functionMetadataMap,
+			functionMap:              rr.functionMap,
 			fnWeightDistributionList: rr.functionWtDistributionList,
 			tsRoundTripperParams:     ts.tsRoundTripperParams,
 			isDebugEnv:               ts.isDebugEnv,
@@ -158,8 +158,8 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		// deployment. For more details, please check "handler" function of functionHandler.
 
 		if rr.resolveResultType == resolveResultSingleFunction {
-			for _, metadata := range fh.functionMetadataMap {
-				fh.function = metadata
+			for _, fn := range fh.functionMap {
+				fh.function = fn
 			}
 		}
 
@@ -185,20 +185,19 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 
 	// Internal triggers for each function by name. Non-http
 	// triggers route into these.
-	for _, function := range ts.functions {
-		m := function.Metadata
-
+	for i := range ts.functions {
+		fn := ts.functions[i]
 		fh := &functionHandler{
-			logger:                 ts.logger.Named(m.Name),
+			logger:                 ts.logger.Named(fn.Metadata.Name),
 			fmap:                   ts.functionServiceMap,
-			function:               &m,
+			function:               &fn,
 			executor:               ts.executor,
 			tsRoundTripperParams:   ts.tsRoundTripperParams,
 			isDebugEnv:             ts.isDebugEnv,
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
 			functionTimeoutMap:     fnTimeoutMap,
 		}
-		muxRouter.HandleFunc(utils.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
+		muxRouter.HandleFunc(utils.UrlForFunction(fn.Metadata.Name, fn.Metadata.Namespace), fh.handler)
 	}
 
 	// Healthz endpoint for the router.
@@ -263,8 +262,8 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					if key.namespace == fn.Metadata.Namespace &&
-						rr.functionMetadataMap[fn.Metadata.Name] != nil &&
-						rr.functionMetadataMap[fn.Metadata.Name].ResourceVersion != fn.Metadata.ResourceVersion {
+						rr.functionMap[fn.Metadata.Name] != nil &&
+						rr.functionMap[fn.Metadata.Name].Metadata.ResourceVersion != fn.Metadata.ResourceVersion {
 						// invalidate resolver cache
 						ts.logger.Debug("invalidating resolver cache")
 						err := ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)

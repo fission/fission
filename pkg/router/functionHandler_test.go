@@ -57,12 +57,12 @@ func TestFunctionProxying(t *testing.T) {
 	backendURL := createBackendService(testResponseString)
 	log.Printf("Created backend svc at %v", backendURL)
 
-	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
+	fnMeta := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
 
 	fmap := makeFunctionServiceMap(logger, 0)
-	fmap.assign(fn, backendURL)
+	fmap.assign(&fnMeta, backendURL)
 
 	httpTrigger := &fv1.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
@@ -78,9 +78,11 @@ func TestFunctionProxying(t *testing.T) {
 	}
 
 	fh := &functionHandler{
-		logger:   logger,
-		fmap:     fmap,
-		function: fn,
+		logger: logger,
+		fmap:   fmap,
+		function: &fv1.Function{
+			Metadata: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
+		},
 		tsRoundTripperParams: &tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
 			timeoutExponent: 2,
