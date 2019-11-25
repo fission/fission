@@ -403,7 +403,9 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			continue
 		}
 
-		for _, fsvc := range funcSvcs {
+		for i := range funcSvcs {
+			fsvc := funcSvcs[i]
+
 			if fsvc.Executor != fv1.ExecutorTypePoolmgr {
 				continue
 			}
