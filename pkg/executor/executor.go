@@ -62,8 +62,6 @@ type (
 		funcSvc *fscache.FuncSvc
 		err     error
 	}
-
-
 )
 
 func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, cms *cms.ConfigSecretController, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {
