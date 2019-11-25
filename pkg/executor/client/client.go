@@ -28,7 +28,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/executor"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
@@ -36,20 +35,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type Client struct {
-	logger      *zap.Logger
-	executorUrl string
-	tappedByUrl map[string]executor.TapServiceRequest
-	requestChan chan executor.TapServiceRequest
-	httpClient  *http.Client
-}
+type (
+	Client struct {
+		logger      *zap.Logger
+		executorUrl string
+		tappedByUrl map[string]TapServiceRequest
+		requestChan chan TapServiceRequest
+		httpClient  *http.Client
+	}
+	TapServiceRequest struct {
+		FnMetadata     metav1.ObjectMeta
+		FnExecutorType fv1.ExecutorType
+		ServiceUrl     string
+	}
+)
 
 func MakeClient(logger *zap.Logger, executorUrl string) *Client {
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorUrl: strings.TrimSuffix(executorUrl, "/"),
-		tappedByUrl: make(map[string]executor.TapServiceRequest),
-		requestChan: make(chan executor.TapServiceRequest),
+		tappedByUrl: make(map[string]TapServiceRequest),
+		requestChan: make(chan TapServiceRequest),
 		httpClient: &http.Client{
 			Transport: &ochttp.Transport{},
 		},
@@ -96,10 +102,10 @@ func (c *Client) service() {
 			}
 
 			urls := c.tappedByUrl
-			c.tappedByUrl = make(map[string]executor.TapServiceRequest)
+			c.tappedByUrl = make(map[string]TapServiceRequest)
 
 			go func() {
-				svcReqs := []executor.TapServiceRequest{}
+				svcReqs := []TapServiceRequest{}
 				for _, req := range urls {
 					svcReqs = append(svcReqs, req)
 				}
@@ -115,7 +121,7 @@ func (c *Client) service() {
 }
 
 func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceUrl *url.URL) {
-	c.requestChan <- executor.TapServiceRequest{
+	c.requestChan <- TapServiceRequest{
 		FnMetadata: metav1.ObjectMeta{
 			Name:            fnMeta.Name,
 			Namespace:       fnMeta.Namespace,
@@ -129,7 +135,7 @@ func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorT
 	}
 }
 
-func (c *Client) _tapService(tapSvcReqs []executor.TapServiceRequest) error {
+func (c *Client) _tapService(tapSvcReqs []TapServiceRequest) error {
 	executorUrl := c.executorUrl + "/v2/tapServices"
 
 	body, err := json.Marshal(tapSvcReqs)

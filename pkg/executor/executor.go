@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -64,11 +63,7 @@ type (
 		err     error
 	}
 
-	TapServiceRequest struct {
-		FnMetadata     metav1.ObjectMeta
-		FnExecutorType fv1.ExecutorType
-		ServiceUrl     string
-	}
+
 )
 
 func MakeExecutor(logger *zap.Logger, gpm *poolmgr.GenericPoolManager, ndm *newdeploy.NewDeploy, cms *cms.ConfigSecretController, fissionClient *crd.FissionClient, fsCache *fscache.FunctionServiceCache) *Executor {

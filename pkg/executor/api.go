@@ -32,6 +32,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission/pkg/executor/client"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
@@ -149,7 +150,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tapSvcReqs := []TapServiceRequest{}
+	tapSvcReqs := []client.TapServiceRequest{}
 	err = json.Unmarshal(body, &tapSvcReqs)
 	if err != nil {
 		executor.logger.Error("failed to decode tap service request",
