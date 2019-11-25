@@ -433,7 +433,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 							zap.String("function", fsvc.Name), zap.String("address", fsvc.Address),
 							zap.String("executor", string(fsvc.Executor)))
 						reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
-						time.Sleep(50*time.Millisecond)
+						time.Sleep(50 * time.Millisecond)
 					}
 				}
 			}()
