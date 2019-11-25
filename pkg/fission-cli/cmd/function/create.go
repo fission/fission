@@ -36,7 +36,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/types"
 )
 
 const (
@@ -363,18 +362,18 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 }
 
 func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
-
 	var fnExecutor, newFnExecutor fv1.ExecutorType
+	executorType := fv1.ExecutorType(input.String(flagkey.FnExecutorType))
 
-	switch input.String(flagkey.FnExecutorType) {
+	switch executorType {
 	case "":
 		fallthrough
-	case types.ExecutorTypePoolmgr:
-		newFnExecutor = types.ExecutorTypePoolmgr
-	case types.ExecutorTypeNewdeploy:
-		newFnExecutor = types.ExecutorTypeNewdeploy
+	case fv1.ExecutorTypePoolmgr:
+		newFnExecutor = fv1.ExecutorTypePoolmgr
+	case fv1.ExecutorTypeNewdeploy:
+		newFnExecutor = fv1.ExecutorTypeNewdeploy
 	default:
-		return nil, errors.New("executor type must be one of 'poolmgr' or 'newdeploy', defaults to 'poolmgr'")
+		return nil, errors.Errorf("executor type must be one of '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy)
 	}
 
 	if existingInvokeStrategy != nil {
@@ -388,11 +387,11 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		fnExecutor = newFnExecutor
 	}
 
-	if input.IsSet(flagkey.FnSpecializationTimeout) && fnExecutor != types.ExecutorTypeNewdeploy {
+	if input.IsSet(flagkey.FnSpecializationTimeout) && fnExecutor != fv1.ExecutorTypeNewdeploy {
 		return nil, errors.Errorf("%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
 	}
 
-	if fnExecutor == types.ExecutorTypePoolmgr {
+	if fnExecutor == fv1.ExecutorTypePoolmgr {
 		if input.IsSet(flagkey.RuntimeTargetcpu) || input.IsSet(flagkey.ReplicasMinscale) || input.IsSet(flagkey.ReplicasMaxscale) {
 			return nil, errors.New("to set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
 		}
@@ -403,7 +402,7 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
-				ExecutorType: types.ExecutorTypePoolmgr,
+				ExecutorType: fv1.ExecutorTypePoolmgr,
 			},
 		}
 	} else {
@@ -413,7 +412,7 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		maxScale := minScale
 		specializationTimeout := fv1.DefaultSpecializationTimeOut
 
-		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == types.ExecutorTypeNewdeploy {
+		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
 			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
 			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
 			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent

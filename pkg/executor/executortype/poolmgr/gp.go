@@ -144,7 +144,7 @@ func MakeGenericPool(
 func (gp *GenericPool) getDeployLabels() map[string]string {
 	return map[string]string{
 		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		types.EXECUTOR_TYPE:           fv1.ExecutorTypePoolmgr,
+		types.EXECUTOR_TYPE:           string(fv1.ExecutorTypePoolmgr),
 		types.ENVIRONMENT_NAME:        gp.env.Metadata.Name,
 		types.ENVIRONMENT_NAMESPACE:   gp.env.Metadata.Namespace,
 		types.ENVIRONMENT_UID:         string(gp.env.Metadata.UID),
@@ -614,7 +614,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Environment:       gp.env,
 		Address:           svcHost,
 		KubernetesObjects: kubeObjRefs,
-		Executor:          fscache.POOLMGR,
+		Executor:          fv1.ExecutorTypePoolmgr,
 		Ctime:             time.Now(),
 		Atime:             time.Now(),
 	}
@@ -623,6 +623,9 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		return nil, err
 	}
+
+	gp.fsCache.IncreaseColdStarts(fn.Metadata.Name, string(fn.Metadata.UID))
+
 	return fsvc, nil
 }
 

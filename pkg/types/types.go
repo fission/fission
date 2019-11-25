@@ -131,15 +131,6 @@ const (
 )
 
 const (
-	ExecutorTypePoolmgr   = fv1.ExecutorTypePoolmgr
-	ExecutorTypeNewdeploy = fv1.ExecutorTypeNewdeploy
-)
-
-const (
-	StrategyTypeExecution = fv1.StrategyTypeExecution
-)
-
-const (
 	SharedVolumeUserfunc   = fv1.SharedVolumeUserfunc
 	SharedVolumePackages   = fv1.SharedVolumePackages
 	SharedVolumeSecrets    = fv1.SharedVolumeSecrets

@@ -33,17 +33,13 @@ import (
 )
 
 type fscRequestType int
-type executorType int
+
+//type executorType int
 
 const (
 	TOUCH fscRequestType = iota
 	LISTOLD
 	LOG
-)
-
-const (
-	POOLMGR executorType = iota
-	NEWDEPLOY
 )
 
 type (
@@ -53,7 +49,7 @@ type (
 		Environment       *fv1.Environment        // function's environment
 		Address           string                  // Host:Port or IP:Port that the function's service can be reached at.
 		KubernetesObjects []apiv1.ObjectReference // Kubernetes Objects (within the function namespace)
-		Executor          executorType
+		Executor          fv1.ExecutorType
 
 		Ctime time.Time
 		Atime time.Time

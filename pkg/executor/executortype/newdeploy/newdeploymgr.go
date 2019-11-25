@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/pkg/throttler"
-	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -42,10 +40,15 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
+
+var _ executortype.ExecutorType = &NewDeploy{}
 
 type (
 	NewDeploy struct {
@@ -82,7 +85,7 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-) *NewDeploy {
+) executortype.ExecutorType {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -128,6 +131,105 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 	go deploy.funcController.Run(ctx.Done())
 	go deploy.envController.Run(ctx.Done())
 	go deploy.idleObjectReaper()
+}
+
+func (deploy *NewDeploy) GetTypeName() fv1.ExecutorType {
+	return fv1.ExecutorTypeNewdeploy
+}
+
+func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	return deploy.createFunction(fn, false)
+}
+
+func (deploy *NewDeploy) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+	return deploy.fsCache.GetByFunction(&fn.Metadata)
+}
+
+func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+	deploy.fsCache.DeleteEntry(fsvc)
+}
+
+func (deploy *NewDeploy) TapService(svcHost string) error {
+	err := deploy.fsCache.TouchByAddress(svcHost)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsValid does a get on the service address to ensure it's a valid service, then
+// scale deployment to 1 replica if there are no available replicas for function.
+// Return true if no error occurs, return false otherwise.
+func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
+	service := strings.Split(fsvc.Address, ".")
+	if len(service) == 0 {
+		return false
+	}
+
+	_, err := deploy.kubernetesClient.CoreV1().Services(service[1]).Get(service[0], metav1.GetOptions{})
+	if err != nil {
+		deploy.logger.Error("error validating function service address", zap.String("function", fsvc.Function.Name), zap.Error(err))
+		return false
+	}
+
+	deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+	if deployObj == nil {
+		deploy.logger.Error("deployment obj for function does not exist", zap.String("function", fsvc.Function.Name))
+		return false
+	}
+
+	currentDeploy, err := deploy.kubernetesClient.AppsV1().
+		Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+	if err != nil {
+		deploy.logger.Error("error validating function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+		return false
+	}
+
+	// return directly when available replicas > 0
+	if currentDeploy.Status.AvailableReplicas > 0 {
+		return true
+	}
+
+	return false
+}
+
+// RefreshFuncPods deleted pods related to the function so that new pods are replenished
+func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+
+	env, err := deploy.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	if err != nil {
+		return err
+	}
+
+	funcLabels := deploy.getDeployLabels(f.Metadata, metav1.ObjectMeta{
+		Name:      f.Spec.Environment.Name,
+		Namespace: f.Spec.Environment.Namespace,
+		UID:       env.Metadata.UID,
+	})
+
+	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%s"}]}]}}}}`,
+		f.Metadata.Name,
+		fv1.LastUpdateTimestamp,
+		time.Now().String())
+
+	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
+	for _, deployment := range dep.Items {
+		_, err := deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
+			k8sTypes.StrategicMergePatchType,
+			[]byte(patch))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
@@ -221,49 +323,6 @@ func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
 		}
 	}
 	return relatedFunctions
-}
-
-func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return deploy.createFunction(fn, false)
-}
-
-// RefreshFuncPods deleted pods related to the function so that new pods are replenished
-func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
-
-	env, err := deploy.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
-	if err != nil {
-		return err
-	}
-
-	funcLabels := deploy.getDeployLabels(f.Metadata, metav1.ObjectMeta{
-		Name:      f.Spec.Environment.Name,
-		Namespace: f.Spec.Environment.Namespace,
-		UID:       env.Metadata.UID,
-	})
-
-	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
-		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
-	})
-
-	if err != nil {
-		return err
-	}
-
-	patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%s"}]}]}}}}`,
-		f.Metadata.Name,
-		fv1.LastUpdateTimestamp,
-		time.Now().String())
-
-	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
-	for _, deployment := range dep.Items {
-		_, err := deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
-			k8sTypes.StrategicMergePatchType,
-			[]byte(patch))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fscache.FuncSvc, error) {
@@ -385,7 +444,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 		Environment:       env,
 		Address:           svcAddress,
 		KubernetesObjects: kubeObjRefs,
-		Executor:          fscache.NEWDEPLOY,
+		Executor:          fv1.ExecutorTypeNewdeploy,
 	}
 
 	_, err = deploy.fsCache.Add(*fsvc)
@@ -393,6 +452,9 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
 		return fsvc, err
 	}
+
+	deploy.fsCache.IncreaseColdStarts(fn.Metadata.Name, string(fn.Metadata.UID))
+
 	return fsvc, nil
 }
 
@@ -602,7 +664,7 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
 		types.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		types.EXECUTOR_TYPE:             fv1.ExecutorTypeNewdeploy,
+		types.EXECUTOR_TYPE:             string(fv1.ExecutorTypeNewdeploy),
 		types.ENVIRONMENT_NAME:          envMeta.Name,
 		types.ENVIRONMENT_NAMESPACE:     envMeta.Namespace,
 		types.ENVIRONMENT_UID:           string(envMeta.UID),
@@ -616,42 +678,6 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 // Current implementation only logs messages, in future it will update function status
 func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message string) {
 	deploy.logger.Error("function status update", zap.Error(err), zap.Any("function", fn), zap.String("message", message))
-}
-
-// IsValid does a get on the service address to ensure it's a valid service, then
-// scale deployment to 1 replica if there are no available replicas for function.
-// Return true if no error occurs, return false otherwise.
-func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
-	service := strings.Split(fsvc.Address, ".")
-	if len(service) == 0 {
-		return false
-	}
-
-	_, err := deploy.kubernetesClient.CoreV1().Services(service[1]).Get(service[0], metav1.GetOptions{})
-	if err != nil {
-		deploy.logger.Error("error validating function service address", zap.String("function", fsvc.Function.Name), zap.Error(err))
-		return false
-	}
-
-	deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-	if deployObj == nil {
-		deploy.logger.Error("deployment obj for function does not exist", zap.String("function", fsvc.Function.Name))
-		return false
-	}
-
-	currentDeploy, err := deploy.kubernetesClient.AppsV1().
-		Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
-	if err != nil {
-		deploy.logger.Error("error validating function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-		return false
-	}
-
-	// return directly when available replicas > 0
-	if currentDeploy.Status.AvailableReplicas > 0 {
-		return true
-	}
-
-	return false
 }
 
 // idleObjectReaper reaps objects after certain idle time
@@ -678,7 +704,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 		}
 
 		for _, fsvc := range funcSvcs {
-			if fsvc.Executor != fscache.NEWDEPLOY {
+			if fsvc.Executor != fv1.ExecutorTypeNewdeploy {
 				continue
 			}
 
@@ -694,7 +720,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 			if err != nil {
 				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
 				// so we ignore the not found error for functions with newdeploy executor type here.
-				if k8sErrs.IsNotFound(err) && fsvc.Executor == fscache.NEWDEPLOY {
+				if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeNewdeploy {
 					continue
 				}
 				deploy.logger.Error("error getting function", zap.Error(err), zap.String("function", fsvc.Function.Name))

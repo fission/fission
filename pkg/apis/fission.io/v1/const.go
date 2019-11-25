@@ -54,8 +54,8 @@ const (
 )
 
 const (
-	ExecutorTypePoolmgr   = "poolmgr"
-	ExecutorTypeNewdeploy = "newdeploy"
+	ExecutorTypePoolmgr   ExecutorType = "poolmgr"
+	ExecutorTypeNewdeploy ExecutorType = "newdeploy"
 )
 
 const (
