@@ -102,9 +102,11 @@ func TestProxyErrorHandler(t *testing.T) {
 
 	fh := &functionHandler{
 		logger: logger,
-		function: &metav1.ObjectMeta{
-			Name:      "dummy",
-			Namespace: "dummy-bar",
+		function: &fv1.Function{
+			Metadata: metav1.ObjectMeta{
+				Name:      "dummy",
+				Namespace: "dummy-bar",
+			},
 		},
 	}
 
