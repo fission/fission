@@ -420,20 +420,23 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				continue
 			}
 
-			deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
-			if err != nil {
-				gpm.logger.Error("error deleting Kubernetes objects for function service",
-					zap.Error(err),
-					zap.Any("service", fsvc))
-			}
-
-			if !deleted {
-				continue
-			}
-
-			for _, kubeobj := range fsvc.KubernetesObjects {
-				reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &kubeobj)
-			}
+			go func() {
+				deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
+				if err != nil {
+					gpm.logger.Error("error deleting Kubernetes objects for function service",
+						zap.Error(err),
+						zap.Any("service", fsvc))
+				}
+				if deleted {
+					for i := range fsvc.KubernetesObjects {
+						gpm.logger.Debug("release idle function resources",
+							zap.String("function", fsvc.Name), zap.String("address", fsvc.Address),
+							zap.String("executor", string(fsvc.Executor)))
+						reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+						time.Sleep(50*time.Millisecond)
+					}
+				}
+			}()
 		}
 	}
 }

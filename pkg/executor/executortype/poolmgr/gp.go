@@ -471,14 +471,17 @@ func (gp *GenericPool) waitForReadyPod() error {
 
 			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
 			pod := podList.Items[0]
-			multierr := &multierror.Error{}
+			errs := &multierror.Error{}
 			for _, cStatus := range pod.Status.ContainerStatuses {
 				if !cStatus.Ready {
-					multierr = multierror.Append(multierr, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
+					errs = multierror.Append(errs, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
 				}
 			}
-			return errors.Wrapf(multierr, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
-				gp.deployment.ObjectMeta.Name, gp.namespace)
+			if errs.ErrorOrNil() != nil {
+				return errors.Wrapf(errs, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
+					gp.deployment.ObjectMeta.Name, gp.namespace)
+			}
+			return nil
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
