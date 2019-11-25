@@ -50,7 +50,7 @@ type (
 	// a distribution of requests across two functions.
 	resolveResult struct {
 		resolveResultType
-		functionMetadataMap        map[string]*metav1.ObjectMeta
+		functionMap                map[string]*fv1.Function
 		functionWtDistributionList []FunctionWeightDistribution
 	}
 
@@ -134,12 +134,13 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 
 	f := obj.(*fv1.Function)
-	functionMetadataMap := make(map[string]*metav1.ObjectMeta, 1)
-	functionMetadataMap[f.Metadata.Name] = &f.Metadata
+	functionMap := map[string]*fv1.Function{
+		f.Metadata.Name: f,
+	}
 
 	rr := resolveResult{
-		resolveResultType:   resolveResultSingleFunction,
-		functionMetadataMap: functionMetadataMap,
+		resolveResultType: resolveResultSingleFunction,
+		functionMap:       functionMap,
 	}
 
 	return &rr, nil
@@ -147,7 +148,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 
 func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string, fr *fv1.FunctionReference) (*resolveResult, error) {
 
-	functionMetadataMap := make(map[string]*metav1.ObjectMeta)
+	functionMap := make(map[string]*fv1.Function)
 	fnWtDistrList := make([]FunctionWeightDistribution, 0)
 	sumPrefix := 0
 
@@ -167,19 +168,18 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 		}
 
 		f := obj.(*fv1.Function)
-		functionMetadataMap[f.Metadata.Name] = &f.Metadata
+		functionMap[f.Metadata.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, FunctionWeightDistribution{
 			name:      functionName,
 			weight:    functionWeight,
 			sumPrefix: sumPrefix,
 		})
-
 	}
 
 	rr := resolveResult{
 		resolveResultType:          resolveResultMultipleFunctions,
-		functionMetadataMap:        functionMetadataMap,
+		functionMap:                functionMap,
 		functionWtDistributionList: fnWtDistrList,
 	}
 

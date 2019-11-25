@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -115,6 +117,7 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 }
 
 // find funcSvc and update its atime
+// TODO: Deprecated tapService
 func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -137,6 +140,45 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// find funcSvc and update its atime
+func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		executor.logger.Error("failed to read tap service request", zap.Error(err))
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
+		return
+	}
+
+	tapSvcReqs := []TapServiceRequest{}
+	err = json.Unmarshal(body, &tapSvcReqs)
+	if err != nil {
+		executor.logger.Error("failed to decode tap service request",
+			zap.Error(err),
+			zap.String("request-payload", string(body)))
+		http.Error(w, "Failed to decode tap service request", http.StatusBadRequest)
+		return
+	}
+
+	errs := &multierror.Error{}
+	for _, req := range tapSvcReqs {
+		svcHost := strings.TrimPrefix(req.ServiceUrl, "http://")
+		err = executor.fsCache.TouchByAddress(svcHost)
+		if err != nil {
+			errs = multierror.Append(errs,
+				errors.Wrapf(err, "'%v' failed to tap function '%v/%v' with service url '%v'",
+					req.FnMetadata.Namespace, req.FnMetadata.Name, req.ServiceUrl, req.FnExecutorType))
+		}
+	}
+
+	if errs.ErrorOrNil() != nil {
+		executor.logger.Error("error tapping function service", zap.Error(errs))
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
@@ -144,7 +186,8 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
-	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST")
+	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
+	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
 	return r
 }

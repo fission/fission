@@ -85,8 +85,8 @@ func TestRouter(t *testing.T) {
 	fnMetaMap[fn.Name] = fn
 
 	rr := resolveResult{
-		resolveResultType:   resolveResultSingleFunction,
-		functionMetadataMap: fnMetaMap,
+		resolveResultType: resolveResultSingleFunction,
+		functionMap:       fnMetaMap,
 	}
 	frr.refCache.Set(nfr, rr)
 

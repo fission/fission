@@ -26,20 +26,21 @@ import (
 	"strings"
 	"time"
 
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/executor"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	ferror "github.com/fission/fission/pkg/error"
 )
 
 type Client struct {
 	logger      *zap.Logger
 	executorUrl string
-	tappedByUrl map[string]bool
-	requestChan chan string
+	tappedByUrl map[string]executor.TapServiceRequest
+	requestChan chan executor.TapServiceRequest
 	httpClient  *http.Client
 }
 
@@ -47,8 +48,8 @@ func MakeClient(logger *zap.Logger, executorUrl string) *Client {
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorUrl: strings.TrimSuffix(executorUrl, "/"),
-		tappedByUrl: make(map[string]bool),
-		requestChan: make(chan string),
+		tappedByUrl: make(map[string]executor.TapServiceRequest),
+		requestChan: make(chan executor.TapServiceRequest),
 		httpClient: &http.Client{
 			Transport: &ochttp.Transport{},
 		},
@@ -87,40 +88,64 @@ func (c *Client) service() {
 	ticker := time.NewTicker(time.Second * 5)
 	for {
 		select {
-		case serviceUrl := <-c.requestChan:
-			c.tappedByUrl[serviceUrl] = true
+		case svcReq := <-c.requestChan:
+			c.tappedByUrl[svcReq.ServiceUrl] = svcReq
 		case <-ticker.C:
-			urls := c.tappedByUrl
-			c.tappedByUrl = make(map[string]bool)
-			if len(urls) > 0 {
-				go func() {
-					for u := range urls {
-						err := c._tapService(u)
-						if err != nil {
-							c.logger.Error("error tapping function service address", zap.Error(err), zap.String("address", u))
-						}
-					}
-					c.logger.Debug("tapped services in batch", zap.Int("service_count", len(urls)))
-				}()
+			if len(c.tappedByUrl) == 0 {
+				continue
 			}
+
+			urls := c.tappedByUrl
+			c.tappedByUrl = make(map[string]executor.TapServiceRequest)
+
+			go func() {
+				svcReqs := []executor.TapServiceRequest{}
+				for _, req := range urls {
+					svcReqs = append(svcReqs, req)
+				}
+				c.logger.Debug("tapped services in batch", zap.Int("service_count", len(urls)))
+
+				err := c._tapService(svcReqs)
+				if err != nil {
+					c.logger.Error("error tapping function service address", zap.Error(err))
+				}
+			}()
 		}
 	}
 }
 
-func (c *Client) TapService(serviceUrl *url.URL) {
-	c.requestChan <- serviceUrl.String()
+func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceUrl *url.URL) {
+	c.requestChan <- executor.TapServiceRequest{
+		FnMetadata: metav1.ObjectMeta{
+			Name:            fnMeta.Name,
+			Namespace:       fnMeta.Namespace,
+			ResourceVersion: fnMeta.ResourceVersion,
+			UID:             fnMeta.UID,
+		},
+		FnExecutorType: executorType,
+		// service url is for executor to know which
+		// pod/service is currently used to serve user function.
+		ServiceUrl: serviceUrl.String(),
+	}
 }
 
-func (c *Client) _tapService(serviceUrlStr string) error {
-	executorUrl := c.executorUrl + "/v2/tapService"
+func (c *Client) _tapService(tapSvcReqs []executor.TapServiceRequest) error {
+	executorUrl := c.executorUrl + "/v2/tapServices"
 
-	resp, err := http.Post(executorUrl, "application/octet-stream", bytes.NewReader([]byte(serviceUrlStr)))
+	body, err := json.Marshal(tapSvcReqs)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(executorUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != 200 {
 		return ferror.MakeErrorFromHTTP(resp)
 	}
+
 	return nil
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -61,6 +62,12 @@ type (
 	createFuncServiceResponse struct {
 		funcSvc *fscache.FuncSvc
 		err     error
+	}
+
+	TapServiceRequest struct {
+		FnMetadata     metav1.ObjectMeta
+		FnExecutorType fv1.ExecutorType
+		ServiceUrl     string
 	}
 )
 

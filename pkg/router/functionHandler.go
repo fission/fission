@@ -54,9 +54,9 @@ type (
 		logger                   *zap.Logger
 		fmap                     *functionServiceMap
 		executor                 *executorClient.Client
-		function                 *metav1.ObjectMeta
+		function                 *fv1.Function
 		httpTrigger              *fv1.HTTPTrigger
-		functionMetadataMap      map[string]*metav1.ObjectMeta
+		functionMap              map[string]*fv1.Function
 		fnWeightDistributionList []FunctionWeightDistribution
 		tsRoundTripperParams     *tsRoundTripperParams
 		isDebugEnv               bool
@@ -150,7 +150,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// Set forwarded host header if not exists
 	roundTripper.addForwardedHostHeader(req)
 
-	fnMeta := roundTripper.funcHandler.function
+	fnMeta := &roundTripper.funcHandler.function.Metadata
 
 	// Metrics stuff
 	startTime := time.Now()
@@ -239,7 +239,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 			// tapService before invoking roundTrip for the serviceUrl
 			if serviceUrlFromCache {
-				go roundTripper.funcHandler.tapService(serviceUrl)
+				go roundTripper.funcHandler.tapService(roundTripper.funcHandler.function, serviceUrl)
 			}
 
 			// modify the request to reflect the service url
@@ -388,25 +388,25 @@ func (roundTripper *RetryingRoundTripper) closeContext() {
 	}
 }
 
-func (fh *functionHandler) tapService(serviceUrl *url.URL) {
+func (fh *functionHandler) tapService(fn *fv1.Function, serviceUrl *url.URL) {
 	if fh.executor == nil {
 		return
 	}
-	fh.executor.TapService(serviceUrl)
+	fh.executor.TapService(fn.Metadata, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
 	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == types.FunctionReferenceTypeFunctionWeights {
 		// canary deployment. need to determine the function to send request to now
-		fnMetadata := getCanaryBackend(fh.functionMetadataMap, fh.fnWeightDistributionList)
-		if fnMetadata == nil {
+		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
+		if fn == nil {
 			fh.logger.Error("could not get canary backend",
-				zap.Any("metadataMap", fh.functionMetadataMap),
+				zap.Any("fnMap", fh.functionMap),
 				zap.Any("distributionList", fh.fnWeightDistributionList))
 			// TODO : write error to responseWrite and return response
 			return
 		}
-		fh.function = fnMetadata
+		fh.function = fn
 		fh.logger.Debug("chosen function backend's metadata", zap.Any("metadata", fh.function))
 	}
 
@@ -414,7 +414,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	setPathInfoToHeader(request)
 
 	// system params
-	setFunctionMetadataToHeader(fh.function, request)
+	setFunctionMetadataToHeader(&fh.function.Metadata, request)
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
@@ -423,7 +423,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	fnTimeout := fh.functionTimeoutMap[fh.function.GetUID()]
+	fnTimeout := fh.functionTimeoutMap[fh.function.Metadata.GetUID()]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
@@ -437,7 +437,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	proxy := &httputil.ReverseProxy{
 		Director:     director,
 		Transport:    rrt,
-		ErrorHandler: getProxyErrorHandler(fh.logger, fh.function),
+		ErrorHandler: getProxyErrorHandler(fh.logger, &fh.function.Metadata),
 	}
 
 	defer func() {
@@ -483,12 +483,10 @@ func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string
 }
 
 // picks a function to route to based on a random number generated
-func getCanaryBackend(fnMetadatamap map[string]*metav1.ObjectMeta, fnWtDistributionList []FunctionWeightDistribution) *metav1.ObjectMeta {
+func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []FunctionWeightDistribution) *fv1.Function {
 	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)-1].sumPrefix + 1)
-
 	fnName := findCeil(randomNumber, fnWtDistributionList)
-
-	return fnMetadatamap[fnName]
+	return fnMap[fnName]
 }
 
 // getProxyErrorHandler returns a reverse proxy error handler
@@ -574,28 +572,30 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	fnMeta := &fh.function.Metadata
+
 	// Use throttle to limit the total amount of requests sent
 	// to the executor to prevent it from overloaded.
 	recordObj, err := fh.svcAddrUpdateThrottler.RunOnce(
-		crd.CacheKey(fh.function),
+		crd.CacheKey(fnMeta),
 		func(firstToTheLock bool) (interface{}, error) {
 			var u *url.URL
 			// Get service entry from executor and update cache if its the first goroutine
 			if firstToTheLock { // first to the service url
 				fh.logger.Debug("calling getServiceForFunction",
-					zap.String("function_name", fh.function.Name))
+					zap.String("function_name", fnMeta.Name))
 				u, err = fh.getServiceEntryFromExecutor(ctx)
 				if err != nil {
 					fh.logger.Error("error getting service url from executor",
 						zap.Error(err),
-						zap.String("function_name", fh.function.Name))
+						zap.String("function_name", fnMeta.Name))
 					return nil, err
 				}
 				// add the address in router's cache
 				fh.logger.Info("assigning service url for function",
 					zap.String("url", u.String()),
-					zap.String("function_name", fh.function.Name))
-				fh.fmap.assign(fh.function, u)
+					zap.String("function_name", fnMeta.Name))
+				fh.fmap.assign(fnMeta, u)
 			} else {
 				u, err = fh.getServiceEntryFromCache()
 				if err != nil {
@@ -613,9 +613,9 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 		e := "error updating service address entry for function"
 		fh.logger.Error(e,
 			zap.Error(err),
-			zap.String("function_name", fh.function.Name),
-			zap.String("function_namespace", fh.function.Namespace))
-		return nil, false, errors.Wrapf(err, "%s %s_%s", e, fh.function.Name, fh.function.Namespace)
+			zap.String("function_name", fnMeta.Name),
+			zap.String("function_namespace", fnMeta.Namespace))
+		return nil, false, errors.Wrapf(err, "%s %s_%s", e, fnMeta.Name, fnMeta.Namespace)
 	}
 
 	record, ok := recordObj.(svcEntryRecord)
@@ -629,7 +629,7 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 // getServiceEntryFromCache returns service url entry returns from cache
 func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
 	// cache lookup to get serviceUrl
-	serviceUrl, err = fh.fmap.lookup(fh.function)
+	serviceUrl, err = fh.fmap.lookup(&fh.function.Metadata)
 	if err != nil {
 		var errMsg string
 
@@ -642,7 +642,7 @@ func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err 
 			if e.Code == ferror.ErrorNotFound {
 				return nil, nil
 			}
-			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Name, err)
+			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Metadata.Name, err)
 		}
 		return nil, ferror.MakeError(http.StatusInternalServerError, errMsg)
 	}
@@ -652,7 +652,7 @@ func (fh *functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err 
 // getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh *functionHandler) getServiceEntryFromExecutor(ctx context.Context) (*url.URL, error) {
 	// send a request to executor to specialize a new pod
-	service, err := fh.executor.GetServiceForFunction(ctx, fh.function)
+	service, err := fh.executor.GetServiceForFunction(ctx, &fh.function.Metadata)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		fh.logger.Error("error from GetServiceForFunction",
