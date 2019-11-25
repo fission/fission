@@ -99,7 +99,18 @@ func TestFunctionProxying(t *testing.T) {
 func TestProxyErrorHandler(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	assert.Nil(t, err)
-	errHandler := getProxyErrorHandler(logger, nil)
+
+	fh := &functionHandler{
+		logger: logger,
+		function: &fv1.Function{
+			Metadata: metav1.ObjectMeta{
+				Name:      "dummy",
+				Namespace: "dummy-bar",
+			},
+		},
+	}
+
+	errHandler := fh.getProxyErrorHandler(time.Now(), &RetryingRoundTripper{})
 
 	req, err := http.NewRequest("GET", "http://foobar.com", nil)
 	assert.Nil(t, err)

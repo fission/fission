@@ -26,13 +26,14 @@ import (
 	"strings"
 	"time"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	ferror "github.com/fission/fission/pkg/error"
 )
 
 type (
@@ -55,7 +56,7 @@ func MakeClient(logger *zap.Logger, executorUrl string) *Client {
 		logger:      logger.Named("executor_client"),
 		executorUrl: strings.TrimSuffix(executorUrl, "/"),
 		tappedByUrl: make(map[string]TapServiceRequest),
-		requestChan: make(chan TapServiceRequest),
+		requestChan: make(chan TapServiceRequest, 100),
 		httpClient: &http.Client{
 			Transport: &ochttp.Transport{},
 		},
