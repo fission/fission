@@ -362,33 +362,45 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 }
 
 func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
-	var fnExecutor, newFnExecutor fv1.ExecutorType
+	var es *fv1.ExecutionStrategy
+
+	if existingInvokeStrategy == nil {
+		es, err = getExecutionStrategy(input)
+	} else {
+		es, err = updateExecutionStrategy(input, &existingInvokeStrategy.ExecutionStrategy)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &fv1.InvokeStrategy{
+		ExecutionStrategy: *es,
+		StrategyType:      fv1.StrategyTypeExecution,
+	}, nil
+}
+
+func getExecutionStrategy(input cli.Input) (strategy *fv1.ExecutionStrategy, err error) {
+	var fnExecutor fv1.ExecutorType
 
 	switch input.String(flagkey.FnExecutorType) {
 	case "":
 		fallthrough
 	case string(fv1.ExecutorTypePoolmgr):
-		newFnExecutor = fv1.ExecutorTypePoolmgr
+		fnExecutor = fv1.ExecutorTypePoolmgr
 	case string(fv1.ExecutorTypeNewdeploy):
-		newFnExecutor = fv1.ExecutorTypeNewdeploy
+		fnExecutor = fv1.ExecutorTypeNewdeploy
 	default:
 		return nil, errors.Errorf("executor type must be one of '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy)
 	}
 
-	if existingInvokeStrategy != nil {
-		fnExecutor = existingInvokeStrategy.ExecutionStrategy.ExecutorType
+	specializationTimeout := fv1.DefaultSpecializationTimeOut
 
-		// override the executor type if user specified a new executor type
-		if input.IsSet(flagkey.FnExecutorType) {
-			fnExecutor = newFnExecutor
+	if input.IsSet(flagkey.FnSpecializationTimeout) {
+		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
+		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		}
-	} else {
-		fnExecutor = newFnExecutor
-	}
-
-	specializationTimeout := input.Int(flagkey.FnSpecializationTimeout)
-	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-		return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 	}
 
 	if fnExecutor == fv1.ExecutorTypePoolmgr {
@@ -399,27 +411,13 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		if input.IsSet(flagkey.RuntimeMincpu) || input.IsSet(flagkey.RuntimeMaxcpu) || input.IsSet(flagkey.RuntimeMinmemory) || input.IsSet(flagkey.RuntimeMaxmemory) {
 			console.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
 		}
-		strategy = &fv1.InvokeStrategy{
-			StrategyType: fv1.StrategyTypeExecution,
-			ExecutionStrategy: fv1.ExecutionStrategy{
+
+		strategy = &fv1.ExecutionStrategy{
 				ExecutorType:          fv1.ExecutorTypePoolmgr,
 				SpecializationTimeout: specializationTimeout,
-			},
 		}
 	} else {
-		// set default value
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
-		minScale := DEFAULT_MIN_SCALE
-		maxScale := minScale
-		specializationTimeout := fv1.DefaultSpecializationTimeOut
-
-		if existingInvokeStrategy != nil && existingInvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-			minScale = existingInvokeStrategy.ExecutionStrategy.MinScale
-			maxScale = existingInvokeStrategy.ExecutionStrategy.MaxScale
-			targetCPU = existingInvokeStrategy.ExecutionStrategy.TargetCPUPercent
-			specializationTimeout = existingInvokeStrategy.ExecutionStrategy.SpecializationTimeout
-		}
-
 		if input.IsSet(flagkey.RuntimeTargetcpu) {
 			targetCPU, err = getTargetCPU(input)
 			if err != nil {
@@ -427,10 +425,12 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 			}
 		}
 
+		minScale := DEFAULT_MIN_SCALE
 		if input.IsSet(flagkey.ReplicasMinscale) {
 			minScale = input.Int(flagkey.ReplicasMinscale)
 		}
 
+		maxScale := minScale
 		if input.IsSet(flagkey.ReplicasMaxscale) {
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
@@ -444,15 +444,109 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 
 		// Right now a simple single case strategy implementation
 		// This will potentially get more sophisticated once we have more strategies in place
-		strategy = &fv1.InvokeStrategy{
-			StrategyType: fv1.StrategyTypeExecution,
-			ExecutionStrategy: fv1.ExecutionStrategy{
+		strategy = &fv1.ExecutionStrategy {
 				ExecutorType:          fnExecutor,
 				MinScale:              minScale,
 				MaxScale:              maxScale,
 				TargetCPUPercent:      targetCPU,
 				SpecializationTimeout: specializationTimeout,
-			},
+		}
+	}
+
+	return strategy, nil
+}
+
+func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.ExecutionStrategy) (strategy *fv1.ExecutionStrategy, err error) {
+	fnExecutor := existingExecutionStrategy.ExecutorType
+	oldExecutor := existingExecutionStrategy.ExecutorType
+
+	if input.IsSet(flagkey.FnExecutorType) {
+		switch input.String(flagkey.FnExecutorType) {
+		case "":
+			fallthrough
+		case string(fv1.ExecutorTypePoolmgr):
+			fnExecutor = fv1.ExecutorTypePoolmgr
+		case string(fv1.ExecutorTypeNewdeploy):
+			fnExecutor = fv1.ExecutorTypeNewdeploy
+		default:
+			return nil, errors.Errorf("executor type must be one of '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy)
+		}
+	}
+
+	specializationTimeout := existingExecutionStrategy.SpecializationTimeout
+
+	if input.IsSet(flagkey.FnSpecializationTimeout) {
+		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
+		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
+		}
+	} else {
+		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+			specializationTimeout = fv1.DefaultSpecializationTimeOut
+		}
+	}
+
+	if fnExecutor == fv1.ExecutorTypePoolmgr {
+		if input.IsSet(flagkey.RuntimeTargetcpu) || input.IsSet(flagkey.ReplicasMinscale) || input.IsSet(flagkey.ReplicasMaxscale) {
+			return nil, errors.New("to set target CPU or min/max scale for function, please specify \"--executortype newdeploy\"")
+		}
+
+		if input.IsSet(flagkey.RuntimeMincpu) || input.IsSet(flagkey.RuntimeMaxcpu) || input.IsSet(flagkey.RuntimeMinmemory) || input.IsSet(flagkey.RuntimeMaxmemory) {
+			console.Warn("To limit CPU/Memory for function with executor type \"poolmgr\", please specify resources limits when creating environment")
+		}
+		strategy = &fv1.ExecutionStrategy{
+			ExecutorType:          fv1.ExecutorTypePoolmgr,
+			SpecializationTimeout: specializationTimeout,
+		}
+	} else {
+		targetCPU := existingExecutionStrategy.TargetCPUPercent
+		minScale := existingExecutionStrategy.MinScale
+		maxScale := existingExecutionStrategy.MaxScale
+
+		if fnExecutor != oldExecutor { // from poolmanager to newdeploy
+			targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
+			minScale = DEFAULT_MIN_SCALE
+			maxScale = minScale
+		}
+
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err = getTargetCPU(input)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if targetCPU <= 0 || targetCPU > 100 {
+				targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
+			}
+		}
+
+		if input.IsSet(flagkey.ReplicasMinscale) {
+			minScale = input.Int(flagkey.ReplicasMinscale)
+		}
+
+		if input.IsSet(flagkey.ReplicasMaxscale) {
+			maxScale = input.Int(flagkey.ReplicasMaxscale)
+			if maxScale <= 0 {
+				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
+			}
+		} else {
+			if maxScale <= 0 {
+				maxScale = 1
+			}
+		}
+
+		if minScale > maxScale {
+			return nil, fmt.Errorf("minscale (%v) can not be greater than maxscale (%v)", minScale, maxScale)
+		}
+
+		// Right now a simple single case strategy implementation
+		// This will potentially get more sophisticated once we have more strategies in place
+		strategy = &fv1.ExecutionStrategy{
+			ExecutorType:          fnExecutor,
+			MinScale:              minScale,
+			MaxScale:              maxScale,
+			TargetCPUPercent:      targetCPU,
+			SpecializationTimeout: specializationTimeout,
 		}
 	}
 
