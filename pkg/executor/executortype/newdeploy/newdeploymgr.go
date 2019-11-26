@@ -138,6 +138,9 @@ func (deploy *NewDeploy) GetTypeName() fv1.ExecutorType {
 }
 
 func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	// TODO: client-go doesn't support to pass in context.
+	//  Once it supports context, we should change the signature of method.
+	// https://github.com/kubernetes/kubernetes/issues/46503
 	return deploy.createFunction(fn, false)
 }
 
