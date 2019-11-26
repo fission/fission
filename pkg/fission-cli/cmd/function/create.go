@@ -413,8 +413,8 @@ func getExecutionStrategy(input cli.Input) (strategy *fv1.ExecutionStrategy, err
 		}
 
 		strategy = &fv1.ExecutionStrategy{
-				ExecutorType:          fv1.ExecutorTypePoolmgr,
-				SpecializationTimeout: specializationTimeout,
+			ExecutorType:          fv1.ExecutorTypePoolmgr,
+			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
 		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
@@ -444,12 +444,12 @@ func getExecutionStrategy(input cli.Input) (strategy *fv1.ExecutionStrategy, err
 
 		// Right now a simple single case strategy implementation
 		// This will potentially get more sophisticated once we have more strategies in place
-		strategy = &fv1.ExecutionStrategy {
-				ExecutorType:          fnExecutor,
-				MinScale:              minScale,
-				MaxScale:              maxScale,
-				TargetCPUPercent:      targetCPU,
-				SpecializationTimeout: specializationTimeout,
+		strategy = &fv1.ExecutionStrategy{
+			ExecutorType:          fnExecutor,
+			MinScale:              minScale,
+			MaxScale:              maxScale,
+			TargetCPUPercent:      targetCPU,
+			SpecializationTimeout: specializationTimeout,
 		}
 	}
 

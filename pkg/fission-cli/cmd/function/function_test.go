@@ -36,33 +36,33 @@ func TestGetInvokeStrategy(t *testing.T) {
 		expectError            bool
 	}{
 		{
-			name: "use default executor poolmgr",
+			name:                   "use default executor poolmgr",
 			testArgs:               map[string]interface{}{},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypePoolmgr,
+					ExecutorType:          fv1.ExecutorTypePoolmgr,
 					SpecializationTimeout: 120,
 				},
 			},
 			expectError: false,
 		},
 		{
-			name: "executor type set to poolmgr",
+			name:                   "executor type set to poolmgr",
 			testArgs:               map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypePoolmgr,
+					ExecutorType:          fv1.ExecutorTypePoolmgr,
 					SpecializationTimeout: 120,
 				},
 			},
 			expectError: false,
 		},
 		{
-			name: "executor type set to newdeploy",
+			name:                   "executor type set to newdeploy",
 			testArgs:               map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -78,7 +78,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "executor type change from poolmgr to newdeploy",
+			name:     "executor type change from poolmgr to newdeploy",
 			testArgs: map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -99,7 +99,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "executor type change from newdeploy to poolmgr",
+			name:     "executor type change from newdeploy to poolmgr",
 			testArgs: map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -114,7 +114,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypePoolmgr,
+					ExecutorType:          fv1.ExecutorTypePoolmgr,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -168,7 +168,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
-			expectError:            false,
+			expectError: false,
 		},
 		{
 			name: "minscale not specified",
@@ -216,7 +216,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 				},
 			},
 			expectedResult: nil,
-			expectError: true,
+			expectError:    true,
 		},
 		{
 			name: "maxscale set to 9 when existing is 5",
