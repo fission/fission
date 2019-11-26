@@ -402,7 +402,7 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		strategy = &fv1.InvokeStrategy{
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
-				ExecutorType: fv1.ExecutorTypePoolmgr,
+				ExecutorType:          fv1.ExecutorTypePoolmgr,
 				SpecializationTimeout: specializationTimeout,
 			},
 		}

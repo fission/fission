@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
