@@ -111,8 +111,17 @@ func (executor *Executor) serveCreateFuncServices() {
 				// still can serve other subsequent requests.
 
 				buffer := 10 // add some buffer time for specialization
+				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
+
+				// set minimum specialization timeout to avoid illegal input and
+				// compatibility problem when applying old spec file that doesn't
+				// have specialization timeout field.
+				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+					specializationTimeout = fv1.DefaultSpecializationTimeOut
+				}
+
 				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
-					time.Duration(req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout+buffer)*time.Second)
+					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)

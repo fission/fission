@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
@@ -91,10 +91,18 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 				if err != nil {
 					logger.Error("error reading response body", zap.Error(err))
 				}
-				resp.Body.Close()
+				defer resp.Body.Close()
 				return body, err
 			}
 			err = ferror.MakeErrorFromHTTP(resp)
+		}
+
+		// skip retry and return directly due to context deadline exceeded
+		if err == context.DeadlineExceeded {
+			msg := "error specializing function pod, either increase the specialization timeout for function or check function pod log would help."
+			err = errors.Wrap(err, msg)
+			logger.Error(msg, zap.Error(err), zap.String("url", url))
+			return nil, err
 		}
 
 		if i < maxRetries-1 {

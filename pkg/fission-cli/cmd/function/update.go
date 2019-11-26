@@ -87,8 +87,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
-	specializationTimeout := input.Int(flagkey.FnSpecializationTimeout)
-
 	var secrets []fv1.SecretReference
 	var configMaps []fv1.ConfigMapReference
 
@@ -168,18 +166,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 	function.Spec.InvokeStrategy = *strategy
-
-	if input.IsSet(flagkey.FnSpecializationTimeout) {
-		if strategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
-			return errors.Errorf("--%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
-		}
-
-		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return errors.Errorf("--%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
-		} else {
-			function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout = specializationTimeout
-		}
-	}
 
 	resReqs, err := util.GetResourceReqs(input, &function.Spec.Resources)
 	if err != nil {
