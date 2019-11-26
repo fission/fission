@@ -71,6 +71,9 @@ func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 }
 
 func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrigger, kubeClient *kubernetes.Clientset) {
+	if !oldT.Spec.CreateIngress && !newT.Spec.CreateIngress {
+		return
+	}
 
 	if !oldT.Spec.CreateIngress && newT.Spec.CreateIngress {
 		createIngress(logger, newT, kubeClient)
