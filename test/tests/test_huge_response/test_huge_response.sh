@@ -6,14 +6,14 @@ source $(dirname $0)/../../utils.sh
 TEST_ID=$(generate_test_id)
 echo "TEST_ID = $TEST_ID"
 
-tmp_dir="/tmp/test-$TEST_ID"
-mkdir -p $tmp_dir
-
 ROOT=$(dirname $0)/../../..
+
+pushd $ROOT/test/tests/test_huge_response
 
 cleanup() {
     clean_resource_by_id $TEST_ID
-    rm -rf $tmp_dir
+    rm -rf response.json
+    popd
 }
 
 retryPost() {
@@ -35,8 +35,6 @@ retryPost() {
         fi
     done
     set -e
-
-    rm -rf response.json
 }
 export -f retryPost
 
