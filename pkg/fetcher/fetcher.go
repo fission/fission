@@ -198,7 +198,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 	err = fetcher.SpecializePod(r.Context(), req.FetchReq, req.LoadReq)
 	if err != nil {
 		fetcher.logger.Error("error specializing pod", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
