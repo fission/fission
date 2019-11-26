@@ -83,7 +83,7 @@ func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClien
 				}
 				funcs, err := getConfigmapRelatedFuncs(logger, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
-					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newCm.ObjectMeta.Name), zap.String("secret_namespace", newCm.ObjectMeta.Namespace))
+					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				}
 				recyclePods(logger, funcs, types)
 			}

@@ -18,13 +18,16 @@ package poolmgr
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
+	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -40,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 var _ executortype.ExecutorType = &GenericPoolManager{}
@@ -110,6 +114,7 @@ func MakeGenericPoolManager(
 		idlePodReapTime:  2 * time.Minute,
 		fetcherConfig:    fetcherConfig,
 	}
+
 	go gpm.service()
 	go gpm.eagerPoolCreator()
 
@@ -238,6 +243,140 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 	return nil
 }
 
+func (gpm *GenericPoolManager) AdoptOrphanResources() {
+	envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		gpm.logger.Error("error getting environment list", zap.Error(err))
+		return
+	}
+
+	envMap := make(map[string]fv1.Environment, len(envs.Items))
+	envWG := &sync.WaitGroup{}
+
+	for i := range envs.Items {
+		env := envs.Items[i]
+
+		if gpm.getEnvPoolsize(&env) > 0 {
+			envWG.Add(1)
+			go func() {
+				defer envWG.Done()
+				_, err := gpm.getPool(&env)
+				if err != nil {
+					gpm.logger.Error("adopt pool failed", zap.Error(err))
+				}
+			}()
+		}
+
+		// create environment map for later use
+		key := fmt.Sprintf("%v/%v", env.Metadata.Namespace, env.Metadata.Name)
+		envMap[key] = env
+	}
+
+	l := map[string]string{
+		types.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
+	}
+
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(l).AsSelector().String(),
+	})
+
+	if err != nil {
+		gpm.logger.Error("error getting pod list", zap.Error(err))
+		return
+	}
+
+	podWG := &sync.WaitGroup{}
+
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if !utils.IsReadyPod(pod) {
+			continue
+		}
+
+		podWG.Add(1)
+		go func() {
+			defer podWG.Done()
+
+			// avoid too many requests arrive Kubernetes API server at the same time.
+			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
+
+			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, gpm.instanceId)
+			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+			if err != nil {
+				// just log the error since it won't affect the function serving
+				gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
+					zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
+				return
+			}
+
+			// for unspecialized pod, we only update its annotations
+			if pod.Labels["managed"] == "true" {
+				return
+			}
+
+			fnName, ok1 := pod.Labels[types.FUNCTION_NAME]
+			fnNS, ok2 := pod.Labels[types.FUNCTION_NAMESPACE]
+			fnUID, ok3 := pod.Labels[types.FUNCTION_UID]
+			fnRV, ok4 := pod.Labels[types.FUNCTION_RESOURCE_VERSION]
+			envName, ok5 := pod.Labels[types.ENVIRONMENT_NAME]
+			envNS, ok6 := pod.Labels[types.ENVIRONMENT_NAMESPACE]
+			svcHost, ok7 := pod.Annotations[types.ANNOTATION_SVC_HOST]
+			env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
+
+			if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
+				gpm.logger.Warn("failed to adopt pod for function due to lack necessary information",
+					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
+					zap.String("env", env.Metadata.Name))
+				return
+			}
+
+			fsvc := fscache.FuncSvc{
+				Name: pod.Name,
+				Function: &metav1.ObjectMeta{
+					Name:            fnName,
+					Namespace:       fnNS,
+					UID:             k8sTypes.UID(fnUID),
+					ResourceVersion: fnRV,
+				},
+				Environment: &env,
+				Address:     svcHost,
+				KubernetesObjects: []apiv1.ObjectReference{
+					{
+						Kind:            "pod",
+						Name:            pod.Name,
+						APIVersion:      pod.TypeMeta.APIVersion,
+						Namespace:       pod.ObjectMeta.Namespace,
+						ResourceVersion: pod.ObjectMeta.ResourceVersion,
+						UID:             pod.ObjectMeta.UID,
+					},
+				},
+				Executor: fv1.ExecutorTypePoolmgr,
+				Ctime:    time.Now(),
+				Atime:    time.Now(),
+			}
+
+			// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pod.
+			// This is for the case that there are multiple function pods for the same function due to unknown reason.
+			_, err := gpm.fsCache.GetByFunction(fsvc.Function)
+			if err == nil {
+				return
+			}
+
+			_, err = gpm.fsCache.Add(fsvc)
+			if err != nil {
+				gpm.logger.Warn("failed to adopt pod for function", zap.Error(err), zap.String("pod", pod.Name))
+				return
+			}
+
+			gpm.logger.Info("adopt function pod",
+				zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
+		}()
+	}
+
+	envWG.Wait()
+	podWG.Wait()
+}
+
 func (gpm *GenericPoolManager) service() {
 	for {
 		req := <-gpm.requestChannel
@@ -353,19 +492,27 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		// creating pools for envs that are actually used by functions.  Also we might want
 		// to keep these eagerly created pools smaller than the ones created when there are
 		// actual function calls.
+
+		wg := &sync.WaitGroup{}
+
 		for i := range envs.Items {
 			env := envs.Items[i]
 			// Create pool only if poolsize greater than zero
 			if gpm.getEnvPoolsize(&env) > 0 {
-				_, err := gpm.getPool(&envs.Items[i])
-				if err != nil {
-					gpm.logger.Error("eager-create pool failed", zap.Error(err))
-				}
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, err := gpm.getPool(&env)
+					if err != nil {
+						gpm.logger.Error("eager-create pool failed", zap.Error(err))
+					}
+				}()
 			}
 		}
 
 		// Clean up pools whose env was deleted
 		gpm.cleanupPools(envs.Items)
+		wg.Wait()
 		time.Sleep(pollSleep)
 	}
 }

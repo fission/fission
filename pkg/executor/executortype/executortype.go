@@ -50,4 +50,7 @@ type ExecutorType interface {
 
 	// RefreshFuncPods refreshes function pods if the secrets/configmaps pods reference to get updated.
 	RefreshFuncPods(*zap.Logger, fv1.Function) error
+
+	// AdoptOrphanResources adopts existing resources created by the deleted executor.
+	AdoptOrphanResources()
 }
