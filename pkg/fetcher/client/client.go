@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/net/context/ctxhttp"
 

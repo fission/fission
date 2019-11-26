@@ -386,8 +386,9 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		fnExecutor = newFnExecutor
 	}
 
-	if input.IsSet(flagkey.FnSpecializationTimeout) && fnExecutor != fv1.ExecutorTypeNewdeploy {
-		return nil, errors.Errorf("%v flag is only applicable for newdeploy type of executor", flagkey.FnSpecializationTimeout)
+	specializationTimeout := input.Int(flagkey.FnSpecializationTimeout)
+	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+		return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 	}
 
 	if fnExecutor == fv1.ExecutorTypePoolmgr {
@@ -402,6 +403,7 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 			StrategyType: fv1.StrategyTypeExecution,
 			ExecutionStrategy: fv1.ExecutionStrategy{
 				ExecutorType: fv1.ExecutorTypePoolmgr,
+				SpecializationTimeout: specializationTimeout,
 			},
 		}
 	} else {
@@ -433,13 +435,6 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
 				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
-			}
-		}
-
-		if input.IsSet(flagkey.FnSpecializationTimeout) {
-			specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
-			if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-				return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 			}
 		}
 
