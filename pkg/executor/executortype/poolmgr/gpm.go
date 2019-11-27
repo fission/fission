@@ -317,7 +317,7 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 			fnName, ok1 := pod.Labels[types.FUNCTION_NAME]
 			fnNS, ok2 := pod.Labels[types.FUNCTION_NAMESPACE]
 			fnUID, ok3 := pod.Labels[types.FUNCTION_UID]
-			fnRV, ok4 := pod.Labels[types.FUNCTION_RESOURCE_VERSION]
+			fnRV, ok4 := pod.Annotations[types.FUNCTION_RESOURCE_VERSION]
 			envName, ok5 := pod.Labels[types.ENVIRONMENT_NAME]
 			envNS, ok6 := pod.Labels[types.ENVIRONMENT_NAMESPACE]
 			svcHost, ok7 := pod.Annotations[types.ANNOTATION_SVC_HOST]

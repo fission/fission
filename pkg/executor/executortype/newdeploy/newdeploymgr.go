@@ -456,7 +456,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 
 	objName := deploy.getObjName(fn)
 	deployLabels := deploy.getDeployLabels(fn.Metadata, env.Metadata)
-	deployAnnotations := deploy.getDeployAnnotations()
+	deployAnnotations := deploy.getDeployAnnotations(fn.Metadata)
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
@@ -686,7 +686,7 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 		ns = fn.Metadata.Namespace
 	}
 
-	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, ns, deployLabels, deploy.getDeployAnnotations())
+	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err
@@ -745,20 +745,20 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
-		types.EXECUTOR_TYPE:             string(fv1.ExecutorTypeNewdeploy),
-		types.ENVIRONMENT_NAME:          envMeta.Name,
-		types.ENVIRONMENT_NAMESPACE:     envMeta.Namespace,
-		types.ENVIRONMENT_UID:           string(envMeta.UID),
-		types.FUNCTION_NAME:             fnMeta.Name,
-		types.FUNCTION_NAMESPACE:        fnMeta.Namespace,
-		types.FUNCTION_UID:              string(fnMeta.UID),
-		types.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
+		types.EXECUTOR_TYPE:         string(fv1.ExecutorTypeNewdeploy),
+		types.ENVIRONMENT_NAME:      envMeta.Name,
+		types.ENVIRONMENT_NAMESPACE: envMeta.Namespace,
+		types.ENVIRONMENT_UID:       string(envMeta.UID),
+		types.FUNCTION_NAME:         fnMeta.Name,
+		types.FUNCTION_NAMESPACE:    fnMeta.Namespace,
+		types.FUNCTION_UID:          string(fnMeta.UID),
 	}
 }
 
-func (deploy *NewDeploy) getDeployAnnotations() map[string]string {
+func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
 		types.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
+		types.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
 	}
 }
 

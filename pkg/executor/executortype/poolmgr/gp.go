@@ -66,10 +66,9 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		fissionClient          *crd.FissionClient
 		instanceId             string // poolmgr instance id
-		//labelsForPool          map[string]string
-		requestChannel chan *choosePodRequest
-		fetcherConfig  *fetcherConfig.Config
-		stopCh         context.CancelFunc
+		requestChannel         chan *choosePodRequest
+		fetcherConfig          *fetcherConfig.Config
+		stopCh                 context.CancelFunc
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -264,8 +263,7 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 	label[types.FUNCTION_NAME] = metadata.Name
 	label[types.FUNCTION_UID] = string(metadata.UID)
 	label[types.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
-	label[types.FUNCTION_RESOURCE_VERSION] = metadata.ResourceVersion
-	label["managed"] = "false" // this allows us to easily find pods not managed by the deployment
+	label["managed"] = "false"                           // this allows us to easily find pods not managed by the deployment
 	return label
 
 }
@@ -630,8 +628,9 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
-	// patch svc-host to the pod annotations for new executor to adopt the pod
-	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.ANNOTATION_SVC_HOST, svcHost)
+	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
+		types.ANNOTATION_SVC_HOST, svcHost, types.FUNCTION_RESOURCE_VERSION, fn.Metadata.ResourceVersion)
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 	if err != nil {
 		// just log the error since it won't affect the function serving
