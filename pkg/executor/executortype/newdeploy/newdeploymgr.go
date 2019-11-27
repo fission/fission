@@ -301,10 +301,10 @@ func (deploy *NewDeploy) AdoptOrphanResources() {
 
 				_, err = deploy.fnCreate(fn, true)
 				if err != nil {
-					deploy.logger.Warn("Failed to adopt resources for function", zap.Error(err))
+					deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
 					return
 				}
-				deploy.logger.Info("Adopt resources for function", zap.String("function", fn.Metadata.Name))
+				deploy.logger.Info("adopt resources for function", zap.String("function", fn.Metadata.Name))
 			}()
 		}
 	}
