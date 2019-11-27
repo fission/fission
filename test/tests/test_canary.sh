@@ -48,12 +48,14 @@ success_scenario() {
     fission route create --name $route_succ --method GET --url /$route_succ --function $fn_v1 --weight 100 --function $fn_v2 --weight 0
 
     log "Create a canary config to gradually increment the weight of version-2 by a step of 50 every 1m"
-    fission canary-config create --name $canary_1 --newfunction $fn_v2 --oldfunction $fn_v1 --httptrigger $route_succ --increment-step 50 --increment-interval 10s --failure-threshold 10
+    fission canary-config create --name $canary_1 --newfunction $fn_v2 --oldfunction $fn_v1 --httptrigger $route_succ --increment-step 50 --increment-interval 1m --failure-threshold 10
 
-    sleep 10
+    sleep 60
 
     log "Fire requests to the route"
-    timeout 40 bash -c "ab -n 2000 -c 1 http://$FISSION_ROUTER/$route_succ" || true
+    ab -n 300 -c 1 http://$FISSION_ROUTER/$route_succ
+
+    sleep 60
 
     log "verify that version-2 of the function is receiving 100% traffic"
     weight=`kubectl -n default get httptrigger $route_succ -o jsonpath='{.spec.functionref.functionweights.'$fn_v2'}'`
@@ -74,14 +76,17 @@ failure_scenario() {
 
     log "Create a route for the version-1 of the function with weight 100% and version-3 with weight 0%"
     fission route create --name $route_fail --method GET --url /$route_fail --function $fn_v1 --weight 100 --function $fn_v3 --weight 0
+    sleep 5
 
     log "Create a canary config to gradually increment the weight of version-2 by a step of 50 every 1m"
-    fission canary-config create --name $canary_2 --newfunction $fn_v3 --oldfunction $fn_v1 --httptrigger $route_fail --increment-step 50 --increment-interval 10s --failure-threshold 10
+    fission canary-config create --name $canary_2 --newfunction $fn_v3 --oldfunction $fn_v1 --httptrigger $route_fail --increment-step 50 --increment-interval 1m --failure-threshold 10
 
-    sleep 10
+    sleep 60
 
     log "Fire requests to the route"
-    timeout 40 bash -c "ab -n 2000 -c 1 http://$FISSION_ROUTER/$route_fail" || true
+    ab -n 300 -c 1 http://$FISSION_ROUTER/$route_fail
+
+    sleep 60
 
     log "verify that version-3 of the function is receiving 0% traffic because of rollback"
     weight=`kubectl -n default get httptrigger $route_fail -o jsonpath='{.spec.functionref.functionweights.'$fn_v3'}'`
