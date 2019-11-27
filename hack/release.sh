@@ -14,8 +14,8 @@ check_branch() {
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
     if [ $curr_branch != "release-${version}" ]
     then
-	echo "Not on release-${version} branch."
-	exit 1
+        echo "Not on release-${version} branch."
+        exit 1
     fi
 }
 
@@ -23,8 +23,8 @@ check_branch() {
 check_clean() {    
     if ! git diff-index --quiet HEAD --
     then
-	echo "Unclean tree"
-	exit 1
+        echo "Unclean tree"
+        exit 1
     fi
 }
 
@@ -150,13 +150,22 @@ push_all() {
 
 tag_and_release() {
     local version=$1
-    local gittag="v${version}"
+    local gittag=$version
+    local prefix="v"
+    local gopkgtag=${version/#/${prefix}}
+
+    if [[ ${version} == v* ]]; # if version starts with "v", don't append prefix.
+    then
+        gopkgtag=${version}
+    fi
 
     # tag the release
     git tag $gittag
-    
+    git tag -a $gopkgtag -m "Fission $gopkgtag"
+
     # push tag
     git push origin $gittag
+    git push origin $gopkgtag
 
     # create gh release
     gothub release \
@@ -170,7 +179,7 @@ tag_and_release() {
 
 attach_github_release_cli() {
     local version=$1
-    local gittag="v${version}"
+    local gittag=$version
     # cli
     echo "Uploading osx cli"
     gothub upload \
@@ -202,7 +211,7 @@ attach_github_release_cli() {
 
 attach_github_release_charts() {
     local version=$1
-    local gittag="v${version}"
+    local gittag=$version
 
     # helm charts
     gothub upload \
@@ -225,7 +234,7 @@ attach_github_release_charts() {
 
 attach_github_release_yamls() {
     local version=$1
-    local gittag="v${version}"
+    local gittag=$version
 
     for c in fission-all fission-core
     do

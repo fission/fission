@@ -75,8 +75,7 @@ a. Switch to fission/fission-charts repo and run `index.sh` in that repo.  (Don'
 
 b. You should have index.yaml and fission-core-*, fission-all-* charts as change, add, commit and push it to repo.
 
-
-8. Go to Github Web UI --> Releases, here you will notice a pre-release for the version x.y.z you just created. 
+9. Go to Github Web UI --> Releases, here you will notice a pre-release for the version x.y.z you just created.
 
 Edit it and add links to:
 
@@ -88,7 +87,7 @@ Before you save the release - UNCHECK the "This is a pre-release" checkbox. This
 Updating Fission Docs (https://github.com/fission/docs.fission.io)
 ------------------------------
 
-9. Documentation Update
+10. Documentation Update
 
 a. Merge documentation PRs that are peer reviewed and get latest master locally.
 
