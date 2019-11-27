@@ -217,32 +217,45 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	}
 
 	restClient := fissionClient.GetCrdClient()
+	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
-	poolID := strings.ToLower(uniuri.NewLen(8))
-	reaper.CleanupOldExecutorObjects(logger, kubernetesClient, poolID)
-	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
+	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
 	gpm := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, executorInstanceID)
 
 	ndm := newdeploy.MakeNewDeploy(
 		logger,
 		fissionClient, kubernetesClient, restClient,
-		functionNamespace, fetcherConfig, poolID)
+		functionNamespace, fetcherConfig, executorInstanceID)
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName()] = gpm
 	executorTypes[ndm.GetTypeName()] = ndm
 
+	wg := &sync.WaitGroup{}
+	for _, et := range executorTypes {
+		wg.Add(1)
+		go func(et executortype.ExecutorType) {
+			defer wg.Done()
+			et.AdoptOrphanResources()
+			et.Run(context.Background())
+		}(et)
+	}
+	wg.Wait()
+
 	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
+	cms.Run(context.Background())
 
 	api, err := MakeExecutor(logger, cms, fissionClient, executorTypes)
 	if err != nil {
 		return err
 	}
 
+	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
+	go reaper.CleanupOldExecutorObjects(logger, kubernetesClient, executorInstanceID)
 	go api.Serve(port)
 	go serveMetric(logger)
 

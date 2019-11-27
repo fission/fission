@@ -33,8 +33,10 @@ import (
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -64,9 +66,9 @@ type (
 		kubernetesClient       *kubernetes.Clientset
 		fissionClient          *crd.FissionClient
 		instanceId             string // poolmgr instance id
-		labelsForPool          map[string]string
 		requestChannel         chan *choosePodRequest
 		fetcherConfig          *fetcherConfig.Config
+		stopCh                 context.CancelFunc
 	}
 
 	// serialize the choosing of pods so that choices don't conflict
@@ -97,6 +99,8 @@ func MakeGenericPool(
 
 	gpLogger.Info("creating pool", zap.Any("environment", env.Metadata))
 
+	ctx, stopCh := context.WithCancel(context.Background())
+
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
@@ -116,6 +120,7 @@ func MakeGenericPool(
 		instanceId:        instanceId,
 		useSvc:            false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
 		useIstio:          enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
+		stopCh:            stopCh,
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -127,7 +132,7 @@ func MakeGenericPool(
 	}
 
 	// Labels for generic deployment/RS/pods.
-	gp.labelsForPool = gp.getDeployLabels()
+	//gp.labelsForPool = gp.getDeployLabels()
 
 	// create the pool
 	err = gp.createPool()
@@ -136,31 +141,41 @@ func MakeGenericPool(
 	}
 	gpLogger.Info("deployment created", zap.Any("environment", env.Metadata))
 
-	go gp.choosePodService()
+	go gp.choosePodService(ctx)
 
 	return gp, nil
 }
 
 func (gp *GenericPool) getDeployLabels() map[string]string {
 	return map[string]string{
+		types.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
+		types.ENVIRONMENT_NAME:      gp.env.Metadata.Name,
+		types.ENVIRONMENT_NAMESPACE: gp.env.Metadata.Namespace,
+		types.ENVIRONMENT_UID:       string(gp.env.Metadata.UID),
+		"managed":                   "true", // this allows us to easily find pods managed by the deployment
+	}
+}
+
+func (gp *GenericPool) getDeployAnnotations() map[string]string {
+	return map[string]string{
 		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-		types.EXECUTOR_TYPE:           string(fv1.ExecutorTypePoolmgr),
-		types.ENVIRONMENT_NAME:        gp.env.Metadata.Name,
-		types.ENVIRONMENT_NAMESPACE:   gp.env.Metadata.Namespace,
-		types.ENVIRONMENT_UID:         string(gp.env.Metadata.UID),
-		"managed":                     "true", // this allows us to easily find pods managed by the deployment
 	}
 }
 
 // choosePodService serializes the choosing of pods
-func (gp *GenericPool) choosePodService() {
-	for req := range gp.requestChannel {
-		pod, err := gp._choosePod(req.newLabels)
-		if err != nil {
-			req.responseChannel <- &choosePodResponse{error: err}
-			continue
+func (gp *GenericPool) choosePodService(ctx context.Context) {
+	for {
+		select {
+		case req := <-gp.requestChannel:
+			pod, err := gp._choosePod(req.newLabels)
+			if err != nil {
+				req.responseChannel <- &choosePodResponse{error: err}
+				continue
+			}
+			req.responseChannel <- &choosePodResponse{pod: pod}
+		case <-ctx.Done():
+			return
 		}
-		req.responseChannel <- &choosePodResponse{pod: pod}
 	}
 }
 
@@ -330,12 +345,15 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 
 // getPoolName returns a unique name of an environment
 func (gp *GenericPool) getPoolName() string {
-	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, uniuri.NewLen(8)))
+	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v-%v", gp.env.Metadata.Name, gp.env.Metadata.Namespace, gp.env.Metadata.ResourceVersion))
 }
 
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
+	deployLabels := gp.getDeployLabels()
+	deployAnnotations := gp.getDeployAnnotations()
+
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
 	gracePeriodSeconds := int64(6 * 60)
@@ -349,6 +367,9 @@ func (gp *GenericPool) createPool() error {
 	}
 	if gp.useIstio && gp.env.Spec.AllowAccessToExternalNetwork {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
+	}
+	for k, v := range deployAnnotations {
+		podAnnotations[k] = v
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
@@ -391,7 +412,7 @@ func (gp *GenericPool) createPool() error {
 
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      gp.labelsForPool,
+			Labels:      deployLabels,
 			Annotations: podAnnotations,
 		},
 		Spec: apiv1.PodSpec{
@@ -408,13 +429,14 @@ func (gp *GenericPool) createPool() error {
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   gp.getPoolName(),
-			Labels: gp.labelsForPool,
+			Name:        gp.getPoolName(),
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &gp.replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: gp.labelsForPool,
+				MatchLabels: deployLabels,
 			},
 			Template: pod,
 		},
@@ -434,11 +456,25 @@ func (gp *GenericPool) createPool() error {
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
+	_, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
+	if err == nil {
+		patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gp.instanceId)
+		depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Patch(deployment.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+		if err == nil {
+			gp.deployment = depl
+			return nil
+		}
+	} else if !k8sErrs.IsNotFound(err) {
+		gp.logger.Error("error getting deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
+		return err
+	}
+
 	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(deployment)
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err
 	}
+
 	gp.deployment = depl
 	return nil
 }
@@ -497,7 +533,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 			Ports: []apiv1.ServicePort{
 				{
 					Protocol:   apiv1.ProtocolTCP,
-					Port:       80,
+					Port:       8888,
 					TargetPort: intstr.FromInt(8888),
 				},
 			},
@@ -584,12 +620,24 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 		// the fission router isn't in the same namespace, so return a
 		// namespace-qualified hostname
-		svcHost = fmt.Sprintf("%v.%v", svcName, gp.namespace)
+		svcHost = fmt.Sprintf("%v.%v:8888", svcName, gp.namespace)
 	} else if gp.useIstio {
 		svc := utils.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
 		svcHost = fmt.Sprintf("%v.%v:8888", svc, gp.namespace)
 	} else {
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
+	}
+
+	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
+		types.ANNOTATION_SVC_HOST, svcHost, types.FUNCTION_RESOURCE_VERSION, fn.Metadata.ResourceVersion)
+	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+	if err != nil {
+		// just log the error since it won't affect the function serving
+		gp.logger.Warn("error patching svc-host to pod", zap.Error(err),
+			zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
+	} else {
+		pod = p
 	}
 
 	gp.logger.Info("specialized pod",
@@ -634,10 +682,13 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 // destroys the pool -- the deployment, replicaset and pods
 func (gp *GenericPool) destroy() error {
+	gp.stopCh()
+
 	deletePropagation := metav1.DeletePropagationBackground
 	delOpt := metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	}
+
 	err := gp.kubernetesClient.AppsV1().
 		Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, &delOpt)
 	if err != nil {

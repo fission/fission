@@ -17,7 +17,6 @@ limitations under the License.
 package executor
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -164,8 +163,8 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 		err = et.TapService(svcHost)
 		if err != nil {
 			errs = multierror.Append(errs,
-				errors.Wrapf(err, "'%v' failed to tap function '%v/%v' with service url '%v'",
-					req.FnMetadata.Namespace, req.FnMetadata.Name, req.ServiceUrl, req.FnExecutorType))
+				errors.Wrapf(err, "'%v' failed to tap function '%v' in '%v' with service url '%v'",
+					req.FnMetadata.Name, req.FnMetadata.Namespace, req.ServiceUrl, req.FnExecutorType))
 		}
 	}
 
@@ -192,16 +191,7 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 func (executor *Executor) Serve(port int) {
-	executor.logger.Info("starting executor", zap.Int("port", port))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	for _, et := range executor.executorTypes {
-		et.Run(ctx)
-	}
-
-	executor.cms.Run(ctx)
+	executor.logger.Info("starting executor API", zap.Int("port", port))
 	address := fmt.Sprintf(":%v", port)
 	err := http.ListenAndServe(address, &ochttp.Handler{
 		Handler: executor.GetHandler(),

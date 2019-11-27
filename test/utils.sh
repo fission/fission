@@ -166,8 +166,8 @@ export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n $
 ## To change the environment image setting for CI test, please refer run_all_tests() in test_utils.sh.
 export PYTHON_RUNTIME_IMAGE=${PYTHON_RUNTIME_IMAGE:-fission/python-env}
 export PYTHON_BUILDER_IMAGE=${PYTHON_BUILDER_IMAGE:-fission/python-builder}
-export GO_RUNTIME_IMAGE=${GO_RUNTIME_IMAGE:-fission/go-env}
-export GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-fission/go-builder}
+export GO_RUNTIME_IMAGE=${GO_RUNTIME_IMAGE:-fission/go-env-1.12}
+export GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-fission/go-builder-1.12}
 export JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-fission/jvm-env}
 export JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-fission/jvm-builder}
 export NODE_RUNTIME_IMAGE=${NODE_RUNTIME_IMAGE:-fission/node-env}
