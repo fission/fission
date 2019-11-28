@@ -299,8 +299,6 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	deployment.String()
-
 	return deployment, nil
 }
 

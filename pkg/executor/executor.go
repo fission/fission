@@ -19,7 +19,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"github.com/fission/fission/pkg/executor/util"
 	"net/http"
 	"strings"
 	"sync"
@@ -30,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/executor/util"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/cms"
