@@ -251,15 +251,15 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 	}
 
 	envMap := make(map[string]fv1.Environment, len(envs.Items))
-	envWG := &sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 
 	for i := range envs.Items {
 		env := envs.Items[i]
 
 		if gpm.getEnvPoolsize(&env) > 0 {
-			envWG.Add(1)
+			wg.Add(1)
 			go func() {
-				defer envWG.Done()
+				defer wg.Done()
 				_, err := gpm.getPool(&env)
 				if err != nil {
 					gpm.logger.Error("adopt pool failed", zap.Error(err))
@@ -285,17 +285,15 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 		return
 	}
 
-	podWG := &sync.WaitGroup{}
-
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 		if !utils.IsReadyPod(pod) {
 			continue
 		}
 
-		podWG.Add(1)
+		wg.Add(1)
 		go func() {
-			defer podWG.Done()
+			defer wg.Done()
 
 			// avoid too many requests arrive Kubernetes API server at the same time.
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
@@ -324,7 +322,7 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 			env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
 
 			if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
-				gpm.logger.Warn("failed to adopt pod for function due to lack necessary information",
+				gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
 					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
 					zap.String("env", env.Metadata.Name))
 				return
@@ -355,16 +353,14 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 				Atime:    time.Now(),
 			}
 
-			// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pod.
-			// This is for the case that there are multiple function pods for the same function due to unknown reason.
-			_, err := gpm.fsCache.GetByFunction(fsvc.Function)
-			if err == nil {
-				return
-			}
-
 			_, err = gpm.fsCache.Add(fsvc)
 			if err != nil {
-				gpm.logger.Warn("failed to adopt pod for function", zap.Error(err), zap.String("pod", pod.Name))
+				// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
+				// This is for the case that there are multiple function pods for the same function due to unknown reason.
+				if !fscache.IsNameExistError(err) {
+					gpm.logger.Warn("failed to adopt pod for function", zap.Error(err), zap.String("pod", pod.Name))
+				}
+
 				return
 			}
 
@@ -373,8 +369,7 @@ func (gpm *GenericPoolManager) AdoptOrphanResources() {
 		}()
 	}
 
-	envWG.Wait()
-	podWG.Wait()
+	wg.Wait()
 }
 
 func (gpm *GenericPoolManager) service() {

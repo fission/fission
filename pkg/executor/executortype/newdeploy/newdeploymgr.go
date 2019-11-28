@@ -143,7 +143,7 @@ func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fsc
 	// TODO: client-go doesn't support to pass in context.
 	//  Once it supports context, we should change the signature of method.
 	// https://github.com/kubernetes/kubernetes/issues/46503
-	return deploy.createFunction(fn, false)
+	return deploy.createFunction(fn)
 }
 
 func (deploy *NewDeploy) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -249,24 +249,21 @@ func (deploy *NewDeploy) AdoptOrphanResources() {
 	podList, err := deploy.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
 		LabelSelector: labels.Set(l).AsSelector().String(),
 	})
-
 	if err != nil {
 		deploy.logger.Error("error getting pod list", zap.Error(err))
 		return
 	}
 
-	podWG := &sync.WaitGroup{}
-
+	// Unlike poolmanager manages the lifecycle of function pod directly,
+	// newdeploy is only responsible to create the deployment and Kubernetes
+	// will handle the rest. Hence we don't need to wait for the pod patching
+	// process to finish.
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 		if !utils.IsReadyPod(pod) {
 			continue
 		}
-
-		podWG.Add(1)
 		go func() {
-			defer podWG.Done()
-
 			// avoid too many requests arrive Kubernetes API server at the same time.
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
@@ -278,7 +275,6 @@ func (deploy *NewDeploy) AdoptOrphanResources() {
 					zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
 				return
 			}
-
 			deploy.logger.Info("adopt newdeploy function pod",
 				zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
 		}()
@@ -290,16 +286,16 @@ func (deploy *NewDeploy) AdoptOrphanResources() {
 		return
 	}
 
-	deployWG := &sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 
 	for i := range fnList.Items {
 		fn := &fnList.Items[i]
 		if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-			deployWG.Add(1)
+			wg.Add(1)
 			go func() {
-				defer deployWG.Done()
+				defer wg.Done()
 
-				_, err = deploy.fnCreate(fn, true)
+				_, err = deploy.fnCreate(fn)
 				if err != nil {
 					deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
 					return
@@ -309,8 +305,7 @@ func (deploy *NewDeploy) AdoptOrphanResources() {
 		}
 	}
 
-	podWG.Wait()
-	deployWG.Wait()
+	wg.Wait()
 }
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
@@ -324,7 +319,7 @@ func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controll
 			go func() {
 				fn := obj.(*fv1.Function)
 				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.Metadata), zap.Any("fnspec", fn.Spec))
-				_, err := deploy.createFunction(fn, true)
+				_, err := deploy.createFunction(fn)
 				if err != nil {
 					deploy.logger.Error("error eager creating function",
 						zap.Error(err),
@@ -406,14 +401,14 @@ func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
 	return relatedFunctions
 }
 
-func (deploy *NewDeploy) createFunction(fn *fv1.Function, firstcreate bool) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) createFunction(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
 		return nil, nil
 	}
 
 	fsvcObj, err := deploy.throttler.RunOnce(string(fn.Metadata.UID), func(ableToCreate bool) (interface{}, error) {
 		if ableToCreate {
-			return deploy.fnCreate(fn, firstcreate)
+			return deploy.fnCreate(fn)
 		}
 		return deploy.fsCache.GetByFunctionUID(fn.Metadata.UID)
 	})
@@ -446,7 +441,7 @@ func (deploy *NewDeploy) deleteFunction(fn *fv1.Function) error {
 	return err
 }
 
-func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	env, err := deploy.fissionClient.
 		Environments(fn.Spec.Environment.Namespace).
 		Get(fn.Spec.Environment.Name)
@@ -478,7 +473,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function, firstcreate bool) (*fscache.
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 
-	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, deployAnnotations, ns, firstcreate)
+	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
 		go deploy.cleanupNewdeploy(ns, objName)
@@ -567,7 +562,7 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 		deploy.logger.Info("function type changed to new deployment, creating resources",
 			zap.Any("old_function", oldFn.Metadata),
 			zap.Any("new_function", newFn.Metadata))
-		_, err := deploy.createFunction(newFn, true)
+		_, err := deploy.createFunction(newFn)
 		if err != nil {
 			deploy.updateStatus(oldFn, err, "error changing the function's type to newdeploy")
 		}

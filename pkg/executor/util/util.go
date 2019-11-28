@@ -17,6 +17,9 @@ limitations under the License.
 package util
 
 import (
+	"sync"
+	"time"
+
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -30,4 +33,16 @@ import (
 func ApplyImagePullSecret(secret string, podspec apiv1.PodSpec) *apiv1.PodSpec {
 	podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
 	return &podspec
+}
+
+func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
+	waitCh := make(chan struct{})
+	go func() {
+		defer close(waitCh)
+		wg.Wait()
+	}()
+	select {
+	case <-waitCh:
+	case <-time.After(timeout):
+	}
 }

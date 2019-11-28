@@ -44,22 +44,22 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string, firstcreate bool) (*appsv1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
-	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
+	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
-	// If it's not the first time creation and minscale is 0 means that all pods for function were recycled,
-	// in such cases we need set minscale to 1 for router to serve requests.
-	if !firstcreate && minScale <= 0 {
+	// Always scale to at least one pod when createOrGetDeployment
+	// is called. The idleObjectReaper will scale-in the deployment
+	// later if no requests to the function.
+	if minScale <= 0 {
 		minScale = 1
 	}
 
-	waitForDeploy := minScale > 0
-
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
-		if existingDepl.Labels[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
+		// Try to adopt orphan deployment created by the old executor.
+		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
 			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Patch(deployName, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
@@ -67,19 +67,21 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 					zap.String("deploy", deployName), zap.String("ns", deployNamespace))
 				return nil, err
 			}
+			// In this case, we just return without waiting for it for fast bootstraping.
+			return existingDepl, nil
 		}
-		if waitForDeploy {
-			if *existingDepl.Spec.Replicas < minScale {
-				err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
-				if err != nil {
-					deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Metadata.Name))
-					return nil, err
-				}
-			}
-			if existingDepl.Status.AvailableReplicas < minScale {
-				existingDepl, err = deploy.waitForDeploy(existingDepl, minScale, specializationTimeout)
+
+		if *existingDepl.Spec.Replicas < minScale {
+			err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
+			if err != nil {
+				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Metadata.Name))
+				return nil, err
 			}
 		}
+		if existingDepl.Status.AvailableReplicas < minScale {
+			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale, specializationTimeout)
+		}
+
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
 		err := deploy.setupRBACObjs(deployNamespace, fn)
@@ -102,7 +104,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			return nil, err
 		}
 
-		if waitForDeploy {
+		if minScale > 0 {
 			depl, err = deploy.waitForDeploy(depl, minScale, specializationTimeout)
 		}
 
@@ -297,6 +299,8 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
+	deployment.String()
+
 	return deployment, nil
 }
 
@@ -351,7 +355,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
-		if existingHpa.Labels[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
+		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
 			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Patch(hpaName, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
@@ -407,7 +411,7 @@ func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
 func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
-		if existingSvc.Labels[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
+		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
 			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Patch(svcName, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
