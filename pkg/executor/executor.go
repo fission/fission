@@ -29,7 +29,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	"github.com/fission/fission/pkg/executor/util"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/cms"
@@ -38,6 +37,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
+	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 )
 
