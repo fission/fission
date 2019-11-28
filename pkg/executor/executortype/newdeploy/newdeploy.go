@@ -29,7 +29,6 @@ import (
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
@@ -56,12 +55,21 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		minScale = 1
 	}
 
+	deployment, err := deploy.getDeploymentSpec(fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+	if err != nil {
+		return nil, err
+	}
+
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
 		// Try to adopt orphan deployment created by the old executor.
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
-			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Patch(deployName, k8sTypes.StrategicMergePatchType, []byte(patch))
+			existingDepl.Annotations = deployment.Annotations
+			existingDepl.Labels = deployment.Labels
+			existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
+			existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
+			existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
+			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(existingDepl)
 			if err != nil {
 				deploy.logger.Warn("error patching executor instance ID of deploy", zap.Error(err),
 					zap.String("deploy", deployName), zap.String("ns", deployNamespace))
@@ -85,11 +93,6 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
 		err := deploy.setupRBACObjs(deployNamespace, fn)
-		if err != nil {
-			return nil, err
-		}
-
-		deployment, err := deploy.getDeploymentSpec(fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +342,9 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 	return resources
 }
 
-func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy, depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
+func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy,
+	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
+
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
 	}
@@ -354,38 +359,41 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	}
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 
+	hpa := &asv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        hpaName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
+		},
+		Spec: asv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: asv1.CrossVersionObjectReference{
+				Kind:       DeploymentKind,
+				Name:       depl.ObjectMeta.Name,
+				APIVersion: DeploymentVersion,
+			},
+			MinReplicas:                    &minRepl,
+			MaxReplicas:                    maxRepl,
+			TargetCPUUtilizationPercentage: &targetCPU,
+		},
+	}
+
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
+		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
-			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Patch(hpaName, k8sTypes.StrategicMergePatchType, []byte(patch))
+			existingHpa.Annotations = hpa.Annotations
+			existingHpa.Labels = hpa.Labels
+			existingHpa.Spec = hpa.Spec
+			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(existingHpa)
 			if err != nil {
-				deploy.logger.Warn("error patching executor instance ID of HPA", zap.Error(err),
+				deploy.logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
 				return nil, err
 			}
 		}
 		return existingHpa, err
 	} else if k8s_err.IsNotFound(err) {
-		hpa := asv1.HorizontalPodAutoscaler{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        hpaName,
-				Labels:      deployLabels,
-				Annotations: deployAnnotations,
-			},
-			Spec: asv1.HorizontalPodAutoscalerSpec{
-				ScaleTargetRef: asv1.CrossVersionObjectReference{
-					Kind:       DeploymentKind,
-					Name:       depl.ObjectMeta.Name,
-					APIVersion: DeploymentVersion,
-				},
-				MinReplicas:                    &minRepl,
-				MaxReplicas:                    maxRepl,
-				TargetCPUUtilizationPercentage: &targetCPU,
-			},
-		}
-
-		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(&hpa)
+		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(hpa)
 		if err != nil {
 			return nil, err
 		}
@@ -410,38 +418,43 @@ func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
 }
 
 func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+	service := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        svcName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
+		},
+		Spec: apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				{
+					Name:       "http-env",
+					Port:       int32(80),
+					TargetPort: intstr.FromInt(8888),
+				},
+			},
+			Selector: deployLabels,
+			Type:     apiv1.ServiceTypeClusterIP,
+		},
+	}
+
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
+		// to adopt orphan service
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
-			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Patch(svcName, k8sTypes.StrategicMergePatchType, []byte(patch))
+			existingSvc.Annotations = service.Annotations
+			existingSvc.Labels = service.Labels
+			existingSvc.Spec.Ports = service.Spec.Ports
+			existingSvc.Spec.Selector = service.Spec.Selector
+			existingSvc.Spec.Type = service.Spec.Type
+			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(existingSvc)
 			if err != nil {
-				deploy.logger.Warn("error patching executor instance ID of service", zap.Error(err),
+				deploy.logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
 				return nil, err
 			}
 		}
 		return existingSvc, err
 	} else if k8s_err.IsNotFound(err) {
-		service := &apiv1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        svcName,
-				Labels:      deployLabels,
-				Annotations: deployAnnotations,
-			},
-			Spec: apiv1.ServiceSpec{
-				Ports: []apiv1.ServicePort{
-					{
-						Name:       "http-env",
-						Port:       int32(80),
-						TargetPort: intstr.FromInt(8888),
-					},
-				},
-				Selector: deployLabels,
-				Type:     apiv1.ServiceTypeClusterIP,
-			},
-		}
-
 		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(service)
 		if err != nil {
 			return nil, err
