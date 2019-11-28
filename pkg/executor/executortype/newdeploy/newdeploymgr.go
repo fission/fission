@@ -681,7 +681,14 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 		ns = fn.Metadata.Namespace
 	}
 
-	newDeployment, err := deploy.getDeploymentSpec(fn, env, fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
+	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(fnObjName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// use current replicas instead of minscale in the ExecutionStrategy.
+	newDeployment, err := deploy.getDeploymentSpec(fn, env,
+		existingDepl.Spec.Replicas, fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err

@@ -89,7 +89,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			return nil, err
 		}
 
-		deployment, err := deploy.getDeploymentSpec(fn, env, deployName, deployNamespace, deployLabels, deployAnnotations)
+		deployment, err := deploy.getDeploymentSpec(fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 		if err != nil {
 			return nil, err
 		}
@@ -170,10 +170,13 @@ func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
 	})
 }
 
-func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment,
+func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	if targetReplicas != nil {
+		replicas = *targetReplicas
+	}
 
 	gracePeriodSeconds := int64(6 * 60)
 	if env.Spec.TerminationGracePeriod > 0 {
