@@ -26,10 +26,10 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/utils"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/utils"
 )
 
 var (
