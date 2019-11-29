@@ -19,7 +19,7 @@ spec:
     namespace: default
   functionTimeout: 60
   package:
-    functionName: hello
+    functionName: source
     packageref:
       name: sourcearchive
       namespace: default
@@ -48,7 +48,7 @@ spec:
     namespace: default
   functionTimeout: 60
   package:
-    functionName: hello
+    functionName: deploy
     packageref:
       name: deployarchive
       namespace: default

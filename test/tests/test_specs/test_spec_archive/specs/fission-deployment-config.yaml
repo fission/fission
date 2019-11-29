@@ -3,5 +3,5 @@
 # Do not edit the UID below: that will break 'fission spec apply'
 apiVersion: fission.io/v1
 kind: DeploymentConfig
-name: untitled-folder
-uid: dd124620-5124-420e-8355-8f3a1711cb62
+name: test-spec-archive
+uid: 04b21526-8873-4dc2-b897-e87ed5347670

@@ -1,5 +1,5 @@
 include:
-  - document/*
+  - func/*
 kind: ArchiveUploadSpec
 name: functions-deploy-archive
 

@@ -1,12 +1,14 @@
 #!/bin/bash
 
 set -euo pipefail
-source $(dirname $0)/../../utils.sh
+source $(dirname $0)/../../../utils.sh
+ROOT=` realpath $(dirname $0)/../../../../`
 
 cleanup() {
     log "Cleaning up..."
-    clean_resource_by_id $TEST_ID
-    rm -rf $tmp_dir
+    fission spec destroy
+    rm -rf func
+    popd
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -15,21 +17,25 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-# init
-fission spec init
+pushd $(dirname $0)
 
-# verify init
 [ -d specs ]
 [ -f specs/README ]
 [ -f specs/fission-deployment-config.yaml ]
 
-log "Apply specs"
-fission spec apply
+mkdir -p func
+cp $ROOT/examples/nodejs/hello.js func/deploy.js
+cp $ROOT/examples/nodejs/hello.js func/source.js
 
-sleep 5
+fission spec destroy || true
+
+log "Apply specs"
+fission --verbosity 2 spec apply
 
 log "verify deployarchive function works"
 fission fn test --name deployarchive
+
+timeout 60s bash -c "waitBuild sourcearchive"
 
 log "verify sourcearchive function works"
 fission fn test --name sourcearchive
