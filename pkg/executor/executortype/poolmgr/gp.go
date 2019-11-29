@@ -459,8 +459,8 @@ func (gp *GenericPool) createPool() error {
 	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
 	if err == nil {
 		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceId {
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gp.instanceId)
-			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Patch(deployment.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceId
+			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(deployment)
 		}
 		gp.deployment = depl
 		return err
