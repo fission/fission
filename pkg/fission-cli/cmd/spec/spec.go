@@ -297,35 +297,26 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 	for _, p := range fr.Packages {
 		packages[MapKey(&p.Metadata)] = false
 
-		if strings.HasPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX) {
-			// check archive refs from package
-			aname := strings.TrimPrefix(p.Spec.Source.URL, ARCHIVE_URL_PREFIX)
-			if len(aname) > 0 {
-				if _, ok := archives[aname]; !ok {
-					result = multierror.Append(result, fmt.Errorf(
-						"%v: package '%v' references unknown source archive %v%v",
-						fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-						p.Metadata.Name,
-						ARCHIVE_URL_PREFIX,
-						aname))
-				} else {
-					archives[aname] = true
-				}
-			}
+		as := map[string]string {
+			"source": p.Spec.Source.URL,
+			"deployment": p.Spec.Deployment.URL,
 		}
 
-		if strings.HasPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX) {
-			aname := strings.TrimPrefix(p.Spec.Deployment.URL, ARCHIVE_URL_PREFIX)
-			if len(aname) > 0 {
-				if _, ok := archives[aname]; !ok {
-					result = multierror.Append(result, fmt.Errorf(
-						"%v: package '%v' references unknown deployment archive %v%v",
-						fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-						p.Metadata.Name,
-						ARCHIVE_URL_PREFIX,
-						aname))
-				} else {
-					archives[aname] = true
+		for archiveType, u := range as {
+			if strings.HasPrefix(u, ARCHIVE_URL_PREFIX) {
+				aname := strings.TrimPrefix(u, ARCHIVE_URL_PREFIX)
+				if len(aname) > 0 {
+					if _, ok := archives[aname]; !ok {
+						result = multierror.Append(result, fmt.Errorf(
+							"%v: package '%v' references unknown %v archive '%v%v'",
+							fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
+							p.Metadata.Name,
+							archiveType,
+							ARCHIVE_URL_PREFIX,
+							aname))
+					} else {
+						archives[aname] = true
+					}
 				}
 			}
 		}

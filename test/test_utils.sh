@@ -534,6 +534,7 @@ run_all_tests() {
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_ignore_hidden_file.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
+        $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
         $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
         $ROOT/test/tests/test_environments/test_go_env.sh \
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
@@ -541,7 +542,6 @@ run_all_tests() {
         $ROOT/test/tests/test_huge_response/test_huge_response.sh
     FAILURES=$?
 
-    # FIXME: run tests with newdeploy one by one.
     export JOBS=3
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
