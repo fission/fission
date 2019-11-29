@@ -456,20 +456,20 @@ func (gp *GenericPool) createPool() error {
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	_, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
+	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
 	if err == nil {
-		patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gp.instanceId)
-		depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Patch(deployment.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
-		if err == nil {
-			gp.deployment = depl
-			return nil
+		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceId {
+			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gp.instanceId)
+			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Patch(deployment.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 		}
+		gp.deployment = depl
+		return err
 	} else if !k8sErrs.IsNotFound(err) {
 		gp.logger.Error("error getting deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err
 	}
 
-	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(deployment)
+	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(deployment)
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err

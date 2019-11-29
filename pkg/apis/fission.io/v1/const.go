@@ -18,7 +18,6 @@ package v1
 
 const (
 	EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
-	POOLMGR_INSTANCEID_LABEL  string = "poolmgrInstanceId"
 	DEFAULT_FUNCTION_TIMEOUT  int    = 60
 )
 

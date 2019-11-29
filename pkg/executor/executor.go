@@ -37,6 +37,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
+	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 )
 
@@ -74,6 +75,12 @@ func MakeExecutor(logger *zap.Logger, cms *cms.ConfigSecretController,
 		requestChan: make(chan *createFuncServiceRequest),
 		fsCreateWg:  make(map[string]*sync.WaitGroup),
 	}
+	for _, et := range types {
+		go func(et executortype.ExecutorType) {
+			et.Run(context.Background())
+		}(et)
+	}
+	go cms.Run(context.Background())
 	go executor.serveCreateFuncServices()
 
 	return executor, nil
@@ -241,21 +248,20 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		go func(et executortype.ExecutorType) {
 			defer wg.Done()
 			et.AdoptOrphanResources()
-			et.Run(context.Background())
 		}(et)
 	}
-	wg.Wait()
+	// set hard timeout for resource adoption
+	util.WaitTimeout(wg, 30*time.Second)
 
 	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
-	cms.Run(context.Background())
 
 	api, err := MakeExecutor(logger, cms, fissionClient, executorTypes)
 	if err != nil {
 		return err
 	}
 
-	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go reaper.CleanupOldExecutorObjects(logger, kubernetesClient, executorInstanceID)
+	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port)
 	go serveMetric(logger)
 
