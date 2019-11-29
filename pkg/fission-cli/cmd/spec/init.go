@@ -105,13 +105,20 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 func (opts *InitSubCommand) run(input cli.Input) error {
 	specDir := util.GetSpecDir(input)
 
+	readme := filepath.Join(specDir, "README")
+	config := filepath.Join(specDir, "fission-deployment-config.yaml")
+
+	if _, err := os.Stat(config); err == nil {
+		return errors.Errorf("Spec DeploymentConfig already exists in directory '%v'", specDir)
+	}
+
 	// Add a bit of documentation to the spec dir here
-	err := ioutil.WriteFile(filepath.Join(specDir, "README"), []byte(SPEC_README), 0644)
+	err := ioutil.WriteFile(readme, []byte(SPEC_README), 0644)
 	if err != nil {
 		return err
 	}
 
-	err = writeDeploymentConfig(specDir, opts.deployConfig)
+	err = writeDeploymentConfig(config, opts.deployConfig)
 	if err != nil {
 		return errors.Wrap(err, "error writing deployment config")
 	}
@@ -124,7 +131,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 
 // writeDeploymentConfig serializes the DeploymentConfig to YAML and writes it to a new
 // fission-config.yaml in specDir.
-func writeDeploymentConfig(specDir string, dc *spectypes.DeploymentConfig) error {
+func writeDeploymentConfig(file string, dc *spectypes.DeploymentConfig) error {
 	y, err := yaml.Marshal(dc)
 	if err != nil {
 		return err
@@ -134,7 +141,7 @@ func writeDeploymentConfig(specDir string, dc *spectypes.DeploymentConfig) error
 		"# See the README in this directory for background and usage information.\n" +
 		"# Do not edit the UID below: that will break 'fission spec apply'\n")
 
-	err = ioutil.WriteFile(filepath.Join(specDir, "fission-deployment-config.yaml"), append(msg, y...), 0644)
+	err = ioutil.WriteFile(file, append(msg, y...), 0644)
 	if err != nil {
 		return err
 	}
