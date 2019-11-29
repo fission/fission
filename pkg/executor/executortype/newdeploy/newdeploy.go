@@ -71,7 +71,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
 			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(existingDepl)
 			if err != nil {
-				deploy.logger.Warn("error patching executor instance ID of deploy", zap.Error(err),
+				deploy.logger.Warn("error adopting deploy", zap.Error(err),
 					zap.String("deploy", deployName), zap.String("ns", deployNamespace))
 				return nil, err
 			}
