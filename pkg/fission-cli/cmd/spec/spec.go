@@ -297,8 +297,8 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 	for _, p := range fr.Packages {
 		packages[MapKey(&p.Metadata)] = false
 
-		as := map[string]string {
-			"source": p.Spec.Source.URL,
+		as := map[string]string{
+			"source":     p.Spec.Source.URL,
 			"deployment": p.Spec.Deployment.URL,
 		}
 
