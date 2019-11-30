@@ -21,7 +21,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"golang.org/x/net/context/ctxhttp"
 	"io"
 	"io/ioutil"
 	"net"
@@ -30,12 +29,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/net/context/ctxhttp"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission/pkg/fission-cli/console"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
@@ -102,17 +103,23 @@ func GetTempDir() (string, error) {
 	return dir, err
 }
 
-// FindAllGlobs returns a list of globs of input list.
+// FindAllGlobs ignores all hidden files and returns a list of globs of input list.
 func FindAllGlobs(paths ...string) ([]string, error) {
 	files := make([]string, 0)
-	for _, path := range paths {
+	for _, p := range paths {
+		// use absolute path to find files
+		path, err := filepath.Abs(p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error getting absolute path of path '%v'", p)
+		}
 		globs, err := filepath.Glob(path)
 		if err != nil {
 			return nil, errors.Errorf("invalid glob %v: %v", path, err)
 		}
 		for _, f := range globs {
-			// ignore hidden file
-			if strings.HasPrefix(f, ".") {
+			// ignore hidden file.
+			if strings.HasPrefix(filepath.Base(f), ".") {
+				console.Verbose(2, "Ignore hidden file '%v'", f)
 				continue
 			}
 			files = append(files, f)
