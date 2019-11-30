@@ -103,20 +103,27 @@ func GetTempDir() (string, error) {
 }
 
 // FindAllGlobs returns a list of globs of input list.
-func FindAllGlobs(inputList []string) ([]string, error) {
+func FindAllGlobs(paths ...string) ([]string, error) {
 	files := make([]string, 0)
-	for _, glob := range inputList {
-		f, err := filepath.Glob(glob)
+	for _, path := range paths {
+		globs, err := filepath.Glob(path)
 		if err != nil {
-			return nil, errors.Errorf("invalid glob %v: %v", glob, err)
+			return nil, errors.Errorf("invalid glob %v: %v", path, err)
 		}
-		files = append(files, f...)
+		for _, f := range globs {
+			// ignore hidden file
+			if strings.HasPrefix(f, ".") {
+				continue
+			}
+			files = append(files, f)
+			// xxx handle excludeGlobs here
+		}
 	}
 	return files, nil
 }
 
 func MakeZipArchive(targetName string, globs ...string) (string, error) {
-	files, err := FindAllGlobs(globs)
+	files, err := FindAllGlobs(globs...)
 	if err != nil {
 		return "", err
 	}

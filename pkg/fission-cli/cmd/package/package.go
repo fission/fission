@@ -85,7 +85,7 @@ func CreateArchive(client *client.Client, includeFiles []string, noZip bool, ins
 		}
 
 		path := filepath.Join(rootDir, path)
-		files, err := utils.FindAllGlobs([]string{path})
+		files, err := utils.FindAllGlobs(path)
 		if err != nil {
 			errs = multierror.Append(errs, errors.Wrap(err, "error finding all globs"))
 			continue
@@ -198,7 +198,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 	archiveName := archiveName(archiveNameHint, archiveInput)
 
 	// Get files from inputs as number of files decide next steps
-	files, err := utils.FindAllGlobs(archiveInput)
+	files, err := utils.FindAllGlobs(archiveInput...)
 	if err != nil {
 		return "", errors.Wrap(err, "error finding all globs")
 	}
