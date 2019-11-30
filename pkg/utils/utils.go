@@ -29,15 +29,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/net/context/ctxhttp"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/fission-cli/console"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
 func UrlForFunction(name, namespace string) string {
