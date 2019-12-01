@@ -22,8 +22,8 @@ const (
 )
 
 const (
-	//LastUpdateTimestamp env variable is used for updating configmaps and secrets in pods
-	LastUpdateTimestamp string = "LASTUPDATE_TIMESTAMP"
+	// ResourceVersionCount env variable is used for updating configmaps and secrets in pods
+	ResourceVersionCount string = "RESOURCE_VERSION_COUNT"
 )
 
 const (

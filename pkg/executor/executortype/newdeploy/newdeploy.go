@@ -18,6 +18,7 @@ package newdeploy
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -215,6 +217,11 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
+	rvCount, err := referencedResourcesRVSum(deploy.kubernetesClient, fn.Metadata.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	if err != nil {
+		return nil, err
+	}
+
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   fn.Metadata.Name,
 		Image:                  env.Spec.Runtime.Image,
@@ -232,8 +239,8 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		},
 		Env: []apiv1.EnvVar{
 			{
-				Name:  fv1.LastUpdateTimestamp,
-				Value: time.Now().String(),
+				Name:  fv1.ResourceVersionCount,
+				Value: fmt.Sprintf("%v", rvCount),
 			},
 		},
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
@@ -525,4 +532,58 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 	}
 
 	return result.ErrorOrNil()
+}
+
+// referencedResourcesRVSum returns the sum of resource version of all resources the function references to.
+// We used to update timestamp in the deployment environment field in order to trigger a rolling update when
+// the function referenced resources get updated. However, use timestamp means we are not able to avoid tri-
+// ggering a rolling update when executor tries to adopt orphaned deployment due to timestamp changed which
+// is unwanted. In order to let executor adopt deployment without triggering a rolling update, we need an
+// identical way to get a value that can reflect resources changed without affecting by the time.
+// To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
+// scenario since the sum of the resource version is always the same as long as no resources changed.
+func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+	rvCount := 0
+
+	if len(secrets) > 0 {
+		list, err := client.CoreV1().Secrets(namespace).List(metav1.ListOptions{})
+		if err != nil {
+			return 0, err
+		}
+
+		objmap := make(map[string]apiv1.Secret)
+		for _, secret := range list.Items {
+			objmap[secret.Namespace+"/"+secret.Name] = secret
+		}
+
+		for _, ref := range secrets {
+			s, ok := objmap[ref.Namespace+"/"+ref.Name]
+			if ok {
+				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
+				rvCount += int(rv)
+			}
+		}
+	}
+
+	if len(cfgmaps) > 0 {
+		list, err := client.CoreV1().ConfigMaps(namespace).List(metav1.ListOptions{})
+		if err != nil {
+			return 0, err
+		}
+
+		objmap := make(map[string]apiv1.ConfigMap)
+		for _, cfg := range list.Items {
+			objmap[cfg.Namespace+"/"+cfg.Name] = cfg
+		}
+
+		for _, ref := range cfgmaps {
+			s, ok := objmap[ref.Namespace+"/"+ref.Name]
+			if ok {
+				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
+				rvCount += int(rv)
+			}
+		}
+	}
+
+	return rvCount, nil
 }

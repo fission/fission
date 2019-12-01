@@ -224,14 +224,17 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 		return err
 	}
 
-	patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%s"}]}]}}}}`,
-		f.Metadata.Name,
-		fv1.LastUpdateTimestamp,
-		time.Now().String())
-
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		_, err := deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
+		rvCount, err := referencedResourcesRVSum(deploy.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		if err != nil {
+			return err
+		}
+
+		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
+			f.Metadata.Name, fv1.ResourceVersionCount, rvCount)
+
+		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch))
 		if err != nil {
