@@ -120,7 +120,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	if resp.StatusCode < 400 {
-		console.Info(string(body))
+		os.Stdout.Write(body)
 		return nil
 	}
 
