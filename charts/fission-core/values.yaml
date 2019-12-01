@@ -45,6 +45,9 @@ builderNamespace: fission-builder
 ## Enable istio integration
 enableIstio: false
 
+executor:
+  adoptExistingResources: false
+
 ## Router config
 router:
   deployAsDaemonSet: false

@@ -243,7 +243,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 	return nil
 }
 
-func (gpm *GenericPoolManager) AdoptOrphanResources() {
+func (gpm *GenericPoolManager) AdoptExistingResources() {
 	envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
@@ -573,9 +573,12 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				}
 				if deleted {
 					for i := range fsvc.KubernetesObjects {
-						gpm.logger.Debug("release idle function resources",
-							zap.String("function", fsvc.Name), zap.String("address", fsvc.Address),
-							zap.String("executor", string(fsvc.Executor)))
+						gpm.logger.Info("release idle function resources",
+							zap.String("function", fsvc.Function.Name),
+							zap.String("address", fsvc.Address),
+							zap.String("executor", string(fsvc.Executor)),
+							zap.String("pod", fsvc.Name),
+						)
 						reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
 						time.Sleep(50 * time.Millisecond)
 					}

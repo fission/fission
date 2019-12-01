@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -242,16 +244,18 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	executorTypes[gpm.GetTypeName()] = gpm
 	executorTypes[ndm.GetTypeName()] = ndm
 
-	wg := &sync.WaitGroup{}
-	for _, et := range executorTypes {
-		wg.Add(1)
-		go func(et executortype.ExecutorType) {
-			defer wg.Done()
-			et.AdoptOrphanResources()
-		}(et)
+	if ok, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES")); ok {
+		wg := &sync.WaitGroup{}
+		for _, et := range executorTypes {
+			wg.Add(1)
+			go func(et executortype.ExecutorType) {
+				defer wg.Done()
+				et.AdoptExistingResources()
+			}(et)
+		}
+		// set hard timeout for resource adoption
+		util.WaitTimeout(wg, 30*time.Second)
 	}
-	// set hard timeout for resource adoption
-	util.WaitTimeout(wg, 30*time.Second)
 
 	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
 
