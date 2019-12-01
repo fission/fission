@@ -38,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -346,8 +345,7 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 
 	for _, container := range pod.Spec.Containers {
 		podLogOpts := apiv1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
-		var podLogsReq *restclient.Request
-		podLogsReq = kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
+		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
 
 		podLogs, err := podLogsReq.Stream()
 		if err != nil {
