@@ -28,8 +28,6 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
 	"github.com/emicklei/go-restful"
 	restfulspec "github.com/emicklei/go-restful-openapi"
 	"github.com/go-openapi/spec"
@@ -38,11 +36,13 @@ import (
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 
-	"github.com/fission/fission/pkg/types"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/types"
 )
 
 func RegisterFunctionRoute(ws *restful.WebService) {
@@ -307,9 +307,9 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get function Pods first
-	selector := map[string]string {
-		types.FUNCTION_UID: string(f.Metadata.UID),
-		types.ENVIRONMENT_NAME: f.Spec.Environment.Name,
+	selector := map[string]string{
+		types.FUNCTION_UID:          string(f.Metadata.UID),
+		types.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 		types.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 	}
 	podList, err := a.kubernetesClient.CoreV1().Pods(podNs).List(metav1.ListOptions{
@@ -334,7 +334,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the pod with highest resource version
-	err = getContainerLog(a.kubernetesClient, w,f, &pods[0])
+	err = getContainerLog(a.kubernetesClient, w, f, &pods[0])
 	if err != nil {
 		a.respondWithError(w, errors.Wrapf(err, "error getting container logs"))
 		return
@@ -355,7 +355,7 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
-			fn.Metadata.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName,	seq)
+			fn.Metadata.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
 		w.Write([]byte(msg))
 
 		_, err = io.Copy(w, podLogs)

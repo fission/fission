@@ -26,8 +26,8 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/fission-cli/console"
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
 func (c *Client) FunctionCreate(f *fv1.Function) (*metav1.ObjectMeta, error) {
