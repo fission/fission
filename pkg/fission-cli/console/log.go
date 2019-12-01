@@ -33,6 +33,11 @@ func Error(msg interface{}) {
 	os.Stderr.WriteString(fmt.Sprintf("%v: %v\n", color.RedString("Error"), trimNewline(msg)))
 }
 
+func Errorf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	os.Stderr.WriteString(fmt.Sprintf("%v: %v\n", color.RedString("Error"), trimNewline(msg)))
+}
+
 func Warn(msg interface{}) {
 	os.Stdout.WriteString(fmt.Sprintf("%v: %v\n", color.YellowString("Warning"), trimNewline(msg)))
 }

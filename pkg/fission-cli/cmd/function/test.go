@@ -102,16 +102,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
-	ctx := context.Background()
-	if deadline := input.Duration(flagkey.FnTestTimeout); deadline > 0 {
-		var closeCtx func()
-		ctx, closeCtx = context.WithTimeout(ctx, deadline)
-		defer closeCtx()
-	}
+	ctx, closeCtx := context.WithTimeout(context.Background(), input.Duration(flagkey.FnTestTimeout))
+	defer closeCtx()
 
-	headers := input.StringSlice(flagkey.FnTestHeader)
-
-	resp, err := doHTTPRequest(ctx, input.String(flagkey.HtMethod), functionUrl.String(), input.String(flagkey.FnTestBody), headers)
+	resp, err := doHTTPRequest(ctx, functionUrl.String(),
+		input.StringSlice(flagkey.FnTestHeader),
+		input.String(flagkey.HtMethod),
+		input.String(flagkey.FnTestBody))
 	if err != nil {
 		return err
 	}
@@ -123,21 +120,25 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	if resp.StatusCode < 400 {
-		fmt.Print(string(body))
+		os.Stdout.Write(body)
 		return nil
 	}
 
-	fmt.Printf("Error calling function %s: %d; Please try again or fix the error: %s", m.Name, resp.StatusCode, string(body))
-	err = printPodLogs(input)
+	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
+	log, err := printPodLogs(opts.client, m)
 	if err != nil {
-		fmt.Printf("Error getting function logs from pod: %v. Try to get logs from log database", err)
-		return Log(input)
+		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
+		err = Log(input)
+		if err != nil {
+			return errors.Wrapf(err, "error retrieving function log from log database")
+		}
+	} else {
+		console.Info(log)
 	}
-
-	return nil
+	return errors.New("error getting function response")
 }
 
-func doHTTPRequest(ctx context.Context, method, url, body string, headers []string) (*http.Response, error) {
+func doHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
 	method, err := httptrigger.GetMethod(method)
 	if err != nil {
 		return nil, err
@@ -163,41 +164,21 @@ func doHTTPRequest(ctx context.Context, method, url, body string, headers []stri
 	return resp, nil
 }
 
-func printPodLogs(input cli.Input) error {
-	fnName := input.String(flagkey.FnName)
-
-	u, err := util.GetApplicationUrl("application=fission-api")
+func printPodLogs(client *client.Client, fnMeta *metav1.ObjectMeta) (string, error) {
+	reader, statusCode, err := client.FunctionPodLogs(fnMeta)
 	if err != nil {
-		return err
+		return "", errors.Wrap(err, "error executing get logs request")
 	}
+	defer reader.Close()
 
-	queryURL, err := url.Parse(u)
+	body, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return errors.Wrap(err, "error parsing the base URL")
-	}
-	queryURL.Path = fmt.Sprintf("/proxy/logs/%s", fnName)
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
-	if err != nil {
-		return errors.Wrap(err, "error creating logs request")
+		return "", errors.Wrap(err, "error reading the response body")
 	}
 
-	httpClient := http.Client{}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "execute get logs request")
+	if statusCode != http.StatusOK {
+		return string(body), errors.Errorf("error getting logs from controller, status code: '%v'", statusCode)
 	}
 
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("get logs from pod directly")
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read the response body")
-	}
-
-	fmt.Println(string(body))
-	return nil
+	return string(body), nil
 }
