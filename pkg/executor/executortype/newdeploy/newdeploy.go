@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -32,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -533,7 +533,6 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 
 	return result.ErrorOrNil()
 }
-
 
 // referencedResourcesRVSum returns the sum of resource version of all resources the function references to.
 // We used to update timestamp in the deployment environment field in order to trigger rolling update when
