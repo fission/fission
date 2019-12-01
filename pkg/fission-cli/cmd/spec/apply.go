@@ -427,13 +427,13 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
 		for _, relativeGlob := range aus.IncludeGlobs {
-			absGlob := rootDir + "/" + relativeGlob
-			f, err := filepath.Glob(absGlob)
+			absGlob := filepath.Join(rootDir, relativeGlob)
+			console.Verbose(2, "try to find globs in path '%v'", absGlob)
+			fs, err := utils.FindAllGlobs(absGlob)
 			if err != nil {
 				return nil, errors.Wrapf(err, "Invalid glob in archive %v: %v", aus.Name, relativeGlob)
 			}
-			files = append(files, f...)
-			// xxx handle excludeGlobs here
+			files = append(files, fs...)
 		}
 	}
 

@@ -21,7 +21,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"golang.org/x/net/context/ctxhttp"
 	"io"
 	"io/ioutil"
 	"net"
@@ -33,10 +32,12 @@ import (
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
 func UrlForFunction(name, namespace string) string {
@@ -102,21 +103,34 @@ func GetTempDir() (string, error) {
 	return dir, err
 }
 
-// FindAllGlobs returns a list of globs of input list.
-func FindAllGlobs(inputList []string) ([]string, error) {
+// FindAllGlobs ignores all hidden files and returns a list of globs of input list.
+func FindAllGlobs(paths ...string) ([]string, error) {
 	files := make([]string, 0)
-	for _, glob := range inputList {
-		f, err := filepath.Glob(glob)
+	for _, p := range paths {
+		// use absolute path to find files
+		path, err := filepath.Abs(p)
 		if err != nil {
-			return nil, errors.Errorf("invalid glob %v: %v", glob, err)
+			return nil, errors.Wrapf(err, "error getting absolute path of path '%v'", p)
 		}
-		files = append(files, f...)
+		globs, err := filepath.Glob(path)
+		if err != nil {
+			return nil, errors.Errorf("invalid glob %v: %v", path, err)
+		}
+		for _, f := range globs {
+			// ignore hidden file.
+			if strings.HasPrefix(filepath.Base(f), ".") {
+				console.Verbose(2, "Ignore hidden file '%v'", f)
+				continue
+			}
+			files = append(files, f)
+			// xxx handle excludeGlobs here
+		}
 	}
 	return files, nil
 }
 
 func MakeZipArchive(targetName string, globs ...string) (string, error) {
-	files, err := FindAllGlobs(globs)
+	files, err := FindAllGlobs(globs...)
 	if err != nil {
 		return "", err
 	}
