@@ -52,5 +52,5 @@ type ExecutorType interface {
 	RefreshFuncPods(*zap.Logger, fv1.Function) error
 
 	// AdoptOrphanResources adopts existing resources created by the deleted executor.
-	AdoptOrphanResources()
+	AdoptExistingResources()
 }

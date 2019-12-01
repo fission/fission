@@ -215,6 +215,8 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: RUNTIME_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: ADOPT_EXISTING_RESOURCES
+          value: {{ .Values.executor.adoptExistingResources | default false | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT

@@ -65,6 +65,9 @@ logger:
   ## security context and set privileged to true.
   enableSecurityContext: false
 
+executor:
+  adoptExistingResources: false
+
 ## Router config
 router:
   deployAsDaemonSet: false

@@ -244,7 +244,7 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 	return nil
 }
 
-func (deploy *NewDeploy) AdoptOrphanResources() {
+func (deploy *NewDeploy) AdoptExistingResources() {
 	l := map[string]string{
 		types.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy),
 	}

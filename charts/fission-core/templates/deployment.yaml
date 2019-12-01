@@ -217,6 +217,8 @@ spec:
           value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: ADOPT_EXISTING_RESOURCES
+          value: {{ .Values.executor.adoptExistingResources | default false | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
         - name: FETCHER_MINCPU
