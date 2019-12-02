@@ -689,9 +689,12 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 		return err
 	}
 
-	// use current replicas instead of minscale in the ExecutionStrategy.
+	// the resource version inside function packageRef is changed,
+	// so the content of fetchRequest in deployment cmd is different.
+	// Therefore, the deployment update will trigger a rolling update.
 	newDeployment, err := deploy.getDeploymentSpec(fn, env,
-		existingDepl.Spec.Replicas, fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
+		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
+		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err

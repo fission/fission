@@ -192,11 +192,12 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}
+
+	// Here, we don't append deployAnnotations to podAnnotations
+	// since newdeploy doesn't manager pod lifecycle directly.
+
 	if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
-	}
-	for k, v := range deployAnnotations {
-		podAnnotations[k] = v
 	}
 	resources := deploy.getResources(env, fn)
 

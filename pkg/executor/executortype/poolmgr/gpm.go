@@ -183,7 +183,7 @@ func (gpm *GenericPoolManager) TapService(svcHost string) error {
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
-		if obj.Kind == "pod" {
+		if strings.ToLower(obj.Kind) == "pod" {
 			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
@@ -192,7 +192,11 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 				// Otherwise, we need to ensure that the address contains pod ip.
 				if gpm.enableIstio ||
 					(!gpm.enableIstio && strings.Contains(fsvc.Address, pod.Status.PodIP)) {
-					gpm.logger.Debug("valid address", zap.String("address", fsvc.Address))
+					gpm.logger.Debug("valid address",
+						zap.String("address", fsvc.Address),
+						zap.Any("function", fsvc.Function),
+						zap.String("executor", string(fsvc.Executor)),
+					)
 					return true
 				}
 			}

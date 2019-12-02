@@ -31,7 +31,9 @@ import (
 // when creating the environment deployment since kubelet will retry to
 // pull image until successes.
 func ApplyImagePullSecret(secret string, podspec apiv1.PodSpec) *apiv1.PodSpec {
-	podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
+	if len(secret) > 0 {
+		podspec.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: secret}}
+	}
 	return &podspec
 }
 

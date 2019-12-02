@@ -85,7 +85,7 @@ func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClien
 				if err != nil {
 					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				}
-				recyclePods(logger, funcs, types)
+				refreshPods(logger, funcs, types)
 			}
 		},
 	})
@@ -131,7 +131,7 @@ func initSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				}
-				recyclePods(logger, funcs, types)
+				refreshPods(logger, funcs, types)
 			}
 		},
 	})
@@ -157,7 +157,7 @@ func getSecretRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClie
 	return relatedFunctions, nil
 }
 
-func recyclePods(logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
+func refreshPods(logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
 	for _, f := range funcs {
 		var err error
 
