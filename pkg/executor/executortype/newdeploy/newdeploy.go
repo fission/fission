@@ -101,23 +101,24 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 
 		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(deployment)
 		if err != nil {
-			deploy.logger.Error("error while creating function deployment",
-				zap.Error(err),
-				zap.String("function", fn.Metadata.Name),
-				zap.String("deployment_name", deployName),
-				zap.String("deployment_namespace", deployNamespace))
-			return nil, err
+			if k8s_err.IsAlreadyExists(err) {
+				depl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
+			}
+			if err != nil {
+				deploy.logger.Error("error while creating function deployment",
+					zap.Error(err),
+					zap.String("function", fn.Metadata.Name),
+					zap.String("deployment_name", deployName),
+					zap.String("deployment_namespace", deployNamespace))
+				return nil, err
+			}
 		}
-
 		if minScale > 0 {
 			depl, err = deploy.waitForDeploy(depl, minScale, specializationTimeout)
 		}
-
 		return depl, err
 	}
-
 	return nil, err
-
 }
 
 func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function) error {
@@ -403,13 +404,16 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	} else if k8s_err.IsNotFound(err) {
 		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(hpa)
 		if err != nil {
-			return nil, err
+			if k8s_err.IsAlreadyExists(err) {
+				cHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
-		return cHpa, nil
+		return cHpa, err
 	}
-
 	return nil, err
-
 }
 
 func (deploy *NewDeploy) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
@@ -465,7 +469,12 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 	} else if k8s_err.IsNotFound(err) {
 		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(service)
 		if err != nil {
-			return nil, err
+			if k8s_err.IsAlreadyExists(err) {
+				svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 		return svc, nil
 	}

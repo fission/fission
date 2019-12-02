@@ -244,18 +244,22 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	executorTypes[gpm.GetTypeName()] = gpm
 	executorTypes[ndm.GetTypeName()] = ndm
 
-	if ok, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES")); ok {
-		wg := &sync.WaitGroup{}
-		for _, et := range executorTypes {
-			wg.Add(1)
-			go func(et executortype.ExecutorType) {
-				defer wg.Done()
+	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
+
+	wg := &sync.WaitGroup{}
+	for _, et := range executorTypes {
+		wg.Add(1)
+		go func(et executortype.ExecutorType) {
+			defer wg.Done()
+			if adoptExistingResources {
 				et.AdoptExistingResources()
-			}(et)
-		}
-		// set hard timeout for resource adoption
-		util.WaitTimeout(wg, 30*time.Second)
+			}
+			et.CleanupOldExecutorObjects()
+		}(et)
 	}
+	// set hard timeout for resource adoption
+	// TODO: use context to control the waiting time once kubernetes client supports it.
+	util.WaitTimeout(wg, 30*time.Second)
 
 	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
 
@@ -264,7 +268,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return err
 	}
 
-	go reaper.CleanupOldExecutorObjects(logger, kubernetesClient, executorInstanceID)
 	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port)
 	go serveMetric(logger)

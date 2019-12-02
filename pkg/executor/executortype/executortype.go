@@ -53,4 +53,7 @@ type ExecutorType interface {
 
 	// AdoptOrphanResources adopts existing resources created by the deleted executor.
 	AdoptExistingResources()
+
+	// CleanupOldExecutorObjects cleans up resources created by old executor instances
+	CleanupOldExecutorObjects()
 }
