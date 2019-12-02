@@ -529,7 +529,7 @@ func (gp *GenericPool) waitForReadyPod() error {
 func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.Service, error) {
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:   name,
 			Labels: labels,
 		},
 		Spec: apiv1.ServiceSpec{
