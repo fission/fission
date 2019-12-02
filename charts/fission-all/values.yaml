@@ -20,13 +20,13 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.7.0-rc.2
+imageTag: 1.7.0
 
 ## Fission fetcher repository
 fetcherImage: fission/fetcher
 
 ## Fission fetcher image version
-fetcherImageTag: 1.7.0-rc.2
+fetcherImageTag: 1.7.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
