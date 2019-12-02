@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,43 +35,6 @@ var (
 	deletePropagation = meta_v1.DeletePropagationBackground
 	delOpt            = meta_v1.DeleteOptions{PropagationPolicy: &deletePropagation}
 )
-
-// CleanupOldExecutorObjects cleans up resources created by old executor instances
-func CleanupOldExecutorObjects(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, instanceId string) {
-	errs := &multierror.Error{}
-
-	err := cleanupHpa(logger, kubernetesClient, instanceId)
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	}
-
-	err = cleanupDeployments(logger, kubernetesClient, instanceId)
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	}
-
-	// Pods might be running user functions, so we give them
-	// a few minutes before terminating them.  This time is the
-	// maximum function runtime, plus the time a router might
-	// still route to an old instance, i.e. router cache expiry
-	// time.
-	time.Sleep(6 * time.Minute)
-
-	err = cleanupServices(logger, kubernetesClient, instanceId)
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	}
-
-	err = cleanupPods(logger, kubernetesClient, instanceId)
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	}
-
-	if errs.ErrorOrNil() != nil {
-		// TODO retry reaper; logged and ignored for now
-		logger.Error("Failed to cleanup old executor objects", zap.Error(err))
-	}
-}
 
 // CleanupKubeObject deletes given kubernetes object
 func CleanupKubeObject(logger *zap.Logger, kubeClient *kubernetes.Clientset, kubeobj *apiv1.ObjectReference) {
@@ -107,8 +69,8 @@ func CleanupKubeObject(logger *zap.Logger, kubeClient *kubernetes.Clientset, kub
 	}
 }
 
-func cleanupDeployments(logger *zap.Logger, client *kubernetes.Clientset, instanceId string) error {
-	deploymentList, err := client.AppsV1().Deployments(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+func CleanupDeployments(logger *zap.Logger, client *kubernetes.Clientset, instanceId string, listOps meta_v1.ListOptions) error {
+	deploymentList, err := client.AppsV1().Deployments(meta_v1.NamespaceAll).List(listOps)
 	if err != nil {
 		return err
 	}
@@ -119,7 +81,7 @@ func cleanupDeployments(logger *zap.Logger, client *kubernetes.Clientset, instan
 			id, ok = dep.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
-			logger.Debug("cleaning up deployment", zap.String("deployment", dep.ObjectMeta.Name))
+			logger.Info("cleaning up deployment", zap.String("deployment", dep.ObjectMeta.Name))
 			err := client.AppsV1().Deployments(dep.ObjectMeta.Namespace).Delete(dep.ObjectMeta.Name, &delOpt)
 			if err != nil {
 				logger.Error("error cleaning up deployment",
@@ -133,8 +95,8 @@ func cleanupDeployments(logger *zap.Logger, client *kubernetes.Clientset, instan
 	return nil
 }
 
-func cleanupPods(logger *zap.Logger, client *kubernetes.Clientset, instanceId string) error {
-	podList, err := client.CoreV1().Pods(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+func CleanupPods(logger *zap.Logger, client *kubernetes.Clientset, instanceId string, listOps meta_v1.ListOptions) error {
+	podList, err := client.CoreV1().Pods(meta_v1.NamespaceAll).List(listOps)
 	if err != nil {
 		return err
 	}
@@ -145,7 +107,7 @@ func cleanupPods(logger *zap.Logger, client *kubernetes.Clientset, instanceId st
 			id, ok = pod.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
-			logger.Debug("cleaning up pod", zap.String("pod", pod.ObjectMeta.Name))
+			logger.Info("cleaning up pod", zap.String("pod", pod.ObjectMeta.Name))
 			err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(pod.ObjectMeta.Name, nil)
 			if err != nil {
 				logger.Error("error cleaning up pod",
@@ -159,8 +121,8 @@ func cleanupPods(logger *zap.Logger, client *kubernetes.Clientset, instanceId st
 	return nil
 }
 
-func cleanupServices(logger *zap.Logger, client *kubernetes.Clientset, instanceId string) error {
-	svcList, err := client.CoreV1().Services(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+func CleanupServices(logger *zap.Logger, client *kubernetes.Clientset, instanceId string, listOps meta_v1.ListOptions) error {
+	svcList, err := client.CoreV1().Services(meta_v1.NamespaceAll).List(listOps)
 	if err != nil {
 		return err
 	}
@@ -171,7 +133,7 @@ func cleanupServices(logger *zap.Logger, client *kubernetes.Clientset, instanceI
 			id, ok = svc.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
-			logger.Debug("cleaning up service", zap.String("service", svc.ObjectMeta.Name))
+			logger.Info("cleaning up service", zap.String("service", svc.ObjectMeta.Name))
 			err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(svc.ObjectMeta.Name, nil)
 			if err != nil {
 				logger.Error("error cleaning up service",
@@ -185,8 +147,8 @@ func cleanupServices(logger *zap.Logger, client *kubernetes.Clientset, instanceI
 	return nil
 }
 
-func cleanupHpa(logger *zap.Logger, client *kubernetes.Clientset, instanceId string) error {
-	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+func CleanupHpa(logger *zap.Logger, client *kubernetes.Clientset, instanceId string, listOps meta_v1.ListOptions) error {
+	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(meta_v1.NamespaceAll).List(listOps)
 	if err != nil {
 		return err
 	}
@@ -198,7 +160,7 @@ func cleanupHpa(logger *zap.Logger, client *kubernetes.Clientset, instanceId str
 			id, ok = hpa.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
-			logger.Debug("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
+			logger.Info("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
 			err := client.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(hpa.ObjectMeta.Name, nil)
 			if err != nil {
 				logger.Error("error cleaning up HPA",

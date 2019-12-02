@@ -43,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/types"
@@ -270,6 +271,35 @@ func (deploy *NewDeploy) AdoptExistingResources() {
 	}
 
 	wg.Wait()
+}
+
+func (deploy *NewDeploy) CleanupOldExecutorObjects() {
+	deploy.logger.Info("Newdeploy starts to clean orphaned resources", zap.String("instanceID", deploy.instanceID))
+
+	errs := &multierror.Error{}
+	listOpts := metav1.ListOptions{
+		LabelSelector: labels.Set(map[string]string{types.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy)}).AsSelector().String(),
+	}
+
+	err := reaper.CleanupHpa(deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+
+	err = reaper.CleanupDeployments(deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+
+	err = reaper.CleanupServices(deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+
+	if errs.ErrorOrNil() != nil {
+		// TODO retry reaper; logged and ignored for now
+		deploy.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
+	}
 }
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {

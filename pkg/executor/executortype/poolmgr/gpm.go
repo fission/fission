@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -374,6 +375,30 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 	}
 
 	wg.Wait()
+}
+
+func (gpm *GenericPoolManager) CleanupOldExecutorObjects() {
+	gpm.logger.Info("Poolmanager starts to clean orphaned resources", zap.String("instanceID", gpm.instanceId))
+
+	errs := &multierror.Error{}
+	listOpts := metav1.ListOptions{
+		LabelSelector: labels.Set(map[string]string{types.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}).AsSelector().String(),
+	}
+
+	err := reaper.CleanupDeployments(gpm.logger, gpm.kubernetesClient, gpm.instanceId, listOpts)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+
+	err = reaper.CleanupPods(gpm.logger, gpm.kubernetesClient, gpm.instanceId, listOpts)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+
+	if errs.ErrorOrNil() != nil {
+		// TODO retry reaper; logged and ignored for now
+		gpm.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
+	}
 }
 
 func (gpm *GenericPoolManager) service() {
