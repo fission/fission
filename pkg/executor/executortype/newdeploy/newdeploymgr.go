@@ -19,7 +19,6 @@ package newdeploy
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -245,44 +244,6 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 }
 
 func (deploy *NewDeploy) AdoptExistingResources() {
-	l := map[string]string{
-		types.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy),
-	}
-
-	podList, err := deploy.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
-		LabelSelector: labels.Set(l).AsSelector().String(),
-	})
-	if err != nil {
-		deploy.logger.Error("error getting pod list", zap.Error(err))
-		return
-	}
-
-	// Unlike poolmanager manages the lifecycle of function pod directly,
-	// newdeploy is only responsible to create the deployment and Kubernetes
-	// will handle the rest. Hence we don't need to wait for the pod patching
-	// process to finish.
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if !utils.IsReadyPod(pod) {
-			continue
-		}
-		go func() {
-			// avoid too many requests arrive Kubernetes API server at the same time.
-			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
-
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, deploy.instanceID)
-			pod, err = deploy.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
-			if err != nil {
-				// just log the error since it won't affect the function serving
-				deploy.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
-					zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
-				return
-			}
-			deploy.logger.Info("adopt newdeploy function pod",
-				zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
-		}()
-	}
-
 	fnList, err := deploy.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("error getting function list", zap.Error(err))
@@ -689,9 +650,12 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 		return err
 	}
 
-	// use current replicas instead of minscale in the ExecutionStrategy.
+	// the resource version inside function packageRef is changed,
+	// so the content of fetchRequest in deployment cmd is different.
+	// Therefore, the deployment update will trigger a rolling update.
 	newDeployment, err := deploy.getDeploymentSpec(fn, env,
-		existingDepl.Spec.Replicas, fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
+		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
+		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.Metadata))
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err

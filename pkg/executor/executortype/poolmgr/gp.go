@@ -146,7 +146,7 @@ func MakeGenericPool(
 	return gp, nil
 }
 
-func (gp *GenericPool) getDeployLabels() map[string]string {
+func (gp *GenericPool) getEnvironmentPoolLabels() map[string]string {
 	return map[string]string{
 		types.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
 		types.ENVIRONMENT_NAME:      gp.env.Metadata.Name,
@@ -246,6 +246,11 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 			// modified, this should fail; in that case just
 			// retry.
 			chosenPod.ObjectMeta.Labels = newLabels
+
+			// Append executor instance id to pod annotations to
+			// indicate this pod is managed by this executor.
+			chosenPod.ObjectMeta.Annotations = gp.getDeployAnnotations()
+
 			_, err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Update(chosenPod)
 			if err != nil {
 				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.ObjectMeta.Name))
@@ -259,7 +264,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 }
 
 func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string]string {
-	label := gp.getDeployLabels()
+	label := gp.getEnvironmentPoolLabels()
 	label[types.FUNCTION_NAME] = metadata.Name
 	label[types.FUNCTION_UID] = string(metadata.UID)
 	label[types.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
@@ -274,11 +279,6 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 		// cleaned up.  (We need a better solutions for both those things; log
 		// aggregation and storage will help.)
 		gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
-		// Ignore sleep here if istio feature is enabled, function pod
-		// will be deleted after 6 mins (terminationGracePeriodSeconds).
-		if !gp.useIstio {
-			time.Sleep(5 * time.Minute)
-		}
 		gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(name, nil)
 	}()
 }
@@ -351,7 +351,7 @@ func (gp *GenericPool) getPoolName() string {
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPool() error {
-	deployLabels := gp.getDeployLabels()
+	deployLabels := gp.getEnvironmentPoolLabels()
 	deployAnnotations := gp.getDeployAnnotations()
 
 	// Use long terminationGracePeriodSeconds for connection draining in case that
@@ -365,11 +365,14 @@ func (gp *GenericPool) createPool() error {
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}
+
+	// Here, we don't append executor instance-id to pod annotations
+	// to prevent unwanted rolling updates occur. Pool manager will
+	// append executor instance-id to pod annotations when a pod is chosen
+	// for function specialization.
+
 	if gp.useIstio && gp.env.Spec.AllowAccessToExternalNetwork {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
-	}
-	for k, v := range deployAnnotations {
-		podAnnotations[k] = v
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
@@ -526,7 +529,8 @@ func (gp *GenericPool) waitForReadyPod() error {
 func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.Service, error) {
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:   name,
+			Labels: labels,
 		},
 		Spec: apiv1.ServiceSpec{
 			Type: apiv1.ServiceTypeClusterIP,
@@ -546,7 +550,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	gp.logger.Info("choosing pod from pool", zap.Any("function", fn.Metadata))
-	newLabels := gp.labelsForFunction(&fn.Metadata)
+	funcLabels := gp.labelsForFunction(&fn.Metadata)
 
 	if gp.useIstio {
 		// Istio only allows accessing pod through k8s service, and requests come to
@@ -589,7 +593,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		}
 	}
 
-	pod, err := gp.choosePod(newLabels)
+	pod, err := gp.choosePod(funcLabels)
 	if err != nil {
 		return nil, err
 	}
@@ -608,7 +612,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 			svcName = fmt.Sprintf("%s-%v", svcName, fn.Metadata.UID)
 		}
 
-		svc, err := gp.createSvc(svcName, newLabels)
+		svc, err := gp.createSvc(svcName, funcLabels)
 		if err != nil {
 			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, err
