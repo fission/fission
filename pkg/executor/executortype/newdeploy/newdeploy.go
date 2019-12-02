@@ -411,7 +411,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 				return nil, err
 			}
 		}
-		return cHpa, err
+		return cHpa, nil
 	}
 	return nil, err
 }
