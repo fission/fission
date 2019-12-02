@@ -204,7 +204,7 @@ attach_github_release_cli() {
 	   --replace \
 	   --user fission \
 	   --repo fission \
-	   --tag $gittag \
+	   --tag  $gittag \
 	   --name fission-cli-windows.exe \
 	   --file $BUILDDIR/cli/windows/fission-cli-windows.exe
 }
@@ -218,7 +218,7 @@ attach_github_release_charts() {
 	   --replace \
 	   --user fission \
 	   --repo fission \
-	   --tag $gittag \
+	   --tag  $gittag \
 	   --name fission-all-$version.tgz \
 	   --file $BUILDDIR/charts/fission-all-$version.tgz
 
@@ -226,7 +226,7 @@ attach_github_release_charts() {
 	   --replace \
 	   --user fission \
 	   --repo fission \
-	   --tag $gittag \
+	   --tag  $gittag \
 	   --name fission-core-$version.tgz \
 	   --file $BUILDDIR/charts/fission-core-$version.tgz
 
@@ -254,6 +254,14 @@ attach_github_release_yamls() {
            --tag $gittag \
            --name ${c}-${version}.yaml \
            --file $BUILDDIR/yamls/${c}-${version}.yaml
+
+        gothub upload \
+           --replace \
+           --user fission \
+           --repo fission \
+           --tag $gittag \
+           --name ${c}-${version}-openshift.yaml \
+           --file $BUILDDIR/yamls/${c}-${version}-openshift.yaml
     done
 }
 
