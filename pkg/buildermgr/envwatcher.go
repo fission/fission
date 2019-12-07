@@ -489,15 +489,18 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		return nil, err
 	}
 
-	podSpec := apiv1.PodSpec{
-		Containers:         []apiv1.Container{*container},
-		ServiceAccountName: "fission-builder",
+	pod := apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      sel,
+			Annotations: podAnnotations,
+		},
+		Spec: apiv1.PodSpec{
+			Containers:         []apiv1.Container{*container},
+			ServiceAccountName: "fission-builder",
+		},
 	}
 
-	finalPodSpec, err := util.MergePodSpec(&podSpec, env.Spec.Builder.PodSpec)
-	if err != nil {
-		return nil, err
-	}
+	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -510,13 +513,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 			Selector: &metav1.LabelSelector{
 				MatchLabels: sel,
 			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      sel,
-					Annotations: podAnnotations,
-				},
-				Spec: *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, *finalPodSpec)),
-			},
+			Template: pod,
 		},
 	}
 
@@ -525,11 +522,20 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		return nil, err
 	}
 
-	envw.logger.Info("creating builder deployment", zap.String("deployment", name))
+	if env.Spec.Builder.PodSpec != nil {
+		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Builder.PodSpec)
+		if err != nil {
+			return nil, err
+		}
+		deployment.Spec.Template.Spec = *newPodSpec
+	}
+
 	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(deployment)
 	if err != nil {
 		return nil, err
 	}
+
+	envw.logger.Info("creating builder deployment", zap.String("deployment", name))
 
 	return deployment, nil
 }
