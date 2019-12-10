@@ -261,7 +261,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrap(err, "error checking configmap")
+						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
 					}
 				}
 			}
