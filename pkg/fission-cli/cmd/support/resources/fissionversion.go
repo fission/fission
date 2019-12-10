@@ -25,10 +25,10 @@ import (
 )
 
 type FissionVersion struct {
-	client *client.Client
+	client client.Interface
 }
 
-func NewFissionVersion(client *client.Client) Resource {
+func NewFissionVersion(client client.Interface) Resource {
 	return FissionVersion{client: client}
 }
 

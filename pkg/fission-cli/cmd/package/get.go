@@ -24,11 +24,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -37,7 +36,7 @@ const (
 )
 
 type GetSubCommand struct {
-	client      *client.Client
+	cmd.CommandActioner
 	name        string
 	namespace   string
 	output      string
@@ -45,27 +44,11 @@ type GetSubCommand struct {
 }
 
 func GetSrc(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := GetSubCommand{
-		client:      c,
-		archiveType: sourceArchive,
-	}
-	return opts.do(input)
+	return (&GetSubCommand{}).do(input)
 }
 
 func GetDeploy(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := GetSubCommand{
-		client:      c,
-		archiveType: deployArchive,
-	}
-	return opts.do(input)
+	return (&GetSubCommand{}).do(input)
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
@@ -84,7 +67,7 @@ func (opts *GetSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) error {
-	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
+	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,
 	})
@@ -101,7 +84,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.client, archive.URL)
+		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client(), archive.URL)
 		if err != nil {
 			return err
 		}

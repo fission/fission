@@ -19,25 +19,17 @@ package timetrigger
 import (
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ShowSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func Show(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := ShowSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ShowSubCommand{}).do(input)
 }
 
 func (opts *ShowSubCommand) do(input cli.Input) error {
@@ -51,7 +43,7 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	t, err := getAPITimeInfo(opts.client)
+	t, err := getAPITimeInfo(opts.Client())
 	if err != nil {
 		return err
 	}

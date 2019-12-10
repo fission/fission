@@ -23,26 +23,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
-	client  *client.Client
+	cmd.CommandActioner
 	trigger *fv1.MessageQueueTrigger
 }
 
 func Update(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := UpdateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&UpdateSubCommand{}).do(input)
 }
 
 func (opts *UpdateSubCommand) do(input cli.Input) error {
@@ -54,7 +46,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
-	mqt, err := opts.client.MessageQueueTriggerGet(&metav1.ObjectMeta{
+	mqt, err := opts.Client().V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.MqtName),
 		Namespace: input.String(flagkey.NamespaceTrigger),
 	})
@@ -111,7 +103,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.client.MessageQueueTriggerUpdate(opts.trigger)
+	_, err := opts.Client().V1().MessageQueueTrigger().Update(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating message queue trigger")
 	}

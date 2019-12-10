@@ -24,12 +24,12 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
-	client        *client.Client
+	cmd.CommandActioner
 	name          string
 	namespace     string
 	deleteOrphans bool
@@ -37,14 +37,7 @@ type DeleteSubCommand struct {
 }
 
 func Delete(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := DeleteSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&DeleteSubCommand{}).do(input)
 }
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
@@ -70,7 +63,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	if len(opts.name) != 0 {
-		_, err := opts.client.PackageGet(&metav1.ObjectMeta{
+		_, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 			Namespace: opts.namespace,
 			Name:      opts.name,
 		})
@@ -78,7 +71,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, "find package")
 		}
 
-		fnList, err := GetFunctionsByPackage(opts.client, opts.name, opts.namespace)
+		fnList, err := GetFunctionsByPackage(opts.Client(), opts.name, opts.namespace)
 		if err != nil {
 			return err
 		}
@@ -86,7 +79,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if !opts.force && len(fnList) > 0 {
 			return errors.New("Package is used by at least one function, use -f to force delete")
 		}
-		err = deletePackage(opts.client, opts.name, opts.namespace)
+		err = deletePackage(opts.Client(), opts.name, opts.namespace)
 		if err != nil {
 			return err
 		}
@@ -95,7 +88,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 
 	// TODO improve list speed when --orphan
 	if opts.deleteOrphans {
-		err := deleteOrphanPkgs(opts.client, opts.namespace)
+		err := deleteOrphanPkgs(opts.Client(), opts.namespace)
 		if err != nil {
 			return errors.Wrap(err, "deleting orphan packages")
 		}
@@ -105,8 +98,8 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
-	pkgList, err := client.PackageList(pkgNamespace)
+func deleteOrphanPkgs(client client.Interface, pkgNamespace string) error {
+	pkgList, err := client.V1().Package().List(pkgNamespace)
 	if err != nil {
 		return err
 	}
@@ -127,8 +120,8 @@ func deleteOrphanPkgs(client *client.Client, pkgNamespace string) error {
 	return nil
 }
 
-func deletePackage(client *client.Client, pkgName string, pkgNamespace string) error {
-	return client.PackageDelete(&metav1.ObjectMeta{
+func deletePackage(client client.Interface, pkgName string, pkgNamespace string) error {
+	return client.V1().Package().Delete(&metav1.ObjectMeta{
 		Namespace: pkgNamespace,
 		Name:      pkgName,
 	})

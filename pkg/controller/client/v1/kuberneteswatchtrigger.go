@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -26,7 +27,29 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 )
 
-func (c *Client) WatchCreate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
+type (
+	KubeWatcherGetter interface {
+		KubeWatcher() KubeWatcherInterface
+	}
+
+	KubeWatcherInterface interface {
+		Create(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, error)
+		Update(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(ns string) ([]fv1.KubernetesWatchTrigger, error)
+	}
+
+	KubeWatcher struct {
+		client rest.Interface
+	}
+)
+
+func newKubeWatcher(c *V1) KubeWatcherInterface {
+	return &KubeWatcher{client: c.restClient}
+}
+
+func (c *KubeWatcher) Create(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
 	err := w.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("KubernetesWatchTrigger", err)
@@ -37,13 +60,13 @@ func (c *Client) WatchCreate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta,
 		return nil, err
 	}
 
-	resp, err := c.create("watches", "application/json", reqbody)
+	resp, err := c.client.Create("watches", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -57,17 +80,17 @@ func (c *Client) WatchCreate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta,
 	return &m, nil
 }
 
-func (c *Client) WatchGet(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, error) {
+func (c *KubeWatcher) Get(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, error) {
 	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -81,25 +104,25 @@ func (c *Client) WatchGet(m *metav1.ObjectMeta) (*fv1.KubernetesWatchTrigger, er
 	return &w, nil
 }
 
-func (c *Client) WatchUpdate(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
+func (c *KubeWatcher) Update(w *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
 	return nil, ferror.MakeError(ferror.ErrorNotImplmented, "watch update not implemented")
 }
 
-func (c *Client) WatchDelete(m *metav1.ObjectMeta) error {
+func (c *KubeWatcher) Delete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("watches/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) WatchList(ns string) ([]fv1.KubernetesWatchTrigger, error) {
+func (c *KubeWatcher) List(ns string) ([]fv1.KubernetesWatchTrigger, error) {
 	relativeUrl := fmt.Sprintf("watches?namespace=%v", ns)
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}

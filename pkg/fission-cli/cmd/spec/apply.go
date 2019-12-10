@@ -34,6 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -44,7 +45,7 @@ import (
 )
 
 type ApplySubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 // Apply compares the specs in the spec/config/ directory to the
@@ -57,14 +58,7 @@ type ApplySubCommand struct {
 // etc, while doing an apply, they will get a partially applied deployment.  However,
 // they can retry their apply command once they're back online.
 func Apply(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := ApplySubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ApplySubCommand{}).do(input)
 }
 
 func (opts *ApplySubCommand) do(input cli.Input) error {
@@ -83,7 +77,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 	if watchResources || waitForBuild {
 		// init package build watcher
-		pbw = makePackageBuildWatcher(opts.client)
+		pbw = makePackageBuildWatcher(opts.Client())
 	}
 
 	if watchResources {
@@ -129,7 +123,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(opts.client, specDir, fr, deleteResources)
+		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources)
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
@@ -258,7 +252,7 @@ func pluralize(num int, word string) string {
 }
 
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-func applyArchives(fclient *client.Client, specDir string, fr *FissionResources) error {
+func applyArchives(fclient client.Interface, specDir string, fr *FissionResources) error {
 
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
@@ -278,7 +272,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 
 	// get list of packages, make content-indexed map of available archives
 	availableArchives := make(map[string]string) // (sha256 -> url)
-	pkgs, err := fclient.PackageList(metav1.NamespaceAll)
+	pkgs, err := fclient.V1().Package().List(metav1.NamespaceAll)
 	if err != nil {
 		return err
 	}
@@ -332,7 +326,7 @@ func applyArchives(fclient *client.Client, specDir string, fr *FissionResources)
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(fclient *client.Client, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
@@ -527,7 +521,7 @@ func hasDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) bool {
 	return false
 }
 
-func waitForPackageBuild(fclient *client.Client, pkg *fv1.Package) (*fv1.Package, error) {
+func waitForPackageBuild(fclient client.Interface, pkg *fv1.Package) (*fv1.Package, error) {
 	start := time.Now()
 	for {
 		if pkg.Status.BuildStatus != fv1.BuildStatusRunning {
@@ -541,16 +535,16 @@ func waitForPackageBuild(fclient *client.Client, pkg *fv1.Package) (*fv1.Package
 		time.Sleep(time.Second)
 
 		var err error
-		pkg, err = fclient.PackageGet(&pkg.Metadata)
+		pkg, err = fclient.V1().Package().Get(&pkg.Metadata)
 		if err != nil {
 			return nil, err
 		}
 	}
 }
 
-func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.PackageList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().Package().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -620,7 +614,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 					pkg.Status.BuildStatus = fv1.BuildStatusPending
 				}
 
-				newmeta, err := fclient.PackageUpdate(pkg)
+				newmeta, err := fclient.V1().Package().Update(pkg)
 				if err != nil {
 					return nil, nil, err
 					// TODO check for resourceVersion conflict errors and retry
@@ -631,7 +625,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 			}
 		} else {
 			// create
-			newmeta, err := fclient.PackageCreate(&o)
+			newmeta, err := fclient.V1().Package().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -646,7 +640,7 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.PackageDelete(&o.Metadata)
+				err := fclient.V1().Package().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -659,9 +653,9 @@ func applyPackages(fclient *client.Client, fr *FissionResources, delete bool) (m
 	return metadataMap, &ras, nil
 }
 
-func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.FunctionList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().Function().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -704,7 +698,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.FunctionUpdate(&o)
+				newmeta, err := fclient.V1().Function().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -714,7 +708,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 			}
 		} else {
 			// create
-			newmeta, err := fclient.FunctionCreate(&o)
+			newmeta, err := fclient.V1().Function().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -729,7 +723,7 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.FunctionDelete(&o.Metadata)
+				err := fclient.V1().Function().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -742,9 +736,9 @@ func applyFunctions(fclient *client.Client, fr *FissionResources, delete bool) (
 	return metadataMap, &ras, nil
 }
 
-func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.EnvironmentList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().Environment().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -787,7 +781,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.EnvironmentUpdate(&o)
+				newmeta, err := fclient.V1().Environment().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -797,7 +791,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 			}
 		} else {
 			// create
-			newmeta, err := fclient.EnvironmentCreate(&o)
+			newmeta, err := fclient.V1().Environment().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -812,7 +806,7 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.EnvironmentDelete(&o.Metadata)
+				err := fclient.V1().Environment().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -825,9 +819,9 @@ func applyEnvironments(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.HTTPTriggerList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().HTTPTrigger().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -870,7 +864,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.HTTPTriggerUpdate(&o)
+				newmeta, err := fclient.V1().HTTPTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -880,7 +874,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 			}
 		} else {
 			// create
-			newmeta, err := fclient.HTTPTriggerCreate(&o)
+			newmeta, err := fclient.V1().HTTPTrigger().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -895,7 +889,7 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.HTTPTriggerDelete(&o.Metadata)
+				err := fclient.V1().HTTPTrigger().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -908,9 +902,9 @@ func applyHTTPTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.WatchList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().KubeWatcher().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -953,7 +947,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.WatchUpdate(&o)
+				newmeta, err := fclient.V1().KubeWatcher().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -963,7 +957,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 			}
 		} else {
 			// create
-			newmeta, err := fclient.WatchCreate(&o)
+			newmeta, err := fclient.V1().KubeWatcher().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -978,7 +972,7 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.WatchDelete(&o.Metadata)
+				err := fclient.V1().KubeWatcher().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -991,9 +985,9 @@ func applyKubernetesWatchTriggers(fclient *client.Client, fr *FissionResources, 
 	return metadataMap, &ras, nil
 }
 
-func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.TimeTriggerList(metav1.NamespaceAll)
+	allObjs, err := fclient.V1().TimeTrigger().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1036,7 +1030,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.TimeTriggerUpdate(&o)
+				newmeta, err := fclient.V1().TimeTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1046,7 +1040,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 			}
 		} else {
 			// create
-			newmeta, err := fclient.TimeTriggerCreate(&o)
+			newmeta, err := fclient.V1().TimeTrigger().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1061,7 +1055,7 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.TimeTriggerDelete(&o.Metadata)
+				err := fclient.V1().TimeTrigger().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1074,9 +1068,9 @@ func applyTimeTriggers(fclient *client.Client, fr *FissionResources, delete bool
 	return metadataMap, &ras, nil
 }
 
-func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.MessageQueueTriggerList("", metav1.NamespaceAll)
+	allObjs, err := fclient.V1().MessageQueueTrigger().List("", metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1119,7 +1113,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 			} else {
 				// update
 				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
-				newmeta, err := fclient.MessageQueueTriggerUpdate(&o)
+				newmeta, err := fclient.V1().MessageQueueTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1129,7 +1123,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 			}
 		} else {
 			// create
-			newmeta, err := fclient.MessageQueueTriggerCreate(&o)
+			newmeta, err := fclient.V1().MessageQueueTrigger().Create(&o)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1144,7 +1138,7 @@ func applyMessageQueueTriggers(fclient *client.Client, fr *FissionResources, del
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.Metadata)]
 			if !wanted {
-				err := fclient.MessageQueueTriggerDelete(&o.Metadata)
+				err := fclient.V1().MessageQueueTrigger().Delete(&o.Metadata)
 				if err != nil {
 					return nil, nil, err
 				}

@@ -27,9 +27,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
@@ -44,20 +44,13 @@ const (
 )
 
 type CreateSubCommand struct {
-	client   *client.Client
+	cmd.CommandActioner
 	function *fv1.Function
 	specFile string
 }
 
 func Create(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := CreateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&CreateSubCommand{}).do(input)
 }
 
 func (opts *CreateSubCommand) do(input cli.Input) error {
@@ -83,7 +76,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	if !toSpec {
 		// check for unique function names within a namespace
-		fn, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 			Name:      input.String(flagkey.FnName),
 			Namespace: input.String(flagkey.NamespaceFunction),
 		})
@@ -139,7 +132,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			pkgMetadata = &pkg.Metadata
 		} else {
 			// use existing package
-			pkg, err = opts.client.PackageGet(&metav1.ObjectMeta{
+			pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      pkgName,
 			})
@@ -181,7 +174,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					fnName, envName))
 			}
 		} else {
-			_, err := opts.client.EnvironmentGet(&metav1.ObjectMeta{
+			_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 				Namespace: envNamespace,
 				Name:      envName,
 			})
@@ -213,7 +206,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgName := fmt.Sprintf("%v-%v", fnName, uuid.NewV4().String())
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.client, pkgName, fnNamespace, envName, envNamespace,
+		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
@@ -227,7 +220,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				_, err := opts.client.SecretGet(&metav1.ObjectMeta{
+				_, err := opts.Client().V1().Misc().SecretGet(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      secretName,
 				})
@@ -253,7 +246,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				_, err := opts.client.ConfigMapGet(&metav1.ObjectMeta{
+				_, err := opts.Client().V1().Misc().ConfigMapGet(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      cfgMapName,
 				})
@@ -316,7 +309,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.client.FunctionCreate(opts.function)
+	_, err := opts.Client().V1().Function().Create(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error creating function")
 	}
@@ -352,7 +345,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			},
 		},
 	}
-	_, err = opts.client.HTTPTriggerCreate(ht)
+	_, err = opts.Client().V1().HTTPTrigger().Create(ht)
 	if err != nil {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}

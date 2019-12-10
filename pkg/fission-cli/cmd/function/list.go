@@ -24,31 +24,23 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func List(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := ListSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ListSubCommand{}).do(input)
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
 	ns := input.String(flagkey.NamespaceFunction)
 
-	fns, err := opts.client.FunctionList(ns)
+	fns, err := opts.Client().V1().Function().List(ns)
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")
 	}

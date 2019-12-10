@@ -39,11 +39,11 @@ const (
 )
 
 type CrdDumper struct {
-	client  *client.Client
+	client  client.Interface
 	crdType string
 }
 
-func NewCrdDumper(client *client.Client, crdType string) Resource {
+func NewCrdDumper(client client.Interface, crdType string) Resource {
 	return CrdDumper{client: client, crdType: crdType}
 }
 
@@ -51,7 +51,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 
 	switch res.crdType {
 	case CrdEnvironment:
-		items, err := res.client.EnvironmentList(metav1.NamespaceAll)
+		items, err := res.client.V1().Environment().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
@@ -63,7 +63,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 	case CrdFunction:
-		items, err := res.client.FunctionList(metav1.NamespaceAll)
+		items, err := res.client.V1().Function().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
@@ -75,7 +75,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 	case CrdPackage:
-		items, err := res.client.PackageList(metav1.NamespaceAll)
+		items, err := res.client.V1().Package().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
@@ -88,7 +88,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 	case CrdHttpTrigger:
-		items, err := res.client.HTTPTriggerList(metav1.NamespaceAll)
+		items, err := res.client.V1().HTTPTrigger().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
@@ -100,7 +100,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 	case CrdKubeWatcher:
-		items, err := res.client.WatchList(metav1.NamespaceAll)
+		items, err := res.client.V1().KubeWatcher().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
@@ -115,7 +115,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		var triggers []fv1.MessageQueueTrigger
 
 		for _, mqType := range []string{types.MessageQueueTypeNats, types.MessageQueueTypeASQ} {
-			l, err := res.client.MessageQueueTriggerList(mqType, metav1.NamespaceAll)
+			l, err := res.client.V1().MessageQueueTrigger().List(mqType, metav1.NamespaceAll)
 			if err != nil {
 				console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 				break
@@ -129,7 +129,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 	case CrdTimeTrigger:
-		items, err := res.client.TimeTriggerList(metav1.NamespaceAll)
+		items, err := res.client.V1().TimeTrigger().List(metav1.NamespaceAll)
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return

@@ -19,25 +19,18 @@ package spec
 import (
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DestroySubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 // Destroy destroys everything in the spec.
 func Destroy(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := &DestroySubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&DestroySubCommand{}).do(input)
 }
 
 func (opts *DestroySubCommand) do(input cli.Input) error {
@@ -59,7 +52,7 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 	// "apply" the empty state
-	_, _, err = applyResources(opts.client, specDir, &emptyFr, true)
+	_, _, err = applyResources(opts.Client(), specDir, &emptyFr, true)
 	if err != nil {
 		return errors.Wrap(err, "error deleting resources")
 	}
