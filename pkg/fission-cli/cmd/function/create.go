@@ -235,7 +235,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
-						return errors.Wrap(err, "error checking secret")
+						return errors.Wrapf(err, "error checking secret %s", secretName)
 					}
 				}
 			}
@@ -261,7 +261,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrap(err, "error checking configmap")
+						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
 					}
 				}
 			}
