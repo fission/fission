@@ -58,17 +58,16 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	routerURL := os.Getenv("FISSION_ROUTER")
-	if len(routerURL) == 0 {
-		// Portforward to the fission router
-		localRouterPort, err := util.SetupPortForward(util.GetFissionNamespace(), "application=fission-router")
-		if err != nil {
-			return err
-		}
-		routerURL = "127.0.0.1:" + localRouterPort
-	} else {
-		console.Verbose(2, "Env FISSION_ROUTER: %v", routerURL)
-		routerURL = strings.TrimPrefix(routerURL, "http://")
+	if len(routerURL) != 0 {
+		console.Warn("The environment variable FISSION_ROUTER is no longer supported for this command")
 	}
+
+	// Portforward to the fission router
+	localRouterPort, err := util.SetupPortForward(util.GetFissionNamespace(), "application=fission-router")
+	if err != nil {
+		return err
+	}
+	routerURL = "127.0.0.1:" + localRouterPort
 
 	fnUri := m.Name
 	if m.Namespace != metav1.NamespaceDefault {
