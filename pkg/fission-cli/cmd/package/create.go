@@ -30,6 +30,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -37,18 +38,11 @@ import (
 )
 
 type CreateSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func Create(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := CreateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&CreateSubCommand{}).do(input)
 }
 
 func (opts *CreateSubCommand) do(input cli.Input) error {
@@ -114,14 +108,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
 	}
 
-	_, err := CreatePackage(input, opts.client, pkgName, pkgNamespace, envName, envNamespace,
+	_, err := CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName, envNamespace,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
 
 	return err
 }
 
 // TODO: get all necessary value from CLI input directly
-func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNamespace string, envName string, envNamespace string,
+func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string, envNamespace string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) (*metav1.ObjectMeta, error) {
 
 	insecure := input.Bool(flagkey.PkgInsecure)
@@ -201,7 +195,7 @@ func CreatePackage(input cli.Input, client *client.Client, pkgName string, pkgNa
 		}
 		return &pkg.Metadata, nil
 	} else {
-		pkgMetadata, err := client.PackageCreate(pkg)
+		pkgMetadata, err := client.V1().Package().Create(pkg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating package")
 		}

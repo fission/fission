@@ -14,30 +14,53 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
-func (c *Client) CanaryConfigCreate(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error) {
+type (
+	CanaryConfigGetter interface {
+		CanaryConfig() CanaryConfigInterface
+	}
+
+	CanaryConfigInterface interface {
+		Create(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.CanaryConfig, error)
+		Update(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(ns string) ([]fv1.CanaryConfig, error)
+	}
+
+	CanaryConfig struct {
+		client rest.Interface
+	}
+)
+
+func newCanaryConfigClient(c *V1) CanaryConfigInterface {
+	return &CanaryConfig{client: c.restClient}
+}
+
+func (c *CanaryConfig) Create(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(canaryConf)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.create("canaryconfigs", "application/json", reqbody)
+	resp, err := c.client.Create("canaryconfigs", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -51,17 +74,17 @@ func (c *Client) CanaryConfigCreate(canaryConf *fv1.CanaryConfig) (*metav1.Objec
 	return &m, nil
 }
 
-func (c *Client) CanaryConfigGet(m *metav1.ObjectMeta) (*fv1.CanaryConfig, error) {
+func (c *CanaryConfig) Get(m *metav1.ObjectMeta) (*fv1.CanaryConfig, error) {
 	relativeUrl := fmt.Sprintf("canaryconfigs/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -75,20 +98,20 @@ func (c *Client) CanaryConfigGet(m *metav1.ObjectMeta) (*fv1.CanaryConfig, error
 	return &canaryCfg, nil
 }
 
-func (c *Client) CanaryConfigUpdate(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error) {
+func (c *CanaryConfig) Update(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta, error) {
 	reqbody, err := json.Marshal(canaryConf)
 	if err != nil {
 		return nil, err
 	}
 	relativeUrl := fmt.Sprintf("canaryconfigs/%v", canaryConf.Metadata.Name)
 
-	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -101,21 +124,21 @@ func (c *Client) CanaryConfigUpdate(canaryConf *fv1.CanaryConfig) (*metav1.Objec
 	return &m, nil
 }
 
-func (c *Client) CanaryConfigDelete(m *metav1.ObjectMeta) error {
+func (c *CanaryConfig) Delete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("canaryconfigs/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) CanaryConfigList(ns string) ([]fv1.CanaryConfig, error) {
+func (c *CanaryConfig) List(ns string) ([]fv1.CanaryConfig, error) {
 	relativeUrl := fmt.Sprintf("canaryconfigs?namespace=%v", ns)
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}

@@ -22,27 +22,19 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
-	client    *client.Client
+	cmd.CommandActioner
 	name      string
 	namespace string
 }
 
 func Delete(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := DeleteSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&DeleteSubCommand{}).do(input)
 }
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
@@ -60,7 +52,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.client.WatchDelete(&metav1.ObjectMeta{
+	err := opts.Client().V1().KubeWatcher().Delete(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,
 	})

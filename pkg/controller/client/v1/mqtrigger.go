@@ -14,18 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
-func (c *Client) MessageQueueTriggerCreate(t *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
+type (
+	MessageQueueTriggerGetter interface {
+		MessageQueueTrigger() MessageQueueTriggerInterface
+	}
+
+	MessageQueueTriggerInterface interface {
+		Create(t *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.MessageQueueTrigger, error)
+		Update(mqTrigger *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(mqType string, ns string) ([]fv1.MessageQueueTrigger, error)
+	}
+
+	MessageQueueTrigger struct {
+		client rest.Interface
+	}
+)
+
+func newMessageQueueTrigger(c *V1) MessageQueueTriggerInterface {
+	return &MessageQueueTrigger{client: c.restClient}
+}
+
+func (c *MessageQueueTrigger) Create(t *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
 	err := t.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("MessageQueueTrigger", err)
@@ -36,13 +59,13 @@ func (c *Client) MessageQueueTriggerCreate(t *fv1.MessageQueueTrigger) (*metav1.
 		return nil, err
 	}
 
-	resp, err := c.create("triggers/messagequeue", "application/json", reqbody)
+	resp, err := c.client.Create("triggers/messagequeue", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -56,17 +79,17 @@ func (c *Client) MessageQueueTriggerCreate(t *fv1.MessageQueueTrigger) (*metav1.
 	return &m, nil
 }
 
-func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*fv1.MessageQueueTrigger, error) {
+func (c *MessageQueueTrigger) Get(m *metav1.ObjectMeta) (*fv1.MessageQueueTrigger, error) {
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +103,7 @@ func (c *Client) MessageQueueTriggerGet(m *metav1.ObjectMeta) (*fv1.MessageQueue
 	return &t, nil
 }
 
-func (c *Client) MessageQueueTriggerUpdate(mqTrigger *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
+func (c *MessageQueueTrigger) Update(mqTrigger *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
 	err := mqTrigger.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("MessageQueueTrigger", err)
@@ -92,13 +115,13 @@ func (c *Client) MessageQueueTriggerUpdate(mqTrigger *fv1.MessageQueueTrigger) (
 	}
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", mqTrigger.Metadata.Name)
 
-	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -111,26 +134,26 @@ func (c *Client) MessageQueueTriggerUpdate(mqTrigger *fv1.MessageQueueTrigger) (
 	return &m, nil
 }
 
-func (c *Client) MessageQueueTriggerDelete(m *metav1.ObjectMeta) error {
+func (c *MessageQueueTrigger) Delete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) MessageQueueTriggerList(mqType string, ns string) ([]fv1.MessageQueueTrigger, error) {
+func (c *MessageQueueTrigger) List(mqType string, ns string) ([]fv1.MessageQueueTrigger, error) {
 	relativeUrl := "triggers/messagequeue"
 	if len(mqType) > 0 {
 		// TODO remove this, replace with field selector
 		relativeUrl += fmt.Sprintf("?mqtype=%v&namespace=%v", mqType, ns)
 	}
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}

@@ -3,9 +3,12 @@ package app
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/canaryconfig"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	"github.com/fission/fission/pkg/fission-cli/cmd/function"
@@ -20,6 +23,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -40,6 +44,13 @@ func App() *cobra.Command {
 		PersistentPreRunE: wrapper.Wrapper(
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
+				serverUrl, err := util.GetServerURL(input)
+				if err != nil {
+					return err
+				}
+				restClient := rest.NewRESTClient(serverUrl)
+				// TODO: use fake rest client for offline spec generation
+				cmd.SetClientset(client.MakeClientset(restClient))
 				return nil
 			},
 		),

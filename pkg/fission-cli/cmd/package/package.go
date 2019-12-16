@@ -45,7 +45,7 @@ import (
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func CreateArchive(client *client.Client, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
+func CreateArchive(client client.Interface, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
 	var err error
@@ -241,8 +241,8 @@ func archiveName(givenNameHint string, includedFiles []string) string {
 	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
-func GetFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]fv1.Function, error) {
-	fnList, err := client.FunctionList(pkgNamespace)
+func GetFunctionsByPackage(client client.Interface, pkgName, pkgNamespace string) ([]fv1.Function, error) {
+	fnList, err := client.V1().Function().List(pkgNamespace)
 	if err != nil {
 		return nil, err
 	}

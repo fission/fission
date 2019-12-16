@@ -378,7 +378,7 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 			return err
 		}
 		for _, cm := range f.Spec.ConfigMaps {
-			_, err := client.ConfigMapGet(&metav1.ObjectMeta{
+			_, err := client.V1().Misc().ConfigMapGet(&metav1.ObjectMeta{
 				Name:      cm.Name,
 				Namespace: cm.Namespace,
 			})
@@ -388,7 +388,7 @@ func (fr *FissionResources) Validate(input cli.Input) error {
 		}
 
 		for _, s := range f.Spec.Secrets {
-			_, err := client.SecretGet(&metav1.ObjectMeta{
+			_, err := client.V1().Misc().SecretGet(&metav1.ObjectMeta{
 				Name:      s.Name,
 				Namespace: s.Namespace,
 			})

@@ -34,11 +34,13 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 )
 
 var g struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func panicIf(err error) {
@@ -96,38 +98,38 @@ func TestFunctionApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.FunctionGet(&metav1.ObjectMeta{
+	_, err := g.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      testFunc.Metadata.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "function")
 
-	m, err := g.client.FunctionCreate(testFunc)
+	m, err := g.Client().V1().Function().Create(testFunc)
 	panicIf(err)
 	defer func() {
-		err := g.client.FunctionDelete(m)
+		err := g.Client().V1().Function().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.client.FunctionCreate(testFunc)
+	_, err = g.Client().V1().Function().Create(testFunc)
 	assertNameReuseFailure(err, "function")
 
 	testFunc.Metadata.ResourceVersion = m.ResourceVersion
 	testFunc.Spec.Package.FunctionName = "yyy"
-	_, err = g.client.FunctionUpdate(testFunc)
+	_, err = g.Client().V1().Function().Update(testFunc)
 	panicIf(err)
 
 	testFunc.Metadata.ResourceVersion = ""
 	testFunc.Metadata.Name = "bar"
-	m2, err := g.client.FunctionCreate(testFunc)
+	m2, err := g.Client().V1().Function().Create(testFunc)
 	panicIf(err)
-	defer g.client.FunctionDelete(m2)
+	defer g.Client().V1().Function().Delete(m2)
 
-	funcs, err := g.client.FunctionList(metav1.NamespaceDefault)
+	funcs, err := g.Client().V1().Function().List(metav1.NamespaceDefault)
 	panicIf(err)
 	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but found %v", len(funcs)))
 
-	funcs_url := g.client.Url + "/v2/functions"
+	funcs_url := g.Client().ServerURL() + "/v2/functions"
 	resp, err := http.Get(funcs_url)
 	panicIf(err)
 	defer resp.Body.Close()
@@ -157,20 +159,20 @@ func TestHTTPTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.HTTPTriggerGet(&metav1.ObjectMeta{
+	_, err := g.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      testTrigger.Metadata.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "httptrigger")
 
-	m, err := g.client.HTTPTriggerCreate(testTrigger)
+	m, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
-	defer g.client.HTTPTriggerDelete(m)
+	defer g.Client().V1().HTTPTrigger().Delete(m)
 
-	_, err = g.client.HTTPTriggerCreate(testTrigger)
+	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "httptrigger")
 
-	tr, err := g.client.HTTPTriggerGet(m)
+	tr, err := g.Client().V1().HTTPTrigger().Get(m)
 	panicIf(err)
 	assert(testTrigger.Spec.Method == tr.Spec.Method &&
 		testTrigger.Spec.RelativeURL == tr.Spec.RelativeURL &&
@@ -179,20 +181,20 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	testTrigger.Metadata.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.RelativeURL = "/hi"
-	_, err = g.client.HTTPTriggerUpdate(testTrigger)
+	_, err = g.Client().V1().HTTPTrigger().Update(testTrigger)
 	panicIf(err)
 
 	testTrigger.Metadata.ResourceVersion = ""
 	testTrigger.Metadata.Name = "yyy"
-	_, err = g.client.HTTPTriggerCreate(testTrigger)
+	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
 	assert(err != nil, "duplicate trigger should not be allowed")
 
 	testTrigger.Spec.RelativeURL = "/hi2"
-	m2, err := g.client.HTTPTriggerCreate(testTrigger)
+	m2, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
-	defer g.client.HTTPTriggerDelete(m2)
+	defer g.Client().V1().HTTPTrigger().Delete(m2)
 
-	ts, err := g.client.HTTPTriggerList(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().HTTPTrigger().List(metav1.NamespaceDefault)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but found %v", len(ts)))
 }
@@ -212,36 +214,36 @@ func TestEnvironmentApi(t *testing.T) {
 			Resources: v1.ResourceRequirements{},
 		},
 	}
-	_, err := g.client.EnvironmentGet(&metav1.ObjectMeta{
+	_, err := g.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      testEnv.Metadata.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "environment")
 
-	m, err := g.client.EnvironmentCreate(testEnv)
+	m, err := g.Client().V1().Environment().Create(testEnv)
 	panicIf(err)
-	defer g.client.EnvironmentDelete(m)
+	defer g.Client().V1().Environment().Delete(m)
 
-	_, err = g.client.EnvironmentCreate(testEnv)
+	_, err = g.Client().V1().Environment().Create(testEnv)
 	assertNameReuseFailure(err, "environment")
 
-	e, err := g.client.EnvironmentGet(m)
+	e, err := g.Client().V1().Environment().Get(m)
 	panicIf(err)
 	assert(reflect.DeepEqual(testEnv.Spec, e.Spec), "env should match after reading")
 
 	testEnv.Metadata.ResourceVersion = m.ResourceVersion
 	testEnv.Spec.Runtime.Image = "another-img"
-	_, err = g.client.EnvironmentUpdate(testEnv)
+	_, err = g.Client().V1().Environment().Update(testEnv)
 	panicIf(err)
 
 	testEnv.Metadata.ResourceVersion = ""
 	testEnv.Metadata.Name = "bar"
 
-	m2, err := g.client.EnvironmentCreate(testEnv)
+	m2, err := g.Client().V1().Environment().Create(testEnv)
 	panicIf(err)
-	defer g.client.EnvironmentDelete(m2)
+	defer g.Client().V1().Environment().Delete(m2)
 
-	ts, err := g.client.EnvironmentList(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().Environment().List(metav1.NamespaceDefault)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two envs, but found %v", len(ts)))
 }
@@ -261,20 +263,20 @@ func TestWatchApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.WatchGet(&metav1.ObjectMeta{
+	_, err := g.Client().V1().KubeWatcher().Get(&metav1.ObjectMeta{
 		Name:      testWatch.Metadata.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "watch")
 
-	m, err := g.client.WatchCreate(testWatch)
+	m, err := g.Client().V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
-	defer g.client.WatchDelete(m)
+	defer g.Client().V1().KubeWatcher().Delete(m)
 
-	_, err = g.client.WatchCreate(testWatch)
+	_, err = g.Client().V1().KubeWatcher().Create(testWatch)
 	assertNameReuseFailure(err, "watch")
 
-	w, err := g.client.WatchGet(m)
+	w, err := g.Client().V1().KubeWatcher().Get(m)
 	panicIf(err)
 	assert(testWatch.Spec.Namespace == w.Spec.Namespace &&
 		testWatch.Spec.Type == w.Spec.Type &&
@@ -282,11 +284,11 @@ func TestWatchApi(t *testing.T) {
 		testWatch.Spec.FunctionReference.Name == w.Spec.FunctionReference.Name, "watch should match after reading")
 
 	testWatch.Metadata.Name = "yyy"
-	m2, err := g.client.WatchCreate(testWatch)
+	m2, err := g.Client().V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
-	defer g.client.WatchDelete(m2)
+	defer g.Client().V1().KubeWatcher().Delete(m2)
 
-	ws, err := g.client.WatchList(metav1.NamespaceDefault)
+	ws, err := g.Client().V1().KubeWatcher().List(metav1.NamespaceDefault)
 	panicIf(err)
 	assert(len(ws) == 2, fmt.Sprintf("created two watches, but found %v", len(ws)))
 }
@@ -305,17 +307,17 @@ func TestTimeTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.client.TimeTriggerGet(&metav1.ObjectMeta{Name: testTrigger.Metadata.Name})
+	_, err := g.Client().V1().TimeTrigger().Get(&metav1.ObjectMeta{Name: testTrigger.Metadata.Name})
 	assertNotFoundFailure(err, "trigger")
 
-	m, err := g.client.TimeTriggerCreate(testTrigger)
+	m, err := g.Client().V1().TimeTrigger().Create(testTrigger)
 	panicIf(err)
-	defer g.client.TimeTriggerDelete(m)
+	defer g.Client().V1().TimeTrigger().Delete(m)
 
-	_, err = g.client.TimeTriggerCreate(testTrigger)
+	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "trigger")
 
-	tr, err := g.client.TimeTriggerGet(m)
+	tr, err := g.Client().V1().TimeTrigger().Get(m)
 	panicIf(err)
 	assert(testTrigger.Spec.Cron == tr.Spec.Cron &&
 		testTrigger.Spec.FunctionReference.Type == tr.Spec.FunctionReference.Type &&
@@ -323,16 +325,16 @@ func TestTimeTriggerApi(t *testing.T) {
 
 	testTrigger.Metadata.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.Cron = "@hourly"
-	_, err = g.client.TimeTriggerUpdate(testTrigger)
+	_, err = g.Client().V1().TimeTrigger().Update(testTrigger)
 	panicIf(err)
 
 	testTrigger.Metadata.ResourceVersion = ""
 	testTrigger.Metadata.Name = "yyy"
 	testTrigger.Spec.Cron = "Not valid cron spec"
-	_, err = g.client.TimeTriggerCreate(testTrigger)
+	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
 	assertCronSpecFails(err)
 
-	ts, err := g.client.TimeTriggerList(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().TimeTrigger().List(metav1.NamespaceDefault)
 	panicIf(err)
 	assert(len(ts) == 1, fmt.Sprintf("created two time triggers, but found %v", len(ts)))
 }
@@ -353,7 +355,10 @@ func TestMain(m *testing.M) {
 	go Start(logger, 8888, true)
 
 	time.Sleep(5 * time.Second)
-	g.client = client.MakeClient("http://localhost:8888")
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	// TODO: use fake rest client for offline spec generation
+	cmd.SetClientset(client.MakeClientset(restClient))
 
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)

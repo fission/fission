@@ -17,9 +17,28 @@ limitations under the License.
 package cmd
 
 import (
+	"sync"
+
+	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 )
 
 type (
-	CommandAction func(input cli.Input) error
+	CommandAction   func(input cli.Input) error
+	CommandActioner struct{}
 )
+
+var (
+	once             = sync.Once{}
+	defaultClientset client.Interface
+)
+
+func SetClientset(clientset client.Interface) {
+	once.Do(func() {
+		defaultClientset = clientset
+	})
+}
+
+func (c *CommandActioner) Client() client.Interface {
+	return defaultClientset
+}

@@ -26,25 +26,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func Get(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := GetSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&GetSubCommand{}).do(input)
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
@@ -56,7 +48,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		Name:      input.String(flagkey.HtName),
 		Namespace: input.String(flagkey.NamespaceFunction),
 	}
-	ht, err := opts.client.HTTPTriggerGet(m)
+	ht, err := opts.Client().V1().HTTPTrigger().Get(m)
 	if err != nil {
 		return errors.Wrap(err, "error getting http trigger")
 	}

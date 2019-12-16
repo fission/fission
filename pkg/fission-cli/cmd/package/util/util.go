@@ -37,7 +37,7 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-func UploadArchiveFile(ctx context.Context, client *client.Client, fileName string) (*fv1.Archive, error) {
+func UploadArchiveFile(ctx context.Context, client client.Interface, fileName string) (*fv1.Archive, error) {
 	var archive fv1.Archive
 
 	size, err := utils.FileSize(fileName)
@@ -52,7 +52,7 @@ func UploadArchiveFile(ctx context.Context, client *client.Client, fileName stri
 			return nil, err
 		}
 	} else {
-		u := strings.TrimSuffix(client.Url, "/") + "/proxy/storage"
+		u := strings.TrimSuffix(client.ServerURL(), "/") + "/proxy/storage"
 		ssClient := storageSvcClient.MakeClient(u)
 
 		// TODO add a progress bar
@@ -61,7 +61,7 @@ func UploadArchiveFile(ctx context.Context, client *client.Client, fileName stri
 			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
 		}
 
-		storageSvc, err := client.GetSvcURL("application=fission-storage")
+		storageSvc, err := client.V1().Misc().GetSvcURL("application=fission-storage")
 		storageSvcURL := "http://" + storageSvc
 		if err != nil {
 			return nil, errors.Wrapf(err, "error getting fission storage service name")
@@ -161,14 +161,14 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 }
 
 // DownloadStoragesvcURL downloads and return archive content with given storage service url
-func DownloadStoragesvcURL(client *client.Client, fileUrl string) (io.ReadCloser, error) {
+func DownloadStoragesvcURL(client client.Interface, fileUrl string) (io.ReadCloser, error) {
 	u, err := url.ParseRequestURI(fileUrl)
 	if err != nil {
 		return nil, err
 	}
 
 	// replace in-cluster storage service host with controller server url
-	fileDownloadUrl := strings.TrimSuffix(client.Url, "/") + "/proxy/storage/" + u.RequestURI()
+	fileDownloadUrl := strings.TrimSuffix(client.ServerURL(), "/") + "/proxy/storage/" + u.RequestURI()
 	reader, err := DownloadURL(fileDownloadUrl)
 	if err != nil {
 		return nil, errors.Wrapf(err, fmt.Sprintf("error downloading from storage service url: %v", fileUrl))

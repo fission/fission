@@ -23,27 +23,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type RebuildSubCommand struct {
-	client    *client.Client
+	cmd.CommandActioner
 	name      string
 	namespace string
 }
 
 func Rebuild(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := RebuildSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&RebuildSubCommand{}).do(input)
 }
 
 func (opts *RebuildSubCommand) do(input cli.Input) error {
@@ -61,7 +53,7 @@ func (opts *RebuildSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *RebuildSubCommand) run(input cli.Input) error {
-	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
+	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,
 	})
@@ -74,7 +66,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 			pkg.Metadata.Name, fv1.BuildStatusFailed))
 	}
 
-	_, err = updatePackageStatus(opts.client, pkg, fv1.BuildStatusPending)
+	_, err = updatePackageStatus(opts.Client(), pkg, fv1.BuildStatusPending)
 	if err != nil {
 		return errors.Wrap(err, "update package status")
 	}

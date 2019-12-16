@@ -30,6 +30,7 @@ import (
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -37,18 +38,11 @@ import (
 )
 
 type TestSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func Test(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := TestSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&TestSubCommand{}).do(input)
 }
 
 func (opts *TestSubCommand) do(input cli.Input) error {
@@ -124,7 +118,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
-	log, err := printPodLogs(opts.client, m)
+	log, err := printPodLogs(opts.Client(), m)
 	if err != nil {
 		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
 		err = Log(input)
@@ -163,8 +157,8 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	return resp, nil
 }
 
-func printPodLogs(client *client.Client, fnMeta *metav1.ObjectMeta) (string, error) {
-	reader, statusCode, err := client.FunctionPodLogs(fnMeta)
+func printPodLogs(client client.Interface, fnMeta *metav1.ObjectMeta) (string, error) {
+	reader, statusCode, err := client.V1().Misc().PodLogs(fnMeta)
 	if err != nil {
 		return "", errors.Wrap(err, "error executing get logs request")
 	}

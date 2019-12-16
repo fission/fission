@@ -21,25 +21,17 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
-	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/plugin"
 )
 
 type ListSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func List(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := &ListSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ListSubCommand{}).do(input)
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {

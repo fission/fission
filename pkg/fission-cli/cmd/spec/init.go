@@ -26,27 +26,20 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type InitSubCommand struct {
-	client       *client.Client
+	cmd.CommandActioner
 	deployConfig *spectypes.DeploymentConfig
 }
 
 func Init(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := InitSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&InitSubCommand{}).do(input)
 }
 
 func (opts *InitSubCommand) do(input cli.Input) error {

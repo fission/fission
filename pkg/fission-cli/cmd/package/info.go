@@ -22,28 +22,20 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type InfoSubCommand struct {
-	client    *client.Client
+	cmd.CommandActioner
 	name      string
 	namespace string
 }
 
 func Info(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := InfoSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&InfoSubCommand{}).do(input)
 }
 
 func (opts *InfoSubCommand) do(input cli.Input) error {
@@ -61,7 +53,7 @@ func (opts *InfoSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *InfoSubCommand) run(input cli.Input) error {
-	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
+	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,
 	})

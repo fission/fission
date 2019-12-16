@@ -23,26 +23,18 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
-	client    *client.Client
+	cmd.CommandActioner
 	namespace string
 }
 
 func List(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := ListSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ListSubCommand{}).do(input)
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
@@ -59,7 +51,7 @@ func (opts *ListSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) error {
-	mqts, err := opts.client.MessageQueueTriggerList(input.String(flagkey.MqtMQType), opts.namespace)
+	mqts, err := opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
 	if err != nil {
 		return errors.Wrap(err, "error listing message queue triggers")
 	}

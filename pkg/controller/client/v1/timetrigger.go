@@ -14,21 +14,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
-func (c *Client) HTTPTriggerCreate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
+type (
+	TimeTriggerGetter interface {
+		TimeTrigger() TimeTriggerInterface
+	}
+
+	TimeTriggerInterface interface {
+		Create(t *fv1.TimeTrigger) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.TimeTrigger, error)
+		Update(t *fv1.TimeTrigger) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(ns string) ([]fv1.TimeTrigger, error)
+	}
+
+	TimeTrigger struct {
+		client rest.Interface
+	}
+)
+
+func newTimeTriggerClient(c *V1) TimeTriggerInterface {
+	return &TimeTrigger{client: c.restClient}
+}
+
+func (c *TimeTrigger) Create(t *fv1.TimeTrigger) (*metav1.ObjectMeta, error) {
 	err := t.Validate()
 	if err != nil {
-		return nil, fv1.AggregateValidationErrors("HTTPTrigger", err)
+		return nil, fv1.AggregateValidationErrors("TimeTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)
@@ -36,13 +59,13 @@ func (c *Client) HTTPTriggerCreate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, erro
 		return nil, err
 	}
 
-	resp, err := c.create("triggers/http", "application/json", reqbody)
+	resp, err := c.client.Create("triggers/time", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -56,22 +79,22 @@ func (c *Client) HTTPTriggerCreate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, erro
 	return &m, nil
 }
 
-func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*fv1.HTTPTrigger, error) {
-	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+func (c *TimeTrigger) Get(m *metav1.ObjectMeta) (*fv1.TimeTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
 
-	var t fv1.HTTPTrigger
+	var t fv1.TimeTrigger
 	err = json.Unmarshal(body, &t)
 	if err != nil {
 		return nil, err
@@ -80,25 +103,25 @@ func (c *Client) HTTPTriggerGet(m *metav1.ObjectMeta) (*fv1.HTTPTrigger, error) 
 	return &t, nil
 }
 
-func (c *Client) HTTPTriggerUpdate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
+func (c *TimeTrigger) Update(t *fv1.TimeTrigger) (*metav1.ObjectMeta, error) {
 	err := t.Validate()
 	if err != nil {
-		return nil, fv1.AggregateValidationErrors("HTTPTrigger", err)
+		return nil, fv1.AggregateValidationErrors("TimeTrigger", err)
 	}
 
 	reqbody, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("triggers/http/%v", t.Metadata.Name)
+	relativeUrl := fmt.Sprintf("triggers/time/%v", t.Metadata.Name)
 
-	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -111,26 +134,26 @@ func (c *Client) HTTPTriggerUpdate(t *fv1.HTTPTrigger) (*metav1.ObjectMeta, erro
 	return &m, nil
 }
 
-func (c *Client) HTTPTriggerDelete(m *metav1.ObjectMeta) error {
-	relativeUrl := fmt.Sprintf("triggers/http/%v", m.Name)
+func (c *TimeTrigger) Delete(m *metav1.ObjectMeta) error {
+	relativeUrl := fmt.Sprintf("triggers/time/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) HTTPTriggerList(triggerNamespace string) ([]fv1.HTTPTrigger, error) {
-	relativeUrl := fmt.Sprintf("triggers/http?namespace=%v", triggerNamespace)
-	resp, err := c.get(relativeUrl)
+func (c *TimeTrigger) List(ns string) ([]fv1.TimeTrigger, error) {
+	relativeUrl := fmt.Sprintf("triggers/time?namespace=%v", ns)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
 
-	triggers := make([]fv1.HTTPTrigger, 0)
+	triggers := make([]fv1.TimeTrigger, 0)
 	err = json.Unmarshal(body, &triggers)
 	if err != nil {
 		return nil, err

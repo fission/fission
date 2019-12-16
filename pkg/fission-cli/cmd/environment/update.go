@@ -24,27 +24,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
 type UpdateSubCommand struct {
-	client *client.Client
-	env    *fv1.Environment
+	cmd.CommandActioner
+	env *fv1.Environment
 }
 
 func Update(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := UpdateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&UpdateSubCommand{}).do(input)
 }
 
 func (opts *UpdateSubCommand) do(input cli.Input) error {
@@ -56,7 +48,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
-	env, err := opts.client.EnvironmentGet(&metav1.ObjectMeta{
+	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
 		Namespace: input.String(flagkey.NamespaceEnvironment),
 	})
@@ -74,7 +66,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.client.EnvironmentUpdate(opts.env)
+	_, err := opts.Client().V1().Environment().Update(opts.env)
 	if err != nil {
 		return errors.Wrap(err, "error updating environment")
 	}

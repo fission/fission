@@ -25,8 +25,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -39,18 +39,11 @@ const (
 )
 
 type DumpSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 func Dump(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := &DumpSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&DumpSubCommand{}).do(input)
 }
 
 func (opts *DumpSubCommand) do(input cli.Input) error {
@@ -86,7 +79,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"kubernetes-nodes":   resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesNode, ""),
 
 		// fission info
-		"fission-version": resources.NewFissionVersion(opts.client),
+		"fission-version": resources.NewFissionVersion(opts.Client()),
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
@@ -113,13 +106,13 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
 
 		// CRD resources
-		"fission-crd-packages":     resources.NewCrdDumper(opts.client, resources.CrdPackage),
-		"fission-crd-environments": resources.NewCrdDumper(opts.client, resources.CrdEnvironment),
-		"fission-crd-functions":    resources.NewCrdDumper(opts.client, resources.CrdFunction),
-		"fission-crd-httptriggers": resources.NewCrdDumper(opts.client, resources.CrdHttpTrigger),
-		"fission-crd-kubewatchers": resources.NewCrdDumper(opts.client, resources.CrdKubeWatcher),
-		"fission-crd-mqtriggers":   resources.NewCrdDumper(opts.client, resources.CrdMessageQueueTrigger),
-		"fission-crd-timetriggers": resources.NewCrdDumper(opts.client, resources.CrdTimeTrigger),
+		"fission-crd-packages":     resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
+		"fission-crd-environments": resources.NewCrdDumper(opts.Client(), resources.CrdEnvironment),
+		"fission-crd-functions":    resources.NewCrdDumper(opts.Client(), resources.CrdFunction),
+		"fission-crd-httptriggers": resources.NewCrdDumper(opts.Client(), resources.CrdHttpTrigger),
+		"fission-crd-kubewatchers": resources.NewCrdDumper(opts.Client(), resources.CrdKubeWatcher),
+		"fission-crd-mqtriggers":   resources.NewCrdDumper(opts.Client(), resources.CrdMessageQueueTrigger),
+		"fission-crd-timetriggers": resources.NewCrdDumper(opts.Client(), resources.CrdTimeTrigger),
 	}
 
 	dumpName := fmt.Sprintf("%v_%v", DUMP_ARCHIVE_PREFIX, time.Now().Unix())

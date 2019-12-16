@@ -14,18 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 )
 
-func (c *Client) PackageCreate(f *fv1.Package) (*metav1.ObjectMeta, error) {
+type (
+	PackageGetter interface {
+		Package() PackageInterface
+	}
+
+	PackageInterface interface {
+		Create(f *fv1.Package) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.Package, error)
+		Update(f *fv1.Package) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(pkgNamespace string) ([]fv1.Package, error)
+	}
+
+	Package struct {
+		client rest.Interface
+	}
+)
+
+func newPackageClient(c *V1) PackageInterface {
+	return &Package{client: c.restClient}
+}
+
+func (c *Package) Create(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	err := f.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("Package", err)
@@ -36,13 +59,13 @@ func (c *Client) PackageCreate(f *fv1.Package) (*metav1.ObjectMeta, error) {
 		return nil, err
 	}
 
-	resp, err := c.create("packages", "application/json", reqbody)
+	resp, err := c.client.Create("packages", "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -56,17 +79,17 @@ func (c *Client) PackageCreate(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) PackageGet(m *metav1.ObjectMeta) (*fv1.Package, error) {
+func (c *Package) Get(m *metav1.ObjectMeta) (*fv1.Package, error) {
 	relativeUrl := fmt.Sprintf("packages/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +103,7 @@ func (c *Client) PackageGet(m *metav1.ObjectMeta) (*fv1.Package, error) {
 	return &f, nil
 }
 
-func (c *Client) PackageUpdate(f *fv1.Package) (*metav1.ObjectMeta, error) {
+func (c *Package) Update(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	err := f.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("Package", err)
@@ -92,13 +115,13 @@ func (c *Client) PackageUpdate(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	}
 	relativeUrl := fmt.Sprintf("packages/%v", f.Metadata.Name)
 
-	resp, err := c.put(relativeUrl, "application/json", reqbody)
+	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -111,21 +134,21 @@ func (c *Client) PackageUpdate(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	return &m, nil
 }
 
-func (c *Client) PackageDelete(m *metav1.ObjectMeta) error {
+func (c *Package) Delete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("packages/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) PackageList(pkgNamespace string) ([]fv1.Package, error) {
+func (c *Package) List(pkgNamespace string) ([]fv1.Package, error) {
 	relativeUrl := fmt.Sprintf("packages?namespace=%v", pkgNamespace)
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}

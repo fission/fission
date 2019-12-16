@@ -18,6 +18,7 @@ package util
 
 import (
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -144,7 +145,7 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset, error) {
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
-func CheckFunctionExistence(fissionClient *client.Client, functions []string, fnNamespace string) (err error) {
+func CheckFunctionExistence(client client.Interface, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
 	for _, fnName := range functions {
 		meta := &metav1.ObjectMeta{
@@ -152,7 +153,7 @@ func CheckFunctionExistence(fissionClient *client.Client, functions []string, fn
 			Namespace: fnNamespace,
 		}
 
-		_, err := fissionClient.FunctionGet(meta)
+		_, err := client.V1().Function().Get(meta)
 		if err != nil {
 			fnMissing = append(fnMissing, fnName)
 		}
@@ -165,7 +166,7 @@ func CheckFunctionExistence(fissionClient *client.Client, functions []string, fn
 	return nil
 }
 
-func GetVersion(client *client.Client) info.Versions {
+func GetVersion(client client.Interface) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -179,7 +180,7 @@ func GetVersion(client *client.Client) info.Versions {
 		}
 	}
 
-	serverInfo, err := client.ServerInfo()
+	serverInfo, err := client.V1().Misc().ServerInfo()
 	if err != nil {
 		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
 		serverInfo = &info.ServerInfo{}
@@ -195,13 +196,21 @@ func GetVersion(client *client.Client) info.Versions {
 	return versions
 }
 
-func GetServer(input cli.Input) (c *client.Client, err error) {
-	serverUrl := input.GlobalString(flagkey.Server)
+func GetServer(input cli.Input) (c client.Interface, err error) {
+	serverUrl, err := GetServerURL(input)
+	if err != nil {
+		return nil, err
+	}
+	return client.MakeClientset(rest.NewRESTClient(serverUrl)), nil
+}
+
+func GetServerURL(input cli.Input) (serverUrl string, err error) {
+	serverUrl = input.GlobalString(flagkey.Server)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
 		serverUrl, err = GetApplicationUrl("application=fission-api")
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 	}
 
@@ -212,7 +221,7 @@ func GetServer(input cli.Input) (c *client.Client, err error) {
 		serverUrl = "http://" + serverUrl
 	}
 
-	return client.MakeClient(serverUrl), nil
+	return serverUrl, nil
 }
 
 func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {

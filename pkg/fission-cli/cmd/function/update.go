@@ -24,8 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -33,19 +33,12 @@ import (
 )
 
 type UpdateSubCommand struct {
-	client   *client.Client
+	cmd.CommandActioner
 	function *fv1.Function
 }
 
 func Update(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := UpdateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&UpdateSubCommand{}).do(input)
 }
 
 func (opts *UpdateSubCommand) do(input cli.Input) error {
@@ -60,7 +53,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	function, err := opts.client.FunctionGet(&metav1.ObjectMeta{
+	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: input.String(flagkey.NamespaceFunction),
 	})
@@ -94,7 +87,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			_, err := opts.client.SecretGet(&metav1.ObjectMeta{
+			_, err := opts.Client().V1().Misc().SecretGet(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      secretName,
 			})
@@ -118,7 +111,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			_, err := opts.client.ConfigMapGet(&metav1.ObjectMeta{
+			_, err := opts.Client().V1().Misc().ConfigMapGet(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      cfgMapName,
 			})
@@ -174,7 +167,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function.Spec.Resources = *resReqs
 
-	pkg, err := opts.client.PackageGet(&metav1.ObjectMeta{
+	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: fnNamespace,
 		Name:      pkgName,
 	})
@@ -184,7 +177,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := _package.GetFunctionsByPackage(opts.client, pkg.Metadata.Name, pkg.Metadata.Namespace)
+	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.Metadata.Name, pkg.Metadata.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -193,7 +186,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
-	newPkgMeta, err := _package.UpdatePackage(input, opts.client, pkg)
+	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
 	}
@@ -210,7 +203,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 				fns = append(fns, fn)
 			}
 		}
-		err = _package.UpdateFunctionPackageResourceVersion(opts.client, newPkgMeta, fns...)
+		err = _package.UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fns...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
 		}
@@ -238,7 +231,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.client.FunctionUpdate(opts.function)
+	_, err := opts.Client().V1().Function().Update(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
 	}

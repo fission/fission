@@ -14,17 +14,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package v1
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/generator/encoder"
 	v1generator "github.com/fission/fission/pkg/generator/v1"
+)
+
+type (
+	EnvironmentGetter interface {
+		Environment() EnvironmentInterface
+	}
+
+	EnvironmentInterface interface {
+		Create(env *fv1.Environment) (*metav1.ObjectMeta, error)
+		Get(m *metav1.ObjectMeta) (*fv1.Environment, error)
+		Update(env *fv1.Environment) (*metav1.ObjectMeta, error)
+		Delete(m *metav1.ObjectMeta) error
+		List(ns string) ([]fv1.Environment, error)
+	}
+
+	Environment struct {
+		client rest.Interface
+	}
 )
 
 func getEnvEncodingPayload(env *fv1.Environment) ([]byte, error) {
@@ -35,19 +54,23 @@ func getEnvEncodingPayload(env *fv1.Environment) ([]byte, error) {
 	return generator.StructuredGenerate(encoder.DefaultJSONEncoder())
 }
 
-func (c *Client) EnvironmentCreate(env *fv1.Environment) (*metav1.ObjectMeta, error) {
+func newEnvironmentClient(c *V1) EnvironmentInterface {
+	return &Environment{client: c.restClient}
+}
+
+func (c *Environment) Create(env *fv1.Environment) (*metav1.ObjectMeta, error) {
 	data, err := getEnvEncodingPayload(env)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.create("environments", "application/json", data)
+	resp, err := c.client.Create("environments", "application/json", data)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleCreateResponse(resp)
+	body, err := handleCreateResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -61,17 +84,17 @@ func (c *Client) EnvironmentCreate(env *fv1.Environment) (*metav1.ObjectMeta, er
 	return &m, nil
 }
 
-func (c *Client) EnvironmentGet(m *metav1.ObjectMeta) (*fv1.Environment, error) {
+func (c *Environment) Get(m *metav1.ObjectMeta) (*fv1.Environment, error) {
 	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +108,7 @@ func (c *Client) EnvironmentGet(m *metav1.ObjectMeta) (*fv1.Environment, error) 
 	return &env, nil
 }
 
-func (c *Client) EnvironmentUpdate(env *fv1.Environment) (*metav1.ObjectMeta, error) {
+func (c *Environment) Update(env *fv1.Environment) (*metav1.ObjectMeta, error) {
 	data, err := getEnvEncodingPayload(env)
 	if err != nil {
 		return nil, err
@@ -93,13 +116,13 @@ func (c *Client) EnvironmentUpdate(env *fv1.Environment) (*metav1.ObjectMeta, er
 
 	relativeUrl := fmt.Sprintf("environments/%v", env.Metadata.Name)
 
-	resp, err := c.put(relativeUrl, "application/json", data)
+	resp, err := c.client.Put(relativeUrl, "application/json", data)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -112,21 +135,21 @@ func (c *Client) EnvironmentUpdate(env *fv1.Environment) (*metav1.ObjectMeta, er
 	return &m, nil
 }
 
-func (c *Client) EnvironmentDelete(m *metav1.ObjectMeta) error {
+func (c *Environment) Delete(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("environments/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
-	return c.delete(relativeUrl)
+	return c.client.Delete(relativeUrl)
 }
 
-func (c *Client) EnvironmentList(ns string) ([]fv1.Environment, error) {
+func (c *Environment) List(ns string) ([]fv1.Environment, error) {
 	relativeUrl := fmt.Sprintf("environments?namespace=%v", ns)
-	resp, err := c.get(relativeUrl)
+	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := c.handleResponse(resp)
+	body, err := handleResponse(resp)
 	if err != nil {
 		return nil, err
 	}

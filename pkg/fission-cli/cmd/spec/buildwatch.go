@@ -34,7 +34,7 @@ type (
 	// packageBuildWatcher is used to watch a set of in-progress builds.
 	packageBuildWatcher struct {
 		// fission client
-		fclient *client.Client
+		fclient client.Interface
 
 		// set of packages already printed, ensures we don't duplicate the notifications
 		finished map[string]bool
@@ -44,7 +44,7 @@ type (
 	}
 )
 
-func makePackageBuildWatcher(fclient *client.Client) *packageBuildWatcher {
+func makePackageBuildWatcher(fclient client.Interface) *packageBuildWatcher {
 	return &packageBuildWatcher{
 		fclient:  fclient,
 		finished: make(map[string]bool),
@@ -68,7 +68,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		}
 
 		// pull list of packages (TODO: convert to watch)
-		pkgs, err := w.fclient.PackageList(metav1.NamespaceAll)
+		pkgs, err := w.fclient.V1().Package().List(metav1.NamespaceAll)
 		if err != nil {
 			fmt.Printf("Getting list of packages: %v", err)
 			os.Exit(1)

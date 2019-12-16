@@ -27,26 +27,19 @@ import (
 	"github.com/pkg/errors"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ValidateSubCommand struct {
-	client *client.Client
+	cmd.CommandActioner
 }
 
 // Validate parses a set of specs and checks for references to
 // resources that don't exist.
 func Validate(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := &ValidateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&ValidateSubCommand{}).do(input)
 }
 
 func (opts *ValidateSubCommand) do(input cli.Input) error {

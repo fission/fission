@@ -23,27 +23,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
-	client  *client.Client
+	cmd.CommandActioner
 	trigger *fv1.HTTPTrigger
 }
 
 func Update(input cli.Input) error {
-	c, err := util.GetServer(input)
-	if err != nil {
-		return err
-	}
-	opts := UpdateSubCommand{
-		client: c,
-	}
-	return opts.do(input)
+	return (&UpdateSubCommand{}).do(input)
 }
 
 func (opts *UpdateSubCommand) do(input cli.Input) error {
@@ -58,7 +51,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	htName := input.String(flagkey.HtName)
 	triggerNamespace := input.String(flagkey.NamespaceTrigger)
 
-	ht, err := opts.client.HTTPTriggerGet(&metav1.ObjectMeta{
+	ht, err := opts.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
@@ -77,7 +70,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.HtFnName) {
 		// get the functions and their weights if specified
 		functionList := input.StringSlice(flagkey.HtFnName)
-		err := util.CheckFunctionExistence(opts.client, functionList, triggerNamespace)
+		err := util.CheckFunctionExistence(opts.Client(), functionList, triggerNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -120,7 +113,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.client.HTTPTriggerUpdate(opts.trigger)
+	_, err := opts.Client().V1().HTTPTrigger().Update(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating the HTTP trigger")
 	}
