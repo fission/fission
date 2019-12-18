@@ -62,11 +62,11 @@ func Commands() *cobra.Command {
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all Fission resources in the application specification",
+		Short: "List all the resources that were created through this spec",
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir},
+		Optional: []flag.Flag{flag.SpecDeployID, flag.SpecDir},
 	})
 
 	command := &cobra.Command{
@@ -75,7 +75,7 @@ func Commands() *cobra.Command {
 		Short:   "Manage a declarative application specification",
 	}
 
-	command.AddCommand(initCmd, validateCmd, applyCmd, destroyCmd, listCmd)
+	command.AddCommand(initCmd, validateCmd, applyCmd, listCmd, destroyCmd)
 
 	return command
 }
