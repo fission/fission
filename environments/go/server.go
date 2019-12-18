@@ -119,7 +119,7 @@ func specializeHandler() func(http.ResponseWriter, *http.Request) {
 		userFunc, err = loadPlugin(CODE_PATH, "Handler")
 		if err != nil {
 			err = fmt.Errorf("error specializing function: %v", err)
-			log.Printf(err.Error())
+			log.Println(err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
@@ -169,7 +169,7 @@ func specializeHandlerV2() func(http.ResponseWriter, *http.Request) {
 		userFunc, err = loadPlugin(loadreq.FilePath, loadreq.FunctionName)
 		if err != nil {
 			err = fmt.Errorf("error specializing function: %v", err)
-			log.Printf(err.Error())
+			log.Println(err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
