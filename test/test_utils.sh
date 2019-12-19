@@ -86,7 +86,7 @@ build_and_push_go_mod_cache_image() {
     gcloud_login
 
     gcloud docker -- pull $image_tag
-    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker buildx build --platform linux/amd64,linux/arm64 -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud docker -- push $image_tag &
     travis_fold_end go_mod_cache_image
