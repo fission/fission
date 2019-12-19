@@ -60,13 +60,22 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.SpecDir},
 	})
 
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all the resources that were created through this spec",
+		RunE:  wrapper.Wrapper(List),
+	}
+	wrapper.SetFlags(listCmd, flag.FlagSet{
+		Optional: []flag.Flag{flag.SpecDeployID, flag.SpecDir},
+	})
+
 	command := &cobra.Command{
 		Use:     "spec",
 		Aliases: []string{"specs"},
 		Short:   "Manage a declarative application specification",
 	}
 
-	command.AddCommand(initCmd, validateCmd, applyCmd, destroyCmd)
+	command.AddCommand(initCmd, validateCmd, applyCmd, listCmd, destroyCmd)
 
 	return command
 }
