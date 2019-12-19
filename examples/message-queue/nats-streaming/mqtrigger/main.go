@@ -10,9 +10,9 @@ import (
 
 const (
 	authToken = "defaultFissionAuthToken"
-	host = "nats-streaming.fission"
+	host      = "nats-streaming.fission"
 	clusterID = "fissionMQTrigger"
-	topic = "foobar"
+	topic     = "foobar"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
