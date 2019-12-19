@@ -117,7 +117,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// validate
-		err = fr.Validate(input)
+		_, err = fr.Validate(input)
 		if err != nil {
 			return errors.Wrap(err, "error validating specs")
 		}
