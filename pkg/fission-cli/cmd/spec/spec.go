@@ -276,7 +276,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 	return nil
 }
 
-//Validate validateSs if there is any
+//Validate validates the spec file for irregular references
 func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	result := utils.MultiErrorWithFormat()
 	var warnings []string
@@ -466,20 +466,16 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 
 	for _, f := range fr.Functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-
 			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
 		}
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
-
 			warnings = append(warnings, fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
 		}
 		if f.Spec.FunctionTimeout <= 0 {
-
 			warnings = append(warnings, fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
 		}
 	}
-
 	// (ErrorOrNil returns nil if there were no errors appended.)
 	return warnings, result.ErrorOrNil()
 }
