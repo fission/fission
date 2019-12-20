@@ -18,6 +18,7 @@ package spec
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -55,12 +57,18 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error reading specs")
 	}
 
+	var warnings []string
 	// this does the rest of the checks, like dangling refs
-	err = fr.Validate(input)
+	warnings, err = fr.Validate(input)
 	if err != nil {
 		return errors.Wrap(err, "error validating specs")
 	}
+	fmt.Printf("Spec validation successful\nSpec contains\n %v Functions\n %v Environments\n %v Packages \n %v Http Triggers \n %v MessageQueue Triggers\n %v Time Triggers\n %v Kube Watchers\n %v ArchiveUploadSpec\n",
+		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.ArchiveUploadSpecs))
 
+	for _, warning := range warnings {
+		console.Warn(warning)
+	}
 	return nil
 }
 
