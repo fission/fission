@@ -4,6 +4,14 @@ metadata:
   name: hello
   namespace: default
 spec:
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 0
+      MinScale: 0
+      SpecializationTimeout: 120
+      TargetCPUPercent: 0
+    StrategyType: execution
   environment:
     name: python-27
     namespace: default
