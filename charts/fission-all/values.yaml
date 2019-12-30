@@ -174,7 +174,7 @@ persistence:
   ## If true, fission will create/use a Persistent Volume Claim
   ## If false, use emptyDir
   ##
-  enabled: false
+  enabled: true
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
@@ -236,7 +236,7 @@ debugEnv: false
 ## Prometheus for scrapping service metrics
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
-  enabled: false
+  enabled: true
   
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.

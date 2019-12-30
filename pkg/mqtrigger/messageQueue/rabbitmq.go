@@ -31,10 +31,10 @@ import (
 
 type (
 	RabbitMQ struct {
-		logger          *zap.Logger
-		routerUrl       string
-		rabbitMQURI     string
-		rabbitMQVersion string
+		logger      *zap.Logger
+		routerUrl   string
+		rabbitMQURI string
+		//rabbitMQVersion string
 	}
 )
 
@@ -170,6 +170,10 @@ func rabbitMQMessageHandler(rabbitMQ *RabbitMQ, trigger *fv1.MessageQueueTrigger
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		rabbitMQ.logger.Error("error getting body from the function call response",
+			zap.String("errror", err.Error()))
+	}
 
 	rabbitMQ.logger.Info("got response from function invocation",
 		zap.String("function_url", url),
