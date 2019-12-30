@@ -93,6 +93,8 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger, fissionClient *crd.Fissi
 		messageQueue, err = newAzureStorageConnection(logger, routerUrl, mqConfig)
 	case types.MessageQueueTypeKafka:
 		messageQueue, err = makeKafkaMessageQueue(logger, routerUrl, mqConfig)
+	case types.MessageQueueTypeRabbitMQ:
+		messageQueue, err = makeRabbitMQMessageQueue(logger, routerUrl, mqConfig)
 	default:
 		err = fmt.Errorf("no supported message queue type found for %q", mqConfig.MQType)
 	}

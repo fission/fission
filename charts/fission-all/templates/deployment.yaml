@@ -689,6 +689,51 @@ data:
 {{- end }}
 {{- end }}
 
+
+{{- if .Values.rabbitmq.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-rabbitmq
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: rabbitmq
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger
+        messagequeue: rabbitmq
+    spec:
+      containers:
+      - name: mqtrigger
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: MESSAGE_QUEUE_TYPE
+          value: rabbitmq
+        - name: MESSAGE_QUEUE_URL
+          value: "{{.Values.rabbitmq.amqpURI}}"
+        - name: MESSAGE_QUEUE_RABBITMQ_VERSION
+          value: "{{.Values.rabbitmq.version}}"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+      serviceAccountName: fission-svc
+{{- end }}
+      
 {{- if .Values.azureStorageQueue.enabled }}
 ---
 apiVersion: apps/v1

@@ -170,8 +170,23 @@ func IsTopicValid(mqType MessageQueueType, topic string) bool {
 		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
 	case MessageQueueTypeKafka:
 		return IsValidKafkaTopic(topic)
+	case MessageQueueTypeRabbitMQ:
+		return IsValidRabbitMQTopic(topic)
 	}
 	return false
+}
+
+// IsValidRabbitMQTopic is based on RabbitMQ's doc https://www.rabbitmq.com/queues.html
+func IsValidRabbitMQTopic(topic string) bool {
+	if strings.HasPrefix(topic, "amq.") {
+		return false
+	}
+
+	if len(topic) > 255 {
+		return false
+	}
+
+	return true
 }
 
 // The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java
@@ -528,7 +543,7 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 	result = multierror.Append(result, spec.FunctionReference.Validate())
 
 	switch spec.MessageQueueType {
-	case MessageQueueTypeNats, MessageQueueTypeASQ, MessageQueueTypeKafka: // no op
+	case MessageQueueTypeNats, MessageQueueTypeASQ, MessageQueueTypeKafka, MessageQueueTypeRabbitMQ: // no op
 	default:
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	}

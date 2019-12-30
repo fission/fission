@@ -69,9 +69,10 @@ const (
 )
 
 const (
-	MessageQueueTypeNats  = "nats-streaming"
-	MessageQueueTypeASQ   = "azure-storage-queue"
-	MessageQueueTypeKafka = "kafka"
+	MessageQueueTypeNats     = "nats-streaming"
+	MessageQueueTypeASQ      = "azure-storage-queue"
+	MessageQueueTypeKafka    = "kafka"
+	MessageQueueTypeRabbitMQ = "rabbitmq"
 )
 
 const (

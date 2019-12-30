@@ -160,12 +160,21 @@ kafka:
   ## Should be >= 0.11.2.0 to enable Kafka record headers support
   # version: "0.11.2.0"
 
+## Rabbitmq: enable and configuration
+rabbitmq:
+  version: ''
+  # decides if you want integrate your fission with rabbitmq or not
+  enabled: true
+  # note: below link is only for reference. 
+  # Please use the URI for your rabbitmq here. 
+  amqpURI: 'amqp://guest:guest@rabbitmq.rabbitmq.svc.cluster.local:5672/'
+
 ## Persist data to a persistent volume.
 persistence:
   ## If true, fission will create/use a Persistent Volume Claim
   ## If false, use emptyDir
   ##
-  enabled: true
+  enabled: false
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
@@ -227,7 +236,7 @@ debugEnv: false
 ## Prometheus for scrapping service metrics
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
-  enabled: true
+  enabled: false
   
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.

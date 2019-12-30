@@ -69,8 +69,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		mqType = types.MessageQueueTypeASQ
 	case types.MessageQueueTypeKafka:
 		mqType = types.MessageQueueTypeKafka
+	case types.MessageQueueTypeRabbitMQ:
+		mqType = types.MessageQueueTypeRabbitMQ
 	default:
-		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
+		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka, rabbitmq\" is supported")
 	}
 
 	topic := input.String(flagkey.MqtTopic)
