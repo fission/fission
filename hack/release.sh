@@ -115,15 +115,16 @@ push_all_env_builders() {
     local version=$1
 
     # call with version, env dir, image name base, image name variant
-    push_env_builder_image "$version" "python"   "python-builder"   ""
-    push_env_builder_image "$version" "binary"   "binary-builder"   ""
-    push_env_builder_image "$version" "go"       "go-builder"       ""
-    push_env_builder_image "$version" "go"       "go-builder"       "1.11.4"
-    push_env_builder_image "$version" "go"       "go-builder"       "1.12"
-    push_env_builder_image "$version" "jvm"      "jvm-builder"      ""
-    push_env_builder_image "$version" "nodejs"   "node-builder"     ""
-    push_env_builder_image "$version" "ruby"     "ruby-builder"         ""
-    push_env_builder_image "$version" "dotnet20" "dotnet20-builder"     ""
+    push_env_builder_image "$version" "python"   "python-builder"     ""
+    push_env_builder_image "$version" "binary"   "binary-builder"     ""
+    push_env_builder_image "$version" "go"       "go-builder"         ""
+    push_env_builder_image "$version" "go"       "go-builder"         "1.11.4"
+    push_env_builder_image "$version" "go"       "go-builder"         "1.12"
+    push_env_builder_image "$version" "jvm"      "jvm-builder"        ""
+    push_env_builder_image "$version" "nodejs"   "node-builder"       ""
+    push_env_builder_image "$version" "ruby"     "ruby-builder"       ""
+    push_env_builder_image "$version" "dotnet20" "dotnet20-builder"   ""
+    push_env_builder_image "$version" "php7"     "php-builder"        ""
 }
 
 # Push pre-upgrade-checks image
