@@ -17,6 +17,7 @@ limitations under the License.
 package messageQueue
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -31,16 +32,17 @@ import (
 
 type (
 	RabbitMQ struct {
-		logger      *zap.Logger
-		routerUrl   string
-		rabbitMQURI string
+		logger        *zap.Logger
+		routerUrl     string
+		rabbitMQURI   string
+		serverChannel *amqp.Channel
 		//rabbitMQVersion string
 	}
 )
 
 func makeRabbitMQMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
 	if len(routerUrl) == 0 || len(mqCfg.Url) == 0 {
-		return nil, errors.New("The royter url or the MQ url is empty.")
+		return nil, errors.New("The router url or the MQ url is empty.")
 	}
 
 	//rabbitMQVersion := os.Getenv("MESSAGE_QUEUE_RABBITMQ_VERSION")
@@ -68,6 +70,8 @@ func (rabbitMQ RabbitMQ) subscribe(trigger *fv1.MessageQueueTrigger) (messageQue
 	if err != nil {
 		return nil, err
 	}
+	rabbitMQ.serverChannel = ch
+
 	queue, err := ch.QueueDeclare(
 		trigger.Spec.Topic,
 		false,
@@ -80,9 +84,12 @@ func (rabbitMQ RabbitMQ) subscribe(trigger *fv1.MessageQueueTrigger) (messageQue
 		return nil, err
 	}
 
+	// 	The consumer is identified by a string that is unique and scoped for all
+	// consumers on this channel.  If you wish to eventually cancel the consumer, use
+	// the same non-empty identifier in Channel.Cancel
 	msgs, err := ch.Consume(
 		queue.Name,
-		"",
+		"func-cons",
 		true,
 		false,
 		false,
@@ -106,7 +113,7 @@ func (rabbitMQ RabbitMQ) subscribe(trigger *fv1.MessageQueueTrigger) (messageQue
 }
 
 func (rabbitMQ RabbitMQ) unsubscribe(sub messageQueueSubscription) error {
-	return sub.(*amqp.Channel).Close()
+	return rabbitMQ.serverChannel.Cancel("func-cons", true)
 }
 
 func rabbitMQMessageHandler(rabbitMQ *RabbitMQ, trigger *fv1.MessageQueueTrigger, msg amqp.Delivery) {
@@ -170,14 +177,76 @@ func rabbitMQMessageHandler(rabbitMQ *RabbitMQ, trigger *fv1.MessageQueueTrigger
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		rabbitMQ.logger.Error("error getting body from the function call response",
-			zap.String("errror", err.Error()))
-	}
 
 	rabbitMQ.logger.Info("got response from function invocation",
 		zap.String("function_url", url),
 		zap.String("trigger", trigger.Metadata.Name),
 		zap.String("body", string(body)))
 
+	if err != nil {
+		rabbitMQErrorHandler(rabbitMQ.logger, trigger, rabbitMQ.serverChannel, url,
+			errors.Wrapf(err, "request body error %v", string(body)))
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		rabbitMQErrorHandler(rabbitMQ.logger, trigger, rabbitMQ.serverChannel, url,
+			fmt.Errorf("request returned failure %v", resp.StatusCode))
+		return
+	}
+
+	if len(trigger.Spec.ResponseTopic) > 0 {
+		// produce the response to the output topic
+		err = rabbitMQ.serverChannel.Publish(
+			"",
+			trigger.Spec.ResponseTopic,
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        body,
+			},
+		)
+
+		if err != nil {
+			rabbitMQ.logger.Warn("failed to publish response body to output topic",
+				zap.Error(err),
+				zap.String("topic", trigger.Spec.ResponseTopic),
+				zap.String("function_url", url),
+			)
+			return
+		}
+	}
+
+}
+
+func rabbitMQErrorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, serverChannel *amqp.Channel, url string,
+	errMsg error) {
+	if len(trigger.Spec.ErrorTopic) > 0 {
+		err := serverChannel.Publish(
+			"",
+			trigger.Spec.ErrorTopic,
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(errMsg.Error()),
+			},
+		)
+
+		if err != nil {
+			logger.Error("failed to publish message to error topic",
+				zap.Error(err),
+				zap.String("trigger", trigger.Metadata.Name),
+				zap.String("message", err.Error()),
+				zap.String("topic", trigger.Spec.ErrorTopic),
+			)
+		}
+	} else {
+		logger.Error("message received to publish to error topic, but no error topic was set",
+			zap.String("message", errMsg.Error()),
+			zap.String("trigger", trigger.Metadata.Name),
+			zap.String("function_url", url),
+		)
+	}
 }
