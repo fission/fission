@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
@@ -48,6 +48,14 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	err := opts.complete(input)
 	if err != nil {
 		return err
+	}
+	// dump the spec to STDOUT
+	if input.Bool(flagkey.SpecDump) {
+		err := spec.SpecDump(*opts.trigger)
+		if err != nil {
+			return errors.Wrap(err, "Error displaying httptrigger spec ")
+		}
+		return nil
 	}
 	return opts.run(input)
 }
@@ -156,6 +164,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
+
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Metadata.Name)

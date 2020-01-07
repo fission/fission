@@ -175,6 +175,15 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		},
 	}
 
+	// dump the spec to STDOUT
+	if input.Bool(flagkey.SpecDump) {
+		err := spec.SpecDump(*pkg)
+		if err != nil {
+			return &pkg.Metadata, errors.Wrap(err, "Error displaying package spec ")
+		}
+		return &pkg.Metadata, nil
+	}
+
 	if len(specFile) > 0 {
 		// if a package with the same spec exists, don't create a new spec file
 		fr, err := spec.ReadSpecs(util.GetSpecDir(input))

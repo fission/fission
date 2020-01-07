@@ -49,6 +49,15 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
+	// dump the spec to STDOUT
+	if input.Bool(flagkey.SpecDump) {
+		err := spec.SpecDump(*opts.trigger)
+		if err != nil {
+			return errors.Wrap(err, "Error displaying time trigger spec ")
+		}
+		return nil
+	}
+
 	return opts.run(input)
 }
 

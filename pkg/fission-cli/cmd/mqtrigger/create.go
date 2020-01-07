@@ -47,6 +47,15 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
+	// dump the spec to STDOUT
+	if input.Bool(flagkey.SpecDump) {
+		err := spec.SpecDump(*opts.trigger)
+		if err != nil {
+			return errors.Wrap(err, "Error displaying message queue trigger spec ")
+		}
+		return nil
+	}
+
 	return opts.run(input)
 }
 
@@ -147,6 +156,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
+
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Metadata.Name)
