@@ -33,7 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
 		Optional: []flag.Flag{flag.MqtName, flag.MqtMQType, flag.MqtRespTopic,
 			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
-			flag.NamespaceFunction, flag.SpecSave},
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
 	updateCmd := &cobra.Command{

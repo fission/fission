@@ -48,7 +48,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave},
+			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := &cobra.Command{

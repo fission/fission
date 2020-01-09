@@ -33,7 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgBuildCmd,
-			flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave},
+			flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
 	})
 
 	getSrcCmd := &cobra.Command{

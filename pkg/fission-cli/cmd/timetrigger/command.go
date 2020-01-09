@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Optional: []flag.Flag{flag.TtName, flag.TtFnName,
-			flag.TtCron, flag.NamespaceFunction, flag.SpecSave},
+			flag.TtCron, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
 	updateCmd := &cobra.Command{

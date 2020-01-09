@@ -134,7 +134,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
+		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating source archive")
 		}
@@ -144,7 +144,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
+		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating deploy archive")
 		}
@@ -189,7 +189,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 			return &pkg.ObjectMeta, nil
 		}
 
-		err = spec.SpecSave(*pkg, specFile)
+		err = spec.SpecSave(*pkg, specFile, input)
 		if err != nil {
 			return nil, errors.Wrap(err, "error saving package spec")
 		}
