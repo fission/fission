@@ -103,9 +103,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if input.Bool(flagkey.SpecSave) {
+	// save to spec file or display the spec to console
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Metadata.Name)
-		err := spec.SpecSave(*opts.watcher, specFile)
+		err := spec.SpecSave(*opts.watcher, specFile, input)
 		if err != nil {
 			return errors.Wrap(err, "error creating kubewatch spec")
 		}

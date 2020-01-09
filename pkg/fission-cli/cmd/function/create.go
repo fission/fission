@@ -301,8 +301,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't create the function
-	if input.Bool(flagkey.SpecSave) {
-		err := spec.SpecSave(*opts.function, opts.specFile)
+	// save to spec file or display the spec to console
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
+		err := spec.SpecSave(*opts.function, opts.specFile, input)
 		if err != nil {
 			return errors.Wrap(err, "error creating function spec")
 		}

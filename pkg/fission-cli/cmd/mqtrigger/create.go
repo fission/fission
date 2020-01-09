@@ -148,9 +148,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
-	if input.Bool(flagkey.SpecSave) {
+	// save to spec file or display the spec to console
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Metadata.Name)
-		err := spec.SpecSave(*opts.trigger, specFile)
+		err := spec.SpecSave(*opts.trigger, specFile, input)
 		if err != nil {
 			return errors.Wrap(err, "error creating message queue trigger spec")
 		}

@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -162,8 +163,8 @@ func save(data []byte, specDir string, specFile string) error {
 	return nil
 }
 
-// called from `fission * create --spec`
-func SpecSave(resource interface{}, specFile string) error {
+// called from `fission * create --spec` or `fission * create --dry`
+func SpecSave(resource interface{}, specFile string, input cli.Input) error {
 	var meta metav1.ObjectMeta
 	var kind string
 	var specDir = "specs"
@@ -222,10 +223,19 @@ func SpecSave(resource interface{}, specFile string) error {
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	default:
+		if input.Bool(flagkey.SpecDry) {
+			return fmt.Errorf("can't display resource %#v spec", resource)
+		}
 		return fmt.Errorf("can't save resource %#v", resource)
 	}
 	if err != nil {
 		return errors.Wrap(err, "Couldn't marshal YAML")
+	}
+	if input.Bool(flagkey.SpecDry) {
+		console.Info(fmt.Sprintf("Generated Spec\n%v", (string(data))))
+		if !input.Bool(flagkey.SpecSave) {
+			return nil
+		}
 	}
 
 	fr, err := ReadSpecs(specDir)

@@ -75,10 +75,10 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	// if we're writing a spec, don't call the API
-	// save to spec file
-	if input.Bool(flagkey.SpecSave) {
+	// save to spec file or display the spec to console
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
-		err = spec.SpecSave(*opts.env, specFile)
+		err = spec.SpecSave(*opts.env, specFile, input)
 		if err != nil {
 			return errors.Wrap(err, "error creating environment spec")
 		}
