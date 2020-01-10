@@ -67,7 +67,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 	// check if any of the spec resource is already present in the cluster
 	error := ResourceExists(opts, fr)
 	if error != nil {
-		return errors.Wrap(error, " Spec validation failed")
+		return errors.Wrap(error, "Spec validation failed")
 	}
 	fmt.Printf("Spec validation successful\nSpec contains\n %v Functions\n %v Environments\n %v Packages \n %v Http Triggers \n %v MessageQueue Triggers\n %v Time Triggers\n %v Kube Watchers\n %v ArchiveUploadSpec\n",
 		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.ArchiveUploadSpecs))
@@ -82,7 +82,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	result := utils.MultiErrorWithFormat()
 
-	fnlist, err := GetAllFunctions(opts.Client())
+	fnlist, err := getAllFunctions(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get Functions %v", err.Error())
 	}
@@ -90,11 +90,11 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 		for _, fn := range fr.Functions {
 			// if the function name is same check if they are present in same namespace
 			if f.Metadata.Name == fn.Metadata.Name && f.Metadata.Namespace == fn.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\nFunction %v/%v already exist", fn.Metadata.Name, fn.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("Function %v/%v already exists", fn.Metadata.Name, fn.Metadata.Namespace))
 			}
 		}
 	}
-	envlist, err := GetAllEnvironments(opts.Client())
+	envlist, err := getAllEnvironments(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get Environments %v", err.Error())
 	}
@@ -103,37 +103,37 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 			// if the enviornemt name is same check if they are present in the same namespace
 
 			if e.Metadata.Name == env.Metadata.Name && e.Metadata.Namespace == env.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\nEnvironment %v/%v already exist", env.Metadata.Name, env.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("Environment %v/%v already exists", env.Metadata.Name, env.Metadata.Namespace))
 
 			}
 		}
 	}
-	pkglist, err := GetAllPackages(opts.Client())
+	pkglist, err := getAllPackages(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get Packages %v", err.Error())
 	}
 	for _, p := range pkglist {
 		for _, pkg := range fr.Packages {
-			// if the enviornemt name is same check if they are present in the same namespace
+			// if the package name is same check if they are present in the same namespace
 			if p.Metadata.Name == pkg.Metadata.Name && p.Metadata.Namespace == pkg.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\nPakcage %v/%v already exist", p.Metadata.Name, pkg.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("Package %v/%v already exists", p.Metadata.Name, pkg.Metadata.Namespace))
 			}
 		}
 	}
 
-	httptriggerlist, err := GetAllHTTPTriggers(opts.Client())
+	httptriggerlist, err := getAllHTTPTriggers(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get HTTPTrigger %v", err.Error())
 	}
 	for _, h := range httptriggerlist {
 		for _, htt := range fr.HttpTriggers {
-			// if the enviornemt name is same check if they are present in the same namespace
+			// if the HttpTrigger name is same check if they are present in the same namespace
 			if h.Metadata.Name == htt.Metadata.Name && h.Metadata.Namespace == htt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\n HttpTrigger %v/%v already exist", htt.Metadata.Name, htt.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("HttpTrigger %v/%v already exists", htt.Metadata.Name, htt.Metadata.Namespace))
 			}
 		}
 	}
-	mqtriggerlist, err := GetAllMessageQueueTriggers(opts.Client(), "")
+	mqtriggerlist, err := getAllMessageQueueTriggers(opts.Client(), "")
 	if err != nil {
 		return errors.Errorf("Unable to get Message Queue Trigger %v", err.Error())
 	}
@@ -141,33 +141,33 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 		for _, mqt := range fr.MessageQueueTriggers {
 			// if the messagequeue trigger name is same check if they are present in the same namespace
 			if m.Metadata.Name == mqt.Metadata.Name && m.Metadata.Namespace == mqt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\n MessageQueueTriggers %v/%v already exist", m.Metadata.Name, mqt.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("MessageQueueTriggers %v/%v already exists", m.Metadata.Name, mqt.Metadata.Namespace))
 			}
 		}
 	}
 
-	timetriggerlist, err := GetAllTimeTriggers(opts.Client())
+	timetriggerlist, err := getAllTimeTriggers(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get Time Trigger %v", err.Error())
 	}
 	for _, t := range timetriggerlist {
 		for _, tt := range fr.MessageQueueTriggers {
-			// if the enviornemt name is same check if they are present in the same namespace
+			// if the TimeTrigger name is same check if they are present in the same namespace
 			if t.Metadata.Name == tt.Metadata.Name && t.Metadata.Namespace == tt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\n TimeTrigger %v/%v already exist", tt.Metadata.Name, tt.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("TimeTrigger %v/%v already exists", tt.Metadata.Name, tt.Metadata.Namespace))
 			}
 		}
 	}
 
-	kubewatchtriggerlist, err := GetAllKubeWatchTriggers(opts.Client())
+	kubewatchtriggerlist, err := getAllKubeWatchTriggers(opts.Client())
 	if err != nil {
 		return errors.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
 	}
 	for _, k := range kubewatchtriggerlist {
 		for _, kwt := range fr.KubernetesWatchTriggers {
-			// if the enviornemt name is same check if they are present in the same namespace
+			// if the kubewatcher name is same check if they are present in the same namespace
 			if k.Metadata.Name == kwt.Metadata.Name && k.Metadata.Namespace == kwt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("\n Kubernetes Watch Trigger %v/%v already exist", kwt.Metadata.Name, kwt.Metadata.Namespace))
+				result = multierror.Append(result, fmt.Errorf("Kubernetes Watch Trigger %v/%v already exists", kwt.Metadata.Name, kwt.Metadata.Namespace))
 			}
 		}
 	}
