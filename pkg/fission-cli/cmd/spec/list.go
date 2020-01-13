@@ -395,7 +395,7 @@ func getAllFunctions(client client.Interface) ([]fv1.Function, error) {
 func getAllEnvironments(client client.Interface) ([]fv1.Environment, error) {
 	envs, err := client.V1().Environment().List("")
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Enviornments %v", err.Error())
+		return nil, errors.Errorf("Unable to get Environments %v", err.Error())
 	}
 	return envs, nil
 }
