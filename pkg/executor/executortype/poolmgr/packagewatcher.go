@@ -43,7 +43,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 				pkg := obj.(*fv1.Package)
 				gpm.logger.Debug("list watch for package reported a new package addition",
 					zap.String("package_name", pkg.Metadata.Name),
-					zap.String("package_namepsace", pkg.Metadata.Namespace))
+					zap.String("package_namespace", pkg.Metadata.Namespace))
 
 				// create or update role-binding for fetcher sa in env ns to be able to get the pkg contents from pkg namespace
 				envNs := fissionfnNamespace

@@ -207,7 +207,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 			// we can list the functions once per role-binding.
 			funcList, err := fissionClient.Functions(roleBinding.Namespace).List(meta_v1.ListOptions{})
 			if err != nil {
-				logger.Error("error fetching environment list in namespace", zap.Error(err), zap.String("namespace", roleBinding.Namespace))
+				logger.Error("error fetching function list in namespace", zap.Error(err), zap.String("namespace", roleBinding.Namespace))
 				continue
 			}
 
@@ -248,7 +248,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 					}
 				}
 
-				// if its a package-getterr-rb, we have 2 kinds of SAs and each of them is handled differently
+				// if its a package-getter-rb, we have 2 kinds of SAs and each of them is handled differently
 				// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
 				if roleBinding.Name == types.PackageGetterRB {
 					// check if there is an env obj in saNs
