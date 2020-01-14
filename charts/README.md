@@ -45,8 +45,8 @@ Parameter | Description | Default
 `image` | Fission image repository | `fission/fission-bundle`
 `imageTag` | Fission image tag | `1.7.1`
 `pullPolicy` | Image pull policy | `IfNotPresent`
-`fetcherImage` | Fission fetcher repository | `fission/fetcher`
-`fetcherImageTag` | Fission fetcher image tag | `1.7.1`
+`fetcher.image` | Fission fetcher repository | `fission/fetcher`
+`fetcher.imageTag` | Fission fetcher image tag | `1.7.1`
 `controllerPort` | Fission Controller service port | `31313`
 `routerPort` | Fission Router service port | ` 31314`
 `functionNamespace` | Namespace in which to run fission functions (this is different from the release namespace) | `fission-function`

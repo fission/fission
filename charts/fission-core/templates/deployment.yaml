@@ -210,7 +210,9 @@ spec:
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
         env:
         - name: FETCHER_IMAGE
-          value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
+          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
+        - name: RUNTIME_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
@@ -278,7 +280,7 @@ spec:
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
-          value: "{{ .Values.fetcherImage }}:{{ .Values.fetcherImageTag }}"
+          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY

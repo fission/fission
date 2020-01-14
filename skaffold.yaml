@@ -42,8 +42,9 @@ deploy:
         setValues:
           image: <DOCKERHUB_REPO>/fission
           imageTag: skaffold-test
-          fetcherImage: <DOCKERHUB_REPO>/fetcher
-          fetcherImageTag: skaffold-test
+          fetcher:
+            image: <DOCKERHUB_REPO>/fetcher
+            imageTag: skaffold-test
           namespace: fission
           preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
           repository: index.docker.io
