@@ -32,5 +32,5 @@ spec:
         - name: post-upgrade-job
           image: "fission/alpinecurl"
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-upgrade\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.sh/analytics || true"]
+          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-upgrade\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.io/analytics || true"]
 {{- end }}
