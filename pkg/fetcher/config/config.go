@@ -40,7 +40,7 @@ type Config struct {
 func getFetcherResources() (apiv1.ResourceRequirements, error) {
 	resourceReqs := apiv1.ResourceRequirements{
 		Requests: map[apiv1.ResourceName]resource.Quantity{},
-		Limits: map[apiv1.ResourceName]resource.Quantity{},
+		Limits:   map[apiv1.ResourceName]resource.Quantity{},
 	}
 	errs := utils.MultiErrorWithFormat()
 	errs = multierror.Append(errs,
