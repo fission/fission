@@ -78,7 +78,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
 				Namespace: fnNamespace,
 			},
@@ -93,7 +93,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.trigger = &fv1.TimeTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: fnNamespace,
 		},
@@ -112,7 +112,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.Metadata.Name)
+		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
 			return errors.Wrap(err, "error creating time trigger spec")
@@ -125,7 +125,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating Time trigger")
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
 	t, err := getAPITimeInfo(opts.Client())
 	if err != nil {

@@ -71,7 +71,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating environment")
 	}
 
-	fmt.Printf("environment '%v' updated\n", opts.env.Metadata.Name)
+	fmt.Printf("environment '%v' updated\n", opts.env.ObjectMeta.Name)
 	return nil
 }
 

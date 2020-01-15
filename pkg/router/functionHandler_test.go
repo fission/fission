@@ -65,7 +65,7 @@ func TestFunctionProxying(t *testing.T) {
 	fmap.assign(&fnMeta, backendURL)
 
 	httpTrigger := &fv1.HTTPTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:            "xxx",
 			Namespace:       metav1.NamespaceDefault,
 			ResourceVersion: "1234",
@@ -81,7 +81,7 @@ func TestFunctionProxying(t *testing.T) {
 		logger: logger,
 		fmap:   fmap,
 		function: &fv1.Function{
-			Metadata: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
+			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
 		},
 		tsRoundTripperParams: &tsRoundTripperParams{
 			timeout:         50 * time.Millisecond,
@@ -103,7 +103,7 @@ func TestProxyErrorHandler(t *testing.T) {
 	fh := &functionHandler{
 		logger: logger,
 		function: &fv1.Function{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy",
 				Namespace: "dummy-bar",
 			},

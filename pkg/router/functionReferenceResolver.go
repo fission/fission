@@ -79,9 +79,9 @@ func makeFunctionReferenceResolver(store k8sCache.Store) *functionReferenceResol
 // resolve translates a trigger's function reference to a resolveResult.
 func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedTriggerReference{
-		namespace:              trigger.Metadata.Namespace,
-		triggerName:            trigger.Metadata.Name,
-		triggerResourceVersion: trigger.Metadata.ResourceVersion,
+		namespace:              trigger.ObjectMeta.Namespace,
+		triggerName:            trigger.ObjectMeta.Name,
+		triggerResourceVersion: trigger.ObjectMeta.ResourceVersion,
 	}
 
 	// check cache
@@ -121,7 +121,7 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
 	obj, isExist, err := frr.store.Get(&fv1.Function{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
 		},
@@ -135,7 +135,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 
 	f := obj.(*fv1.Function)
 	functionMap := map[string]*fv1.Function{
-		f.Metadata.Name: f,
+		f.ObjectMeta.Name: f,
 	}
 
 	rr := resolveResult{
@@ -155,7 +155,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
 		obj, isExist, err := frr.store.Get(&fv1.Function{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      functionName,
 			},
@@ -168,7 +168,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 		}
 
 		f := obj.(*fv1.Function)
-		functionMap[f.Metadata.Name] = f
+		functionMap[f.ObjectMeta.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, FunctionWeightDistribution{
 			name:      functionName,

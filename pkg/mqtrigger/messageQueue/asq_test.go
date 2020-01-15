@@ -303,7 +303,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		httpClient: httpClient,
 	}
 	subscription, err := connection.subscribe(&fv1.MessageQueueTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      TriggerName,
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -451,7 +451,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 		httpClient: httpClient,
 	}
 	subscription, err := connection.subscribe(&fv1.MessageQueueTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      TriggerName,
 			Namespace: metav1.NamespaceDefault,
 		},

@@ -173,7 +173,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 				break
 			}
 			env := ev.Object.(*fv1.Environment)
-			rv = env.Metadata.ResourceVersion
+			rv = env.ObjectMeta.ResourceVersion
 			envw.sync()
 		}
 	}
@@ -202,7 +202,7 @@ func (envw *environmentWatcher) sync() {
 			}
 			_, err := envw.getEnvBuilder(&env)
 			if err != nil {
-				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.Metadata.Name))
+				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.ObjectMeta.Name))
 			}
 		}
 
@@ -220,11 +220,11 @@ func (envw *environmentWatcher) service() {
 			// In order to support backward compatibility, for all environments with builder image created in default env,
 			// the pods will be created in fission-builder namespace
 			ns := envw.builderNamespace
-			if req.env.Metadata.Namespace != metav1.NamespaceDefault {
-				ns = req.env.Metadata.Namespace
+			if req.env.ObjectMeta.Namespace != metav1.NamespaceDefault {
+				ns = req.env.ObjectMeta.Namespace
 			}
 
-			key := envw.getCacheKey(req.env.Metadata.Name, ns, req.env.Metadata.ResourceVersion)
+			key := envw.getCacheKey(req.env.ObjectMeta.Name, ns, req.env.ObjectMeta.ResourceVersion)
 			builderInfo, ok := envw.cache[key]
 			if !ok {
 				builderInfo, err := envw.createBuilder(req.env, ns)
@@ -243,10 +243,10 @@ func (envw *environmentWatcher) service() {
 				// In order to support backward compatibility, for all builder images created in default
 				// env, the pods are created in fission-builder namespace
 				ns := envw.builderNamespace
-				if env.Metadata.Namespace != metav1.NamespaceDefault {
-					ns = env.Metadata.Namespace
+				if env.ObjectMeta.Namespace != metav1.NamespaceDefault {
+					ns = env.ObjectMeta.Namespace
 				}
-				key := envw.getCacheKey(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
+				key := envw.getCacheKey(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 				latestEnvList[key] = &env
 			}
 
@@ -321,7 +321,7 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 	var svc *apiv1.Service
 	var deploy *appsv1.Deployment
 
-	sel := envw.getLabels(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
+	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 
 	svcList, err := envw.getBuilderServiceList(sel, ns)
 	if err != nil {
@@ -336,7 +336,7 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 	} else if len(svcList) == 1 {
 		svc = &svcList[0]
 	} else {
-		return nil, fmt.Errorf("found more than one builder service for environment %q", env.Metadata.Name)
+		return nil, fmt.Errorf("found more than one builder service for environment %q", env.ObjectMeta.Name)
 	}
 
 	deployList, err := envw.getBuilderDeploymentList(sel, ns)
@@ -358,11 +358,11 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 	} else if len(deployList) == 1 {
 		deploy = &deployList[0]
 	} else {
-		return nil, fmt.Errorf("found more than one builder deployment for environment %q", env.Metadata.Name)
+		return nil, fmt.Errorf("found more than one builder deployment for environment %q", env.ObjectMeta.Name)
 	}
 
 	return &builderInfo{
-		envMetadata: &env.Metadata,
+		envMetadata: &env.ObjectMeta,
 		service:     svc,
 		deployment:  deploy,
 	}, nil
@@ -400,8 +400,8 @@ func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns 
 }
 
 func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns string) (*apiv1.Service, error) {
-	name := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
-	sel := envw.getLabels(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
+	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
+	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
@@ -453,11 +453,11 @@ func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, 
 }
 
 func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
-	name := fmt.Sprintf("%v-%v", env.Metadata.Name, env.Metadata.ResourceVersion)
-	sel := envw.getLabels(env.Metadata.Name, ns, env.Metadata.ResourceVersion)
+	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
+	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 	var replicas int32 = 1
 
-	podAnnotations := env.Metadata.Annotations
+	podAnnotations := env.ObjectMeta.Annotations
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}

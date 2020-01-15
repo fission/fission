@@ -51,7 +51,7 @@ func TestFunctionServiceCache(t *testing.T) {
 			UID:  "1212",
 		},
 		Environment: &fv1.Environment{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "foo-env",
 				UID:  "2323",
 			},

@@ -60,7 +60,7 @@ func RegisterCanaryConfigRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.CanaryConfig{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created canaryConfig", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created canaryConfig", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/canaryconfigs/{canaryConfig}").
@@ -86,7 +86,7 @@ func RegisterCanaryConfigRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.CanaryConfig{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated canaryConfig", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated canaryConfig", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/canaryconfigs/{canaryConfig}").
@@ -122,13 +122,13 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canaryCfgNew, err := a.fissionClient.CanaryConfigs(canaryCfg.Metadata.Namespace).Create(&canaryCfg)
+	canaryCfgNew, err := a.fissionClient.CanaryConfigs(canaryCfg.ObjectMeta.Namespace).Create(&canaryCfg)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(canaryCfgNew.Metadata)
+	resp, err := json.Marshal(canaryCfgNew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -153,7 +153,7 @@ func (a *API) CanaryConfigApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	canaryCfg, err := a.fissionClient.CanaryConfigs(ns).Get(name)
+	canaryCfg, err := a.fissionClient.CanaryConfigs(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -215,13 +215,13 @@ func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canayCfgNew, err := a.fissionClient.CanaryConfigs(c.Metadata.Namespace).Update(&c)
+	canayCfgNew, err := a.fissionClient.CanaryConfigs(c.ObjectMeta.Namespace).Update(&c)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(canayCfgNew.Metadata)
+	resp, err := json.Marshal(canayCfgNew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

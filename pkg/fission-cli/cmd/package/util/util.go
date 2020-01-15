@@ -182,7 +182,7 @@ func PrintPackageSummary(writer io.Writer, pkg *fv1.Package) {
 	// replace escaped line breaker character
 	buildlog := strings.ReplaceAll(pkg.Status.BuildLog, `\n`, "\n")
 	w := tabwriter.NewWriter(writer, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Metadata.Name)
+	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.ObjectMeta.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
 	fmt.Fprintf(w, "%v\n%v", "Build Logs:", buildlog)

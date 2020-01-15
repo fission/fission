@@ -25,8 +25,6 @@ require (
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
-	github.com/golang/protobuf v1.3.1
-	github.com/gomodule/redigo v0.0.0-20180627144507-2cd21d9966bf
 	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.2.0 // indirect
@@ -63,7 +61,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.3.0
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
-	github.com/urfave/cli v1.20.0
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.etcd.io/bbolt v1.3.2 // indirect
 	go.opencensus.io v0.22.0

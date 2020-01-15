@@ -25,6 +25,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
 	"github.com/robfig/cron"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -554,5 +555,137 @@ func (spec TimeTriggerSpec) Validate() error {
 
 	result = multierror.Append(result, spec.FunctionReference.Validate())
 
+	return result.ErrorOrNil()
+}
+
+func validateMetadata(field string, m metav1.ObjectMeta) error {
+	return ValidateKubeReference(field, m.Name, m.Namespace)
+}
+
+func (p *Package) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("Package", p.ObjectMeta),
+		p.Spec.Validate(),
+		p.Status.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (pl *PackageList) Validate() error {
+	result := &multierror.Error{}
+	// not validate ListMeta
+	for _, p := range pl.Items {
+		result = multierror.Append(result, p.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (f *Function) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("Function", f.ObjectMeta),
+		f.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (fl *FunctionList) Validate() error {
+	result := &multierror.Error{}
+	for _, f := range fl.Items {
+		result = multierror.Append(result, f.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (e *Environment) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("Environment", e.ObjectMeta),
+		e.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (el *EnvironmentList) Validate() error {
+	result := &multierror.Error{}
+	for _, e := range el.Items {
+		result = multierror.Append(result, e.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (h *HTTPTrigger) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("HTTPTrigger", h.ObjectMeta),
+		h.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (hl *HTTPTriggerList) Validate() error {
+	result := &multierror.Error{}
+	for _, h := range hl.Items {
+		result = multierror.Append(result, h.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (k *KubernetesWatchTrigger) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("KubernetesWatchTrigger", k.ObjectMeta),
+		k.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (kl *KubernetesWatchTriggerList) Validate() error {
+	result := &multierror.Error{}
+	for _, k := range kl.Items {
+		result = multierror.Append(result, k.Validate())
+	}
+	return result
+}
+
+func (t *TimeTrigger) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("TimeTrigger", t.ObjectMeta),
+		t.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (tl *TimeTriggerList) Validate() error {
+	result := &multierror.Error{}
+	for _, t := range tl.Items {
+		result = multierror.Append(result, t.Validate())
+	}
+	return result.ErrorOrNil()
+}
+
+func (m *MessageQueueTrigger) Validate() error {
+	result := &multierror.Error{}
+
+	result = multierror.Append(result,
+		validateMetadata("MessageQueueTrigger", m.ObjectMeta),
+		m.Spec.Validate())
+
+	return result.ErrorOrNil()
+}
+
+func (ml *MessageQueueTriggerList) Validate() error {
+	result := &multierror.Error{}
+	for _, m := range ml.Items {
+		result = multierror.Append(result, m.Validate())
+	}
 	return result.ErrorOrNil()
 }

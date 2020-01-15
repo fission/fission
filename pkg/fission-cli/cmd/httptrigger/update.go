@@ -117,6 +117,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error updating the HTTP trigger")
 	}
-	fmt.Printf("trigger '%v' updated\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 	return nil
 }

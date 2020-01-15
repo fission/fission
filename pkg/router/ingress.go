@@ -47,7 +47,7 @@ func createIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 		logger.Error("failed to create ingress", zap.Error(err))
 		return
 	}
-	logger.Debug("created ingress successfully for trigger", zap.String("trigger", trigger.Metadata.Name))
+	logger.Debug("created ingress successfully for trigger", zap.String("trigger", trigger.ObjectMeta.Name))
 }
 
 func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kubernetes.Clientset) {
@@ -55,9 +55,9 @@ func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 		return
 	}
 
-	ingress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(trigger.Metadata.Name, v1.GetOptions{})
+	ingress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(trigger.ObjectMeta.Name, v1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
-		logger.Error("failed to get ingress when deleting trigger", zap.Error(err), zap.String("trigger", trigger.Metadata.Name))
+		logger.Error("failed to get ingress when deleting trigger", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
 		return
 	}
 
@@ -66,7 +66,7 @@ func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 		logger.Error("failed to delete ingress for trigger",
 			zap.Error(err),
 			zap.Any("ingress", ingress),
-			zap.String("trigger", trigger.Metadata.Name))
+			zap.String("trigger", trigger.ObjectMeta.Name))
 	}
 }
 
@@ -85,14 +85,14 @@ func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrig
 		return
 	}
 
-	oldIngress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(oldT.Metadata.Name, v1.GetOptions{})
+	oldIngress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(oldT.ObjectMeta.Name, v1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			createIngress(logger, newT, kubeClient)
 		}
 		logger.Error("failed to get ingress when updating trigger",
 			zap.Error(err),
-			zap.String("trigger", oldT.Metadata.Name))
+			zap.String("trigger", oldT.ObjectMeta.Name))
 		return
 	}
 	newIngress := util.GetIngressSpec(podNamespace, newT)
@@ -124,11 +124,11 @@ func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrig
 	if changes {
 		_, err = kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Update(oldIngress)
 		if err != nil {
-			logger.Error("failed to update ingress for trigger", zap.Error(err), zap.String("trigger", oldT.Metadata.Name))
+			logger.Error("failed to update ingress for trigger", zap.Error(err), zap.String("trigger", oldT.ObjectMeta.Name))
 			return
 		}
 
 		logger.Debug("updated ingress successfully for trigger",
-			zap.String("old_trigger", oldT.Metadata.Name), zap.String("new_trigger", newT.Metadata.Name))
+			zap.String("old_trigger", oldT.ObjectMeta.Name), zap.String("new_trigger", newT.ObjectMeta.Name))
 	}
 }

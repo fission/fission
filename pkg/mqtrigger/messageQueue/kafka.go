@@ -124,13 +124,13 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 		consumerConfig.Net.TLS.Config = tlsConfig
 	}
 
-	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.Metadata.UID), []string{trigger.Spec.Topic}, consumerConfig)
+	consumer, err := cluster.NewConsumer(kafka.brokers, string(trigger.ObjectMeta.UID), []string{trigger.Spec.Topic}, consumerConfig)
 	kafka.logger.Info("created a new consumer", zap.Strings("brokers", kafka.brokers),
 		zap.String("input topic", trigger.Spec.Topic),
 		zap.String("output topic", trigger.Spec.ResponseTopic),
 		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger name", trigger.Metadata.Name),
-		zap.String("function namespace", trigger.Metadata.Namespace),
+		zap.String("trigger name", trigger.ObjectMeta.Name),
+		zap.String("function namespace", trigger.ObjectMeta.Namespace),
 		zap.String("function name", trigger.Spec.FunctionReference.Name))
 	if err != nil {
 		return nil, err
@@ -141,8 +141,8 @@ func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubs
 		zap.String("input topic", trigger.Spec.Topic),
 		zap.String("output topic", trigger.Spec.ResponseTopic),
 		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger name", trigger.Metadata.Name),
-		zap.String("function namespace", trigger.Metadata.Namespace),
+		zap.String("trigger name", trigger.ObjectMeta.Name),
+		zap.String("function namespace", trigger.ObjectMeta.Namespace),
 		zap.String("function name", trigger.Spec.FunctionReference.Name))
 
 	if err != nil {
@@ -205,10 +205,10 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
 		kafka.logger.Fatal("unsupported function reference type for trigger",
 			zap.Any("function_reference_type", trigger.Spec.FunctionReference.Type),
-			zap.String("trigger", trigger.Metadata.Name))
+			zap.String("trigger", trigger.ObjectMeta.Name))
 	}
 
-	url := kafka.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/")
+	url := kafka.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/")
 	kafka.logger.Debug("making HTTP request", zap.String("url", url))
 
 	// Generate the Headers
@@ -252,7 +252,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 			kafka.logger.Error("sending function invocation request failed",
 				zap.Error(err),
 				zap.String("function_url", url),
-				zap.String("trigger", trigger.Metadata.Name))
+				zap.String("trigger", trigger.ObjectMeta.Name))
 			continue
 		}
 		if resp == nil {
@@ -267,7 +267,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	if resp == nil {
 		kafka.logger.Warn("every function invocation retry failed; final retry gave empty response",
 			zap.String("function_url", url),
-			zap.String("trigger", trigger.Metadata.Name))
+			zap.String("trigger", trigger.ObjectMeta.Name))
 		return
 	}
 	defer resp.Body.Close()
@@ -275,7 +275,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 
 	kafka.logger.Debug("got response from function invocation",
 		zap.String("function_url", url),
-		zap.String("trigger", trigger.Metadata.Name),
+		zap.String("trigger", trigger.ObjectMeta.Name),
 		zap.String("body", string(body)))
 
 	if err != nil {
@@ -328,12 +328,12 @@ func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer
 		if e != nil {
 			logger.Error("failed to publish message to error topic",
 				zap.Error(e),
-				zap.String("trigger", trigger.Metadata.Name),
+				zap.String("trigger", trigger.ObjectMeta.Name),
 				zap.String("message", err.Error()),
 				zap.String("topic", trigger.Spec.Topic))
 		}
 	} else {
 		logger.Error("message received to publish to error topic, but no error topic was set",
-			zap.String("message", err.Error()), zap.String("trigger", trigger.Metadata.Name), zap.String("function_url", funcUrl))
+			zap.String("message", err.Error()), zap.String("trigger", trigger.ObjectMeta.Name), zap.String("function_url", funcUrl))
 	}
 }

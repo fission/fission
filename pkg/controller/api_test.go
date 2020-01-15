@@ -79,7 +79,7 @@ func assertCronSpecFails(err error) {
 
 func TestFunctionApi(t *testing.T) {
 	testFunc := &fv1.Function{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -99,7 +99,7 @@ func TestFunctionApi(t *testing.T) {
 		},
 	}
 	_, err := g.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      testFunc.Metadata.Name,
+		Name:      testFunc.ObjectMeta.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "function")
@@ -114,13 +114,13 @@ func TestFunctionApi(t *testing.T) {
 	_, err = g.Client().V1().Function().Create(testFunc)
 	assertNameReuseFailure(err, "function")
 
-	testFunc.Metadata.ResourceVersion = m.ResourceVersion
+	testFunc.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testFunc.Spec.Package.FunctionName = "yyy"
 	_, err = g.Client().V1().Function().Update(testFunc)
 	panicIf(err)
 
-	testFunc.Metadata.ResourceVersion = ""
-	testFunc.Metadata.Name = "bar"
+	testFunc.ObjectMeta.ResourceVersion = ""
+	testFunc.ObjectMeta.Name = "bar"
 	m2, err := g.Client().V1().Function().Create(testFunc)
 	panicIf(err)
 	defer g.Client().V1().Function().Delete(m2)
@@ -146,7 +146,7 @@ func TestFunctionApi(t *testing.T) {
 
 func TestHTTPTriggerApi(t *testing.T) {
 	testTrigger := &fv1.HTTPTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -160,7 +160,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 		},
 	}
 	_, err := g.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
-		Name:      testTrigger.Metadata.Name,
+		Name:      testTrigger.ObjectMeta.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "httptrigger")
@@ -179,13 +179,13 @@ func TestHTTPTriggerApi(t *testing.T) {
 		testTrigger.Spec.FunctionReference.Type == tr.Spec.FunctionReference.Type &&
 		testTrigger.Spec.FunctionReference.Name == tr.Spec.FunctionReference.Name, "trigger should match after reading")
 
-	testTrigger.Metadata.ResourceVersion = m.ResourceVersion
+	testTrigger.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.RelativeURL = "/hi"
 	_, err = g.Client().V1().HTTPTrigger().Update(testTrigger)
 	panicIf(err)
 
-	testTrigger.Metadata.ResourceVersion = ""
-	testTrigger.Metadata.Name = "yyy"
+	testTrigger.ObjectMeta.ResourceVersion = ""
+	testTrigger.ObjectMeta.Name = "yyy"
 	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
 	assert(err != nil, "duplicate trigger should not be allowed")
 
@@ -202,7 +202,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 func TestEnvironmentApi(t *testing.T) {
 
 	testEnv := &fv1.Environment{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -215,7 +215,7 @@ func TestEnvironmentApi(t *testing.T) {
 		},
 	}
 	_, err := g.Client().V1().Environment().Get(&metav1.ObjectMeta{
-		Name:      testEnv.Metadata.Name,
+		Name:      testEnv.ObjectMeta.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "environment")
@@ -231,13 +231,13 @@ func TestEnvironmentApi(t *testing.T) {
 	panicIf(err)
 	assert(reflect.DeepEqual(testEnv.Spec, e.Spec), "env should match after reading")
 
-	testEnv.Metadata.ResourceVersion = m.ResourceVersion
+	testEnv.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testEnv.Spec.Runtime.Image = "another-img"
 	_, err = g.Client().V1().Environment().Update(testEnv)
 	panicIf(err)
 
-	testEnv.Metadata.ResourceVersion = ""
-	testEnv.Metadata.Name = "bar"
+	testEnv.ObjectMeta.ResourceVersion = ""
+	testEnv.ObjectMeta.Name = "bar"
 
 	m2, err := g.Client().V1().Environment().Create(testEnv)
 	panicIf(err)
@@ -250,7 +250,7 @@ func TestEnvironmentApi(t *testing.T) {
 
 func TestWatchApi(t *testing.T) {
 	testWatch := &fv1.KubernetesWatchTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -264,7 +264,7 @@ func TestWatchApi(t *testing.T) {
 		},
 	}
 	_, err := g.Client().V1().KubeWatcher().Get(&metav1.ObjectMeta{
-		Name:      testWatch.Metadata.Name,
+		Name:      testWatch.ObjectMeta.Name,
 		Namespace: metav1.NamespaceDefault,
 	})
 	assertNotFoundFailure(err, "watch")
@@ -283,7 +283,7 @@ func TestWatchApi(t *testing.T) {
 		testWatch.Spec.FunctionReference.Type == w.Spec.FunctionReference.Type &&
 		testWatch.Spec.FunctionReference.Name == w.Spec.FunctionReference.Name, "watch should match after reading")
 
-	testWatch.Metadata.Name = "yyy"
+	testWatch.ObjectMeta.Name = "yyy"
 	m2, err := g.Client().V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
 	defer g.Client().V1().KubeWatcher().Delete(m2)
@@ -295,7 +295,7 @@ func TestWatchApi(t *testing.T) {
 
 func TestTimeTriggerApi(t *testing.T) {
 	testTrigger := &fv1.TimeTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "xxx",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -307,7 +307,7 @@ func TestTimeTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.Client().V1().TimeTrigger().Get(&metav1.ObjectMeta{Name: testTrigger.Metadata.Name})
+	_, err := g.Client().V1().TimeTrigger().Get(&metav1.ObjectMeta{Name: testTrigger.ObjectMeta.Name})
 	assertNotFoundFailure(err, "trigger")
 
 	m, err := g.Client().V1().TimeTrigger().Create(testTrigger)
@@ -323,13 +323,13 @@ func TestTimeTriggerApi(t *testing.T) {
 		testTrigger.Spec.FunctionReference.Type == tr.Spec.FunctionReference.Type &&
 		testTrigger.Spec.FunctionReference.Name == tr.Spec.FunctionReference.Name, "trigger should match after reading")
 
-	testTrigger.Metadata.ResourceVersion = m.ResourceVersion
+	testTrigger.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.Cron = "@hourly"
 	_, err = g.Client().V1().TimeTrigger().Update(testTrigger)
 	panicIf(err)
 
-	testTrigger.Metadata.ResourceVersion = ""
-	testTrigger.Metadata.Name = "yyy"
+	testTrigger.ObjectMeta.ResourceVersion = ""
+	testTrigger.ObjectMeta.Name = "yyy"
 	testTrigger.Spec.Cron = "Not valid cron spec"
 	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
 	assertCronSpecFails(err)

@@ -63,7 +63,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {
 		return errors.New(fmt.Sprintf("Package %v is not in %v state.",
-			pkg.Metadata.Name, fv1.BuildStatusFailed))
+			pkg.ObjectMeta.Name, fv1.BuildStatusFailed))
 	}
 
 	_, err = updatePackageStatus(opts.Client(), pkg, fv1.BuildStatusPending)
@@ -71,7 +71,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "update package status")
 	}
 
-	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.Metadata.Name, pkg.Metadata.Name)
+	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.ObjectMeta.Name, pkg.ObjectMeta.Name)
 
 	return nil
 }

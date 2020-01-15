@@ -63,7 +63,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	m := opts.env.Metadata
+	m := opts.env.ObjectMeta
 
 	envList, err := opts.Client().V1().Environment().List(m.Namespace)
 	if err != nil {
@@ -145,7 +145,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			Kind:       fv1.CRD_NAME_ENVIRONMENT,
 			APIVersion: fv1.CRD_VERSION,
 		},
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      envName,
 			Namespace: envNamespace,
 		},

@@ -79,7 +79,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		keepWaiting := false
 		buildpkgs := make([]fv1.Package, 0)
 		for _, pkg := range pkgs {
-			_, ok := w.pkgMeta[mapKey(&pkg.Metadata)]
+			_, ok := w.pkgMeta[mapKey(&pkg.ObjectMeta)]
 			if !ok {
 				continue
 			}
@@ -118,5 +118,5 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 
 func pkgKey(pkg *fv1.Package) string {
 	// packages are mutable so we want to keep track of them by resource version
-	return fmt.Sprintf("%v:%v:%v", pkg.Metadata.Name, pkg.Metadata.Namespace, pkg.Metadata.ResourceVersion)
+	return fmt.Sprintf("%v:%v:%v", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.ObjectMeta.ResourceVersion)
 }

@@ -247,10 +247,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 			if pkg.Status.BuildStatus != types.BuildStatusSucceeded && pkg.Status.BuildStatus != types.BuildStatusNone {
 				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", types.BuildStatusSucceeded)
 				fetcher.logger.Error(e,
-					zap.String("package_name", pkg.Metadata.Name),
-					zap.String("package_namespace", pkg.Metadata.Namespace),
+					zap.String("package_name", pkg.ObjectMeta.Name),
+					zap.String("package_namespace", pkg.ObjectMeta.Namespace),
 					zap.Any("package_build_status", pkg.Status.BuildStatus))
-				return http.StatusInternalServerError, errors.New(fmt.Sprintf("%s: pkg %s.%s has a status of %s", e, pkg.Metadata.Name, pkg.Metadata.Namespace, pkg.Status.BuildStatus))
+				return http.StatusInternalServerError, errors.New(fmt.Sprintf("%s: pkg %s.%s has a status of %s", e, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.Status.BuildStatus))
 			}
 			archive = &pkg.Spec.Deployment
 		} else {
@@ -551,7 +551,7 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(req types.FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		pkg, err = fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name)
+		pkg, err = fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			return pkg, nil
 		}

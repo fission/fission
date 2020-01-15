@@ -46,7 +46,7 @@ type HTTPTriggerSet struct {
 	kubeClient                 *kubernetes.Clientset
 	executor                   *executorClient.Client
 	resolver                   *functionReferenceResolver
-	crdClient                  *rest.RESTClient
+	crdClient                  rest.Interface
 	triggers                   []fv1.HTTPTrigger
 	triggerStore               k8sCache.Store
 	triggerController          k8sCache.Controller
@@ -60,7 +60,7 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient *rest.RESTClient, params *tsRoundTripperParams, isDebugEnv bool, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
+	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient rest.Interface, params *tsRoundTripperParams, isDebugEnv bool, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -138,7 +138,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		}
 
 		fh := &functionHandler{
-			logger:                   ts.logger.Named(trigger.Metadata.Name),
+			logger:                   ts.logger.Named(trigger.ObjectMeta.Name),
 			fmap:                     ts.functionServiceMap,
 			executor:                 ts.executor,
 			httpTrigger:              &trigger,
@@ -188,7 +188,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		fh := &functionHandler{
-			logger:                 ts.logger.Named(fn.Metadata.Name),
+			logger:                 ts.logger.Named(fn.ObjectMeta.Name),
 			fmap:                   ts.functionServiceMap,
 			function:               &fn,
 			executor:               ts.executor,
@@ -197,7 +197,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
 			functionTimeoutMap:     fnTimeoutMap,
 		}
-		muxRouter.HandleFunc(utils.UrlForFunction(fn.Metadata.Name, fn.Metadata.Namespace), fh.handler)
+		muxRouter.HandleFunc(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace), fh.handler)
 	}
 
 	// Healthz endpoint for the router.
@@ -229,7 +229,7 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 				oldTrigger := oldObj.(*fv1.HTTPTrigger)
 				newTrigger := newObj.(*fv1.HTTPTrigger)
 
-				if oldTrigger.Metadata.ResourceVersion == newTrigger.Metadata.ResourceVersion {
+				if oldTrigger.ObjectMeta.ResourceVersion == newTrigger.ObjectMeta.ResourceVersion {
 					return
 				}
 
@@ -255,15 +255,15 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				oldFn := oldObj.(*fv1.Function)
 				fn := newObj.(*fv1.Function)
 
-				if oldFn.Metadata.ResourceVersion == fn.Metadata.ResourceVersion {
+				if oldFn.ObjectMeta.ResourceVersion == fn.ObjectMeta.ResourceVersion {
 					return
 				}
 
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
-					if key.namespace == fn.Metadata.Namespace &&
-						rr.functionMap[fn.Metadata.Name] != nil &&
-						rr.functionMap[fn.Metadata.Name].Metadata.ResourceVersion != fn.Metadata.ResourceVersion {
+					if key.namespace == fn.ObjectMeta.Namespace &&
+						rr.functionMap[fn.ObjectMeta.Name] != nil &&
+						rr.functionMap[fn.ObjectMeta.Name].ObjectMeta.ResourceVersion != fn.ObjectMeta.ResourceVersion {
 						// invalidate resolver cache
 						ts.logger.Debug("invalidating resolver cache")
 						err := ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
@@ -305,7 +305,7 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		functions := make([]fv1.Function, len(latestFunctions))
 		for _, f := range latestFunctions {
 			fn := *f.(*fv1.Function)
-			functionTimeout[fn.Metadata.UID] = fn.Spec.FunctionTimeout
+			functionTimeout[fn.ObjectMeta.UID] = fn.Spec.FunctionTimeout
 			functions = append(functions, *f.(*fv1.Function))
 		}
 		ts.functions = functions

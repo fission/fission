@@ -42,7 +42,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -99,7 +99,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -159,7 +159,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -217,7 +217,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -275,7 +275,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -333,7 +333,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -392,7 +392,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -450,7 +450,7 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},
@@ -539,7 +539,7 @@ func TestGetDeployLabels(t *testing.T) {
 			name: "getdeploylabels",
 			args: args{
 				trigger: &fv1.HTTPTrigger{
-					Metadata: metav1.ObjectMeta{
+					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "bar",
 					},

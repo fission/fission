@@ -68,7 +68,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
 				Namespace: fnNamespace,
 			},
@@ -83,7 +83,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.watcher = &fv1.KubernetesWatchTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      watchName,
 			Namespace: fnNamespace,
 		},
@@ -104,7 +104,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Metadata.Name)
+		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.watcher, specFile)
 		if err != nil {
 			return errors.Wrap(err, "error creating kubewatch spec")
@@ -117,6 +117,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating kubewatch")
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.watcher.Metadata.Name)
+	fmt.Printf("trigger '%v' created\n", opts.watcher.ObjectMeta.Name)
 	return nil
 }

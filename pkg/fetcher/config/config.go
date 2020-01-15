@@ -112,7 +112,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 	// path /userfunc/user
 	targetFilename := "user"
 	if env.Spec.Version >= 2 {
-		targetFilename = string(fn.Metadata.UID)
+		targetFilename = string(fn.ObjectMeta.UID)
 	}
 
 	return types.FunctionSpecializeRequest{
@@ -130,7 +130,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 		LoadReq: types.FunctionLoadRequest{
 			FilePath:         filepath.Join(cfg.sharedMountPath, targetFilename),
 			FunctionName:     fn.Spec.Package.FunctionName,
-			FunctionMetadata: &fn.Metadata,
+			FunctionMetadata: &fn.ObjectMeta,
 			EnvVersion:       env.Spec.Version,
 		},
 	}

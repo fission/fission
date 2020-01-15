@@ -367,7 +367,7 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
 			return nil, nil, errors.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
-				f.Metadata.Namespace, f.Metadata.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
+				f.ObjectMeta.Namespace, f.ObjectMeta.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
@@ -532,14 +532,14 @@ func waitForPackageBuild(fclient client.Interface, pkg *fv1.Package) (*fv1.Packa
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, errors.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.Metadata.Name)
+			return nil, errors.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
 		}
 
 		// TODO watch instead
 		time.Sleep(time.Second)
 
 		var err error
-		pkg, err = fclient.V1().Package().Get(&pkg.Metadata)
+		pkg, err = fclient.V1().Package().Get(&pkg.ObjectMeta)
 		if err != nil {
 			return nil, err
 		}
@@ -556,7 +556,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 	// filter
 	objs := make([]fv1.Package, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -564,7 +564,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 	// index
 	existent := make(map[string]fv1.Package)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -576,13 +576,13 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 	// create or update desired state
 	for _, o := range fr.Packages {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			keep := false
@@ -598,10 +598,10 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 
 			if keep && existingObj.Status.BuildStatus == fv1.BuildStatusSucceeded {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
@@ -609,7 +609,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 				pkg, err := waitForPackageBuild(fclient, &o)
 				if err != nil {
 					// log and ignore
-					console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.Metadata.Name))
+					console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.ObjectMeta.Name))
 					pkg = &o
 				}
 
@@ -625,7 +625,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -634,7 +634,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -642,14 +642,14 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().Package().Delete(&o.Metadata)
+				err := fclient.V1().Package().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -667,7 +667,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	// filter
 	objs := make([]fv1.Function, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -675,7 +675,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	// index
 	existent := make(map[string]fv1.Function)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -687,28 +687,28 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	// create or update desired state
 	for _, o := range fr.Functions {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().Function().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -717,7 +717,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -725,14 +725,14 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().Function().Delete(&o.Metadata)
+				err := fclient.V1().Function().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -750,7 +750,7 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 	// filter
 	objs := make([]fv1.Environment, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -758,7 +758,7 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 	// index
 	existent := make(map[string]fv1.Environment)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -770,28 +770,28 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 	// create or update desired state
 	for _, o := range fr.Environments {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().Environment().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -800,7 +800,7 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -808,14 +808,14 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().Environment().Delete(&o.Metadata)
+				err := fclient.V1().Environment().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -833,7 +833,7 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// filter
 	objs := make([]fv1.HTTPTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -841,7 +841,7 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// index
 	existent := make(map[string]fv1.HTTPTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -853,28 +853,28 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// create or update desired state
 	for _, o := range fr.HttpTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().HTTPTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -883,7 +883,7 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -891,14 +891,14 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().HTTPTrigger().Delete(&o.Metadata)
+				err := fclient.V1().HTTPTrigger().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -916,7 +916,7 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 	// filter
 	objs := make([]fv1.KubernetesWatchTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -924,7 +924,7 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 	// index
 	existent := make(map[string]fv1.KubernetesWatchTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -936,28 +936,28 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 	// create or update desired state
 	for _, o := range fr.KubernetesWatchTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().KubeWatcher().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -966,7 +966,7 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -974,14 +974,14 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().KubeWatcher().Delete(&o.Metadata)
+				err := fclient.V1().KubeWatcher().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -999,7 +999,7 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// filter
 	objs := make([]fv1.TimeTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1007,7 +1007,7 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// index
 	existent := make(map[string]fv1.TimeTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1019,28 +1019,28 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	// create or update desired state
 	for _, o := range fr.TimeTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().TimeTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -1049,7 +1049,7 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -1057,14 +1057,14 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().TimeTrigger().Delete(&o.Metadata)
+				err := fclient.V1().TimeTrigger().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}
@@ -1082,7 +1082,7 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 	// filter
 	objs := make([]fv1.MessageQueueTrigger, 0)
 	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.Metadata, fr) {
+		if hasDeploymentConfig(&o.ObjectMeta, fr) {
 			objs = append(objs, o)
 		}
 	}
@@ -1090,7 +1090,7 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 	// index
 	existent := make(map[string]fv1.MessageQueueTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.Metadata)] = obj
+		existent[mapKey(&obj.ObjectMeta)] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1102,28 +1102,28 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 	// create or update desired state
 	for _, o := range fr.MessageQueueTriggers {
 		// apply deploymentConfig so we can find our objects on future apply invocations
-		applyDeploymentConfig(&o.Metadata, fr)
+		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.Metadata)] = true
+		desired[mapKey(&o.ObjectMeta)] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.Metadata)]
+		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.Metadata)] = existingObj.Metadata
+				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.Metadata.ResourceVersion = existingObj.Metadata.ResourceVersion
+				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
 				newmeta, err := fclient.V1().MessageQueueTrigger().Update(&o)
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Updated = append(ras.Updated, newmeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.Metadata)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
 		} else {
 			// create
@@ -1132,7 +1132,7 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.Metadata)] = *newmeta
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
@@ -1140,14 +1140,14 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.Metadata)]
+			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().MessageQueueTrigger().Delete(&o.Metadata)
+				err := fclient.V1().MessageQueueTrigger().Delete(&o.ObjectMeta)
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Deleted = append(ras.Deleted, &o.Metadata)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.Metadata.Namespace, o.Metadata.Name)
+				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
+				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 			}
 		}
 	}

@@ -108,6 +108,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating message queue trigger")
 	}
 
-	fmt.Printf("message queue trigger '%v' updated\n", opts.trigger.Metadata.Name)
+	fmt.Printf("message queue trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 	return nil
 }

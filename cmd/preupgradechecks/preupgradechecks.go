@@ -108,20 +108,20 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	for _, fn := range fList.Items {
 		secrets := fn.Spec.Secrets
 		for _, secret := range secrets {
-			if secret.Namespace != fn.Metadata.Namespace {
-				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, secret.Name, secret.Namespace))
+			if secret.Namespace != fn.ObjectMeta.Namespace {
+				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
 			}
 		}
 
 		configmaps := fn.Spec.ConfigMaps
 		for _, configmap := range configmaps {
-			if configmap.Namespace != fn.Metadata.Namespace {
-				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, configmap.Name, configmap.Namespace))
+			if configmap.Namespace != fn.ObjectMeta.Namespace {
+				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
 			}
 		}
 
-		if fn.Spec.Package.PackageRef.Namespace != fn.Metadata.Namespace {
-			errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.Metadata.Name, fn.Metadata.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+		if fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
+			errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
 		}
 	}
 

@@ -23,21 +23,18 @@ import (
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	clientset "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned"
+	genv1 "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned/typed/fission.io/v1"
 )
 
 type (
 	FissionClient struct {
-		crdClient *rest.RESTClient
+		crdClient clientset.Interface
 	}
 )
 
@@ -78,110 +75,9 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 }
 
 // GetCrdClient gets a CRD client config
-func GetCrdClient(config *rest.Config) (*rest.RESTClient, error) {
-	// mutate config to add our types
-	configureClient(config)
-
+func GetCrdClient(config *rest.Config) (clientset.Interface, error) {
 	// make a REST client with that config
-	return rest.RESTClientFor(config)
-}
-
-// configureClient sets up a REST client for Fission CRD types.
-//
-// This is copied from the client-go CRD example.  (I don't understand
-// all of it completely.)  It registers our types with the global API
-// "scheme" (api.Scheme), which keeps a directory of types [I guess so
-// it can use the string in the Kind field to make a Go object?].  It
-// also puts the fission CRD types under a "group version" which we
-// create for our CRDs types.
-func configureClient(config *rest.Config) {
-	groupversion := schema.GroupVersion{
-		Group:   "fission.io",
-		Version: "v1",
-	}
-	config.GroupVersion = &groupversion
-	config.APIPath = "/apis"
-	config.ContentType = runtime.ContentTypeJSON
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
-
-	schemeBuilder := runtime.NewSchemeBuilder(
-		func(scheme *runtime.Scheme) error {
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.Function{},
-				&fv1.FunctionList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.Environment{},
-				&fv1.EnvironmentList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.HTTPTrigger{},
-				&fv1.HTTPTriggerList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.KubernetesWatchTrigger{},
-				&fv1.KubernetesWatchTriggerList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.TimeTrigger{},
-				&fv1.TimeTriggerList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.MessageQueueTrigger{},
-				&fv1.MessageQueueTriggerList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.Package{},
-				&fv1.PackageList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			scheme.AddKnownTypes(
-				groupversion,
-				&fv1.CanaryConfig{},
-				&fv1.CanaryConfigList{},
-				&metav1.ListOptions{},
-				&metav1.DeleteOptions{},
-			)
-			return nil
-		})
-	schemeBuilder.AddToScheme(scheme.Scheme)
-}
-
-func waitForCRDs(crdClient *rest.RESTClient) error {
-	start := time.Now()
-	for {
-		fi := MakeFunctionInterface(crdClient, metav1.NamespaceDefault)
-		_, err := fi.List(metav1.ListOptions{})
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-		} else {
-			return nil
-		}
-
-		if time.Since(start) > 30*time.Second {
-			return errors.New("timeout waiting for CRDs")
-		}
-	}
+	return clientset.NewForConfig(config)
 }
 
 func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, error) {
@@ -199,33 +95,48 @@ func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsc
 	return fc, kubeClient, apiExtClient, nil
 }
 
-func (fc *FissionClient) Functions(ns string) FunctionInterface {
-	return MakeFunctionInterface(fc.crdClient, ns)
+func (fc *FissionClient) Functions(ns string) genv1.FunctionInterface {
+	return fc.crdClient.V1V1().Functions(ns)
 }
-func (fc *FissionClient) Environments(ns string) EnvironmentInterface {
-	return MakeEnvironmentInterface(fc.crdClient, ns)
+func (fc *FissionClient) Environments(ns string) genv1.EnvironmentInterface {
+	return fc.crdClient.V1V1().Environments(ns)
 }
-func (fc *FissionClient) HTTPTriggers(ns string) HTTPTriggerInterface {
-	return MakeHTTPTriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) HTTPTriggers(ns string) genv1.HTTPTriggerInterface {
+	return fc.crdClient.V1V1().HTTPTriggers(ns)
 }
-func (fc *FissionClient) KubernetesWatchTriggers(ns string) KubernetesWatchTriggerInterface {
-	return MakeKubernetesWatchTriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) KubernetesWatchTriggers(ns string) genv1.KubernetesWatchTriggerInterface {
+	return fc.crdClient.V1V1().KubernetesWatchTriggers(ns)
 }
-func (fc *FissionClient) TimeTriggers(ns string) TimeTriggerInterface {
-	return MakeTimeTriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) TimeTriggers(ns string) genv1.TimeTriggerInterface {
+	return fc.crdClient.V1V1().TimeTriggers(ns)
 }
-func (fc *FissionClient) MessageQueueTriggers(ns string) MessageQueueTriggerInterface {
-	return MakeMessageQueueTriggerInterface(fc.crdClient, ns)
+func (fc *FissionClient) MessageQueueTriggers(ns string) genv1.MessageQueueTriggerInterface {
+	return fc.crdClient.V1V1().MessageQueueTriggers(ns)
 }
-func (fc *FissionClient) Packages(ns string) PackageInterface {
-	return MakePackageInterface(fc.crdClient, ns)
+func (fc *FissionClient) Packages(ns string) genv1.PackageInterface {
+	return fc.crdClient.V1V1().Packages(ns)
 }
-func (fc *FissionClient) CanaryConfigs(ns string) CanaryConfigInterface {
-	return MakeCanaryConfigInterface(fc.crdClient, ns)
+func (fc *FissionClient) CanaryConfigs(ns string) genv1.CanaryConfigInterface {
+	return fc.crdClient.V1V1().CanaryConfigs(ns)
 }
+
 func (fc *FissionClient) WaitForCRDs() error {
-	return waitForCRDs(fc.crdClient)
+	start := time.Now()
+	for {
+		fi := fc.crdClient.V1V1().Functions(metav1.NamespaceDefault)
+		_, err := fi.List(metav1.ListOptions{})
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			return nil
+		}
+
+		if time.Since(start) > 30*time.Second {
+			return errors.New("timeout waiting for CRDs")
+		}
+	}
 }
-func (fc *FissionClient) GetCrdClient() *rest.RESTClient {
+
+func (fc *FissionClient) GetCrdClient() clientset.Interface {
 	return fc.crdClient
 }

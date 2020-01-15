@@ -68,7 +68,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := GetFunctionsByPackage(opts.Client(), pkg.Metadata.Name, pkg.Metadata.Namespace)
+	fnList, err := GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -82,7 +82,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating package")
 	}
 
-	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
 		err = UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fnList...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
@@ -166,7 +166,7 @@ func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (
 	}
 
 	if !needToUpdate {
-		return &pkg.Metadata, nil
+		return &pkg.ObjectMeta, nil
 	}
 
 	// Set package as pending status when needToBuild is true
@@ -174,7 +174,7 @@ func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (
 		// change into pending state to trigger package build
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         fv1.BuildStatusPending,
-			LastUpdateTimestamp: time.Now().UTC(),
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
 	}
 
@@ -196,7 +196,7 @@ func UpdateFunctionPackageResourceVersion(client client.Interface, pkgMeta *meta
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
 		_, err := client.V1().Function().Update(&fn)
 		if err != nil {
-			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.Metadata.Name))
+			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.ObjectMeta.Name))
 		}
 	}
 
@@ -208,7 +208,7 @@ func updatePackageStatus(client client.Interface, pkg *fv1.Package, status fv1.B
 	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.CanaryConfigStatusAborted:
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         status,
-			LastUpdateTimestamp: time.Now().UTC(),
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
 		pkg, err := client.V1().Package().Update(pkg)
 		return pkg, err

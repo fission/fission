@@ -205,7 +205,7 @@ func (asc AzureStorageConnection) subscribe(trigger *fv1.MessageQueueTrigger) (m
 	asc.logger.Info("subscribing to Azure storage queue", zap.String("queue", trigger.Spec.Topic))
 
 	if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
-		return nil, fmt.Errorf("unsupported function reference type (%v) for trigger %q", trigger.Spec.FunctionReference.Type, trigger.Metadata.Name)
+		return nil, fmt.Errorf("unsupported function reference type (%v) for trigger %q", trigger.Spec.FunctionReference.Type, trigger.ObjectMeta.Name)
 	}
 
 	subscription := &AzureQueueSubscription{
@@ -215,7 +215,7 @@ func (asc AzureStorageConnection) subscribe(trigger *fv1.MessageQueueTrigger) (m
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		functionURL: asc.routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/"),
+		functionURL: asc.routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/"),
 		contentType: trigger.Spec.ContentType,
 		unsubscribe: make(chan bool),
 		done:        make(chan bool),

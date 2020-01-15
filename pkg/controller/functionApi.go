@@ -70,7 +70,7 @@ func RegisterFunctionRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Function{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusOK, "Metadata of created function", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of created function", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/functions/{function}").
@@ -96,7 +96,7 @@ func RegisterFunctionRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Function{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated function", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated function", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/functions/{function}").
@@ -147,19 +147,19 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(f.Metadata.Namespace)
+	err = a.createNsIfNotExists(f.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Create(&f)
+	fnew, err := a.fissionClient.Functions(f.ObjectMeta.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(fnew.Metadata)
+	resp, err := json.Marshal(fnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -177,7 +177,7 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	f, err := a.fissionClient.Functions(ns).Get(name)
+	f, err := a.fissionClient.Functions(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -208,19 +208,19 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if name != f.Metadata.Name {
+	if name != f.ObjectMeta.Name {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "Function name doesn't match URL")
 		a.respondWithError(w, err)
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.Metadata.Namespace).Update(&f)
+	fnew, err := a.fissionClient.Functions(f.ObjectMeta.Namespace).Update(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(fnew.Metadata)
+	resp, err := json.Marshal(fnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -299,7 +299,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		podNs = ns
 	}
 
-	f, err := a.fissionClient.Functions(ns).Get(fnName)
+	f, err := a.fissionClient.Functions(ns).Get(fnName, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -307,7 +307,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Get function Pods first
 	selector := map[string]string{
-		types.FUNCTION_UID:          string(f.Metadata.UID),
+		types.FUNCTION_UID:          string(f.ObjectMeta.UID),
 		types.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 		types.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 	}
@@ -353,7 +353,7 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
-			fn.Metadata.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
+			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
 		w.Write([]byte(msg))
 
 		_, err = io.Copy(w, podLogs)

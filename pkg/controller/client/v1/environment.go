@@ -114,7 +114,7 @@ func (c *Environment) Update(env *fv1.Environment) (*metav1.ObjectMeta, error) {
 		return nil, err
 	}
 
-	relativeUrl := fmt.Sprintf("environments/%v", env.Metadata.Name)
+	relativeUrl := fmt.Sprintf("environments/%v", env.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", data)
 	if err != nil {

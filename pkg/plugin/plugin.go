@@ -42,7 +42,7 @@ var (
 	Prefix = "fission-"
 )
 
-// Metadata contains the metadata of a plugin.
+// ObjectMeta contains the metadata of a plugin.
 // The only metadata that is guaranteed to be non-empty is the path and Name. All other fields are considered optional.
 type Metadata struct {
 	Name    string   `json:"name,omitempty"`

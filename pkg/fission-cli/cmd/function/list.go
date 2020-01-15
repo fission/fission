@@ -60,7 +60,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		}
 
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			f.Metadata.Name, f.Spec.Environment.Name,
+			f.ObjectMeta.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,

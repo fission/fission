@@ -100,7 +100,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	// finally create canaryCfg in the same namespace as the functions referenced
 	opts.canary = &fv1.CanaryConfig{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: fnNs,
 		},
@@ -127,6 +127,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating canary config")
 	}
 
-	fmt.Printf("canary config '%v' created\n", opts.canary.Metadata.Name)
+	fmt.Printf("canary config '%v' created\n", opts.canary.ObjectMeta.Name)
 	return nil
 }

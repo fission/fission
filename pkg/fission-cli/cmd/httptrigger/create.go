@@ -107,7 +107,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 		for _, fn := range functionList {
 			exists, err := fr.ExistsInSpecs(fv1.Function{
-				Metadata: metav1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      fn,
 					Namespace: fnNamespace,
 				},
@@ -138,7 +138,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	host := input.String(flagkey.HtHost)
 
 	opts.trigger = &fv1.HTTPTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      triggerName,
 			Namespace: fnNamespace,
 		},
@@ -158,7 +158,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Metadata.Name)
+		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
 			return errors.Wrap(err, "error creating HTTP trigger spec")
@@ -171,7 +171,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "create HTTP trigger")
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
 	return nil
 }

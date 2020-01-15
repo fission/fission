@@ -60,7 +60,7 @@ func RegisterPackageRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Package{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created package", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created package", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/packages/{package}").
@@ -86,7 +86,7 @@ func RegisterPackageRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Package{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated package", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated package", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/packages/{package}").
@@ -150,19 +150,19 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(f.Metadata.Namespace)
+	err = a.createNsIfNotExists(f.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	fnew, err := a.fissionClient.Packages(f.Metadata.Namespace).Create(&f)
+	fnew, err := a.fissionClient.Packages(f.ObjectMeta.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(fnew.Metadata)
+	resp, err := json.Marshal(fnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -181,7 +181,7 @@ func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 	}
 	raw := r.FormValue("raw") // just the deployment pkg
 
-	f, err := a.fissionClient.Packages(ns).Get(name)
+	f, err := a.fissionClient.Packages(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -217,19 +217,19 @@ func (a *API) PackageApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if name != f.Metadata.Name {
+	if name != f.ObjectMeta.Name {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "Package name doesn't match URL")
 		a.respondWithError(w, err)
 		return
 	}
 
-	fnew, err := a.fissionClient.Packages(f.Metadata.Namespace).Update(&f)
+	fnew, err := a.fissionClient.Packages(f.ObjectMeta.Namespace).Update(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(fnew.Metadata)
+	resp, err := json.Marshal(fnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
