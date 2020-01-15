@@ -1,5 +1,5 @@
 /*
-Copyright The Kubernetes Authors.
+Copyright The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ package fake
 import (
 	fissioniov1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -56,7 +57,18 @@ func (c *FakeCanaryConfigs) List(opts v1.ListOptions) (result *fissioniov1.Canar
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*fissioniov1.CanaryConfigList), err
+
+	label, _, _ := testing.ExtractFromListOptions(opts)
+	if label == nil {
+		label = labels.Everything()
+	}
+	list := &fissioniov1.CanaryConfigList{ListMeta: obj.(*fissioniov1.CanaryConfigList).ListMeta}
+	for _, item := range obj.(*fissioniov1.CanaryConfigList).Items {
+		if label.Matches(labels.Set(item.Labels)) {
+			list.Items = append(list.Items, item)
+		}
+	}
+	return list, err
 }
 
 // Watch returns a watch.Interface that watches the requested canaryConfigs.
