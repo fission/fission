@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,46 +32,36 @@ type Config struct {
 	sharedSecretPath string
 	sharedCfgMapPath string
 
-	// dockerRegistryAuthDomain string
-	// dockerRegistryUsername   string
-	// dockerRegistryPassword   string
-
 	serviceAccount string
 
 	jaegerCollectorEndpoint string
 }
 
 func getFetcherResources() (apiv1.ResourceRequirements, error) {
-	mincpu, err := resource.ParseQuantity(os.Getenv("FETCHER_MINCPU"))
-	if err != nil {
-		return apiv1.ResourceRequirements{}, err
+	resourceReqs := apiv1.ResourceRequirements{
+		Requests: map[apiv1.ResourceName]resource.Quantity{},
+		Limits:   map[apiv1.ResourceName]resource.Quantity{},
 	}
+	errs := utils.MultiErrorWithFormat()
+	errs = multierror.Append(errs,
+		parseResources("FETCHER_MINCPU", resourceReqs.Requests, apiv1.ResourceCPU),
+		parseResources("FETCHER_MINMEM", resourceReqs.Requests, apiv1.ResourceMemory),
+		parseResources("FETCHER_MAXCPU", resourceReqs.Limits, apiv1.ResourceCPU),
+		parseResources("FETCHER_MAXMEM", resourceReqs.Limits, apiv1.ResourceMemory),
+	)
+	return resourceReqs, errs.ErrorOrNil()
+}
 
-	minmem, err := resource.ParseQuantity(os.Getenv("FETCHER_MINMEM"))
-	if err != nil {
-		return apiv1.ResourceRequirements{}, err
+func parseResources(env string, resourceReqs map[apiv1.ResourceName]resource.Quantity, resName apiv1.ResourceName) error {
+	val := os.Getenv(env)
+	if len(val) > 0 {
+		quantity, err := resource.ParseQuantity(val)
+		if err != nil {
+			return err
+		}
+		resourceReqs[resName] = quantity
 	}
-
-	maxcpu, err := resource.ParseQuantity(os.Getenv("FETCHER_MAXCPU"))
-	if err != nil {
-		return apiv1.ResourceRequirements{}, err
-	}
-
-	maxmem, err := resource.ParseQuantity(os.Getenv("FETCHER_MAXMEM"))
-	if err != nil {
-		return apiv1.ResourceRequirements{}, err
-	}
-
-	return apiv1.ResourceRequirements{
-		Requests: map[apiv1.ResourceName]resource.Quantity{
-			apiv1.ResourceCPU:    mincpu,
-			apiv1.ResourceMemory: minmem,
-		},
-		Limits: map[apiv1.ResourceName]resource.Quantity{
-			apiv1.ResourceCPU:    maxcpu,
-			apiv1.ResourceMemory: maxmem,
-		},
-	}, nil
+	return nil
 }
 
 func MakeFetcherConfig(sharedMountPath string) (*Config, error) {

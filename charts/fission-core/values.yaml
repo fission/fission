@@ -22,12 +22,6 @@ imageTag: 1.7.1
 ## Image pull policy
 pullPolicy: IfNotPresent
 
-## Fission fetcher repository
-fetcherImage: fission/fetcher
-
-## Fission fetcher image version
-fetcherImageTag: 1.7.1
-
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
 
@@ -44,6 +38,23 @@ builderNamespace: fission-builder
 
 ## Enable istio integration
 enableIstio: false
+
+fetcher:
+  ## Fetcher repository
+  image: fission/fetcher
+  ## Fetcher image version
+  imageTag: 1.7.1
+  
+  ## Fetcher is only for to downloading or uploading archive.
+  ## Normally, you don't need to change the value here, unless necessary.
+  resource:
+    cpu:
+      requests: "10m"
+      ## Low CPU limits will increases the function specialization time.
+      limits: ""
+    mem:
+      requests: "16Mi"
+      limits: ""
 
 executor:
   adoptExistingResources: false
