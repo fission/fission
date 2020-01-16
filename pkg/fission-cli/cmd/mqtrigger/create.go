@@ -110,7 +110,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
 				Namespace: fnNamespace,
 			},
@@ -125,7 +125,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.trigger = &fv1.MessageQueueTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      mqtName,
 			Namespace: fnNamespace,
 		},
@@ -149,7 +149,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Metadata.Name)
+		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
 			return errors.Wrap(err, "error creating message queue trigger spec")
@@ -162,7 +162,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "create message queue trigger")
 	}
 
-	fmt.Printf("trigger '%s' created\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%s' created\n", opts.trigger.ObjectMeta.Name)
 	return nil
 }
 

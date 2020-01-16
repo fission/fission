@@ -17,13 +17,9 @@ limitations under the License.
 package v1
 
 import (
-	"time"
-
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 //
 // To add a Fission CRD type:
@@ -42,11 +38,13 @@ import (
 type (
 
 	// Packages. Think of these as function-level images.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Package struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            PackageSpec       `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+
+		Spec PackageSpec `json:"spec"`
 
 		// Status indicates the build status of package.
 		Status PackageStatus `json:"status"`
@@ -56,121 +54,130 @@ type (
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-		Items           []Package       `json:"items"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []Package `json:"items"`
 	}
 
 	// Function is function runs within environment runtime with given package and secrets/configmaps.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Function struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            FunctionSpec      `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              FunctionSpec `json:"spec"`
 	}
 
 	// FunctionList is a list of Functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	FunctionList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-		Items           []Function      `json:"items"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []Function `json:"items"`
 	}
 
 	// Environment is environment for building and running user functions.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	Environment struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            EnvironmentSpec   `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              EnvironmentSpec `json:"spec"`
 	}
 
 	// EnvironmentList is a list of Environments.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	EnvironmentList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-		Items           []Environment   `json:"items"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []Environment `json:"items"`
 	}
 
 	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	HTTPTrigger struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            HTTPTriggerSpec   `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              HTTPTriggerSpec `json:"spec"`
 	}
 
 	// HTTPTriggerList is a list of HTTPTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
-		Items           []HTTPTrigger   `json:"items"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []HTTPTrigger `json:"items"`
 	}
 
 	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	KubernetesWatchTrigger struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta          `json:"metadata"`
-		Spec            KubernetesWatchTriggerSpec `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              KubernetesWatchTriggerSpec `json:"spec"`
 	}
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta          `json:"metadata"`
+		metav1.ListMeta `json:"metadata"`
 		Items           []KubernetesWatchTrigger `json:"items"`
 	}
 
 	// TimeTrigger invokes functions based on given cron schedule.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	TimeTrigger struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta `json:"metadata"`
-		Spec            TimeTriggerSpec   `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+
+		Spec TimeTriggerSpec `json:"spec"`
 	}
 
 	// TimeTriggerList is a list of TimeTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
+		metav1.ListMeta `json:"metadata"`
 
 		Items []TimeTrigger `json:"items"`
 	}
 
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	MessageQueueTrigger struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta       `json:"metadata"`
-		Spec            MessageQueueTriggerSpec `json:"spec"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+
+		Spec MessageQueueTriggerSpec `json:"spec"`
 	}
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta       `json:"metadata"`
+		metav1.ListMeta `json:"metadata"`
 		Items           []MessageQueueTrigger `json:"items"`
 	}
 
 	// CanaryConfig is for canary deployment of two functions.
+	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	CanaryConfig struct {
-		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ObjectMeta  `json:"metadata"`
-		Spec            CanaryConfigSpec   `json:"spec"`
-		Status          CanaryConfigStatus `json:"status"`
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              CanaryConfigSpec   `json:"spec"`
+		Status            CanaryConfigStatus `json:"status"`
 	}
 
 	// CanaryConfigList is a list of CanaryConfigs.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
-		Metadata        metav1.ListMeta `json:"metadata"`
+		metav1.ListMeta `json:"metadata"`
 
 		Items []CanaryConfig `json:"items"`
 	}
@@ -267,7 +274,9 @@ type (
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
 		// LastUpdateTimestamp will store the timestamp the package was last updated
-		LastUpdateTimestamp time.Time `json:"lastUpdateTimestamp,omitempty"`
+		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
+		// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
+		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
 	}
 
 	// PackageRef is a reference to the package.

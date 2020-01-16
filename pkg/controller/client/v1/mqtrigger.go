@@ -113,7 +113,7 @@ func (c *MessageQueueTrigger) Update(mqTrigger *fv1.MessageQueueTrigger) (*metav
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", mqTrigger.Metadata.Name)
+	relativeUrl := fmt.Sprintf("triggers/messagequeue/%v", mqTrigger.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {

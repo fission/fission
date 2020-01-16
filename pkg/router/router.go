@@ -126,8 +126,6 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 		logger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
 
-	restClient := fissionClient.GetCrdClient()
-
 	executor := executorClient.MakeClient(logger, executorUrl)
 
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
@@ -222,7 +220,7 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 			zap.Bool("default", displayAccessLog))
 	}
 
-	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, restClient, &tsRoundTripperParams{
+	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, fissionClient.V1().RESTClient(), &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,

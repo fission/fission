@@ -91,8 +91,8 @@ func (timer *Timer) syncCron(triggers []fv1.TimeTrigger) error {
 	// add new triggers or update existing ones
 	triggerMap := make(map[string]bool)
 	for _, t := range triggers {
-		triggerMap[crd.CacheKey(&t.Metadata)] = true
-		if item, ok := timer.triggers[crd.CacheKey(&t.Metadata)]; ok {
+		triggerMap[crd.CacheKey(&t.ObjectMeta)] = true
+		if item, ok := timer.triggers[crd.CacheKey(&t.ObjectMeta)]; ok {
 			// update cron if the cron spec changed
 			if item.trigger.Spec.Cron != t.Spec.Cron {
 				// if there is an cron running, stop it
@@ -104,7 +104,7 @@ func (timer *Timer) syncCron(triggers []fv1.TimeTrigger) error {
 
 			item.trigger = t
 		} else {
-			timer.triggers[crd.CacheKey(&t.Metadata)] = &timerTriggerWithCron{
+			timer.triggers[crd.CacheKey(&t.ObjectMeta)] = &timerTriggerWithCron{
 				trigger: t,
 				cron:    timer.newCron(t),
 			}
@@ -116,7 +116,7 @@ func (timer *Timer) syncCron(triggers []fv1.TimeTrigger) error {
 		if _, found := triggerMap[k]; !found {
 			if v.cron != nil {
 				v.cron.Stop()
-				timer.logger.Info("cron for time trigger stopped", zap.String("trigger", v.trigger.Metadata.Name))
+				timer.logger.Info("cron for time trigger stopped", zap.String("trigger", v.trigger.ObjectMeta.Name))
 			}
 			delete(timer.triggers, k)
 		}
@@ -129,15 +129,15 @@ func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
 	c := cron.New()
 	c.AddFunc(t.Spec.Cron, func() {
 		headers := map[string]string{
-			"X-Fission-Timer-Name": t.Metadata.Name,
+			"X-Fission-Timer-Name": t.ObjectMeta.Name,
 		}
 
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		(*timer.publisher).Publish("", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Metadata.Namespace))
+		(*timer.publisher).Publish("", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.ObjectMeta.Namespace))
 	})
 	c.Start()
-	timer.logger.Info("added new cron for time trigger", zap.String("trigger", t.Metadata.Name))
+	timer.logger.Info("added new cron for time trigger", zap.String("trigger", t.ObjectMeta.Name))
 	return c
 }

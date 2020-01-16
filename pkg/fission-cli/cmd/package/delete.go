@@ -106,12 +106,12 @@ func deleteOrphanPkgs(client client.Interface, pkgNamespace string) error {
 
 	// range through all packages and find out the ones not referenced by any function
 	for _, pkg := range pkgList {
-		fnList, err := GetFunctionsByPackage(client, pkg.Metadata.Name, pkgNamespace)
+		fnList, err := GetFunctionsByPackage(client, pkg.ObjectMeta.Name, pkgNamespace)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+			return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
 		}
 		if len(fnList) == 0 {
-			err = deletePackage(client, pkg.Metadata.Name, pkgNamespace)
+			err = deletePackage(client, pkg.ObjectMeta.Name, pkgNamespace)
 			if err != nil {
 				return err
 			}

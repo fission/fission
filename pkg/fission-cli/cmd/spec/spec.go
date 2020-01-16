@@ -182,43 +182,43 @@ func SpecSave(resource interface{}, specFile string) error {
 	case fv1.Package:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Package"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.Function:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Function"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.Environment:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "Environment"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.HTTPTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "HTTPTrigger"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.KubernetesWatchTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "KubernetesWatchTrigger"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.MessageQueueTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "MessageQueueTrigger"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.TimeTrigger:
 		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
 		typedres.TypeMeta.Kind = "TimeTrigger"
-		meta = typedres.Metadata
+		meta = typedres.ObjectMeta
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	default:
@@ -297,7 +297,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	// index packages, check outgoing refs, mark archives that are referenced
 	packages := make(map[string]bool)
 	for _, p := range fr.Packages {
-		packages[MapKey(&p.Metadata)] = false
+		packages[MapKey(&p.ObjectMeta)] = false
 
 		as := map[string]string{
 			"source":     p.Spec.Source.URL,
@@ -311,8 +311,8 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 					if _, ok := archives[aname]; !ok {
 						result = multierror.Append(result, fmt.Errorf(
 							"%v: package '%v' references unknown %v archive '%v%v'",
-							fr.SourceMap.Locations["Package"][p.Metadata.Namespace][p.Metadata.Name],
-							p.Metadata.Name,
+							fr.SourceMap.Locations["Package"][p.ObjectMeta.Namespace][p.ObjectMeta.Name],
+							p.ObjectMeta.Name,
 							archiveType,
 							ARCHIVE_URL_PREFIX,
 							aname))
@@ -339,7 +339,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	// index functions, check function package refs, mark referenced packages
 	functions := make(map[string]bool)
 	for _, f := range fr.Functions {
-		functions[MapKey(&f.Metadata)] = false
+		functions[MapKey(&f.ObjectMeta)] = false
 
 		pkgMeta := &metav1.ObjectMeta{
 			Name:      f.Spec.Package.PackageRef.Name,
@@ -354,21 +354,21 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 
 		// check that the package referenced by each function is in the same ns as the function
 		packageRefInFuncNs := func(f *fv1.Function) bool {
-			return f.Spec.Package.PackageRef.Namespace == f.Metadata.Namespace
+			return f.Spec.Package.PackageRef.Namespace == f.ObjectMeta.Namespace
 		}
 
 		if !packageRefInFuncNs(&f) {
 			result = multierror.Append(result, fmt.Errorf(
 				"%v: function '%v' references a package outside of its namespace %v/%v",
-				fr.SourceMap.Locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
-				f.Metadata.Name,
+				fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
+				f.ObjectMeta.Name,
 				f.Spec.Package.PackageRef.Namespace,
 				f.Spec.Package.PackageRef.Name))
 		} else if !packageRefExists() {
 			result = multierror.Append(result, fmt.Errorf(
 				"%v: function '%v' references unknown package %v/%v",
-				fr.SourceMap.Locations["Function"][f.Metadata.Namespace][f.Metadata.Name],
-				f.Metadata.Name,
+				fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
+				f.ObjectMeta.Name,
 				pkgMeta.Namespace,
 				pkgMeta.Name))
 		} else {
@@ -415,7 +415,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 
 	// check function refs from triggers
 	for _, t := range fr.HttpTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
@@ -426,21 +426,21 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.KubernetesWatchTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
 		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.TimeTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
 		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.MessageQueueTriggers {
-		err := fr.validateFunctionReference(functions, t.Kind, &t.Metadata, t.Spec.FunctionReference)
+		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
 			result = multierror.Append(result, err)
 		}
@@ -453,7 +453,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	// Index envs, warn on functions referencing an environment for which spes does not exist
 	environments := make(map[string]struct{})
 	for _, e := range fr.Environments {
-		environments[fmt.Sprintf("%s:%s", e.Metadata.Name, e.Metadata.Namespace)] = struct{}{}
+		environments[fmt.Sprintf("%s:%s", e.ObjectMeta.Name, e.ObjectMeta.Namespace)] = struct{}{}
 		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
 			warnings = append(warnings, fmt.Sprintf("You have provided both - container spec and pod spec and while merging the pod spec will take precedence."))
 		}
@@ -466,7 +466,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 
 	for _, f := range fr.Functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Metadata.Name))
+			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.ObjectMeta.Name))
 		}
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
@@ -521,7 +521,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.Packages = append(fr.Packages, v)
 	case "Function":
 		var v fv1.Function
@@ -529,7 +529,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.Functions = append(fr.Functions, v)
 	case "Environment":
 		var v fv1.Environment
@@ -537,7 +537,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.Environments = append(fr.Environments, v)
 	case "HTTPTrigger":
 		var v fv1.HTTPTrigger
@@ -551,7 +551,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			v.Spec.RelativeURL = fmt.Sprintf("/%s", v.Spec.RelativeURL)
 		}
 
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.HttpTriggers = append(fr.HttpTriggers, v)
 	case "KubernetesWatchTrigger":
 		var v fv1.KubernetesWatchTrigger
@@ -559,7 +559,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.KubernetesWatchTriggers = append(fr.KubernetesWatchTriggers, v)
 	case "TimeTrigger":
 		var v fv1.TimeTrigger
@@ -567,7 +567,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.TimeTriggers = append(fr.TimeTriggers, v)
 	case "MessageQueueTrigger":
 		var v fv1.MessageQueueTrigger
@@ -575,7 +575,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-		m = &v.Metadata
+		m = &v.ObjectMeta
 		fr.MessageQueueTriggers = append(fr.MessageQueueTriggers, v)
 
 	// The following are not CRDs
@@ -637,7 +637,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 		return nil
 	case *fv1.Package:
 		for _, p := range fr.Packages {
-			if compareMetadata && !reflect.DeepEqual(p.Metadata, typedres.Metadata) {
+			if compareMetadata && !reflect.DeepEqual(p.ObjectMeta, typedres.ObjectMeta) {
 				continue
 			}
 			if compareSpec && !reflect.DeepEqual(p.Spec, typedres.Spec) {
@@ -663,50 +663,50 @@ func (fr *FissionResources) ExistsInSpecs(resource interface{}) (bool, error) {
 		}
 	case fv1.Package:
 		for _, obj := range fr.Packages {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.Function:
 		for _, obj := range fr.Functions {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.Environment:
 		for _, obj := range fr.Environments {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.HTTPTrigger:
 		for _, obj := range fr.HttpTriggers {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.KubernetesWatchTrigger:
 		for _, obj := range fr.KubernetesWatchTriggers {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.MessageQueueTrigger:
 		for _, obj := range fr.MessageQueueTriggers {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.TimeTrigger:
 		for _, obj := range fr.TimeTriggers {
-			if obj.Metadata.Name == typedres.Metadata.Name &&
-				obj.Metadata.Namespace == typedres.Metadata.Namespace {
+			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
+				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
 				return true, nil
 			}
 		}

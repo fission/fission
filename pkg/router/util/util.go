@@ -53,7 +53,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 	ing := &v1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: GetDeployLabels(trigger),
-			Name:   trigger.Metadata.Name,
+			Name:   trigger.ObjectMeta.Name,
 			// The Ingress NS MUST be same as Router NS, check long discussion:
 			// https://github.com/kubernetes/kubernetes/issues/17088
 			// We need to revisit this in future, once Kubernetes supports cross namespace ingress
@@ -91,8 +91,8 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 func GetDeployLabels(trigger *fv1.HTTPTrigger) map[string]string {
 	// TODO: support function weight
 	return map[string]string{
-		"triggerName":      trigger.Metadata.Name,
+		"triggerName":      trigger.ObjectMeta.Name,
 		"functionName":     trigger.Spec.FunctionReference.Name,
-		"triggerNamespace": trigger.Metadata.Namespace,
+		"triggerNamespace": trigger.ObjectMeta.Namespace,
 	}
 }

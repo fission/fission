@@ -22,7 +22,7 @@ package v1
 //
 
 type (
-	// Metadata is used as the general identifier for all kinds of
+	// ObjectMeta is used as the general identifier for all kinds of
 	// resources managed by the controller.
 	Metadata struct {
 		Name string `json:"name"`

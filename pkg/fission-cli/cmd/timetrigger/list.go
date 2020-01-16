@@ -48,7 +48,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
 	for _, tt := range tts {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
+			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

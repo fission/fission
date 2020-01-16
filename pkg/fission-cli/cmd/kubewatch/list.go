@@ -62,7 +62,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME")
 	for _, wa := range ws {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			wa.Metadata.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
+			wa.ObjectMeta.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
 	}
 	w.Flush()
 

@@ -58,7 +58,7 @@ func RegisterHTTPTriggerRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.HTTPTrigger{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created httpTrigger", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created httpTrigger", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/triggers/http/{httpTrigger}").
@@ -84,7 +84,7 @@ func RegisterHTTPTriggerRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.HTTPTrigger{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated httpTrigger", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated httpTrigger", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/triggers/http/{httpTrigger}").
@@ -105,7 +105,7 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.HTTPTriggers(ns).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.V1().HTTPTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -122,19 +122,19 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 
 // checkHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
 func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger) error {
-	triggers, err := a.fissionClient.HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.V1().HTTPTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 	for _, ht := range triggers.Items {
-		if ht.Metadata.UID == t.Metadata.UID {
+		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
 			// Same resource. No need to check.
 			continue
 		}
 		if ht.Spec.RelativeURL == t.Spec.RelativeURL && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return ferror.MakeError(ferror.ErrorNameExists,
 				fmt.Sprintf("HTTPTrigger with same Host, URL & method already exists (%v)",
-					ht.Metadata.Name))
+					ht.ObjectMeta.Name))
 		}
 	}
 	return nil
@@ -162,19 +162,19 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.Metadata.Namespace)
+	err = a.createNsIfNotExists(t.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	tnew, err := a.fissionClient.HTTPTriggers(t.Metadata.Namespace).Create(&t)
+	tnew, err := a.fissionClient.V1().HTTPTriggers(t.ObjectMeta.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(tnew.Metadata)
+	resp, err := json.Marshal(tnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -192,7 +192,7 @@ func (a *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.HTTPTriggers(ns).Get(name)
+	t, err := a.fissionClient.V1().HTTPTriggers(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -224,7 +224,7 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if name != t.Metadata.Name {
+	if name != t.ObjectMeta.Name {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "HTTPTrigger name doesn't match URL")
 		a.respondWithError(w, err)
 		return
@@ -236,13 +236,13 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.HTTPTriggers(t.Metadata.Namespace).Update(&t)
+	tnew, err := a.fissionClient.V1().HTTPTriggers(t.ObjectMeta.Namespace).Update(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(tnew.Metadata)
+	resp, err := json.Marshal(tnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -258,7 +258,7 @@ func (a *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.HTTPTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().HTTPTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

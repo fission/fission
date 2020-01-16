@@ -84,7 +84,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		if *existingDepl.Spec.Replicas < minScale {
 			err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
-				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Metadata.Name))
+				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
 				return nil, err
 			}
 		}
@@ -107,7 +107,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			if err != nil {
 				deploy.logger.Error("error while creating function deployment",
 					zap.Error(err),
-					zap.String("function", fn.Metadata.Name),
+					zap.String("function", fn.ObjectMeta.Name),
 					zap.String("deployment_name", deployName),
 					zap.String("deployment_namespace", deployNamespace))
 				return nil, err
@@ -123,14 +123,14 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 
 func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function) error {
 	// create fetcher SA in this ns, if not already created
-	err := deploy.fetcherConfig.SetupServiceAccount(deploy.kubernetesClient, deployNamespace, fn.Metadata)
+	err := deploy.fetcherConfig.SetupServiceAccount(deploy.kubernetesClient, deployNamespace, fn.ObjectMeta)
 	if err != nil {
 		deploy.logger.Error("error creating fission fetcher service account for function",
 			zap.Error(err),
 			zap.String("service_account_name", types.FissionFetcherSA),
 			zap.String("service_account_namespace", deployNamespace),
-			zap.String("function_name", fn.Metadata.Name),
-			zap.String("function_namespace", fn.Metadata.Namespace))
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace))
 		return err
 	}
 
@@ -140,25 +140,25 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
 			zap.String("role_binding", types.PackageGetterRB),
-			zap.String("function_name", fn.Metadata.Name),
-			zap.String("function_namespace", fn.Metadata.Namespace))
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace))
 		return err
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, types.SecretConfigMapGetterRB, fn.Metadata.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, types.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
 			zap.String("role_binding", types.SecretConfigMapGetterRB),
-			zap.String("function_name", fn.Metadata.Name),
-			zap.String("function_namespace", fn.Metadata.Namespace))
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace))
 		return err
 	}
 
 	deploy.logger.Info("set up all RBAC objects for function",
-		zap.String("function_name", fn.Metadata.Name),
-		zap.String("function_namespace", fn.Metadata.Namespace))
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 	return nil
 }
 
@@ -189,7 +189,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
-	podAnnotations := env.Metadata.Annotations
+	podAnnotations := env.ObjectMeta.Annotations
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}
@@ -219,13 +219,13 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
-	rvCount, err := referencedResourcesRVSum(deploy.kubernetesClient, fn.Metadata.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := referencedResourcesRVSum(deploy.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
-		Name:                   fn.Metadata.Name,
+		Name:                   fn.ObjectMeta.Name,
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
@@ -298,7 +298,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
 	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
-		fn.Metadata.Name,
+		fn.ObjectMeta.Name,
 		fn,
 		env,
 	)

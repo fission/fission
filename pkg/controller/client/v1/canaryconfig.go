@@ -103,7 +103,7 @@ func (c *CanaryConfig) Update(canaryConf *fv1.CanaryConfig) (*metav1.ObjectMeta,
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("canaryconfigs/%v", canaryConf.Metadata.Name)
+	relativeUrl := fmt.Sprintf("canaryconfigs/%v", canaryConf.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {

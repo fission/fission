@@ -65,7 +65,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 
 	// sort the package list by lastUpdatedTimestamp
 	sort.Slice(pkgList, func(i, j int) bool {
-		return pkgList[i].Status.LastUpdateTimestamp.After(pkgList[j].Status.LastUpdateTimestamp)
+		return pkgList[i].Status.LastUpdateTimestamp.After(pkgList[j].Status.LastUpdateTimestamp.Time)
 	})
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
@@ -75,9 +75,9 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		show := true
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
-			fnList, err := GetFunctionsByPackage(opts.Client(), pkg.Metadata.Name, pkg.Metadata.Namespace)
+			fnList, err := GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.Metadata.Name))
+				return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
 			}
 			if len(fnList) > 0 {
 				show = false
@@ -87,7 +87,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 			show = false
 		}
 		if show {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.ObjectMeta.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
 		}
 	}
 

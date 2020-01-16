@@ -85,7 +85,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating Time trigger")
 	}
 
-	fmt.Printf("trigger '%v' updated\n", opts.trigger.Metadata.Name)
+	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 
 	t, err := getAPITimeInfo(opts.Client())
 	if err != nil {

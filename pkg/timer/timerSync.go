@@ -46,7 +46,7 @@ func MakeTimerSync(logger *zap.Logger, fissionClient *crd.FissionClient, timer *
 
 func (ws *TimerSync) syncSvc() {
 	for {
-		triggers, err := ws.fissionClient.TimeTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		triggers, err := ws.fissionClient.V1().TimeTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				ws.logger.Info("encountered a network error - will retry", zap.Error(err))

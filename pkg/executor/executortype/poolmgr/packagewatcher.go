@@ -36,14 +36,14 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(fissionClient.GetCrdClient(), "packages", metav1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(fissionClient.V1().RESTClient(), "packages", metav1.NamespaceAll, fields.Everything())
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pkg := obj.(*fv1.Package)
 				gpm.logger.Debug("list watch for package reported a new package addition",
-					zap.String("package_name", pkg.Metadata.Name),
-					zap.String("package_namespace", pkg.Metadata.Namespace))
+					zap.String("package_name", pkg.ObjectMeta.Name),
+					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
 
 				// create or update role-binding for fetcher sa in env ns to be able to get the pkg contents from pkg namespace
 				envNs := fissionfnNamespace
@@ -53,28 +53,28 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 
 				// here, we return if we hit an error during rolebinding setup. this is because this rolebinding is mandatory for
 				// every function's package to be loaded into its env. without that, there's no point to move forward.
-				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.PackageGetterRB, pkg.Metadata.Namespace, types.PackageGetterCR, types.ClusterRole, types.FissionFetcherSA, envNs)
+				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.PackageGetterRB, pkg.ObjectMeta.Namespace, types.PackageGetterCR, types.ClusterRole, types.FissionFetcherSA, envNs)
 				if err != nil {
 					gpm.logger.Error("error creating rolebinding for package",
 						zap.Error(err),
 						zap.String("role_binding", types.PackageGetterRB),
-						zap.String("package_name", pkg.Metadata.Name),
-						zap.String("package_namespace", pkg.Metadata.Namespace))
+						zap.String("package_name", pkg.ObjectMeta.Name),
+						zap.String("package_namespace", pkg.ObjectMeta.Namespace))
 					return
 				}
 
 				gpm.logger.Debug("successfully set up rolebinding for fetcher service account",
 					zap.String("service_account", types.FissionFetcherSA),
 					zap.String("service_account_namespace", envNs),
-					zap.String("package_name", pkg.Metadata.Name),
-					zap.String("package_namespace", pkg.Metadata.Namespace))
+					zap.String("package_name", pkg.ObjectMeta.Name),
+					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
 			},
 
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldPkg := oldObj.(*fv1.Package)
 				newPkg := newObj.(*fv1.Package)
 
-				if oldPkg.Metadata.ResourceVersion == newPkg.Metadata.ResourceVersion {
+				if oldPkg.ObjectMeta.ResourceVersion == newPkg.ObjectMeta.ResourceVersion {
 					return
 				}
 
@@ -88,22 +88,22 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 					}
 
 					err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.PackageGetterRB,
-						newPkg.Metadata.Namespace, types.PackageGetterCR, types.ClusterRole,
+						newPkg.ObjectMeta.Namespace, types.PackageGetterCR, types.ClusterRole,
 						types.FissionFetcherSA, envNs)
 					if err != nil {
 						gpm.logger.Error("error updating rolebinding for package",
 							zap.Error(err),
 							zap.String("role_binding", types.PackageGetterRB),
-							zap.String("package_name", newPkg.Metadata.Name),
-							zap.String("package_namespace", newPkg.Metadata.Namespace))
+							zap.String("package_name", newPkg.ObjectMeta.Name),
+							zap.String("package_namespace", newPkg.ObjectMeta.Namespace))
 						return
 					}
 
 					gpm.logger.Debug("successfully updated rolebinding for fetcher service account",
 						zap.String("service_account", types.FissionFetcherSA),
 						zap.String("service_account_namespace", envNs),
-						zap.String("package_name", newPkg.Metadata.Name),
-						zap.String("package_namespace", newPkg.Metadata.Namespace))
+						zap.String("package_name", newPkg.ObjectMeta.Name),
+						zap.String("package_namespace", newPkg.ObjectMeta.Namespace))
 				}
 			},
 		})

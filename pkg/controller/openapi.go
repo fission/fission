@@ -71,7 +71,7 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 
 var openapiDescription = `
 OpenAPI 2.0 document for fission controller
-* Metadata (v1.ObjectMeta) should be empty when creating a CRD resource. Kubernetes will assign it automatically.
+* ObjectMeta (v1.ObjectMeta) should be empty when creating a CRD resource. Kubernetes will assign it automatically.
 * Following semantic errors are known issues and won't affect the API accessibility.
   - Operations must have unique operationIds.
   - All scale semantic errors. (Due to go-restful exposes inner fields of k8s struct).

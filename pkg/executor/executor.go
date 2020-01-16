@@ -97,7 +97,7 @@ func MakeExecutor(logger *zap.Logger, cms *cms.ConfigSecretController,
 func (executor *Executor) serveCreateFuncServices() {
 	for {
 		req := <-executor.requestChan
-		fnMetadata := &req.function.Metadata
+		fnMetadata := &req.function.ObjectMeta
 
 		// Cache miss -- is this first one to request the func?
 		wg, found := executor.fsCreateWg[crd.CacheKey(fnMetadata)]
@@ -167,8 +167,8 @@ func (executor *Executor) serveCreateFuncServices() {
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	executor.logger.Debug("no cached function service found, creating one",
-		zap.String("function_name", fn.Metadata.Name),
-		zap.String("function_namespace", fn.Metadata.Namespace))
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
@@ -181,9 +181,9 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 		e := "error creating service for function"
 		executor.logger.Error(e,
 			zap.Error(fsvcErr),
-			zap.String("function_name", fn.Metadata.Name),
-			zap.String("function_namespace", fn.Metadata.Namespace))
-		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%s] %s", fn.Metadata.Name, e))
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace))
+		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%s] %s", fn.ObjectMeta.Name, e))
 	}
 
 	return fsvc, fsvcErr
@@ -225,7 +225,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "Error making fetcher config")
 	}
 
-	restClient := fissionClient.GetCrdClient()
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
@@ -237,7 +236,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	ndm := newdeploy.MakeNewDeploy(
 		logger,
-		fissionClient, kubernetesClient, restClient,
+		fissionClient, kubernetesClient, fissionClient.V1().RESTClient(),
 		functionNamespace, fetcherConfig, executorInstanceID)
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)

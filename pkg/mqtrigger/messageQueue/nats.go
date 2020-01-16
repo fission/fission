@@ -79,7 +79,7 @@ func (nats Nats) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubscr
 	opts := []ns.SubscriptionOption{
 		// Create a durable subscription to nats, so that triggers could retrieve last unack message.
 		// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
-		ns.DurableName(string(trigger.Metadata.UID)),
+		ns.DurableName(string(trigger.ObjectMeta.UID)),
 
 		// Nats-streaming server is auto-ack mode by default. Since we want nats-streaming server to
 		// resend a message if the trigger does not ack it, we need to enable the manual ack mode, so that
@@ -109,13 +109,13 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 		if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
 			nats.logger.Fatal("unsupported function reference type for trigger",
 				zap.Any("function_reference_type", trigger.Spec.FunctionReference.Type),
-				zap.String("trigger", trigger.Metadata.Name))
+				zap.String("trigger", trigger.ObjectMeta.Name))
 		}
 
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		url := nats.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Metadata.Namespace), "/")
+		url := nats.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/")
 		nats.logger.Debug("making HTTP request", zap.String("url", url))
 
 		headers := map[string]string{
@@ -147,7 +147,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 				nats.logger.Error("sending function invocation request failed",
 					zap.Error(err),
 					zap.String("function_url", url),
-					zap.String("trigger", trigger.Metadata.Name))
+					zap.String("trigger", trigger.ObjectMeta.Name))
 				continue
 			}
 			if resp == nil {
@@ -162,7 +162,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 		if resp == nil {
 			nats.logger.Warn("every function invocation retry failed; final retry gave empty response",
 				zap.String("function_url", url),
-				zap.String("trigger", trigger.Metadata.Name))
+				zap.String("trigger", trigger.ObjectMeta.Name))
 			return
 		}
 
@@ -173,7 +173,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 			nats.logger.Error("error reading function invocation response",
 				zap.Error(err),
 				zap.String("function_url", url),
-				zap.String("trigger", trigger.Metadata.Name))
+				zap.String("trigger", trigger.ObjectMeta.Name))
 			return
 		}
 
@@ -186,7 +186,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 						zap.Error(publishErr),
 						zap.String("topic", trigger.Spec.ErrorTopic),
 						zap.String("function_url", url),
-						zap.String("trigger", trigger.Metadata.Name))
+						zap.String("trigger", trigger.ObjectMeta.Name))
 					// TODO: We will ack this message after max retries to prevent re-processing but
 					// this may cause message loss
 				}
@@ -200,7 +200,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 			nats.logger.Error("failed to ack message after successful function invocation from trigger",
 				zap.Error(err),
 				zap.String("function_url", url),
-				zap.String("trigger", trigger.Metadata.Name))
+				zap.String("trigger", trigger.ObjectMeta.Name))
 		}
 
 		if len(trigger.Spec.ResponseTopic) > 0 {
@@ -209,7 +209,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 				nats.logger.Error("failed to publish message with function invocation response to topic",
 					zap.Error(err),
 					zap.String("topic", trigger.Spec.ResponseTopic),
-					zap.String("trigger", trigger.Metadata.Name))
+					zap.String("trigger", trigger.ObjectMeta.Name))
 			}
 		}
 	}

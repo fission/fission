@@ -113,7 +113,7 @@ func (c *Package) Update(f *fv1.Package) (*metav1.ObjectMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("packages/%v", f.Metadata.Name)
+	relativeUrl := fmt.Sprintf("packages/%v", f.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {

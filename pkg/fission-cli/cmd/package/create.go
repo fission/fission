@@ -91,7 +91,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 		}
 		exists, err := fr.ExistsInSpecs(fv1.Environment{
-			Metadata: metav1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      envName,
 				Namespace: envNamespace,
 			},
@@ -164,14 +164,14 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 	}
 
 	pkg := &fv1.Package{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      pkgName,
 			Namespace: pkgNamespace,
 		},
 		Spec: pkgSpec,
 		Status: fv1.PackageStatus{
 			BuildStatus:         pkgStatus,
-			LastUpdateTimestamp: time.Now().UTC(),
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		},
 	}
 
@@ -185,15 +185,15 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		obj := fr.SpecExists(pkg, true, true)
 		if obj != nil {
 			pkg := obj.(*fv1.Package)
-			fmt.Printf("Re-using previously created package %v\n", pkg.Metadata.Name)
-			return &pkg.Metadata, nil
+			fmt.Printf("Re-using previously created package %v\n", pkg.ObjectMeta.Name)
+			return &pkg.ObjectMeta, nil
 		}
 
 		err = spec.SpecSave(*pkg, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error saving package spec")
 		}
-		return &pkg.Metadata, nil
+		return &pkg.ObjectMeta, nil
 	} else {
 		pkgMetadata, err := client.V1().Package().Create(pkg)
 		if err != nil {

@@ -58,7 +58,7 @@ func RegisterTimeTriggerRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.TimeTrigger{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created timeTrigger", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created timeTrigger", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/triggers/time/{timeTrigger}").
@@ -84,7 +84,7 @@ func RegisterTimeTriggerRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.TimeTrigger{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated timeTrigger", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated timeTrigger", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/triggers/time/{timeTrigger}").
@@ -105,7 +105,7 @@ func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.TimeTriggers(ns).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.V1().TimeTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -143,19 +143,19 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.Metadata.Namespace)
+	err = a.createNsIfNotExists(t.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	tnew, err := a.fissionClient.TimeTriggers(t.Metadata.Namespace).Create(&t)
+	tnew, err := a.fissionClient.V1().TimeTriggers(t.ObjectMeta.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(tnew.Metadata)
+	resp, err := json.Marshal(tnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -173,7 +173,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.TimeTriggers(ns).Get(name)
+	t, err := a.fissionClient.V1().TimeTriggers(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -205,7 +205,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if name != t.Metadata.Name {
+	if name != t.ObjectMeta.Name {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger name doesn't match URL")
 		a.respondWithError(w, err)
 		return
@@ -218,13 +218,13 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.TimeTriggers(t.Metadata.Namespace).Update(&t)
+	tnew, err := a.fissionClient.V1().TimeTriggers(t.ObjectMeta.Namespace).Update(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(tnew.Metadata)
+	resp, err := json.Marshal(tnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -240,7 +240,7 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.TimeTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().TimeTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

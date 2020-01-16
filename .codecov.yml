@@ -5,6 +5,7 @@ ignore:
   - "examples"
   - "test"
   - "tools"
+  - "pkg/apis/genclient"
 coverage:
   status:
     project:

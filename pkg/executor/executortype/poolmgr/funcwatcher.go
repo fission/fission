@@ -44,7 +44,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(fissionClient.GetCrdClient(), "functions", metav1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(fissionClient.V1().RESTClient(), "functions", metav1.NamespaceAll, fields.Everything())
 
 	funcStore, controller := k8sCache.NewInformer(lw, &fv1.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
@@ -74,33 +74,33 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				// setup rolebinding is tried, if it fails, we dont return. we just log an error and move on, because :
 				// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
 				// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.SecretConfigMapGetterRB, fn.Metadata.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, envNs)
+				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, envNs)
 				if err != nil {
 					gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", types.SecretConfigMapGetterRB))
 				} else {
 					gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
 						zap.String("service_account", types.FissionFetcherSA),
 						zap.String("service_account_namepsace", envNs),
-						zap.String("function_name", fn.Metadata.Name),
-						zap.String("function_namespace", fn.Metadata.Namespace))
+						zap.String("function_name", fn.ObjectMeta.Name),
+						zap.String("function_namespace", fn.ObjectMeta.Namespace))
 				}
 
 				if istioEnabled {
 					// create a same name service for function
 					// since istio only allows the traffic to service
 					sel := map[string]string{
-						"functionName": fn.Metadata.Name,
-						"functionUid":  string(fn.Metadata.UID),
+						"functionName": fn.ObjectMeta.Name,
+						"functionUid":  string(fn.ObjectMeta.UID),
 					}
 
-					svcName := utils.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
+					svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
 
 					// service for accepting user traffic
 					svc := apiv1.Service{
 						ObjectMeta: metav1.ObjectMeta{
 							Namespace: envNs,
 							Name:      svcName,
-							Labels:    getIstioServiceLabels(fn.Metadata.Name),
+							Labels:    getIstioServiceLabels(fn.ObjectMeta.Name),
 						},
 						Spec: apiv1.ServiceSpec{
 							Type: apiv1.ServiceTypeClusterIP,
@@ -130,7 +130,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						gpm.logger.Error("error creating istio service for function",
 							zap.Error(err),
 							zap.String("service_name", svcName),
-							zap.String("function_name", fn.Metadata.Name),
+							zap.String("function_name", fn.ObjectMeta.Name),
 							zap.Any("selectors", sel))
 					}
 				}
@@ -150,14 +150,14 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				}
 
 				if istioEnabled {
-					svcName := utils.GetFunctionIstioServiceName(fn.Metadata.Name, fn.Metadata.Namespace)
+					svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
 					// delete function istio service
 					err := kubernetesClient.CoreV1().Services(envNs).Delete(svcName, nil)
 					if err != nil && !kerrors.IsNotFound(err) {
 						gpm.logger.Error("error deleting istio service for function",
 							zap.Error(err),
 							zap.String("service_name", svcName),
-							zap.String("function_name", fn.Metadata.Name))
+							zap.String("function_name", fn.ObjectMeta.Name))
 
 					}
 				}
@@ -167,7 +167,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				oldFunc := oldObj.(*fv1.Function)
 				newFunc := newObj.(*fv1.Function)
 
-				if oldFunc.Metadata.ResourceVersion == newFunc.Metadata.ResourceVersion {
+				if oldFunc.ObjectMeta.ResourceVersion == newFunc.ObjectMeta.ResourceVersion {
 					return
 				}
 
@@ -188,7 +188,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 					}
 
 					err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.SecretConfigMapGetterRB,
-						newFunc.Metadata.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole,
+						newFunc.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole,
 						types.FissionFetcherSA, envNs)
 
 					if err != nil {
@@ -197,8 +197,8 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
 							zap.String("service_account", types.FissionFetcherSA),
 							zap.String("service_account_namepsace", envNs),
-							zap.String("function_name", newFunc.Metadata.Name),
-							zap.String("function_namespace", newFunc.Metadata.Namespace))
+							zap.String("function_name", newFunc.ObjectMeta.Name),
+							zap.String("function_namespace", newFunc.ObjectMeta.Namespace))
 					}
 				}
 			},

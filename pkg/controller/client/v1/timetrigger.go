@@ -113,7 +113,7 @@ func (c *TimeTrigger) Update(t *fv1.TimeTrigger) (*metav1.ObjectMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("triggers/time/%v", t.Metadata.Name)
+	relativeUrl := fmt.Sprintf("triggers/time/%v", t.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {

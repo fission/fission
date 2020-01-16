@@ -80,8 +80,8 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 			case <-requestChan:
 				logFilter := logdb.LogFilter{
 					Pod:         fnPod,
-					Function:    f.Metadata.Name,
-					FuncUid:     string(f.Metadata.UID),
+					Function:    f.ObjectMeta.Name,
+					FuncUid:     string(f.ObjectMeta.UID),
 					Since:       t,
 					Reverse:     logReverseQuery,
 					RecordLimit: recordLimit,

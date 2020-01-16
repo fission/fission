@@ -121,7 +121,7 @@ func getAppliedFunctions(fns []fv1.Function, deployID string) []fv1.Function {
 	var fnlist []fv1.Function
 	if len(fns) > 0 {
 		for _, f := range fns {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				fnlist = append(fnlist, f)
 			}
 		}
@@ -133,7 +133,7 @@ func getAppliedEnvironments(envs []fv1.Environment, deployID string) []fv1.Envir
 	var envlist []fv1.Environment
 	if len(envs) > 0 {
 		for _, f := range envs {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				envlist = append(envlist, f)
 			}
 		}
@@ -145,7 +145,7 @@ func getAppliedPackages(pkgs []fv1.Package, deployID string) []fv1.Package {
 	var pkglist []fv1.Package
 	if len(pkgs) > 0 {
 		for _, f := range pkgs {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				pkglist = append(pkglist, f)
 			}
 		}
@@ -156,7 +156,7 @@ func getAppliedCanaryConfigs(canaryCfgs []fv1.CanaryConfig, deployID string) []f
 	var canaryConfiglist []fv1.CanaryConfig
 	if len(canaryCfgs) > 0 {
 		for _, f := range canaryCfgs {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				canaryConfiglist = append(canaryConfiglist, f)
 			}
 		}
@@ -168,7 +168,7 @@ func getAppliedHTTPTriggers(hts []fv1.HTTPTrigger, deployID string) []fv1.HTTPTr
 	var httpTriggerlist []fv1.HTTPTrigger
 	if len(hts) > 0 {
 		for _, f := range hts {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				httpTriggerlist = append(httpTriggerlist, f)
 			}
 		}
@@ -181,7 +181,7 @@ func getAppliedMessageQueueTriggers(mqts []fv1.MessageQueueTrigger, deployID str
 	var mqTriggerlist []fv1.MessageQueueTrigger
 	if len(mqts) > 0 {
 		for _, f := range mqts {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				mqTriggerlist = append(mqTriggerlist, f)
 			}
 		}
@@ -192,7 +192,7 @@ func getAppliedTimeTriggers(tts []fv1.TimeTrigger, deployID string) []fv1.TimeTr
 	var timeTriggerlist []fv1.TimeTrigger
 	if len(tts) > 0 {
 		for _, f := range tts {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				timeTriggerlist = append(timeTriggerlist, f)
 			}
 		}
@@ -203,7 +203,7 @@ func getSpecKubeWatchers(ws []fv1.KubernetesWatchTrigger, deployID string) []fv1
 	var kubeWatchTriggerlist []fv1.KubernetesWatchTrigger
 	if len(ws) > 0 {
 		for _, f := range ws {
-			if f.Metadata.Annotations["fission-uid"] == deployID {
+			if f.ObjectMeta.Annotations["fission-uid"] == deployID {
 				kubeWatchTriggerlist = append(kubeWatchTriggerlist, f)
 			}
 		}
@@ -230,7 +230,7 @@ func ShowFunctions(fns []fv1.Function) {
 			}
 
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				f.Metadata.Name, f.Spec.Environment.Name,
+				f.ObjectMeta.Name, f.Spec.Environment.Name,
 				f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 				f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 				f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
@@ -255,7 +255,7 @@ func ShowEnvironments(envs []fv1.Environment) {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
 		for _, env := range envs {
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				env.Metadata.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
+				env.ObjectMeta.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 				env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 				env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
 				env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
@@ -272,7 +272,7 @@ func ShowPackages(pkgList []fv1.Package) {
 		fmt.Fprintf(w, "%v\n", "Packages:")
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT")
 		for _, pkg := range pkgList {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Metadata.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.ObjectMeta.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()
@@ -287,7 +287,7 @@ func ShowCanaryConfigs(canaryCfgs []fv1.CanaryConfig) {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS")
 		for _, canaryCfg := range canaryCfgs {
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				canaryCfg.Metadata.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction, canaryCfg.Spec.WeightIncrement, canaryCfg.Spec.WeightIncrementDuration,
+				canaryCfg.ObjectMeta.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction, canaryCfg.Spec.WeightIncrement, canaryCfg.Spec.WeightIncrementDuration,
 				canaryCfg.Spec.FailureThreshold, canaryCfg.Spec.FailureType, canaryCfg.Status.Status)
 		}
 		fmt.Fprintf(w, "\n")
@@ -327,7 +327,7 @@ func ShowHTTPTriggers(hts []fv1.HTTPTrigger) {
 			ann := strings.Join(msg, ", ")
 
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				trigger.Metadata.Name, trigger.Spec.Method, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
+				trigger.ObjectMeta.Name, trigger.Spec.Method, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()
@@ -342,7 +342,7 @@ func ShowMQTriggers(mqts []fv1.MessageQueueTrigger) {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE")
 		for _, mqt := range mqts {
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				mqt.Metadata.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType)
+				mqt.ObjectMeta.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType)
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()
@@ -358,7 +358,7 @@ func ShowTimeTriggers(tts []fv1.TimeTrigger) {
 		for _, tt := range tts {
 
 			fmt.Fprintf(w, "%v\t%v\t%v\n",
-				tt.Metadata.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
+				tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()
@@ -374,7 +374,7 @@ func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
 
 		for _, wa := range ws {
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-				wa.Metadata.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
+				wa.ObjectMeta.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()

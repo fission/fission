@@ -58,7 +58,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range items {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -70,7 +70,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range items {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -83,7 +83,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 
 		for _, item := range items {
 			item = pkgClean(item)
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -95,7 +95,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range items {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -107,7 +107,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range items {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -124,7 +124,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range triggers {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
@@ -136,7 +136,7 @@ func (res CrdDumper) Dump(dumpDir string) {
 		}
 
 		for _, item := range items {
-			f := getFileName(dumpDir, item.Metadata)
+			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 

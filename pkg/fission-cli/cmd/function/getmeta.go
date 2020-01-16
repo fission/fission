@@ -48,7 +48,7 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\n", "NAME", "ENV")
-	fmt.Fprintf(w, "%v\t%v\n", fn.Metadata.Name, fn.Spec.Environment.Name)
+	fmt.Fprintf(w, "%v\t%v\n", fn.ObjectMeta.Name, fn.Spec.Environment.Name)
 	w.Flush()
 
 	return nil

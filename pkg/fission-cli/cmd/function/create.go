@@ -120,7 +120,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}
 			obj := fr.SpecExists(&fv1.Package{
-				Metadata: metav1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      pkgName,
 					Namespace: fnNamespace,
 				},
@@ -129,7 +129,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				return errors.Errorf("please create package %v spec file before referencing it", pkgName)
 			}
 			pkg = obj.(*fv1.Package)
-			pkgMetadata = &pkg.Metadata
+			pkgMetadata = &pkg.ObjectMeta
 		} else {
 			// use existing package
 			pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
@@ -139,7 +139,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
 			}
-			pkgMetadata = &pkg.Metadata
+			pkgMetadata = &pkg.ObjectMeta
 		}
 
 		envName = pkg.Spec.Environment.Name
@@ -161,7 +161,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}
 			exists, err := fr.ExistsInSpecs(fv1.Environment{
-				Metadata: metav1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      envName,
 					Namespace: envNamespace,
 				},
@@ -269,7 +269,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.function = &fv1.Function{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
 			Namespace: fnNamespace,
 		},
@@ -314,7 +314,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating function")
 	}
 
-	fmt.Printf("function '%v' created\n", opts.function.Metadata.Name)
+	fmt.Printf("function '%v' created\n", opts.function.ObjectMeta.Name)
 
 	// Allow the user to specify an HTTP trigger while creating a function.
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -332,16 +332,16 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	triggerName := uuid.NewV4().String()
 	ht := &fv1.HTTPTrigger{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: opts.function.Metadata.Namespace,
+			Namespace: opts.function.ObjectMeta.Namespace,
 		},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
 			Method:      method,
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
-				Name: opts.function.Metadata.Name,
+				Name: opts.function.ObjectMeta.Name,
 			},
 		},
 	}
@@ -350,7 +350,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}
 
-	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, opts.function.Metadata.Name)
+	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, opts.function.ObjectMeta.Name)
 	return nil
 }
 

@@ -141,8 +141,8 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create an env on the cluster
-	env, err := fissionClient.Environments(fissionNs).Create(&fv1.Environment{
-		Metadata: metav1.ObjectMeta{
+	env, err := fissionClient.V1().Environments(fissionNs).Create(&fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
 		},
@@ -174,8 +174,8 @@ func TestExecutor(t *testing.T) {
 	time.Sleep(6 * time.Second)
 
 	envRef := fv1.EnvironmentReference{
-		Namespace: env.Metadata.Namespace,
-		Name:      env.Metadata.Name,
+		Namespace: env.ObjectMeta.Namespace,
+		Name:      env.ObjectMeta.Name,
 	}
 
 	deployment := fv1.Archive{
@@ -185,7 +185,7 @@ func TestExecutor(t *testing.T) {
 
 	// create a package
 	p := &fv1.Package{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
@@ -194,14 +194,14 @@ func TestExecutor(t *testing.T) {
 			Deployment:  deployment,
 		},
 	}
-	p, err = fissionClient.Packages(fissionNs).Create(p)
+	p, err = fissionClient.V1().Packages(fissionNs).Create(p)
 	if err != nil {
 		log.Panicf("failed to create package: %v", err)
 	}
 
 	// create a function
 	f := &fv1.Function{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: fissionNs,
 		},
@@ -209,38 +209,38 @@ func TestExecutor(t *testing.T) {
 			Environment: envRef,
 			Package: fv1.FunctionPackageRef{
 				PackageRef: fv1.PackageRef{
-					Namespace:       p.Metadata.Namespace,
-					Name:            p.Metadata.Name,
-					ResourceVersion: p.Metadata.ResourceVersion,
+					Namespace:       p.ObjectMeta.Namespace,
+					Name:            p.ObjectMeta.Name,
+					ResourceVersion: p.ObjectMeta.ResourceVersion,
 				},
 			},
 		},
 	}
-	_, err = fissionClient.Functions(fissionNs).Create(f)
+	_, err = fissionClient.V1().Functions(fissionNs).Create(f)
 	if err != nil {
 		log.Panicf("failed to create function: %v", err)
 	}
 
 	// create a service to call fetcher and the env container
-	labels := map[string]string{"functionName": f.Metadata.Name}
+	labels := map[string]string{"functionName": f.ObjectMeta.Name}
 	var fetcherPort int32 = 30001
-	fetcherSvc := createSvc(kubeClient, functionNs, fmt.Sprintf("%v-%v", f.Metadata.Name, "fetcher"), 8000, fetcherPort, labels)
+	fetcherSvc := createSvc(kubeClient, functionNs, fmt.Sprintf("%v-%v", f.ObjectMeta.Name, "fetcher"), 8000, fetcherPort, labels)
 	defer kubeClient.CoreV1().Services(functionNs).Delete(fetcherSvc.ObjectMeta.Name, nil)
 
 	var funcSvcPort int32 = 30002
-	functionSvc := createSvc(kubeClient, functionNs, f.Metadata.Name, 8888, funcSvcPort, labels)
+	functionSvc := createSvc(kubeClient, functionNs, f.ObjectMeta.Name, 8888, funcSvcPort, labels)
 	defer kubeClient.CoreV1().Services(functionNs).Delete(functionSvc.ObjectMeta.Name, nil)
 
 	// the main test: get a service for a given function
 	t1 := time.Now()
-	svc, err := poolmgrClient.GetServiceForFunction(context.Background(), &f.Metadata)
+	svc, err := poolmgrClient.GetServiceForFunction(context.Background(), &f.ObjectMeta)
 	if err != nil {
 		log.Panicf("failed to get func svc: %v", err)
 	}
 	log.Printf("svc for function created at: %v (in %v)", svc, time.Since(t1))
 
-	// ensure that a pod with the label functionName=f.Metadata.Name exists
-	podCount := countPods(kubeClient, functionNs, map[string]string{"functionName": f.Metadata.Name})
+	// ensure that a pod with the label functionName=f.ObjectMeta.Name exists
+	podCount := countPods(kubeClient, functionNs, map[string]string{"functionName": f.ObjectMeta.Name})
 	if podCount != 1 {
 		log.Panicf("expected 1 function pod, found %v", podCount)
 	}

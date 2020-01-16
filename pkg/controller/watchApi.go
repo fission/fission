@@ -57,7 +57,7 @@ func RegisterWatchRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.KubernetesWatchTrigger{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created kubernetesWatch", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created kubernetesWatch", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/watches/{watch}").
@@ -83,7 +83,7 @@ func RegisterWatchRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.KubernetesWatchTrigger{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated kubernetesWatch", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated kubernetesWatch", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/watches/{watch}").
@@ -104,7 +104,7 @@ func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	watches, err := a.fissionClient.KubernetesWatchTriggers(ns).List(metav1.ListOptions{})
+	watches, err := a.fissionClient.V1().KubernetesWatchTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -136,19 +136,19 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 	// TODO check for duplicate watches
 	// TODO check for duplicate watches -> we probably wont need it?
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(watch.Metadata.Namespace)
+	err = a.createNsIfNotExists(watch.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	wnew, err := a.fissionClient.KubernetesWatchTriggers(watch.Metadata.Namespace).Create(&watch)
+	wnew, err := a.fissionClient.V1().KubernetesWatchTriggers(watch.ObjectMeta.Namespace).Create(&watch)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(wnew.Metadata)
+	resp, err := json.Marshal(wnew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -166,7 +166,7 @@ func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	watch, err := a.fissionClient.KubernetesWatchTriggers(ns).Get(name)
+	watch, err := a.fissionClient.V1().KubernetesWatchTriggers(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -194,7 +194,7 @@ func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.KubernetesWatchTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().KubernetesWatchTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

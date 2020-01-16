@@ -128,7 +128,7 @@ func (c *Function) Update(f *fv1.Function) (*metav1.ObjectMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	relativeUrl := fmt.Sprintf("functions/%v", f.Metadata.Name)
+	relativeUrl := fmt.Sprintf("functions/%v", f.ObjectMeta.Name)
 
 	resp, err := c.client.Put(relativeUrl, "application/json", reqbody)
 	if err != nil {

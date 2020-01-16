@@ -13,7 +13,7 @@ import (
 func TestPrintPackageSummary(t *testing.T) {
 
 	pkg := &fv1.Package{
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foobar",
 			Namespace: "dummy",
 		},

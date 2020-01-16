@@ -184,7 +184,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// cache, then retry to get new svc record from executor again.
 	var retryCounter int
 	var err error
-	var fnMeta = &roundTripper.funcHandler.function.Metadata
+	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -363,7 +363,7 @@ func (fh *functionHandler) tapService(fn *fv1.Function, serviceUrl *url.URL) {
 	if fh.executor == nil {
 		return
 	}
-	fh.executor.TapService(fn.Metadata, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
+	fh.executor.TapService(fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -385,7 +385,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	setPathInfoToHeader(request)
 
 	// system params
-	setFunctionMetadataToHeader(&fh.function.Metadata, request)
+	setFunctionMetadataToHeader(&fh.function.ObjectMeta, request)
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
@@ -394,7 +394,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	fnTimeout := fh.functionTimeoutMap[fh.function.Metadata.GetUID()]
+	fnTimeout := fh.functionTimeoutMap[fh.function.ObjectMeta.GetUID()]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
@@ -523,7 +523,7 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fnMeta := &fh.function.Metadata
+	fnMeta := &fh.function.ObjectMeta
 
 	// Use throttle to limit the total amount of requests sent
 	// to the executor to prevent it from overloaded.
@@ -580,7 +580,7 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 // getServiceEntryFromCache returns service url entry returns from cache
 func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
 	// cache lookup to get serviceUrl
-	serviceUrl, err = fh.fmap.lookup(&fh.function.Metadata)
+	serviceUrl, err = fh.fmap.lookup(&fh.function.ObjectMeta)
 	if err != nil {
 		var errMsg string
 
@@ -593,7 +593,7 @@ func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err e
 			if e.Code == ferror.ErrorNotFound {
 				return nil, nil
 			}
-			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Metadata.Name, err)
+			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.ObjectMeta.Name, err)
 		}
 		return nil, ferror.MakeError(http.StatusInternalServerError, errMsg)
 	}
@@ -603,7 +603,7 @@ func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err e
 // getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (*url.URL, error) {
 	// send a request to executor to specialize a new pod
-	service, err := fh.executor.GetServiceForFunction(ctx, &fh.function.Metadata)
+	service, err := fh.executor.GetServiceForFunction(ctx, &fh.function.ObjectMeta)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		fh.logger.Error("error from GetServiceForFunction",
@@ -667,8 +667,8 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 
 	// Metrics stuff
 	funcMetricLabels := &functionLabels{
-		namespace: fh.function.Metadata.Namespace,
-		name:      fh.function.Metadata.Name,
+		namespace: fh.function.ObjectMeta.Namespace,
+		name:      fh.function.ObjectMeta.Name,
 	}
 	httpMetricLabels := &httpLabels{
 		method: req.Method,
@@ -690,7 +690,7 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 		fh.tapService(fh.function, rrt.serviceUrl)
 	}
 
-	fh.logger.Debug("Request complete", zap.String("function", fh.function.Metadata.Name),
+	fh.logger.Debug("Request complete", zap.String("function", fh.function.ObjectMeta.Name),
 		zap.Int("retry", rrt.totalRetry), zap.Duration("total-time", duration),
 		zap.Int64("content-length", resp.ContentLength))
 }

@@ -147,7 +147,7 @@ func (gpm *GenericPoolManager) GetTypeName() fv1.ExecutorType {
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	// from Func -> get Env
-	gpm.logger.Debug("getting environment for function", zap.String("function", fn.Metadata.Name))
+	gpm.logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(fn)
 	if err != nil {
 		return nil, err
@@ -160,12 +160,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.Metadata.Name))
+	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
 	return pool.getFuncSvc(ctx, fn)
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return gpm.fsCache.GetByFunction(&fn.Metadata)
+	return gpm.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
@@ -208,7 +208,7 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 
 func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
-	env, err := gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name)
+	env, err := gpm.fissionClient.V1().Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -218,14 +218,14 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 		return err
 	}
 
-	funcSvc, err := gp.fsCache.GetByFunction(&f.Metadata)
+	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
 	if err != nil {
 		return err
 	}
 
 	gp.fsCache.DeleteEntry(funcSvc)
 
-	funcLabels := gp.labelsForFunction(&f.Metadata)
+	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
 	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
@@ -249,7 +249,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources() {
-	envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+	envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
 		return
@@ -273,7 +273,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 		}
 
 		// create environment map for later use
-		key := fmt.Sprintf("%v/%v", env.Metadata.Namespace, env.Metadata.Name)
+		key := fmt.Sprintf("%v/%v", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
 		envMap[key] = env
 	}
 
@@ -329,7 +329,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 			if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
 				gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
 					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
-					zap.String("env", env.Metadata.Name))
+					zap.String("env", env.ObjectMeta.Name))
 				return
 			}
 
@@ -408,7 +408,7 @@ func (gpm *GenericPoolManager) service() {
 		case GET_POOL:
 			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
-			pool, ok := gpm.pools[crd.CacheKey(&req.env.Metadata)]
+			pool, ok := gpm.pools[crd.CacheKey(&req.env.ObjectMeta)]
 			if !ok {
 				poolsize := gpm.getEnvPoolsize(req.env)
 				switch req.env.Spec.AllowedFunctionsPerContainer {
@@ -419,8 +419,8 @@ func (gpm *GenericPoolManager) service() {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
 				ns := gpm.namespace
-				if req.env.Metadata.Namespace != metav1.NamespaceDefault {
-					ns = req.env.Metadata.Namespace
+				if req.env.ObjectMeta.Namespace != metav1.NamespaceDefault {
+					ns = req.env.ObjectMeta.Namespace
 				}
 
 				pool, err = MakeGenericPool(gpm.logger,
@@ -430,20 +430,20 @@ func (gpm *GenericPoolManager) service() {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
-				gpm.pools[crd.CacheKey(&req.env.Metadata)] = pool
+				gpm.pools[crd.CacheKey(&req.env.ObjectMeta)] = pool
 			}
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
-				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = int(gpm.getEnvPoolsize(&env))
+				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(gpm.getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
 				poolsize, ok := latestEnvPoolsize[key]
 				if !ok || poolsize == 0 {
 					// Env no longer exists or pool size changed to zero
 
-					gpm.logger.Info("destroying generic pool", zap.Any("environment", pool.env.Metadata))
+					gpm.logger.Info("destroying generic pool", zap.Any("environment", pool.env.ObjectMeta))
 					delete(gpm.pools, key)
 
 					// and delete the pool asynchronously.
@@ -478,20 +478,20 @@ func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environmen
 
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
-	result, err := gpm.functionEnv.Get(crd.CacheKey(&fn.Metadata))
+	result, err := gpm.functionEnv.Get(crd.CacheKey(&fn.ObjectMeta))
 	if err == nil {
 		env = result.(*fv1.Environment)
 		return env, nil
 	}
 
 	// Get env from controller
-	env, err = gpm.fissionClient.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
+	env, err = gpm.fissionClient.V1().Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
 	// cache for future lookups
-	m := fn.Metadata
+	m := fn.ObjectMeta
 	gpm.functionEnv.Set(crd.CacheKey(&m), env)
 
 	return env, nil
@@ -501,7 +501,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 	pollSleep := 2 * time.Second
 	for {
 		// get list of envs from controller
-		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
@@ -558,14 +558,14 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Fatal("failed to get environment list", zap.Error(err))
 		}
 
 		envList := make(map[k8sTypes.UID]struct{})
 		for _, env := range envs.Items {
-			envList[env.Metadata.UID] = struct{}{}
+			envList[env.ObjectMeta.UID] = struct{}{}
 		}
 
 		funcSvcs, err := gpm.fsCache.ListOld(gpm.idlePodReapTime)
@@ -583,9 +583,9 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 
 			// For function with the environment that no longer exists, executor
 			// cleanups the idle pod as usual and prints log to notify user.
-			if _, ok := envList[fsvc.Environment.Metadata.UID]; !ok {
+			if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
 				gpm.logger.Warn("function environment no longer exists",
-					zap.String("environment", fsvc.Environment.Metadata.Name),
+					zap.String("environment", fsvc.Environment.ObjectMeta.Name),
 					zap.String("function", fsvc.Name))
 			}
 

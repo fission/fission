@@ -24,9 +24,9 @@ import (
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	genv1 "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned/typed/fission.io/v1"
 )
 
 func panicIf(err error) {
@@ -35,14 +35,14 @@ func panicIf(err error) {
 	}
 }
 
-func functionTests(crdClient *rest.RESTClient) {
+func functionTests(crdClient genv1.V1V1Interface) {
 	// sample function object
 	function := &fv1.Function{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Function",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -61,34 +61,34 @@ func functionTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test function CRUD
-	fi := MakeFunctionInterface(crdClient, metav1.NamespaceDefault)
+	fi := crdClient.Functions(metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
-	fi.Delete(function.Metadata.Name, nil)
+	fi.Delete(function.ObjectMeta.Name, nil)
 
 	// create
 	f, err := fi.Create(function)
 	panicIf(err)
-	if f.Metadata.Name != function.Metadata.Name {
+	if f.ObjectMeta.Name != function.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", f)
 	}
 
 	// read
-	f, err = fi.Get(function.Metadata.Name)
+	f, err = fi.Get(function.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if f.Spec.Environment.Name != function.Spec.Environment.Name {
 		log.Panicf("Bad result from Get: %v", f)
 	}
 
-	log.Printf("f.Metadata = %#v", f.Metadata)
+	log.Printf("f.ObjectMeta = %#v", f.ObjectMeta)
 
 	// update
-	function.Metadata.ResourceVersion = f.Metadata.ResourceVersion
+	function.ObjectMeta.ResourceVersion = f.ObjectMeta.ResourceVersion
 	function.Spec.Environment.Name = "yyy"
 	f, err = fi.Update(function)
 	panicIf(err)
 
-	log.Printf("f.Metadata = %#v", f.Metadata)
+	log.Printf("f.ObjectMeta = %#v", f.ObjectMeta)
 
 	// list
 	fl, err := fi.List(metav1.ListOptions{})
@@ -101,7 +101,7 @@ func functionTests(crdClient *rest.RESTClient) {
 	}
 
 	// delete
-	err = fi.Delete(f.Metadata.Name, nil)
+	err = fi.Delete(f.ObjectMeta.Name, nil)
 	panicIf(err)
 
 	// start a watch
@@ -109,10 +109,10 @@ func functionTests(crdClient *rest.RESTClient) {
 	panicIf(err)
 
 	start := time.Now()
-	function.Metadata.ResourceVersion = ""
+	function.ObjectMeta.ResourceVersion = ""
 	f, err = fi.Create(function)
 	panicIf(err)
-	defer fi.Delete(f.Metadata.Name, nil)
+	defer fi.Delete(f.ObjectMeta.Name, nil)
 
 	// assert that we get a watch event for the new function
 	recvd := false
@@ -135,14 +135,14 @@ func functionTests(crdClient *rest.RESTClient) {
 
 }
 
-func environmentTests(crdClient *rest.RESTClient) {
+func environmentTests(crdClient genv1.V1V1Interface) {
 	// sample environment object
 	environment := &fv1.Environment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Environment",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -159,27 +159,27 @@ func environmentTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test environment CRUD
-	ei := MakeEnvironmentInterface(crdClient, metav1.NamespaceDefault)
+	ei := crdClient.Environments(metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(environment.Metadata.Name, nil)
+	ei.Delete(environment.ObjectMeta.Name, nil)
 
 	// create
 	e, err := ei.Create(environment)
 	panicIf(err)
-	if e.Metadata.Name != environment.Metadata.Name {
+	if e.ObjectMeta.Name != environment.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(environment.Metadata.Name)
+	e, err = ei.Get(environment.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if len(e.Spec.Runtime.Image) != len(environment.Spec.Runtime.Image) {
 		log.Panicf("Bad result from Get: %#v", e)
 	}
 
 	// update
-	environment.Metadata.ResourceVersion = e.Metadata.ResourceVersion
+	environment.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	environment.Spec.Runtime.Image = "www"
 	e, err = ei.Update(environment)
 	panicIf(err)
@@ -195,7 +195,7 @@ func environmentTests(crdClient *rest.RESTClient) {
 	}
 
 	// delete
-	err = ei.Delete(e.Metadata.Name, nil)
+	err = ei.Delete(e.ObjectMeta.Name, nil)
 	panicIf(err)
 
 	// start a watch
@@ -203,10 +203,10 @@ func environmentTests(crdClient *rest.RESTClient) {
 	panicIf(err)
 
 	start := time.Now()
-	environment.Metadata.ResourceVersion = ""
+	environment.ObjectMeta.ResourceVersion = ""
 	e, err = ei.Create(environment)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer ei.Delete(e.ObjectMeta.Name, nil)
 
 	// assert that we get a watch event for the new environment
 	recvd := false
@@ -229,14 +229,14 @@ func environmentTests(crdClient *rest.RESTClient) {
 
 }
 
-func httpTriggerTests(crdClient *rest.RESTClient) {
+func httpTriggerTests(crdClient genv1.V1V1Interface) {
 	// sample httpTrigger object
 	httpTrigger := &fv1.HTTPTrigger{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPTrigger",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -251,27 +251,27 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test httpTrigger CRUD
-	ei := MakeHTTPTriggerInterface(crdClient, metav1.NamespaceDefault)
+	ei := crdClient.HTTPTriggers(metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(httpTrigger.Metadata.Name, nil)
+	ei.Delete(httpTrigger.ObjectMeta.Name, nil)
 
 	// create
 	e, err := ei.Create(httpTrigger)
 	panicIf(err)
-	if e.Metadata.Name != httpTrigger.Metadata.Name {
+	if e.ObjectMeta.Name != httpTrigger.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(httpTrigger.Metadata.Name)
+	e, err = ei.Get(httpTrigger.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if len(e.Spec.Method) != len(httpTrigger.Spec.Method) {
 		log.Panicf("Bad result from Get: %#v", e)
 	}
 
 	// update
-	httpTrigger.Metadata.ResourceVersion = e.Metadata.ResourceVersion
+	httpTrigger.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	httpTrigger.Spec.Method = "POST"
 	e, err = ei.Update(httpTrigger)
 	panicIf(err)
@@ -287,7 +287,7 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// delete
-	err = ei.Delete(e.Metadata.Name, nil)
+	err = ei.Delete(e.ObjectMeta.Name, nil)
 	panicIf(err)
 
 	// start a watch
@@ -295,10 +295,10 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 	panicIf(err)
 
 	start := time.Now()
-	httpTrigger.Metadata.ResourceVersion = ""
+	httpTrigger.ObjectMeta.ResourceVersion = ""
 	e, err = ei.Create(httpTrigger)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer ei.Delete(e.ObjectMeta.Name, nil)
 
 	// assert that we get a watch event for the new httpTrigger
 	recvd := false
@@ -321,14 +321,14 @@ func httpTriggerTests(crdClient *rest.RESTClient) {
 
 }
 
-func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
+func kubernetesWatchTriggerTests(crdClient genv1.V1V1Interface) {
 	// sample kubernetesWatchTrigger object
 	kubernetesWatchTrigger := &fv1.KubernetesWatchTrigger{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "KubernetesWatchTrigger",
 			APIVersion: "fission.io/v1",
 		},
-		Metadata: metav1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hello",
 			Namespace: metav1.NamespaceDefault,
 		},
@@ -346,27 +346,27 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// Test kubernetesWatchTrigger CRUD
-	ei := MakeKubernetesWatchTriggerInterface(crdClient, metav1.NamespaceDefault)
+	ei := crdClient.KubernetesWatchTriggers(metav1.NamespaceDefault)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(kubernetesWatchTrigger.Metadata.Name, nil)
+	ei.Delete(kubernetesWatchTrigger.ObjectMeta.Name, nil)
 
 	// create
 	e, err := ei.Create(kubernetesWatchTrigger)
 	panicIf(err)
-	if e.Metadata.Name != kubernetesWatchTrigger.Metadata.Name {
+	if e.ObjectMeta.Name != kubernetesWatchTrigger.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(kubernetesWatchTrigger.Metadata.Name)
+	e, err = ei.Get(kubernetesWatchTrigger.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if e.Spec.Type != kubernetesWatchTrigger.Spec.Type {
 		log.Panicf("Bad result from Get: %#v", e)
 	}
 
 	// update
-	kubernetesWatchTrigger.Metadata.ResourceVersion = e.Metadata.ResourceVersion
+	kubernetesWatchTrigger.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	kubernetesWatchTrigger.Spec.Type = "service"
 	e, err = ei.Update(kubernetesWatchTrigger)
 	panicIf(err)
@@ -382,7 +382,7 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	}
 
 	// delete
-	err = ei.Delete(e.Metadata.Name, nil)
+	err = ei.Delete(e.ObjectMeta.Name, nil)
 	panicIf(err)
 
 	// start a watch
@@ -390,10 +390,10 @@ func kubernetesWatchTriggerTests(crdClient *rest.RESTClient) {
 	panicIf(err)
 
 	start := time.Now()
-	kubernetesWatchTrigger.Metadata.ResourceVersion = ""
+	kubernetesWatchTrigger.ObjectMeta.ResourceVersion = ""
 	e, err = ei.Create(kubernetesWatchTrigger)
 	panicIf(err)
-	defer ei.Delete(e.Metadata.Name, nil)
+	defer ei.Delete(e.ObjectMeta.Name, nil)
 
 	// assert that we get a watch event for the new kubernetesWatchTrigger
 	recvd := false
@@ -424,27 +424,24 @@ func TestCrd(t *testing.T) {
 		return
 	}
 
-	// Create the client config. Needs the KUBECONFIG env var to
-	// point at a valid kubeconfig.
-	config, _, apiExtClient, err := GetKubernetesClient()
-	panicIf(err)
-
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
+
+	fc, _, apiExtClient, err := MakeFissionClient()
+	if err != nil {
+		panicIf(err)
+	}
 
 	// init our types
 	err = EnsureFissionCRDs(logger, apiExtClient)
 	panicIf(err)
 
+	err = fc.WaitForCRDs()
+	panicIf(err)
+
 	// rest client with knowledge about our crd types
-	crdClient, err := GetCrdClient(config)
-	panicIf(err)
-
-	err = waitForCRDs(crdClient)
-	panicIf(err)
-
-	functionTests(crdClient)
-	environmentTests(crdClient)
-	httpTriggerTests(crdClient)
-	kubernetesWatchTriggerTests(crdClient)
+	functionTests(fc.crdClient.V1V1())
+	environmentTests(fc.crdClient.V1V1())
+	httpTriggerTests(fc.crdClient.V1V1())
+	kubernetesWatchTriggerTests(fc.crdClient.V1V1())
 }

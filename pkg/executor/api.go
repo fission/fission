@@ -51,7 +51,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
-	fn, err := executor.fissionClient.Functions(m.Namespace).Get(m.Name)
+	fn, err := executor.fissionClient.V1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			http.Error(w, "Failed to find function", http.StatusNotFound)
@@ -87,8 +87,8 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
 	// Check function -> svc cache
 	executor.logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.Metadata.Name),
-		zap.String("function_namespace", fn.Metadata.Namespace))
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	et, exists := executor.executorTypes[t]
@@ -103,8 +103,8 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 			return fsvc.Address, nil
 		} else {
 			executor.logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.Metadata.Name),
-				zap.String("function_namespace", fn.Metadata.Namespace),
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
 			et.DeleteFuncSvcFromCache(fsvc)
 		}

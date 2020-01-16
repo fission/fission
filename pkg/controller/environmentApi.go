@@ -58,7 +58,7 @@ func RegisterEnvironmentRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Environment{}).
 			Writes(metav1.ObjectMeta{}).
-			Returns(http.StatusCreated, "Metadata of created environment", metav1.ObjectMeta{}))
+			Returns(http.StatusCreated, "ObjectMeta of created environment", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.GET("/v2/environments/{environment}").
@@ -84,7 +84,7 @@ func RegisterEnvironmentRoute(ws *restful.WebService) {
 			Produces(restful.MIME_JSON).
 			Reads(fv1.Environment{}).
 			Writes(metav1.ObjectMeta{}). // on the response
-			Returns(http.StatusOK, "Metadata of updated environment", metav1.ObjectMeta{}))
+			Returns(http.StatusOK, "ObjectMeta of updated environment", metav1.ObjectMeta{}))
 
 	ws.Route(
 		ws.DELETE("/v2/environments/{environment}").
@@ -105,7 +105,7 @@ func (a *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	envs, err := a.fissionClient.Environments(ns).List(metav1.ListOptions{})
+	envs, err := a.fissionClient.V1().Environments(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -136,19 +136,19 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(env.Metadata.Namespace)
+	err = a.createNsIfNotExists(env.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	enew, err := a.fissionClient.Environments(env.Metadata.Namespace).Create(&env)
+	enew, err := a.fissionClient.V1().Environments(env.ObjectMeta.Namespace).Create(&env)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(enew.Metadata)
+	resp, err := json.Marshal(enew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -167,7 +167,7 @@ func (a *API) EnvironmentApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	env, err := a.fissionClient.Environments(ns).Get(name)
+	env, err := a.fissionClient.V1().Environments(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -199,19 +199,19 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if name != env.Metadata.Name {
+	if name != env.ObjectMeta.Name {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "Environment name doesn't match URL")
 		a.respondWithError(w, err)
 		return
 	}
 
-	enew, err := a.fissionClient.Environments(env.Metadata.Namespace).Update(&env)
+	enew, err := a.fissionClient.V1().Environments(env.ObjectMeta.Namespace).Update(&env)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	resp, err := json.Marshal(enew.Metadata)
+	resp, err := json.Marshal(enew.ObjectMeta)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -229,7 +229,7 @@ func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Environments(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().Environments(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

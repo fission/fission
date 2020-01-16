@@ -72,7 +72,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		for _, trigger := range triggers {
 			// TODO: delete canary http triggers as well.
 			if trigger.Spec.FunctionReference.Name == opts.functionName {
-				triggersToDelete = append(triggersToDelete, trigger.Metadata.Name)
+				triggersToDelete = append(triggersToDelete, trigger.ObjectMeta.Name)
 			}
 		}
 	} else {

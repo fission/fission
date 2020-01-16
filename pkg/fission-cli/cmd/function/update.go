@@ -177,7 +177,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.Metadata.Name, pkg.Metadata.Namespace)
+	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -194,12 +194,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// the package resource version of function has been changed,
 	// we need to update function resource version to prevent conflict.
 	// TODO: remove this block when deprecating pkg flags of function command.
-	if pkg.Metadata.ResourceVersion != newPkgMeta.ResourceVersion {
+	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
 		var fns []fv1.Function
 		// don't update the package resource version of the function we are currently
 		// updating to prevent update conflict.
 		for _, fn := range fnList {
-			if fn.Metadata.UID != function.Metadata.UID {
+			if fn.ObjectMeta.UID != function.ObjectMeta.UID {
 				fns = append(fns, fn)
 			}
 		}
@@ -236,6 +236,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error updating function")
 	}
 
-	fmt.Printf("Function '%v' updated\n", opts.function.Metadata.Name)
+	fmt.Printf("Function '%v' updated\n", opts.function.ObjectMeta.Name)
 	return nil
 }
