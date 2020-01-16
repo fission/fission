@@ -42,7 +42,6 @@ import (
 	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -139,7 +138,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var req types.FunctionFetchRequest
+	var req FunctionFetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		fetcher.logger.Error("error parsing request body", zap.Error(err))
@@ -187,7 +186,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var req types.FunctionSpecializeRequest
+	var req FunctionSpecializeRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		fetcher.logger.Error("error parsing request body", zap.Error(err))
@@ -208,7 +207,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 
 // Fetch takes FetchRequest and makes the fetch call
 // It returns the HTTP code and error if any
-func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.FunctionFetchRequest) (int, error) {
+func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
 		e := "fetch request received for an empty file name"
@@ -227,7 +226,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 	tmpFile := req.Filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
-	if req.FetchType == types.FETCH_URL {
+	if req.FetchType == fv1.FETCH_URL {
 		// fetch the file and save it to the tmp path
 		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
 		if err != nil {
@@ -237,15 +236,15 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req types.F
 		}
 	} else {
 		var archive *fv1.Archive
-		if req.FetchType == types.FETCH_SOURCE {
+		if req.FetchType == fv1.FETCH_SOURCE {
 			archive = &pkg.Spec.Source
-		} else if req.FetchType == types.FETCH_DEPLOYMENT {
+		} else if req.FetchType == fv1.FETCH_DEPLOYMENT {
 			// sometimes, the user may invoke the function even before the source code is built into a deploy pkg.
 			// this results in executor sending a fetch request of type FETCH_DEPLOYMENT and since pkg.Spec.Deployment.Url will be empty,
 			// we hit this "Get : unsupported protocol scheme "" error.
 			// it may be useful to the user if we can send a more meaningful error in such a scenario.
-			if pkg.Status.BuildStatus != types.BuildStatusSucceeded && pkg.Status.BuildStatus != types.BuildStatusNone {
-				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", types.BuildStatusSucceeded)
+			if pkg.Status.BuildStatus != fv1.BuildStatusSucceeded && pkg.Status.BuildStatus != fv1.BuildStatusNone {
+				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", fv1.BuildStatusSucceeded)
 				fetcher.logger.Error(e,
 					zap.String("package_name", pkg.ObjectMeta.Name),
 					zap.String("package_namespace", pkg.ObjectMeta.Namespace),
@@ -441,7 +440,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req types.ArchiveUploadRequest
+	var req ArchiveUploadRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		fetcher.logger.Error("error parsing request body", zap.Error(err))
@@ -491,7 +490,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := types.ArchiveUploadResponse{
+	resp := ArchiveUploadResponse{
 		ArchiveDownloadUrl: ssClient.GetUrl(fileID),
 		Checksum:           *sum,
 	}
@@ -548,7 +547,7 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 }
 
 // getPkgInformation gets package information from k8s api server.
-func (fetcher *Fetcher) getPkgInformation(req types.FunctionFetchRequest) (pkg *fv1.Package, err error) {
+func (fetcher *Fetcher) getPkgInformation(req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
 		pkg, err = fetcher.fissionClient.V1().Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
@@ -569,7 +568,7 @@ func (fetcher *Fetcher) getPkgInformation(req types.FunctionFetchRequest) (pkg *
 	return nil, err
 }
 
-func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq types.FunctionFetchRequest, loadReq types.FunctionLoadRequest) error {
+func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) error {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)

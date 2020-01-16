@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +31,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
+	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils"
 )
 
 var nodeName = os.Getenv("NODE_NAME")
@@ -55,7 +55,7 @@ func makePodLoggerController(zapLogger *zap.Logger, k8sClientSet *kubernetes.Cli
 				}
 				err := createLogSymlinks(zapLogger, pod)
 				if err != nil {
-					funcName := pod.Labels[types.FUNCTION_NAME]
+					funcName := pod.Labels[fv1.FUNCTION_NAME]
 					zapLogger.Error("error creating symlink",
 						zap.String("function", funcName), zap.Error(err))
 				}
@@ -67,7 +67,7 @@ func makePodLoggerController(zapLogger *zap.Logger, k8sClientSet *kubernetes.Cli
 				}
 				err := createLogSymlinks(zapLogger, pod)
 				if err != nil {
-					funcName := pod.Labels[types.FUNCTION_NAME]
+					funcName := pod.Labels[fv1.FUNCTION_NAME]
 					zapLogger.Error("error creating symlink",
 						zap.String("function", funcName), zap.Error(err))
 				}
@@ -115,8 +115,8 @@ func isValidFunctionPodOnNode(pod *corev1.Pod) bool {
 	if pod.Spec.NodeName != nodeName {
 		return false
 	}
-	labels := []string{types.ENVIRONMENT_NAMESPACE, types.ENVIRONMENT_NAME, types.ENVIRONMENT_UID,
-		types.FUNCTION_NAMESPACE, types.FUNCTION_NAME, types.FUNCTION_UID, types.EXECUTOR_TYPE}
+	labels := []string{fv1.ENVIRONMENT_NAMESPACE, fv1.ENVIRONMENT_NAME, fv1.ENVIRONMENT_UID,
+		fv1.FUNCTION_NAMESPACE, fv1.FUNCTION_NAME, fv1.FUNCTION_UID, fv1.EXECUTOR_TYPE}
 	for _, l := range labels {
 		if len(pod.Labels[l]) == 0 {
 			return false

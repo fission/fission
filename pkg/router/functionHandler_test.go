@@ -31,7 +31,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/types"
 )
 
 func createBackendService(testResponseString string) *url.URL {
@@ -72,7 +71,7 @@ func TestFunctionProxying(t *testing.T) {
 		},
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
-				Type: types.FunctionReferenceTypeFunctionName,
+				Type: fv1.FunctionReferenceTypeFunctionName,
 			},
 		},
 	}

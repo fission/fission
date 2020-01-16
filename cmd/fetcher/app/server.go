@@ -30,7 +30,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/fetcher"
-	"github.com/fission/fission/pkg/types"
 )
 
 func registerTraceExporter(collectorEndpoint string) error {
@@ -94,7 +93,7 @@ func Run(logger *zap.Logger) {
 	// do specialization in other goroutine to prevent blocking in newdeploy
 	go func() {
 		if *specializeOnStart {
-			var specializeReq types.FunctionSpecializeRequest
+			var specializeReq fetcher.FunctionSpecializeRequest
 
 			err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
 			if err != nil {

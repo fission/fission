@@ -27,7 +27,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cmd/package/util"
-	"github.com/fission/fission/pkg/types"
 )
 
 type (
@@ -83,11 +82,11 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			if pkg.Status.BuildStatus == types.BuildStatusNone {
+			if pkg.Status.BuildStatus == fv1.BuildStatusNone {
 				continue
 			}
-			if pkg.Status.BuildStatus == types.BuildStatusPending ||
-				pkg.Status.BuildStatus == types.BuildStatusRunning {
+			if pkg.Status.BuildStatus == fv1.BuildStatusPending ||
+				pkg.Status.BuildStatus == fv1.BuildStatusRunning {
 				keepWaiting = true
 			}
 			buildpkgs = append(buildpkgs, pkg)
@@ -99,8 +98,8 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 			if _, printed := w.finished[k]; printed {
 				continue
 			}
-			if pkg.Status.BuildStatus == types.BuildStatusFailed ||
-				pkg.Status.BuildStatus == types.BuildStatusSucceeded {
+			if pkg.Status.BuildStatus == fv1.BuildStatusFailed ||
+				pkg.Status.BuildStatus == fv1.BuildStatusSucceeded {
 				w.finished[k] = true
 				fmt.Printf("------\n")
 				util.PrintPackageSummary(os.Stdout, &pkg)

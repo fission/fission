@@ -35,7 +35,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -127,7 +126,7 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	if err != nil {
 		deploy.logger.Error("error creating fission fetcher service account for function",
 			zap.Error(err),
-			zap.String("service_account_name", types.FissionFetcherSA),
+			zap.String("service_account_name", fv1.FissionFetcherSA),
 			zap.String("service_account_namespace", deployNamespace),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
@@ -135,22 +134,22 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	}
 
 	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
-	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, types.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, types.PackageGetterCR, types.ClusterRole, types.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
-			zap.String("role_binding", types.PackageGetterRB),
+			zap.String("role_binding", fv1.PackageGetterRB),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
 		return err
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, types.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
-			zap.String("role_binding", types.SecretConfigMapGetterRB),
+			zap.String("role_binding", fv1.SecretConfigMapGetterRB),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
 		return err

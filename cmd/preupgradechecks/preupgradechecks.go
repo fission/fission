@@ -29,7 +29,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -190,33 +189,33 @@ func (client *PreUpgradeTaskClient) SetupRoleBindings() {
 
 	// the fact that we're here implies that there had been a prior installation of fission and objects are present still
 	// so, we go ahead and create the role-bindings necessary for the fission-fetcher and fission-builder Service Accounts.
-	err := utils.SetupRoleBinding(client.logger, client.k8sClient, types.PackageGetterRB, metav1.NamespaceDefault, types.PackageGetterCR, types.ClusterRole, types.FissionFetcherSA, client.fnPodNs)
+	err := utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.PackageGetterRB, metav1.NamespaceDefault, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, client.fnPodNs)
 	if err != nil {
 		client.logger.Fatal("error setting up rolebinding for service account",
 			zap.Error(err),
-			zap.String("role_binding", types.PackageGetterRB),
-			zap.String("service_account", types.FissionFetcherSA),
+			zap.String("role_binding", fv1.PackageGetterRB),
+			zap.String("service_account", fv1.FissionFetcherSA),
 			zap.String("service_account_namespace", client.fnPodNs))
 	}
 
-	err = utils.SetupRoleBinding(client.logger, client.k8sClient, types.PackageGetterRB, metav1.NamespaceDefault, types.PackageGetterCR, types.ClusterRole, types.FissionBuilderSA, client.envBuilderNs)
+	err = utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.PackageGetterRB, metav1.NamespaceDefault, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionBuilderSA, client.envBuilderNs)
 	if err != nil {
 		client.logger.Fatal("error setting up rolebinding for service account",
 			zap.Error(err),
-			zap.String("role_binding", types.PackageGetterRB),
-			zap.String("service_account", types.FissionBuilderSA),
+			zap.String("role_binding", fv1.PackageGetterRB),
+			zap.String("service_account", fv1.FissionBuilderSA),
 			zap.String("service_account_namespace", client.envBuilderNs))
 	}
 
-	err = utils.SetupRoleBinding(client.logger, client.k8sClient, types.SecretConfigMapGetterRB, metav1.NamespaceDefault, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, client.fnPodNs)
+	err = utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.SecretConfigMapGetterRB, metav1.NamespaceDefault, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, client.fnPodNs)
 	if err != nil {
 		client.logger.Fatal("error setting up rolebinding for service account",
 			zap.Error(err),
-			zap.String("role_binding", types.SecretConfigMapGetterRB),
-			zap.String("service_account", types.FissionFetcherSA),
+			zap.String("role_binding", fv1.SecretConfigMapGetterRB),
+			zap.String("service_account", fv1.FissionFetcherSA),
 			zap.String("service_account_namespace", client.fnPodNs))
 	}
 
 	client.logger.Info("created rolebindings in default namespace",
-		zap.Strings("role_bindings", []string{types.PackageGetterRB, types.SecretConfigMapGetterRB}))
+		zap.Strings("role_bindings", []string{fv1.PackageGetterRB, fv1.SecretConfigMapGetterRB}))
 }

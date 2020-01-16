@@ -19,7 +19,6 @@ package poolmgr
 import (
 	"time"
 
-	"github.com/fission/fission/pkg/types"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -74,12 +73,12 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				// setup rolebinding is tried, if it fails, we dont return. we just log an error and move on, because :
 				// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
 				// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole, types.FissionFetcherSA, envNs)
+				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
 				if err != nil {
-					gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", types.SecretConfigMapGetterRB))
+					gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
 				} else {
 					gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
-						zap.String("service_account", types.FissionFetcherSA),
+						zap.String("service_account", fv1.FissionFetcherSA),
 						zap.String("service_account_namepsace", envNs),
 						zap.String("function_name", fn.ObjectMeta.Name),
 						zap.String("function_namespace", fn.ObjectMeta.Namespace))
@@ -187,15 +186,15 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 						envNs = newFunc.Spec.Environment.Namespace
 					}
 
-					err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, types.SecretConfigMapGetterRB,
-						newFunc.ObjectMeta.Namespace, types.SecretConfigMapGetterCR, types.ClusterRole,
-						types.FissionFetcherSA, envNs)
+					err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
+						newFunc.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole,
+						fv1.FissionFetcherSA, envNs)
 
 					if err != nil {
-						gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", types.SecretConfigMapGetterRB))
+						gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
 					} else {
 						gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
-							zap.String("service_account", types.FissionFetcherSA),
+							zap.String("service_account", fv1.FissionFetcherSA),
 							zap.String("service_account_namepsace", envNs),
 							zap.String("function_name", newFunc.ObjectMeta.Name),
 							zap.String("function_namespace", newFunc.ObjectMeta.Namespace))

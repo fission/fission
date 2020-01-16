@@ -32,7 +32,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -157,17 +156,17 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			// Add the package getter rolebinding to builder sa
 			// we continue here if role binding was not setup succeesffully. this is because without this, the fetcher wont be able to fetch the source pkg into the container and
 			// the build will fail eventually
-			err := utils.SetupRoleBinding(pkgw.logger, pkgw.k8sClient, types.PackageGetterRB, pkg.ObjectMeta.Namespace, types.PackageGetterCR, types.ClusterRole, types.FissionBuilderSA, builderNs)
+			err := utils.SetupRoleBinding(pkgw.logger, pkgw.k8sClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionBuilderSA, builderNs)
 			if err != nil {
 				pkgw.logger.Error("error setting up role binding for package",
 					zap.Error(err),
-					zap.String("role_binding", types.PackageGetterRB),
+					zap.String("role_binding", fv1.PackageGetterRB),
 					zap.String("package_name", pkg.ObjectMeta.Name),
 					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
 				continue
 			} else {
 				pkgw.logger.Info("setup rolebinding for sa package",
-					zap.String("sa", fmt.Sprintf("%s.%s", types.FissionBuilderSA, builderNs)),
+					zap.String("sa", fmt.Sprintf("%s.%s", fv1.FissionBuilderSA, builderNs)),
 					zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
 			}
 
@@ -175,7 +174,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, types.BuildStatusFailed, buildLogs, nil)
+				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				return
 			}
 
@@ -210,10 +209,10 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			}
 
 			_, err = updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
-				types.BuildStatusSucceeded, buildLogs, uploadResp)
+				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
 			if err != nil {
 				pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, types.BuildStatusFailed, buildLogs, nil)
+				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				return
 			}
 
@@ -223,7 +222,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 	}
 	// build timeout
 	updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
-		types.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
+		fv1.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
 
 	pkgw.logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready",
 		zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))

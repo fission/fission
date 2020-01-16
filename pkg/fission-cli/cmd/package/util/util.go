@@ -33,7 +33,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -45,7 +44,7 @@ func UploadArchiveFile(ctx context.Context, client client.Interface, fileName st
 		return nil, err
 	}
 
-	if size < types.ArchiveLiteralSizeLimit {
+	if size < fv1.ArchiveLiteralSizeLimit {
 		archive.Type = fv1.ArchiveTypeLiteral
 		archive.Literal, err = GetContents(fileName)
 		if err != nil {

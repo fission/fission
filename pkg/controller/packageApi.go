@@ -25,7 +25,6 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/emicklei/go-restful"
 	restfulspec "github.com/emicklei/go-restful-openapi"
-	"github.com/fission/fission/pkg/types"
 	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,15 +135,15 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure size limits
-	if len(f.Spec.Source.Literal) > int(types.ArchiveLiteralSizeLimit) {
+	if len(f.Spec.Source.Literal) > int(fv1.ArchiveLiteralSizeLimit) {
 		err := ferror.MakeError(ferror.ErrorInvalidArgument,
-			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(types.ArchiveLiteralSizeLimit))))
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(fv1.ArchiveLiteralSizeLimit))))
 		a.respondWithError(w, err)
 		return
 	}
-	if len(f.Spec.Deployment.Literal) > int(types.ArchiveLiteralSizeLimit) {
+	if len(f.Spec.Deployment.Literal) > int(fv1.ArchiveLiteralSizeLimit) {
 		err := ferror.MakeError(ferror.ErrorInvalidArgument,
-			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(types.ArchiveLiteralSizeLimit))))
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(fv1.ArchiveLiteralSizeLimit))))
 		a.respondWithError(w, err)
 		return
 	}

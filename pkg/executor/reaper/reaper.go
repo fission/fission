@@ -27,7 +27,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -75,10 +74,10 @@ func CleanupDeployments(logger *zap.Logger, client *kubernetes.Clientset, instan
 		return err
 	}
 	for _, dep := range deploymentList.Items {
-		id, ok := dep.ObjectMeta.Annotations[types.EXECUTOR_INSTANCEID_LABEL]
+		id, ok := dep.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 		if !ok {
 			// Backward compatibility with older label name
-			id, ok = dep.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
+			id, ok = dep.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
 			logger.Info("cleaning up deployment", zap.String("deployment", dep.ObjectMeta.Name))
@@ -101,10 +100,10 @@ func CleanupPods(logger *zap.Logger, client *kubernetes.Clientset, instanceId st
 		return err
 	}
 	for _, pod := range podList.Items {
-		id, ok := pod.ObjectMeta.Annotations[types.EXECUTOR_INSTANCEID_LABEL]
+		id, ok := pod.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 		if !ok {
 			// Backward compatibility with older label name
-			id, ok = pod.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
+			id, ok = pod.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
 			logger.Info("cleaning up pod", zap.String("pod", pod.ObjectMeta.Name))
@@ -127,10 +126,10 @@ func CleanupServices(logger *zap.Logger, client *kubernetes.Clientset, instanceI
 		return err
 	}
 	for _, svc := range svcList.Items {
-		id, ok := svc.ObjectMeta.Annotations[types.EXECUTOR_INSTANCEID_LABEL]
+		id, ok := svc.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 		if !ok {
 			// Backward compatibility with older label name
-			id, ok = svc.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
+			id, ok = svc.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
 			logger.Info("cleaning up service", zap.String("service", svc.ObjectMeta.Name))
@@ -154,10 +153,10 @@ func CleanupHpa(logger *zap.Logger, client *kubernetes.Clientset, instanceId str
 	}
 
 	for _, hpa := range hpaList.Items {
-		id, ok := hpa.ObjectMeta.Annotations[types.EXECUTOR_INSTANCEID_LABEL]
+		id, ok := hpa.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 		if !ok {
 			// Backward compatibility with older label name
-			id, ok = hpa.ObjectMeta.Labels[types.EXECUTOR_INSTANCEID_LABEL]
+			id, ok = hpa.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 		}
 		if ok && id != instanceId {
 			logger.Info("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
@@ -199,7 +198,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 			}
 
 			// ignore role-bindings not created by fission
-			if roleBinding.Name != types.PackageGetterRB && roleBinding.Name != types.SecretConfigMapGetterRB {
+			if roleBinding.Name != fv1.PackageGetterRB && roleBinding.Name != fv1.SecretConfigMapGetterRB {
 				continue
 			}
 
@@ -250,7 +249,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 
 				// if its a package-getter-rb, we have 2 kinds of SAs and each of them is handled differently
 				// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
-				if roleBinding.Name == types.PackageGetterRB {
+				if roleBinding.Name == fv1.PackageGetterRB {
 					// check if there is an env obj in saNs
 					envList, err := fissionClient.V1().Environments(saNs).List(meta_v1.ListOptions{})
 					if err != nil {
@@ -263,7 +262,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 					// if there's at least one function in the role-binding namespace with env reference
 					// to the SA's namespace.
 					// if neither, then we can remove this SA from this role-binding
-					if subj.Name == types.FissionBuilderSA {
+					if subj.Name == fv1.FissionBuilderSA {
 						if len(envList.Items) == 0 && !funcEnvReference {
 							saToRemove[utils.MakeSAMapKey(subj.Name, subj.Namespace)] = true
 						}
@@ -273,13 +272,13 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 					// we also need to check if there's at least one function with executor type New deploy
 					// in the rolebinding's namespace.
 					// if none of them are true, then remove this SA from this role-binding
-					if subj.Name == types.FissionFetcherSA {
+					if subj.Name == fv1.FissionFetcherSA {
 						if len(envList.Items) == 0 && !ndmFunc && !funcEnvReference {
 							// remove SA from rolebinding
 							saToRemove[utils.MakeSAMapKey(subj.Name, subj.Namespace)] = true
 						}
 					}
-				} else if roleBinding.Name == types.SecretConfigMapGetterRB {
+				} else if roleBinding.Name == fv1.SecretConfigMapGetterRB {
 					// if there's not even one function in the role-binding's namespace and there's not even
 					// one function with env reference to the SA's namespace, then remove that SA
 					// from this role-binding

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/fetcher"
 )
 
 type (
@@ -48,23 +48,23 @@ func (c *Client) getUploadUrl() string {
 	return c.url + "/upload"
 }
 
-func (c *Client) Specialize(ctx context.Context, req *types.FunctionSpecializeRequest) error {
+func (c *Client) Specialize(ctx context.Context, req *fetcher.FunctionSpecializeRequest) error {
 	_, err := sendRequest(c.logger, ctx, c.httpClient, req, c.getSpecializeUrl())
 	return err
 }
 
-func (c *Client) Fetch(ctx context.Context, fr *types.FunctionFetchRequest) error {
+func (c *Client) Fetch(ctx context.Context, fr *fetcher.FunctionFetchRequest) error {
 	_, err := sendRequest(c.logger, ctx, c.httpClient, fr, c.getFetchUrl())
 	return err
 }
 
-func (c *Client) Upload(ctx context.Context, fr *types.ArchiveUploadRequest) (*types.ArchiveUploadResponse, error) {
+func (c *Client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (*fetcher.ArchiveUploadResponse, error) {
 	body, err := sendRequest(c.logger, ctx, c.httpClient, fr, c.getUploadUrl())
 	if err != nil {
 		return nil, err
 	}
 
-	uploadResp := types.ArchiveUploadResponse{}
+	uploadResp := fetcher.ArchiveUploadResponse{}
 	err = json.Unmarshal(body, &uploadResp)
 	if err != nil {
 		return nil, err

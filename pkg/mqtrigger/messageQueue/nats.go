@@ -28,7 +28,6 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -106,7 +105,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 	return func(msg *ns.Msg) {
 
 		// Support other function ref types
-		if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
+		if trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
 			nats.logger.Fatal("unsupported function reference type for trigger",
 				zap.Any("function_reference_type", trigger.Spec.FunctionReference.Type),
 				zap.String("trigger", trigger.ObjectMeta.Name))
