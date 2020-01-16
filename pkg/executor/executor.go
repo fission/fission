@@ -225,7 +225,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "Error making fetcher config")
 	}
 
-	restClient := fissionClient.GetCrdClient()
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
@@ -237,7 +236,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	ndm := newdeploy.MakeNewDeploy(
 		logger,
-		fissionClient, kubernetesClient, restClient.V1V1().RESTClient(),
+		fissionClient, kubernetesClient, fissionClient.V1().RESTClient(),
 		functionNamespace, fetcherConfig, executorInstanceID)
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)

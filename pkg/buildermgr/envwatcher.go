@@ -148,7 +148,7 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 func (envw *environmentWatcher) watchEnvironments() {
 	rv := ""
 	for {
-		wi, err := envw.fissionClient.Environments(metav1.NamespaceAll).Watch(metav1.ListOptions{
+		wi, err := envw.fissionClient.V1().Environments(metav1.NamespaceAll).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {
@@ -182,7 +182,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 func (envw *environmentWatcher) sync() {
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
-		envList, err := envw.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envList, err := envw.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))

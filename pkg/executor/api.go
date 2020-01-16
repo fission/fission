@@ -51,7 +51,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
-	fn, err := executor.fissionClient.Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
+	fn, err := executor.fissionClient.V1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			http.Error(w, "Failed to find function", http.StatusNotFound)

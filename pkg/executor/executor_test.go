@@ -141,7 +141,7 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create an env on the cluster
-	env, err := fissionClient.Environments(fissionNs).Create(&fv1.Environment{
+	env, err := fissionClient.V1().Environments(fissionNs).Create(&fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
@@ -194,7 +194,7 @@ func TestExecutor(t *testing.T) {
 			Deployment:  deployment,
 		},
 	}
-	p, err = fissionClient.Packages(fissionNs).Create(p)
+	p, err = fissionClient.V1().Packages(fissionNs).Create(p)
 	if err != nil {
 		log.Panicf("failed to create package: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 	}
-	_, err = fissionClient.Functions(fissionNs).Create(f)
+	_, err = fissionClient.V1().Functions(fissionNs).Create(f)
 	if err != nil {
 		log.Panicf("failed to create function: %v", err)
 	}

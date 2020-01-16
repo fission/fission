@@ -106,7 +106,7 @@ func (a *API) PackageApiList(w http.ResponseWriter, r *http.Request) {
 	if len(ns) == 0 {
 		ns = metav1.NamespaceAll
 	}
-	funcs, err := a.fissionClient.Packages(ns).List(metav1.ListOptions{})
+	funcs, err := a.fissionClient.V1().Packages(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -156,7 +156,7 @@ func (a *API) PackageApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.Packages(f.ObjectMeta.Namespace).Create(&f)
+	fnew, err := a.fissionClient.V1().Packages(f.ObjectMeta.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -181,7 +181,7 @@ func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 	}
 	raw := r.FormValue("raw") // just the deployment pkg
 
-	f, err := a.fissionClient.Packages(ns).Get(name, metav1.GetOptions{})
+	f, err := a.fissionClient.V1().Packages(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -223,7 +223,7 @@ func (a *API) PackageApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.Packages(f.ObjectMeta.Namespace).Update(&f)
+	fnew, err := a.fissionClient.V1().Packages(f.ObjectMeta.Namespace).Update(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -245,7 +245,7 @@ func (a *API) PackageApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Packages(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().Packages(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

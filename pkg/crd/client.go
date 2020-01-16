@@ -74,50 +74,29 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 	return config, clientset, apiExtClientset, nil
 }
 
-// GetCrdClient gets a CRD client config
-func GetCrdClient(config *rest.Config) (clientset.Interface, error) {
-	// make a REST client with that config
-	return clientset.NewForConfig(config)
-}
-
 func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, error) {
 	config, kubeClient, apiExtClient, err := GetKubernetesClient()
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	crdClient, err := GetCrdClient(config)
+
+	// make a CRD REST client with the config
+	crdClient, err := clientset.NewForConfig(config)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+
 	fc := &FissionClient{
 		crdClient: crdClient,
 	}
 	return fc, kubeClient, apiExtClient, nil
 }
 
-func (fc *FissionClient) Functions(ns string) genv1.FunctionInterface {
-	return fc.crdClient.V1V1().Functions(ns)
-}
-func (fc *FissionClient) Environments(ns string) genv1.EnvironmentInterface {
-	return fc.crdClient.V1V1().Environments(ns)
-}
-func (fc *FissionClient) HTTPTriggers(ns string) genv1.HTTPTriggerInterface {
-	return fc.crdClient.V1V1().HTTPTriggers(ns)
-}
-func (fc *FissionClient) KubernetesWatchTriggers(ns string) genv1.KubernetesWatchTriggerInterface {
-	return fc.crdClient.V1V1().KubernetesWatchTriggers(ns)
-}
-func (fc *FissionClient) TimeTriggers(ns string) genv1.TimeTriggerInterface {
-	return fc.crdClient.V1V1().TimeTriggers(ns)
-}
-func (fc *FissionClient) MessageQueueTriggers(ns string) genv1.MessageQueueTriggerInterface {
-	return fc.crdClient.V1V1().MessageQueueTriggers(ns)
-}
-func (fc *FissionClient) Packages(ns string) genv1.PackageInterface {
-	return fc.crdClient.V1V1().Packages(ns)
-}
-func (fc *FissionClient) CanaryConfigs(ns string) genv1.CanaryConfigInterface {
-	return fc.crdClient.V1V1().CanaryConfigs(ns)
+// V1 returns the instance of v1 rest client.
+// The only reason to have this function is to avoid
+// using V1V1() in codebase.
+func (fc *FissionClient) V1() genv1.V1V1Interface {
+	return fc.crdClient.V1V1()
 }
 
 func (fc *FissionClient) WaitForCRDs() error {
@@ -135,8 +114,4 @@ func (fc *FissionClient) WaitForCRDs() error {
 			return errors.New("timeout waiting for CRDs")
 		}
 	}
-}
-
-func (fc *FissionClient) GetCrdClient() clientset.Interface {
-	return fc.crdClient
 }

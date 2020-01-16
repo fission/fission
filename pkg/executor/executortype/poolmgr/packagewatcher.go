@@ -36,7 +36,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(fissionClient.GetCrdClient().V1V1().RESTClient(), "packages", metav1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(fissionClient.V1().RESTClient(), "packages", metav1.NamespaceAll, fields.Everything())
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {

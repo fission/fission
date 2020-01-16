@@ -117,7 +117,7 @@ func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	funcs, err := a.fissionClient.Functions(ns).List(metav1.ListOptions{})
+	funcs, err := a.fissionClient.V1().Functions(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -153,7 +153,7 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.ObjectMeta.Namespace).Create(&f)
+	fnew, err := a.fissionClient.V1().Functions(f.ObjectMeta.Namespace).Create(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -177,7 +177,7 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	f, err := a.fissionClient.Functions(ns).Get(name, metav1.GetOptions{})
+	f, err := a.fissionClient.V1().Functions(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -214,7 +214,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.Functions(f.ObjectMeta.Namespace).Update(&f)
+	fnew, err := a.fissionClient.V1().Functions(f.ObjectMeta.Namespace).Update(&f)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -236,7 +236,7 @@ func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.Functions(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.V1().Functions(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -299,7 +299,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		podNs = ns
 	}
 
-	f, err := a.fissionClient.Functions(ns).Get(fnName, metav1.GetOptions{})
+	f, err := a.fissionClient.V1().Functions(ns).Get(fnName, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

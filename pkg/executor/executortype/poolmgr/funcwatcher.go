@@ -44,7 +44,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(fissionClient.GetCrdClient().V1V1().RESTClient(), "functions", metav1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(fissionClient.V1().RESTClient(), "functions", metav1.NamespaceAll, fields.Everything())
 
 	funcStore, controller := k8sCache.NewInformer(lw, &fv1.Function{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{

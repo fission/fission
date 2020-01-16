@@ -90,7 +90,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	var fList *fv1.FunctionList
 
 	for i := 0; i < maxRetries; i++ {
-		fList, err = client.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+		fList, err = client.fissionClient.V1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err == nil {
 			break
 		}
@@ -168,12 +168,12 @@ func (client *PreUpgradeTaskClient) RemoveClusterAdminRolesForFissionSAs() {
 // This is because, we just deleted the ClusterRoleBindings for these service accounts in the previous function and
 // for the existing functions to work, we need to give these SAs the right privileges
 func (client *PreUpgradeTaskClient) NeedRoleBindings() bool {
-	pkgList, err := client.fissionClient.Packages(metav1.NamespaceDefault).List(metav1.ListOptions{})
+	pkgList, err := client.fissionClient.V1().Packages(metav1.NamespaceDefault).List(metav1.ListOptions{})
 	if err == nil && len(pkgList.Items) > 0 {
 		return true
 	}
 
-	fnList, err := client.fissionClient.Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
+	fnList, err := client.fissionClient.V1().Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
 	if err == nil && len(fnList.Items) > 0 {
 		return true
 	}

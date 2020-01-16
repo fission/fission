@@ -208,7 +208,7 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 
 func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
-	env, err := gpm.fissionClient.Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := gpm.fissionClient.V1().Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources() {
-	envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+	envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
 		return
@@ -485,7 +485,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environmen
 	}
 
 	// Get env from controller
-	env, err = gpm.fissionClient.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name, metav1.GetOptions{})
+	env, err = gpm.fissionClient.V1().Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +501,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 	pollSleep := 2 * time.Second
 	for {
 		// get list of envs from controller
-		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
@@ -558,7 +558,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := gpm.fissionClient.Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Fatal("failed to get environment list", zap.Error(err))
 		}

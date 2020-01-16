@@ -98,7 +98,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 		return
 	}
 
-	env, err := pkgw.fissionClient.Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := pkgw.fissionClient.V1().Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
 		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
@@ -181,7 +181,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 
 			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
 
-			fnList, err := pkgw.fissionClient.
+			fnList, err := pkgw.fissionClient.V1().
 				Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 			if err != nil {
 				e := "error getting function list"
@@ -198,7 +198,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
 					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
 					// update CRD
-					_, err = pkgw.fissionClient.Functions(fn.ObjectMeta.Namespace).Update(&fn)
+					_, err = pkgw.fissionClient.V1().Functions(fn.ObjectMeta.Namespace).Update(&fn)
 					if err != nil {
 						e := "error updating function package resource version"
 						pkgw.logger.Error(e, zap.Error(err))
@@ -232,7 +232,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 func (pkgw *packageWatcher) watchPackages(fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, builderNamespace string) {
 	buildCache := cache.MakeCache(0, 0)
-	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.GetCrdClient().V1V1().RESTClient(), "packages", apiv1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.V1().RESTClient(), "packages", apiv1.NamespaceAll, fields.Everything())
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, 60*time.Second, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)

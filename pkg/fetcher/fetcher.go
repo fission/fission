@@ -551,7 +551,7 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(req types.FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		pkg, err = fetcher.fissionClient.Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
+		pkg, err = fetcher.fissionClient.V1().Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			return pkg, nil
 		}
