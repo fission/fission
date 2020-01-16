@@ -28,12 +28,11 @@ import (
 
 	sarama "github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
-	"github.com/fission/fission/pkg/types"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -202,7 +201,7 @@ func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
 func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.MessageQueueTrigger, msg *sarama.ConsumerMessage, consumer *cluster.Consumer) {
 	var value string = string(msg.Value[:])
 	// Support other function ref types
-	if trigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionName {
+	if trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
 		kafka.logger.Fatal("unsupported function reference type for trigger",
 			zap.Any("function_reference_type", trigger.Spec.FunctionReference.Type),
 			zap.String("trigger", trigger.ObjectMeta.Name))

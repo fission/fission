@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -148,11 +147,11 @@ func MakeGenericPool(
 
 func (gp *GenericPool) getEnvironmentPoolLabels() map[string]string {
 	return map[string]string{
-		types.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
-		types.ENVIRONMENT_NAME:      gp.env.ObjectMeta.Name,
-		types.ENVIRONMENT_NAMESPACE: gp.env.ObjectMeta.Namespace,
-		types.ENVIRONMENT_UID:       string(gp.env.ObjectMeta.UID),
-		"managed":                   "true", // this allows us to easily find pods managed by the deployment
+		fv1.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
+		fv1.ENVIRONMENT_NAME:      gp.env.ObjectMeta.Name,
+		fv1.ENVIRONMENT_NAMESPACE: gp.env.ObjectMeta.Namespace,
+		fv1.ENVIRONMENT_UID:       string(gp.env.ObjectMeta.UID),
+		"managed":                 "true", // this allows us to easily find pods managed by the deployment
 	}
 }
 
@@ -241,7 +240,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		// and make a good scheduling decision.
 		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
-		if gp.env.Spec.AllowedFunctionsPerContainer != types.AllowedFunctionsPerContainerInfinite {
+		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
 			// modified, this should fail; in that case just
 			// retry.
@@ -265,10 +264,10 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 
 func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string]string {
 	label := gp.getEnvironmentPoolLabels()
-	label[types.FUNCTION_NAME] = metadata.Name
-	label[types.FUNCTION_UID] = string(metadata.UID)
-	label[types.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
-	label["managed"] = "false"                           // this allows us to easily find pods not managed by the deployment
+	label[fv1.FUNCTION_NAME] = metadata.Name
+	label[fv1.FUNCTION_UID] = string(metadata.UID)
+	label[fv1.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
+	label["managed"] = "false"                         // this allows us to easily find pods not managed by the deployment
 	return label
 
 }
@@ -634,7 +633,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
 	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
-		types.ANNOTATION_SVC_HOST, svcHost, types.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
+		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 	if err != nil {
 		// just log the error since it won't affect the function serving

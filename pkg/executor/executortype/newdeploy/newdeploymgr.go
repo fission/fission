@@ -46,7 +46,6 @@ import (
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/throttler"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -278,7 +277,7 @@ func (deploy *NewDeploy) CleanupOldExecutorObjects() {
 
 	errs := &multierror.Error{}
 	listOpts := metav1.ListOptions{
-		LabelSelector: labels.Set(map[string]string{types.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy)}).AsSelector().String(),
+		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy)}).AsSelector().String(),
 	}
 
 	err := reaper.CleanupHpa(deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
@@ -744,20 +743,20 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
-		types.EXECUTOR_TYPE:         string(fv1.ExecutorTypeNewdeploy),
-		types.ENVIRONMENT_NAME:      envMeta.Name,
-		types.ENVIRONMENT_NAMESPACE: envMeta.Namespace,
-		types.ENVIRONMENT_UID:       string(envMeta.UID),
-		types.FUNCTION_NAME:         fnMeta.Name,
-		types.FUNCTION_NAMESPACE:    fnMeta.Namespace,
-		types.FUNCTION_UID:          string(fnMeta.UID),
+		fv1.EXECUTOR_TYPE:         string(fv1.ExecutorTypeNewdeploy),
+		fv1.ENVIRONMENT_NAME:      envMeta.Name,
+		fv1.ENVIRONMENT_NAMESPACE: envMeta.Namespace,
+		fv1.ENVIRONMENT_UID:       string(envMeta.UID),
+		fv1.FUNCTION_NAME:         fnMeta.Name,
+		fv1.FUNCTION_NAMESPACE:    fnMeta.Namespace,
+		fv1.FUNCTION_UID:          string(fnMeta.UID),
 	}
 }
 
 func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta) map[string]string {
 	return map[string]string{
-		types.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		types.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
+		fv1.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
+		fv1.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
 	}
 }
 

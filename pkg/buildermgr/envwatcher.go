@@ -36,7 +36,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -346,9 +345,9 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 	// there should be only one deploy in deployList
 	if len(deployList) == 0 {
 		// create builder SA in this ns, if not already created
-		_, err := utils.SetupSA(envw.kubernetesClient, types.FissionBuilderSA, ns)
+		_, err := utils.SetupSA(envw.kubernetesClient, fv1.FissionBuilderSA, ns)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error creating %q in ns: %s", types.FissionBuilderSA, ns)
+			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fv1.FissionBuilderSA, ns)
 		}
 
 		deploy, err = envw.createBuilderDeployment(env, ns)

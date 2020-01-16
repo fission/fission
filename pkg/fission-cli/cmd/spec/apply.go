@@ -40,7 +40,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -474,7 +473,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	}
 
 	// figure out if we're making a literal or a URL-based archive
-	if size < types.ArchiveLiteralSizeLimit {
+	if size < fv1.ArchiveLiteralSizeLimit {
 		contents, err := pkgutil.GetContents(archiveFileName)
 		if err != nil {
 			return nil, err

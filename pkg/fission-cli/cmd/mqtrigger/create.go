@@ -30,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/types"
 )
 
 type CreateSubCommand struct {
@@ -62,13 +61,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	var mqType fv1.MessageQueueType
 	switch input.String(flagkey.MqtMQType) {
 	case "":
-		mqType = types.MessageQueueTypeNats
-	case types.MessageQueueTypeNats:
-		mqType = types.MessageQueueTypeNats
-	case types.MessageQueueTypeASQ:
-		mqType = types.MessageQueueTypeASQ
-	case types.MessageQueueTypeKafka:
-		mqType = types.MessageQueueTypeKafka
+		mqType = fv1.MessageQueueTypeNats
+	case fv1.MessageQueueTypeNats:
+		mqType = fv1.MessageQueueTypeNats
+	case fv1.MessageQueueTypeASQ:
+		mqType = fv1.MessageQueueTypeASQ
+	case fv1.MessageQueueTypeKafka:
+		mqType = fv1.MessageQueueTypeKafka
 	default:
 		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
 	}
@@ -131,7 +130,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		},
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
-				Type: types.FunctionReferenceTypeFunctionName,
+				Type: fv1.FunctionReferenceTypeFunctionName,
 				Name: fnName,
 			},
 			MessageQueueType: mqType,

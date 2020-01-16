@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -36,7 +35,7 @@ func TestRouter(t *testing.T) {
 
 	// and a reference to it
 	fr := fv1.FunctionReference{
-		Type: types.FunctionReferenceTypeFunctionName,
+		Type: fv1.FunctionReferenceTypeFunctionName,
 		Name: fnMeta.Name,
 	}
 

@@ -28,7 +28,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/types"
 )
 
 type CreateSubCommand struct {
@@ -76,7 +75,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	// check that the trigger has function reference type function weights
-	if htTrigger.Spec.FunctionReference.Type != types.FunctionReferenceTypeFunctionWeights {
+	if htTrigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionWeights {
 		return errors.New("canary config cannot be created for http triggers that do not reference functions by weights")
 	}
 

@@ -43,7 +43,6 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -278,7 +277,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 	}
 
 	l := map[string]string{
-		types.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
 	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
@@ -303,7 +302,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 			// avoid too many requests arrive Kubernetes API server at the same time.
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, types.EXECUTOR_INSTANCEID_LABEL, gpm.instanceId)
+			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceId)
 			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
 				// just log the error since it won't affect the function serving
@@ -317,13 +316,13 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 				return
 			}
 
-			fnName, ok1 := pod.Labels[types.FUNCTION_NAME]
-			fnNS, ok2 := pod.Labels[types.FUNCTION_NAMESPACE]
-			fnUID, ok3 := pod.Labels[types.FUNCTION_UID]
-			fnRV, ok4 := pod.Annotations[types.FUNCTION_RESOURCE_VERSION]
-			envName, ok5 := pod.Labels[types.ENVIRONMENT_NAME]
-			envNS, ok6 := pod.Labels[types.ENVIRONMENT_NAMESPACE]
-			svcHost, ok7 := pod.Annotations[types.ANNOTATION_SVC_HOST]
+			fnName, ok1 := pod.Labels[fv1.FUNCTION_NAME]
+			fnNS, ok2 := pod.Labels[fv1.FUNCTION_NAMESPACE]
+			fnUID, ok3 := pod.Labels[fv1.FUNCTION_UID]
+			fnRV, ok4 := pod.Annotations[fv1.FUNCTION_RESOURCE_VERSION]
+			envName, ok5 := pod.Labels[fv1.ENVIRONMENT_NAME]
+			envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
+			svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 			env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
 
 			if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
@@ -382,7 +381,7 @@ func (gpm *GenericPoolManager) CleanupOldExecutorObjects() {
 
 	errs := &multierror.Error{}
 	listOpts := metav1.ListOptions{
-		LabelSelector: labels.Set(map[string]string{types.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}).AsSelector().String(),
+		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}).AsSelector().String(),
 	}
 
 	err := reaper.CleanupDeployments(gpm.logger, gpm.kubernetesClient, gpm.instanceId, listOpts)
@@ -412,7 +411,7 @@ func (gpm *GenericPoolManager) service() {
 			if !ok {
 				poolsize := gpm.getEnvPoolsize(req.env)
 				switch req.env.Spec.AllowedFunctionsPerContainer {
-				case types.AllowedFunctionsPerContainerInfinite:
+				case fv1.AllowedFunctionsPerContainerInfinite:
 					poolsize = 1
 				}
 
@@ -589,7 +588,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 					zap.String("function", fsvc.Name))
 			}
 
-			if fsvc.Environment.Spec.AllowedFunctionsPerContainer == types.AllowedFunctionsPerContainerInfinite {
+			if fsvc.Environment.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
 				continue
 			}
 

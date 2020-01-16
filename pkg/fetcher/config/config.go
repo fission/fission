@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	"github.com/fission/fission/pkg/types"
+	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -88,14 +88,14 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		sharedSecretPath:        "/secrets",
 		sharedCfgMapPath:        "/configs",
 		jaegerCollectorEndpoint: os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"),
-		serviceAccount:          types.FissionFetcherSA,
+		serviceAccount:          fv1.FissionFetcherSA,
 	}, nil
 }
 
 func (cfg *Config) SetupServiceAccount(kubernetesClient *kubernetes.Clientset, namespace string, context interface{}) error {
-	_, err := utils.SetupSA(kubernetesClient, types.FissionFetcherSA, namespace)
+	_, err := utils.SetupSA(kubernetesClient, fv1.FissionFetcherSA, namespace)
 	if err != nil {
-		log.Printf("Error : %v creating %s in ns : %s for: %#v", err, types.FissionFetcherSA, namespace, context)
+		log.Printf("Error : %v creating %s in ns : %s for: %#v", err, fv1.FissionFetcherSA, namespace, context)
 		return err
 	}
 
@@ -106,7 +106,7 @@ func (cfg *Config) SharedMountPath() string {
 	return cfg.sharedMountPath
 }
 
-func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) types.FunctionSpecializeRequest {
+func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
 	// for backward compatibility, since most v1 env
 	// still try to load user function from hard coded
 	// path /userfunc/user
@@ -115,9 +115,9 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 		targetFilename = string(fn.ObjectMeta.UID)
 	}
 
-	return types.FunctionSpecializeRequest{
-		FetchReq: types.FunctionFetchRequest{
-			FetchType: types.FETCH_DEPLOYMENT,
+	return fetcher.FunctionSpecializeRequest{
+		FetchReq: fetcher.FunctionFetchRequest{
+			FetchType: fv1.FETCH_DEPLOYMENT,
 			Package: metav1.ObjectMeta{
 				Namespace: fn.Spec.Package.PackageRef.Namespace,
 				Name:      fn.Spec.Package.PackageRef.Name,
@@ -127,7 +127,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 			ConfigMaps:  fn.Spec.ConfigMaps,
 			KeepArchive: env.Spec.KeepArchive,
 		},
-		LoadReq: types.FunctionLoadRequest{
+		LoadReq: fetcher.FunctionLoadRequest{
 			FilePath:         filepath.Join(cfg.sharedMountPath, targetFilename),
 			FunctionName:     fn.Spec.Package.FunctionName,
 			FunctionMetadata: &fn.ObjectMeta,
@@ -172,19 +172,19 @@ func (cfg *Config) fetcherCommand(extraArgs ...string) []string {
 func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	volumes := []apiv1.Volume{
 		{
-			Name: types.SharedVolumeUserfunc,
+			Name: fv1.SharedVolumeUserfunc,
 			VolumeSource: apiv1.VolumeSource{
 				EmptyDir: &apiv1.EmptyDirVolumeSource{},
 			},
 		},
 		{
-			Name: types.SharedVolumeSecrets,
+			Name: fv1.SharedVolumeSecrets,
 			VolumeSource: apiv1.VolumeSource{
 				EmptyDir: &apiv1.EmptyDirVolumeSource{},
 			},
 		},
 		{
-			Name: types.SharedVolumeConfigmaps,
+			Name: fv1.SharedVolumeConfigmaps,
 			VolumeSource: apiv1.VolumeSource{
 				EmptyDir: &apiv1.EmptyDirVolumeSource{},
 			},
@@ -192,15 +192,15 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	}
 	mounts := []apiv1.VolumeMount{
 		{
-			Name:      types.SharedVolumeUserfunc,
+			Name:      fv1.SharedVolumeUserfunc,
 			MountPath: cfg.sharedMountPath,
 		},
 		{
-			Name:      types.SharedVolumeSecrets,
+			Name:      fv1.SharedVolumeSecrets,
 			MountPath: cfg.sharedSecretPath,
 		},
 		{
-			Name:      types.SharedVolumeConfigmaps,
+			Name:      fv1.SharedVolumeConfigmaps,
 			MountPath: cfg.sharedCfgMapPath,
 		},
 	}
@@ -289,7 +289,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 	podSpec.Volumes = append(podSpec.Volumes, volumes...)
 	podSpec.Containers = append(podSpec.Containers, c)
 	if podSpec.ServiceAccountName == "" {
-		podSpec.ServiceAccountName = types.FissionFetcherSA
+		podSpec.ServiceAccountName = fv1.FissionFetcherSA
 	}
 
 	return nil

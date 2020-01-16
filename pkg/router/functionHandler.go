@@ -40,7 +40,6 @@ import (
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
-	"github.com/fission/fission/pkg/types"
 )
 
 const (
@@ -367,7 +366,7 @@ func (fh *functionHandler) tapService(fn *fv1.Function, serviceUrl *url.URL) {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == types.FunctionReferenceTypeFunctionWeights {
+	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionWeights {
 		// canary deployment. need to determine the function to send request to now
 		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
 		if fn == nil {

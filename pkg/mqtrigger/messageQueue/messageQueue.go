@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fission/fission/pkg/types"
 	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,11 +86,11 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger, fissionClient *crd.Fissi
 		fissionClient: fissionClient,
 	}
 	switch mqConfig.MQType {
-	case types.MessageQueueTypeNats:
+	case fv1.MessageQueueTypeNats:
 		messageQueue, err = makeNatsMessageQueue(logger, routerUrl, mqConfig)
-	case types.MessageQueueTypeASQ:
+	case fv1.MessageQueueTypeASQ:
 		messageQueue, err = newAzureStorageConnection(logger, routerUrl, mqConfig)
-	case types.MessageQueueTypeKafka:
+	case fv1.MessageQueueTypeKafka:
 		messageQueue, err = makeKafkaMessageQueue(logger, routerUrl, mqConfig)
 	default:
 		err = fmt.Errorf("no supported message queue type found for %q", mqConfig.MQType)
