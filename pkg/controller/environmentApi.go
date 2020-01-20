@@ -28,7 +28,7 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -105,7 +105,7 @@ func (a *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	envs, err := a.fissionClient.V1().Environments(ns).List(metav1.ListOptions{})
+	envs, err := a.fissionClient.CoreV1().Environments(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -142,7 +142,7 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enew, err := a.fissionClient.V1().Environments(env.ObjectMeta.Namespace).Create(&env)
+	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Create(&env)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -167,7 +167,7 @@ func (a *API) EnvironmentApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	env, err := a.fissionClient.V1().Environments(ns).Get(name, metav1.GetOptions{})
+	env, err := a.fissionClient.CoreV1().Environments(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -205,7 +205,7 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enew, err := a.fissionClient.V1().Environments(env.ObjectMeta.Namespace).Update(&env)
+	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Update(&env)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -229,7 +229,7 @@ func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.V1().Environments(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().Environments(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 )
 
@@ -164,7 +164,7 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 func (mqt *MessageQueueTriggerManager) syncTriggers() {
 	for {
 		// get new set of triggers
-		newTriggers, err := mqt.fissionClient.V1().MessageQueueTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		newTriggers, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				mqt.logger.Error("encountered network error, will retry", zap.Error(err))

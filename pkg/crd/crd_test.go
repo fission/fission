@@ -25,8 +25,8 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
-	genv1 "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned/typed/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	genInformerCoreV1 "github.com/fission/fission/pkg/apis/genclient/clientset/versioned/typed/core/v1"
 )
 
 func panicIf(err error) {
@@ -35,7 +35,7 @@ func panicIf(err error) {
 	}
 }
 
-func functionTests(crdClient genv1.V1V1Interface) {
+func functionTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// sample function object
 	function := &fv1.Function{
 		TypeMeta: metav1.TypeMeta{
@@ -135,7 +135,7 @@ func functionTests(crdClient genv1.V1V1Interface) {
 
 }
 
-func environmentTests(crdClient genv1.V1V1Interface) {
+func environmentTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// sample environment object
 	environment := &fv1.Environment{
 		TypeMeta: metav1.TypeMeta{
@@ -229,7 +229,7 @@ func environmentTests(crdClient genv1.V1V1Interface) {
 
 }
 
-func httpTriggerTests(crdClient genv1.V1V1Interface) {
+func httpTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// sample httpTrigger object
 	httpTrigger := &fv1.HTTPTrigger{
 		TypeMeta: metav1.TypeMeta{
@@ -321,7 +321,7 @@ func httpTriggerTests(crdClient genv1.V1V1Interface) {
 
 }
 
-func kubernetesWatchTriggerTests(crdClient genv1.V1V1Interface) {
+func kubernetesWatchTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// sample kubernetesWatchTrigger object
 	kubernetesWatchTrigger := &fv1.KubernetesWatchTrigger{
 		TypeMeta: metav1.TypeMeta{
@@ -440,8 +440,8 @@ func TestCrd(t *testing.T) {
 	panicIf(err)
 
 	// rest client with knowledge about our crd types
-	functionTests(fc.crdClient.V1V1())
-	environmentTests(fc.crdClient.V1V1())
-	httpTriggerTests(fc.crdClient.V1V1())
-	kubernetesWatchTriggerTests(fc.crdClient.V1V1())
+	functionTests(fc.CoreV1())
+	environmentTests(fc.CoreV1())
+	httpTriggerTests(fc.CoreV1())
+	kubernetesWatchTriggerTests(fc.CoreV1())
 }

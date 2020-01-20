@@ -31,7 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/cms"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -236,7 +236,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	ndm := newdeploy.MakeNewDeploy(
 		logger,
-		fissionClient, kubernetesClient, fissionClient.V1().RESTClient(),
+		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
 		functionNamespace, fetcherConfig, executorInstanceID)
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)

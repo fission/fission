@@ -28,7 +28,7 @@ import (
 	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -105,7 +105,7 @@ func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.V1().TimeTriggers(ns).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.CoreV1().TimeTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -149,7 +149,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.V1().TimeTriggers(t.ObjectMeta.Namespace).Create(&t)
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Create(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -173,7 +173,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.V1().TimeTriggers(ns).Get(name, metav1.GetOptions{})
+	t, err := a.fissionClient.CoreV1().TimeTriggers(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -218,7 +218,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.V1().TimeTriggers(t.ObjectMeta.Namespace).Update(&t)
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Update(&t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -240,7 +240,7 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.V1().TimeTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().TimeTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

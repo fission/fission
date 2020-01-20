@@ -27,7 +27,7 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -104,7 +104,7 @@ func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	watches, err := a.fissionClient.V1().KubernetesWatchTriggers(ns).List(metav1.ListOptions{})
+	watches, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -142,7 +142,7 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wnew, err := a.fissionClient.V1().KubernetesWatchTriggers(watch.ObjectMeta.Namespace).Create(&watch)
+	wnew, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(watch.ObjectMeta.Namespace).Create(&watch)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -166,7 +166,7 @@ func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	watch, err := a.fissionClient.V1().KubernetesWatchTriggers(ns).Get(name, metav1.GetOptions{})
+	watch, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -194,7 +194,7 @@ func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.V1().KubernetesWatchTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

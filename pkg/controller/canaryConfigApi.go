@@ -29,7 +29,7 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	config "github.com/fission/fission/pkg/featureconfig"
 )
@@ -122,7 +122,7 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canaryCfgNew, err := a.fissionClient.V1().CanaryConfigs(canaryCfg.ObjectMeta.Namespace).Create(&canaryCfg)
+	canaryCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(canaryCfg.ObjectMeta.Namespace).Create(&canaryCfg)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -153,7 +153,7 @@ func (a *API) CanaryConfigApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	canaryCfg, err := a.fissionClient.V1().CanaryConfigs(ns).Get(name, metav1.GetOptions{})
+	canaryCfg, err := a.fissionClient.CoreV1().CanaryConfigs(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -180,7 +180,7 @@ func (a *API) CanaryConfigApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	canaryCfgs, err := a.fissionClient.V1().CanaryConfigs(ns).List(metav1.ListOptions{})
+	canaryCfgs, err := a.fissionClient.CoreV1().CanaryConfigs(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -215,7 +215,7 @@ func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canayCfgNew, err := a.fissionClient.V1().CanaryConfigs(c.ObjectMeta.Namespace).Update(&c)
+	canayCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(c.ObjectMeta.Namespace).Update(&c)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -244,7 +244,7 @@ func (a *API) CanaryConfigApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.V1().CanaryConfigs(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().CanaryConfigs(ns).Delete(name, &metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

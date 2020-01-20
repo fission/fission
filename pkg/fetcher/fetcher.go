@@ -36,7 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
@@ -550,7 +550,7 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		pkg, err = fetcher.fissionClient.V1().Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
+		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			return pkg, nil
 		}

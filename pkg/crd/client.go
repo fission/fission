@@ -28,13 +28,12 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	clientset "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned"
-	genv1 "github.com/fission/fission/pkg/apis/genclient/v1/clientset/versioned/typed/fission.io/v1"
+	genClientset "github.com/fission/fission/pkg/apis/genclient/clientset/versioned"
 )
 
 type (
 	FissionClient struct {
-		crdClient clientset.Interface
+		genClientset.Interface
 	}
 )
 
@@ -81,28 +80,21 @@ func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsc
 	}
 
 	// make a CRD REST client with the config
-	crdClient, err := clientset.NewForConfig(config)
+	crdClient, err := genClientset.NewForConfig(config)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	fc := &FissionClient{
-		crdClient: crdClient,
+		Interface: crdClient,
 	}
 	return fc, kubeClient, apiExtClient, nil
-}
-
-// V1 returns the instance of v1 rest client.
-// The only reason to have this function is to avoid
-// using V1V1() in codebase.
-func (fc *FissionClient) V1() genv1.V1V1Interface {
-	return fc.crdClient.V1V1()
 }
 
 func (fc *FissionClient) WaitForCRDs() error {
 	start := time.Now()
 	for {
-		fi := fc.crdClient.V1V1().Functions(metav1.NamespaceDefault)
+		fi := fc.CoreV1().Functions(metav1.NamespaceDefault)
 		_, err := fi.List(metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
