@@ -5,11 +5,11 @@
 
 ``` bash
 $ cd $GOPATH/src/github.com/fission/fission/
-$ $GOPATH/src/k8s.io/code-generator/generate-groups.sh \
+$ bash $GOPATH/src/k8s.io/code-generator/generate-groups.sh \
     all \
-    github.com/fission/fission/pkg/apis/genclient/v1 \
+    github.com/fission/fission/pkg/apis/genclient \
     github.com/fission/fission/pkg/apis \
-    fission.io:v1 \
+    "core:v1" \
     --go-header-file $GOPATH/src/github.com/fission/fission/pkg/apis/boilerplate.txt
 ```
 

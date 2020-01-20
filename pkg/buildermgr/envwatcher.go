@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -147,7 +147,7 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 func (envw *environmentWatcher) watchEnvironments() {
 	rv := ""
 	for {
-		wi, err := envw.fissionClient.V1().Environments(metav1.NamespaceAll).Watch(metav1.ListOptions{
+		wi, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).Watch(metav1.ListOptions{
 			ResourceVersion: rv,
 		})
 		if err != nil {
@@ -181,7 +181,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 func (envw *environmentWatcher) sync() {
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
-		envList, err := envw.fissionClient.V1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))

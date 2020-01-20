@@ -31,7 +31,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
 )
@@ -51,7 +51,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
-	fn, err := executor.fissionClient.V1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
+	fn, err := executor.fissionClient.CoreV1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			http.Error(w, "Failed to find function", http.StatusNotFound)

@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 )
 
@@ -35,7 +35,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 	kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) (k8sCache.Store, k8sCache.Controller) {
 
 	resyncPeriod := 30 * time.Second
-	lw := k8sCache.NewListWatchFromClient(fissionClient.V1().RESTClient(), "packages", metav1.NamespaceAll, fields.Everything())
+	lw := k8sCache.NewListWatchFromClient(fissionClient.CoreV1().RESTClient(), "packages", metav1.NamespaceAll, fields.Everything())
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, resyncPeriod,
 		k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {

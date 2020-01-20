@@ -38,7 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/client"
 )
@@ -141,7 +141,7 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create an env on the cluster
-	env, err := fissionClient.V1().Environments(fissionNs).Create(&fv1.Environment{
+	env, err := fissionClient.CoreV1().Environments(fissionNs).Create(&fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
@@ -194,7 +194,7 @@ func TestExecutor(t *testing.T) {
 			Deployment:  deployment,
 		},
 	}
-	p, err = fissionClient.V1().Packages(fissionNs).Create(p)
+	p, err = fissionClient.CoreV1().Packages(fissionNs).Create(p)
 	if err != nil {
 		log.Panicf("failed to create package: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 	}
-	_, err = fissionClient.V1().Functions(fissionNs).Create(f)
+	_, err = fissionClient.CoreV1().Functions(fissionNs).Create(f)
 	if err != nil {
 		log.Panicf("failed to create function: %v", err)
 	}

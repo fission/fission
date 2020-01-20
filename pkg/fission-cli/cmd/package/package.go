@@ -29,7 +29,7 @@ import (
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"

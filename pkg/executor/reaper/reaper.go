@@ -25,7 +25,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -204,7 +204,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 
 			// in order to find out if there are any functions that need this role-binding in role-binding namespace,
 			// we can list the functions once per role-binding.
-			funcList, err := fissionClient.V1().Functions(roleBinding.Namespace).List(meta_v1.ListOptions{})
+			funcList, err := fissionClient.CoreV1().Functions(roleBinding.Namespace).List(meta_v1.ListOptions{})
 			if err != nil {
 				logger.Error("error fetching function list in namespace", zap.Error(err), zap.String("namespace", roleBinding.Namespace))
 				continue
@@ -251,7 +251,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 				// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
 				if roleBinding.Name == fv1.PackageGetterRB {
 					// check if there is an env obj in saNs
-					envList, err := fissionClient.V1().Environments(saNs).List(meta_v1.ListOptions{})
+					envList, err := fissionClient.CoreV1().Environments(saNs).List(meta_v1.ListOptions{})
 					if err != nil {
 						logger.Error("error fetching environment list in service account namespace", zap.Error(err), zap.String("namespace", saNs))
 						continue

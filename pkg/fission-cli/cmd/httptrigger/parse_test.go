@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	fv1 "github.com/fission/fission/pkg/apis/fission.io/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func Test_GetIngressConfig(t *testing.T) {
