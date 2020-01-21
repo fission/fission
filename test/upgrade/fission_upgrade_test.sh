@@ -72,7 +72,7 @@ upgrade_tests
 
 ## Build images for Upgrade
 
-REPO=gcr.io/fission-ci
+REPO=gcr.io/$GKE_PROJECT_NAME
 IMAGE=fission-bundle
 FETCHER_IMAGE=$REPO/fetcher
 BUILDER_IMAGE=$REPO/builder

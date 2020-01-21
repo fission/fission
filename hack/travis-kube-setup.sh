@@ -76,7 +76,7 @@ echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > ${HOME}/gcloud-service-key.json
 gcloud auth activate-service-account --key-file ${HOME}/gcloud-service-key.json
 
 # get kube config
-gcloud container clusters get-credentials fission-ci-1 --zone us-central1-a --project fission-ci
+gcloud container clusters get-credentials fission-ci --zone us-central1-a --project $GKE_PROJECT_NAME
 
 # remove gcloud creds
 unset FISSION_CI_SERVICE_ACCOUNT
@@ -91,3 +91,19 @@ then
 fi
 
 kubectl get node
+
+# install helm tiller. It will no longer needed as we upgrade to Helmv3.
+if ! helm list >/dev/null 2>&1 ; then
+    echo "Installing helm..."
+    kubectl -n kube-system create sa tiller
+    kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+    helm init --service-account tiller
+
+    printf "Waiting for Helm"
+    until helm list >/dev/null 2>&1
+    do
+      printf "."
+      sleep 3
+    done
+    printf "\n"
+fi
