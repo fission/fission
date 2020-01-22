@@ -113,6 +113,9 @@ checkIngress $routeName "" $relativeUrl "" ""
 
 fission route delete --name $routeName
 
+TEST_ID=$(generate_test_id)
+
+routeName="ingress-$TEST_ID"
 relativeUrl="/itest-$TEST_ID/{url}"
 wildcardPath="/itest-$TEST_ID/*"
 realPath="itest-$TEST_ID/test"
