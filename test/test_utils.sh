@@ -54,7 +54,7 @@ getGitCommit() {
 }
 
 setupCIBuildEnv() {
-    export REPO=gcr.io/fission-ci
+    export REPO=gcr.io/$GKE_PROJECT_NAME
     export IMAGE=fission-bundle
     export FETCHER_IMAGE=$REPO/fetcher
     export BUILDER_IMAGE=$REPO/builder
@@ -85,8 +85,11 @@ build_and_push_go_mod_cache_image() {
 
     gcloud_login
 
-    gcloud docker -- pull $image_tag
-    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    if ! gcloud docker -- pull $image_tag >/dev/null 2>&1 ; then
+      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    else
+      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    fi
 
     gcloud docker -- push $image_tag &
     travis_fold_end go_mod_cache_image
@@ -497,13 +500,13 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/fission-ci/python-env:${imageTag}
-    export PYTHON_BUILDER_IMAGE=gcr.io/fission-ci/python-env-builder:${imageTag}
-    export GO_RUNTIME_IMAGE=gcr.io/fission-ci/go-env:${imageTag}
-    export GO_BUILDER_IMAGE=gcr.io/fission-ci/go-env-builder:${imageTag}
-    export JVM_RUNTIME_IMAGE=gcr.io/fission-ci/jvm-env:${imageTag}
-    export JVM_BUILDER_IMAGE=gcr.io/fission-ci/jvm-env-builder:${imageTag}
-    export TS_RUNTIME_IMAGE=gcr.io/fission-ci/tensorflow-serving-env:${imageTag}
+    export PYTHON_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env:${imageTag}
+    export PYTHON_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env-builder:${imageTag}
+    export GO_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env:${imageTag}
+    export GO_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env-builder:${imageTag}
+    export JVM_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env:${imageTag}
+    export JVM_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env-builder:${imageTag}
+    export TS_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/tensorflow-serving-env:${imageTag}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
