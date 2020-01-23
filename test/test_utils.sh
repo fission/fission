@@ -75,8 +75,8 @@ setupIngressController() {
 removeIngressController() {
     # set up NGINX ingress controller
     kubectl delete clusterrolebinding cluster-admin-binding || true
-    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
     kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
+    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
 }
 
 build_and_push_go_mod_cache_image() {
@@ -504,8 +504,8 @@ run_all_tests() {
     export PYTHON_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env-builder:${imageTag}
     export GO_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env:${imageTag}
     export GO_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env-builder:${imageTag}
-    export JVM_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env:${imageTag}
-    export JVM_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env-builder:${imageTag}
+    # export JVM_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env:${imageTag}
+    # export JVM_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env-builder:${imageTag}
     export TS_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/tensorflow-serving-env:${imageTag}
 
     set +e
