@@ -143,31 +143,39 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 		}, nil
 	}
 
-	if len(specFile) > 0 {
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &spectypes.ArchiveUploadSpec{
 			Name:         archiveName("", includeFiles),
 			IncludeGlobs: includeFiles,
 		}
 
-		// check if this AUS exists in the specs; if so, don't create a new one
-		fr, err := spec.ReadSpecs(specDir)
-		if err != nil {
-			return nil, errors.Wrap(err, "error reading specs")
-		}
-
-		obj := fr.SpecExists(aus, true, true)
-		if obj != nil {
-			oldAus := obj.(*spectypes.ArchiveUploadSpec)
-			fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
-			aus.Name = oldAus.Name
-		} else {
-			// save the uploadspec
-			err := spec.SpecSave(*aus, specFile, input)
+		if input.Bool(flagkey.SpecDry) {
+			err := spec.SpecDry(*aus)
 			if err != nil {
-				return nil, errors.Wrapf(err, "write spec file %v", specFile)
+				return nil, err
+			}
+		} else if input.Bool(flagkey.SpecSave) {
+			// check if this AUS exists in the specs; if so, don't create a new one
+			fr, err := spec.ReadSpecs(specDir)
+			if err != nil {
+				return nil, errors.Wrap(err, "error reading specs")
+			}
+
+			obj := fr.SpecExists(aus, true, true)
+			if obj != nil {
+				oldAus := obj.(*spectypes.ArchiveUploadSpec)
+				fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
+				aus.Name = oldAus.Name
+			} else {
+				// save the uploadspec
+				err := spec.SpecSave(*aus, specFile)
+				if err != nil {
+					return nil, errors.Wrap(err, "error saving archive spec")
+				}
 			}
 		}
+
 		// create the archive object
 		archive := fv1.Archive{
 			Type: fv1.ArchiveTypeUrl,

@@ -175,7 +175,11 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		},
 	}
 
-	if len(specFile) > 0 {
+	if input.Bool(flagkey.SpecDry) {
+		return &pkg.ObjectMeta, spec.SpecDry(*pkg)
+	}
+
+	if input.Bool(flagkey.SpecSave) {
 		// if a package with the same spec exists, don't create a new spec file
 		fr, err := spec.ReadSpecs(util.GetSpecDir(input))
 		if err != nil {
@@ -189,7 +193,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 			return &pkg.ObjectMeta, nil
 		}
 
-		err = spec.SpecSave(*pkg, specFile, input)
+		err = spec.SpecSave(*pkg, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error saving package spec")
 		}

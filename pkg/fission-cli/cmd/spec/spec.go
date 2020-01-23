@@ -33,7 +33,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
-	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -163,15 +162,56 @@ func save(data []byte, specDir string, specFile string) error {
 	return nil
 }
 
-// called from `fission * create --spec` or `fission * create --dry`
-func SpecSave(resource interface{}, specFile string, input cli.Input) error {
-	var meta metav1.ObjectMeta
-	var kind string
+// called from `fission * create --spec`
+func SpecSave(resource interface{}, specFile string) error {
 	var specDir = "specs"
 
+	meta, kind, data, err := crdToYaml(resource)
+	if err != nil {
+		return err
+	}
+
+	fr, err := ReadSpecs(specDir)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+	}
+
+	exists, err := fr.ExistsInSpecs(resource)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return errors.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
+	}
+
+	err = save(data, specDir, specFile)
+	if err != nil {
+		return err
+	}
+
+	console.Info(fmt.Sprintf("Saving %v '%v/%v' to '%v/%v'",
+		kind, meta.Namespace, meta.Name, specDir, specFile))
+
+	return nil
+}
+
+func SpecDry(resource interface{}) error {
+	_, _, data, err := crdToYaml(resource)
+	if err != nil {
+		return err
+	}
+	fmt.Printf(string(data))
+	return nil
+}
+
+func crdToYaml(resource interface{}) (metav1.ObjectMeta, string, []byte, error) {
 	// make sure we're writing a known type
+	var meta metav1.ObjectMeta
+	var kind string
 	var data []byte
 	var err error
+
 	switch typedres := resource.(type) {
 	case types.ArchiveUploadSpec:
 		typedres.Kind = "ArchiveUploadSpec"
@@ -223,44 +263,14 @@ func SpecSave(resource interface{}, specFile string, input cli.Input) error {
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	default:
-		if input.Bool(flagkey.SpecDry) {
-			return fmt.Errorf("can't display resource %#v spec", resource)
-		}
-		return fmt.Errorf("can't save resource %#v", resource)
+		err = errors.Errorf("unknown object type '%v'", typedres)
 	}
+
 	if err != nil {
-		return errors.Wrap(err, "Couldn't marshal YAML")
-	}
-	if input.Bool(flagkey.SpecDry) {
-		console.Info(fmt.Sprintf("Generated Spec\n%v", (string(data))))
-		if !input.Bool(flagkey.SpecSave) {
-			return nil
-		}
+		return metav1.ObjectMeta{}, "", nil, errors.Wrap(err, "couldn't marshal YAML")
 	}
 
-	fr, err := ReadSpecs(specDir)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
-	}
-
-	exists, err := fr.ExistsInSpecs(resource)
-	if err != nil {
-		return err
-	}
-
-	if exists {
-		return errors.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
-	}
-
-	err = save(data, specDir, specFile)
-	if err != nil {
-		return err
-	}
-
-	console.Info(fmt.Sprintf("Saving %v '%v/%v' to '%v/%v'",
-		kind, meta.Namespace, meta.Name, specDir, specFile))
-
-	return nil
+	return meta, kind, data, nil
 }
 
 // validateFunctionReference checks a function reference
