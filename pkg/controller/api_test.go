@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,13 +36,17 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 )
 
-var g struct {
-	cmd.CommandActioner
-}
+var (
+	g struct {
+		cmd.CommandActioner
+	}
+	testNS = metav1.NamespaceDefault
+)
 
 func panicIf(err error) {
 	if err != nil {
@@ -81,17 +86,17 @@ func TestFunctionApi(t *testing.T) {
 	testFunc := &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: testNS,
 		},
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{
 				Name:      "nodejs",
-				Namespace: metav1.NamespaceDefault,
+				Namespace: testNS,
 			},
 			Package: fv1.FunctionPackageRef{
 				FunctionName: "xxx",
 				PackageRef: fv1.PackageRef{
-					Namespace:       metav1.NamespaceDefault,
+					Namespace:       testNS,
 					Name:            "xxx",
 					ResourceVersion: "12345",
 				},
@@ -100,7 +105,7 @@ func TestFunctionApi(t *testing.T) {
 	}
 	_, err := g.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      testFunc.ObjectMeta.Name,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "function")
 
@@ -125,7 +130,7 @@ func TestFunctionApi(t *testing.T) {
 	panicIf(err)
 	defer g.Client().V1().Function().Delete(m2)
 
-	funcs, err := g.Client().V1().Function().List(metav1.NamespaceDefault)
+	funcs, err := g.Client().V1().Function().List(testNS)
 	panicIf(err)
 	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but found %v", len(funcs)))
 
@@ -148,7 +153,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 	testTrigger := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: testNS,
 		},
 		Spec: fv1.HTTPTriggerSpec{
 			Method:      http.MethodGet,
@@ -161,7 +166,7 @@ func TestHTTPTriggerApi(t *testing.T) {
 	}
 	_, err := g.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      testTrigger.ObjectMeta.Name,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "httptrigger")
 
@@ -194,17 +199,16 @@ func TestHTTPTriggerApi(t *testing.T) {
 	panicIf(err)
 	defer g.Client().V1().HTTPTrigger().Delete(m2)
 
-	ts, err := g.Client().V1().HTTPTrigger().List(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().HTTPTrigger().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but found %v", len(ts)))
 }
 
 func TestEnvironmentApi(t *testing.T) {
-
 	testEnv := &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: testNS,
 		},
 		Spec: fv1.EnvironmentSpec{
 			Version: 1,
@@ -216,7 +220,7 @@ func TestEnvironmentApi(t *testing.T) {
 	}
 	_, err := g.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      testEnv.ObjectMeta.Name,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "environment")
 
@@ -243,7 +247,7 @@ func TestEnvironmentApi(t *testing.T) {
 	panicIf(err)
 	defer g.Client().V1().Environment().Delete(m2)
 
-	ts, err := g.Client().V1().Environment().List(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().Environment().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two envs, but found %v", len(ts)))
 }
@@ -252,7 +256,7 @@ func TestWatchApi(t *testing.T) {
 	testWatch := &fv1.KubernetesWatchTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "xxx",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: testNS,
 		},
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: "default",
@@ -265,7 +269,7 @@ func TestWatchApi(t *testing.T) {
 	}
 	_, err := g.Client().V1().KubeWatcher().Get(&metav1.ObjectMeta{
 		Name:      testWatch.ObjectMeta.Name,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "watch")
 
@@ -288,7 +292,7 @@ func TestWatchApi(t *testing.T) {
 	panicIf(err)
 	defer g.Client().V1().KubeWatcher().Delete(m2)
 
-	ws, err := g.Client().V1().KubeWatcher().List(metav1.NamespaceDefault)
+	ws, err := g.Client().V1().KubeWatcher().List(testNS)
 	panicIf(err)
 	assert(len(ws) == 2, fmt.Sprintf("created two watches, but found %v", len(ws)))
 }
@@ -297,7 +301,7 @@ func TestTimeTriggerApi(t *testing.T) {
 	testTrigger := &fv1.TimeTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "xxx",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: testNS,
 		},
 		Spec: fv1.TimeTriggerSpec{
 			Cron: "0 30 * * * *",
@@ -334,7 +338,7 @@ func TestTimeTriggerApi(t *testing.T) {
 	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
 	assertCronSpecFails(err)
 
-	ts, err := g.Client().V1().TimeTrigger().List(metav1.NamespaceDefault)
+	ts, err := g.Client().V1().TimeTrigger().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 1, fmt.Sprintf("created two time triggers, but found %v", len(ts)))
 }
@@ -348,6 +352,18 @@ func TestMain(m *testing.M) {
 		log.Println("Skipping test, no kubernetes cluster")
 		return
 	}
+
+	_, kubeClient, _, err := crd.GetKubernetesClient()
+	panicIf(err)
+
+	// testNS isolation for running multiple CI builds concurrently.
+	testNS = uuid.NewV4().String()
+	kubeClient.CoreV1().Namespaces().Create(&v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testNS,
+		},
+	})
+	defer kubeClient.CoreV1().Namespaces().Delete(testNS, nil)
 
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
