@@ -75,9 +75,8 @@ You can learn more about Fission and get started from [Fission Docs](https://doc
 See the [compilation guide](https://docs.fission.io/docs/contributing/).
 
 ## Contact
+Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors). 
 Reach us on [slack](http://slack.fission.io) or [twitter](https://twitter.com/fissionio).
-
-Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
 
 ## Community meeting 
 
@@ -90,6 +89,15 @@ Please note that it is strongly recommended that you use official releases of Fi
 the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 Builds from the master branch can have functionality changed and even removed at any time without compatibility support 
 and without prior notice.
+
+# Sponsors
+The following companies, organizations, and individuals support Fission's ongoing maintenance and development.
+Become a sponsor to get your logo on our README on Github with a link to your site.
+
+<p>
+    <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
+    <a href="https://srcmesh.com/"><img src="https://fission.io/sponsors/srcmesh.png" alt="Srcmesh" height="70"></a>
+</p>
 
 # Licensing
 
