@@ -201,7 +201,7 @@ func SpecDry(resource interface{}) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf(string(data))
+	fmt.Println(string(data))
 	return nil
 }
 
