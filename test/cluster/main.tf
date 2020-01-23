@@ -7,11 +7,11 @@ terraform {
 
 provider "google" {
   version = "~> 2.7"
-  project = "fission-ci"
+  project = "infracloud-fission-infra"
 }
 
-resource "google_container_cluster" "fission-ci-1" {
-  name                     = "fission-ci-1"
+resource "google_container_cluster" "fission-ci" {
+  name                     = "fission-ci"
   description              = ""
   min_master_version       = "1.13.6-gke.0"
   network                  = "projects/fission-ci/global/networks/default"
@@ -26,7 +26,7 @@ resource "google_container_cluster" "fission-ci-1" {
 resource "google_container_node_pool" "pool-v1" {
   name     = "pool-v1"
   location = "us-central1-a"
-  cluster  = google_container_cluster.fission-ci-1.name
+  cluster  = google_container_cluster.fission-ci.name
 
   node_config {
     machine_type = "n1-standard-2"
