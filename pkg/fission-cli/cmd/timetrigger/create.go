@@ -111,11 +111,16 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API
+	// save to spec file or display the spec to console
+	if input.Bool(flagkey.SpecDry) {
+		return spec.SpecDry(*opts.trigger)
+	}
+
 	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile)
 		if err != nil {
-			return errors.Wrap(err, "error creating time trigger spec")
+			return errors.Wrap(err, "error saving time trigger spec")
 		}
 		return nil
 	}

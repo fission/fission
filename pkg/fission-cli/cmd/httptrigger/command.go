@@ -33,7 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtUrl, flag.HtFnName},
 		Optional: []flag.Flag{flag.HtName, flag.HtMethod, flag.HtIngress,
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave},
+			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := &cobra.Command{

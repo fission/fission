@@ -31,6 +31,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
@@ -45,7 +46,7 @@ import (
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func CreateArchive(client client.Interface, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
+func CreateArchive(client client.Interface, input cli.Input, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
 	var err error
@@ -56,7 +57,6 @@ func CreateArchive(client client.Interface, includeFiles []string, noZip bool, i
 			return nil, errors.Wrapf(err, "error getting root directory of spec directory")
 		}
 	}
-
 	errs := utils.MultiErrorWithFormat()
 	fileURL := ""
 
@@ -143,31 +143,39 @@ func CreateArchive(client client.Interface, includeFiles []string, noZip bool, i
 		}, nil
 	}
 
-	if len(specFile) > 0 {
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &spectypes.ArchiveUploadSpec{
 			Name:         archiveName("", includeFiles),
 			IncludeGlobs: includeFiles,
 		}
 
-		// check if this AUS exists in the specs; if so, don't create a new one
-		fr, err := spec.ReadSpecs(specDir)
-		if err != nil {
-			return nil, errors.Wrap(err, "error reading specs")
-		}
-
-		obj := fr.SpecExists(aus, true, true)
-		if obj != nil {
-			oldAus := obj.(*spectypes.ArchiveUploadSpec)
-			fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
-			aus.Name = oldAus.Name
-		} else {
-			// save the uploadspec
-			err := spec.SpecSave(*aus, specFile)
+		if input.Bool(flagkey.SpecDry) {
+			err := spec.SpecDry(*aus)
 			if err != nil {
-				return nil, errors.Wrapf(err, "write spec file %v", specFile)
+				return nil, err
+			}
+		} else if input.Bool(flagkey.SpecSave) {
+			// check if this AUS exists in the specs; if so, don't create a new one
+			fr, err := spec.ReadSpecs(specDir)
+			if err != nil {
+				return nil, errors.Wrap(err, "error reading specs")
+			}
+
+			obj := fr.SpecExists(aus, true, true)
+			if obj != nil {
+				oldAus := obj.(*spectypes.ArchiveUploadSpec)
+				fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
+				aus.Name = oldAus.Name
+			} else {
+				// save the uploadspec
+				err := spec.SpecSave(*aus, specFile)
+				if err != nil {
+					return nil, errors.Wrap(err, "error saving archive spec")
+				}
 			}
 		}
+
 		// create the archive object
 		archive := fv1.Archive{
 			Type: fv1.ArchiveTypeUrl,
