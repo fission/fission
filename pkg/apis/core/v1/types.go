@@ -19,6 +19,7 @@ package v1
 import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 //
@@ -674,5 +675,12 @@ type (
 	// CanaryConfig Status
 	CanaryConfigStatus struct {
 		Status string `json:"status"`
+	}
+
+	// MetadataAccessor lets you work with object metadata and type metadata
+	// from any of the versioned or internal API objects.
+	MetadataAccessor interface {
+		GetObjectKind() schema.ObjectKind
+		GetObjectMeta() metav1.Object
 	}
 )
