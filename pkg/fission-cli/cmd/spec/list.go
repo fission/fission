@@ -418,7 +418,7 @@ func getAllCanaryConfigs(client client.Interface) ([]fv1.CanaryConfig, error) {
 	return canaryCfgs, nil
 }
 
-// getAllHTTPTriggers get lists of  HTTP Triggers in all namespaces
+// getAllHTTPTriggers get lists of HTTP Triggers in all namespaces
 func getAllHTTPTriggers(client client.Interface) ([]fv1.HTTPTrigger, error) {
 	hts, err := client.V1().HTTPTrigger().List("")
 	if err != nil {
@@ -427,7 +427,7 @@ func getAllHTTPTriggers(client client.Interface) ([]fv1.HTTPTrigger, error) {
 	return hts, nil
 }
 
-// getAllMessageQueueTriggers get lists of  MessageQueue Triggers in all namespaces
+// getAllMessageQueueTriggers get lists of MessageQueue Triggers in all namespaces
 func getAllMessageQueueTriggers(client client.Interface, mqttype string) ([]fv1.MessageQueueTrigger, error) {
 	mqts, err := client.V1().MessageQueueTrigger().List(mqttype, "")
 	if err != nil {
@@ -436,7 +436,7 @@ func getAllMessageQueueTriggers(client client.Interface, mqttype string) ([]fv1.
 	return mqts, nil
 }
 
-// getAllTimeTriggers get lists of  Time Triggers in all namespaces
+// getAllTimeTriggers get lists of Time Triggers in all namespaces
 func getAllTimeTriggers(client client.Interface) ([]fv1.TimeTrigger, error) {
 	tts, err := client.V1().TimeTrigger().List("")
 	if err != nil {
@@ -445,7 +445,7 @@ func getAllTimeTriggers(client client.Interface) ([]fv1.TimeTrigger, error) {
 	return tts, nil
 }
 
-// getAllKubeWatchTriggers get lists of  Kube Watchers in all namespaces
+// getAllKubeWatchTriggers get lists of Kube Watchers in all namespaces
 func getAllKubeWatchTriggers(client client.Interface) ([]fv1.KubernetesWatchTrigger, error) {
 	ws, err := client.V1().KubeWatcher().List("")
 	if err != nil {

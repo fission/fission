@@ -43,7 +43,11 @@ func Warn(msg interface{}) {
 }
 
 func Info(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v\n", trimNewline(msg)))
+	os.Stdout.WriteString(fmt.Sprintf("%v\n", trimNewline(msg)))
+}
+
+func Infof(format string, args ...interface{}) {
+	os.Stdout.WriteString(fmt.Sprintf("%v\n", trimNewline(fmt.Sprintf(format, args...))))
 }
 
 func Verbose(verbosityLevel int, format string, args ...interface{}) {

@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -58,127 +59,141 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error reading specs")
 	}
 
+	console.Infof("DeployUID: %v", fr.DeploymentConfig.UID)
+	console.Infof("Resources:\n * %v Functions\n * %v Environments\n * %v Packages \n * %v Http Triggers \n * %v MessageQueue Triggers\n * %v Time Triggers\n * %v Kube Watchers\n * %v ArchiveUploadSpec\n",
+		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.ArchiveUploadSpecs))
+
 	var warnings []string
 	// this does the rest of the checks, like dangling refs
 	warnings, err = fr.Validate(input)
 	if err != nil {
 		return errors.Wrap(err, "error validating specs")
 	}
-	// check if any of the spec resource is already present in the cluster
-	err = ResourceExists(opts, fr)
+
+	err = resourceConflictCheck(opts.Client(), fr)
 	if err != nil {
-		return errors.Wrap(err, "Spec validation failed")
+		return errors.Wrap(err, "name conflict error")
 	}
-	fmt.Printf("Spec validation successful\nSpec contains\n %v Functions\n %v Environments\n %v Packages \n %v Http Triggers \n %v MessageQueue Triggers\n %v Time Triggers\n %v Kube Watchers\n %v ArchiveUploadSpec\n",
-		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.ArchiveUploadSpecs))
 
 	for _, warning := range warnings {
 		console.Warn(warning)
 	}
+
+	console.Info("Validation Successful")
+
 	return nil
 }
 
-// ResourceExists checks if the spec resources exists in the cluster
-func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
+// resourceConflictCheck checks if any of the spec resources with
+// the same name is already present in the same cluster namespace.
+// If a same name resource exists in the same namespace, a name
+// conflict error will be returned.
+func resourceConflictCheck(c client.Interface, fr *FissionResources) error {
+	deployUID := fr.DeploymentConfig.UID
 	result := utils.MultiErrorWithFormat()
 
-	fnlist, err := getAllFunctions(opts.Client())
+	fnList, err := getAllFunctions(c)
 	if err != nil {
 		return errors.Errorf("Unable to get Functions %v", err.Error())
 	}
-	for _, f := range fnlist {
-		for _, fn := range fr.Functions {
-			// if the function name is same check if they are present in same namespace
-			if f.ObjectMeta.Name == fn.ObjectMeta.Name &&
-				f.ObjectMeta.Namespace == fn.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", fn.Kind, fn.ObjectMeta.Name, fn.ObjectMeta.Namespace))
+	for _, sObj := range fr.Functions {
+		for _, cObj := range fnList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
-	envlist, err := getAllEnvironments(opts.Client())
+
+	envList, err := getAllEnvironments(c)
 	if err != nil {
 		return errors.Errorf("Unable to get Environments %v", err.Error())
 	}
-	for _, e := range envlist {
-		for _, env := range fr.Environments {
-			// if the enviornemt name is same check if they are present in the same namespace
-
-			if e.ObjectMeta.Name == env.ObjectMeta.Name &&
-				e.ObjectMeta.Namespace == env.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", env.Kind, env.ObjectMeta.Name, env.ObjectMeta.Namespace))
-
+	for _, sObj := range fr.Environments {
+		for _, cObj := range envList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
-	pkglist, err := getAllPackages(opts.Client())
+
+	pkgList, err := getAllPackages(c)
 	if err != nil {
 		return errors.Errorf("Unable to get Packages %v", err.Error())
 	}
-	for _, p := range pkglist {
-		for _, pkg := range fr.Packages {
-			// if the package name is same check if they are present in the same namespace
-			if p.ObjectMeta.Name == pkg.ObjectMeta.Name &&
-				p.ObjectMeta.Namespace == pkg.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", p.Kind, p.ObjectMeta.Name, pkg.ObjectMeta.Namespace))
+	for _, sObj := range fr.Packages {
+		for _, cObj := range pkgList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
 
-	httptriggerlist, err := getAllHTTPTriggers(opts.Client())
+	httptriggerList, err := getAllHTTPTriggers(c)
 	if err != nil {
 		return errors.Errorf("Unable to get HTTPTrigger %v", err.Error())
 	}
-	for _, h := range httptriggerlist {
-		for _, htt := range fr.HttpTriggers {
-			// if the HttpTrigger name is same check if they are present in the same namespace
-			if h.ObjectMeta.Name == htt.ObjectMeta.Name &&
-				h.ObjectMeta.Namespace == htt.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", h.Kind, htt.ObjectMeta.Name, htt.ObjectMeta.Namespace))
+	for _, sObj := range fr.HttpTriggers {
+		for _, cObj := range httptriggerList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
-	mqtriggerlist, err := getAllMessageQueueTriggers(opts.Client(), "")
+
+	mqtriggerList, err := getAllMessageQueueTriggers(c, "")
 	if err != nil {
 		return errors.Errorf("Unable to get Message Queue Trigger %v", err.Error())
 	}
-	for _, m := range mqtriggerlist {
-		for _, mqt := range fr.MessageQueueTriggers {
-			// if the messagequeue trigger name is same check if they are present in the same namespace
-			if m.ObjectMeta.Name == mqt.ObjectMeta.Name &&
-				m.ObjectMeta.Namespace == mqt.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", m.Kind, m.ObjectMeta.Name, mqt.ObjectMeta.Namespace))
+	for _, sObj := range fr.MessageQueueTriggers {
+		for _, cObj := range mqtriggerList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
 
-	timetriggerlist, err := getAllTimeTriggers(opts.Client())
+	timetriggerList, err := getAllTimeTriggers(c)
 	if err != nil {
 		return errors.Errorf("Unable to get Time Trigger %v", err.Error())
 	}
-	for _, t := range timetriggerlist {
-		for _, tt := range fr.MessageQueueTriggers {
-			// if the TimeTrigger name is same check if they are present in the same namespace
-			if t.ObjectMeta.Name == tt.ObjectMeta.Name &&
-				t.ObjectMeta.Namespace == tt.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", tt.Kind, tt.ObjectMeta.Name, tt.ObjectMeta.Namespace))
+	for _, sObj := range fr.TimeTriggers {
+		for _, cObj := range timetriggerList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
 
-	kubewatchtriggerlist, err := getAllKubeWatchTriggers(opts.Client())
+	kubewatchtriggerList, err := getAllKubeWatchTriggers(c)
 	if err != nil {
 		return errors.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
 	}
-	for _, k := range kubewatchtriggerlist {
-		for _, kwt := range fr.KubernetesWatchTriggers {
-			// if the kubewatcher name is same check if they are present in the same namespace
-			if k.ObjectMeta.Name == kwt.ObjectMeta.Name &&
-				k.ObjectMeta.Namespace == kwt.ObjectMeta.Namespace {
-				result = multierror.Append(result, fmt.Errorf("%v %v/%v already exists", kwt.Kind, kwt.ObjectMeta.Name, kwt.ObjectMeta.Namespace))
+	for _, sObj := range fr.KubernetesWatchTriggers {
+		for _, cObj := range kubewatchtriggerList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj); err != nil {
+				result = multierror.Append(result, err)
+				break
 			}
 		}
 	}
+
 	return result.ErrorOrNil()
+}
+
+func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, clusterObj fv1.MetadataAccessor) error {
+	if specObj.GetObjectMeta().GetName() == clusterObj.GetObjectMeta().GetName() &&
+		specObj.GetObjectMeta().GetNamespace() == clusterObj.GetObjectMeta().GetNamespace() &&
+		deployUID != clusterObj.GetObjectMeta().GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] {
+		return fmt.Errorf("%v: '%v/%v' with different deploy uid already exists",
+			clusterObj.GetObjectKind().GroupVersionKind().Kind, clusterObj.GetObjectMeta().GetName(), clusterObj.GetObjectMeta().GetNamespace())
+	}
+	return nil
 }
 
 // ReadSpecs reads all specs in the specified directory and returns a parsed set of
