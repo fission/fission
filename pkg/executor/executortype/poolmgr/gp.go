@@ -18,6 +18,7 @@ package poolmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -241,23 +242,38 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
+			podMeta := chosenPod.ObjectMeta
+
 			// Relabel.  If the pod already got picked and
 			// modified, this should fail; in that case just
 			// retry.
-			chosenPod.ObjectMeta.Labels = newLabels
+			for k, v := range newLabels {
+				podMeta.Labels[k] = v
+			}
 
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
 			chosenPod.ObjectMeta.Annotations = gp.getDeployAnnotations()
+			for k, v := range gp.getDeployAnnotations() {
+				podMeta.Annotations[k] = v
+			}
 
-			_, err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Update(chosenPod)
+			metaBytes, err := json.Marshal(podMeta)
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.ObjectMeta.Name))
+				gp.logger.Error("failed to encode object metadata", zap.Error(err), zap.String("pod", chosenPod.Name))
+				continue
+			}
+
+			_, err = gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, metaBytes)
+			if err != nil {
+				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
 				continue
 			}
 		}
+
 		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
-			zap.String("pod", chosenPod.ObjectMeta.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+
 		return chosenPod, nil
 	}
 }
@@ -269,7 +285,6 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 	label[fv1.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
 	label["managed"] = "false"                         // this allows us to easily find pods not managed by the deployment
 	return label
-
 }
 
 func (gp *GenericPool) scheduleDeletePod(name string) {
