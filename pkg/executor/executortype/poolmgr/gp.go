@@ -242,32 +242,38 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
-			podMeta := chosenPod.ObjectMeta
-
 			// Relabel.  If the pod already got picked and
 			// modified, this should fail; in that case just
 			// retry.
-			for k, v := range newLabels {
-				podMeta.Labels[k] = v
-			}
+			labelPatch, _ := json.Marshal(newLabels)
 
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
-			chosenPod.ObjectMeta.Annotations = gp.getDeployAnnotations()
-			for k, v := range gp.getDeployAnnotations() {
-				podMeta.Annotations[k] = v
-			}
+			annotations := gp.getDeployAnnotations()
+			annotationPatch, _ := json.Marshal(annotations)
 
-			metaBytes, err := json.Marshal(podMeta)
-			if err != nil {
-				gp.logger.Error("failed to encode object metadata", zap.Error(err), zap.String("pod", chosenPod.Name))
-				continue
-			}
-
-			_, err = gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, metaBytes)
+			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
+			gp.logger.Info("relabel pod", zap.String("pod", patch))
+			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
 				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
 				continue
+			}
+
+			// With StrategicMergePatchType, the client-go sometimes return
+			// nil error and the labels & annotations remain the same.
+			// So we have to check both of them to ensure the patch success.
+			for k, v := range newLabels {
+				if newPod.Labels[k] != v {
+					return nil, errors.Errorf("value of necessary labels '%v' mismatch: want '%v', get '%v'",
+						k, v, newPod.Labels[k])
+				}
+			}
+			for k, v := range annotations {
+				if newPod.Annotations[k] != v {
+					return nil, errors.Errorf("value of necessary annotations '%v' mismatch: want '%v', get '%v'",
+						k, v, newPod.Annotations[k])
+				}
 			}
 		}
 
