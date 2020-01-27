@@ -65,9 +65,9 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error validating specs")
 	}
 	// check if any of the spec resource is already present in the cluster
-	error := ResourceExists(opts, fr)
-	if error != nil {
-		return errors.Wrap(error, "Spec validation failed")
+	err = ResourceExists(opts, fr)
+	if err != nil {
+		return errors.Wrap(err, "Spec validation failed")
 	}
 	fmt.Printf("Spec validation successful\nSpec contains\n %v Functions\n %v Environments\n %v Packages \n %v Http Triggers \n %v MessageQueue Triggers\n %v Time Triggers\n %v Kube Watchers\n %v ArchiveUploadSpec\n",
 		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.ArchiveUploadSpecs))
@@ -89,8 +89,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, f := range fnlist {
 		for _, fn := range fr.Functions {
 			// if the function name is same check if they are present in same namespace
-			if f.Metadata.Name == fn.Metadata.Name && f.Metadata.Namespace == fn.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("Function %v/%v already exists", fn.Metadata.Name, fn.Metadata.Namespace))
+			if f.ObjectMeta.Name == fn.ObjectMeta.Name &&
+				f.ObjectMeta.Namespace == fn.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("Function %v/%v already exists", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace))
 			}
 		}
 	}
@@ -102,8 +103,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 		for _, env := range fr.Environments {
 			// if the enviornemt name is same check if they are present in the same namespace
 
-			if e.Metadata.Name == env.Metadata.Name && e.Metadata.Namespace == env.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("Environment %v/%v already exists", env.Metadata.Name, env.Metadata.Namespace))
+			if e.ObjectMeta.Name == env.ObjectMeta.Name &&
+				e.ObjectMeta.Namespace == env.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("Environment %v/%v already exists", env.ObjectMeta.Name, env.ObjectMeta.Namespace))
 
 			}
 		}
@@ -115,8 +117,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, p := range pkglist {
 		for _, pkg := range fr.Packages {
 			// if the package name is same check if they are present in the same namespace
-			if p.Metadata.Name == pkg.Metadata.Name && p.Metadata.Namespace == pkg.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("Package %v/%v already exists", p.Metadata.Name, pkg.Metadata.Namespace))
+			if p.ObjectMeta.Name == pkg.ObjectMeta.Name &&
+				p.ObjectMeta.Namespace == pkg.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("Package %v/%v already exists", p.ObjectMeta.Name, pkg.ObjectMeta.Namespace))
 			}
 		}
 	}
@@ -128,8 +131,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, h := range httptriggerlist {
 		for _, htt := range fr.HttpTriggers {
 			// if the HttpTrigger name is same check if they are present in the same namespace
-			if h.Metadata.Name == htt.Metadata.Name && h.Metadata.Namespace == htt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("HttpTrigger %v/%v already exists", htt.Metadata.Name, htt.Metadata.Namespace))
+			if h.ObjectMeta.Name == htt.ObjectMeta.Name &&
+				h.ObjectMeta.Namespace == htt.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("HttpTrigger %v/%v already exists", htt.ObjectMeta.Name, htt.ObjectMeta.Namespace))
 			}
 		}
 	}
@@ -140,8 +144,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, m := range mqtriggerlist {
 		for _, mqt := range fr.MessageQueueTriggers {
 			// if the messagequeue trigger name is same check if they are present in the same namespace
-			if m.Metadata.Name == mqt.Metadata.Name && m.Metadata.Namespace == mqt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("MessageQueueTriggers %v/%v already exists", m.Metadata.Name, mqt.Metadata.Namespace))
+			if m.ObjectMeta.Name == mqt.ObjectMeta.Name &&
+				m.ObjectMeta.Namespace == mqt.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("MessageQueueTriggers %v/%v already exists", m.ObjectMeta.Name, mqt.ObjectMeta.Namespace))
 			}
 		}
 	}
@@ -153,8 +158,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, t := range timetriggerlist {
 		for _, tt := range fr.MessageQueueTriggers {
 			// if the TimeTrigger name is same check if they are present in the same namespace
-			if t.Metadata.Name == tt.Metadata.Name && t.Metadata.Namespace == tt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("TimeTrigger %v/%v already exists", tt.Metadata.Name, tt.Metadata.Namespace))
+			if t.ObjectMeta.Name == tt.ObjectMeta.Name &&
+				t.ObjectMeta.Namespace == tt.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("TimeTrigger %v/%v already exists", tt.ObjectMeta.Name, tt.ObjectMeta.Namespace))
 			}
 		}
 	}
@@ -166,8 +172,9 @@ func ResourceExists(opts *ValidateSubCommand, fr *FissionResources) error {
 	for _, k := range kubewatchtriggerlist {
 		for _, kwt := range fr.KubernetesWatchTriggers {
 			// if the kubewatcher name is same check if they are present in the same namespace
-			if k.Metadata.Name == kwt.Metadata.Name && k.Metadata.Namespace == kwt.Metadata.Namespace {
-				result = multierror.Append(result, fmt.Errorf("Kubernetes Watch Trigger %v/%v already exists", kwt.Metadata.Name, kwt.Metadata.Namespace))
+			if k.ObjectMeta.Name == kwt.ObjectMeta.Name &&
+				k.ObjectMeta.Namespace == kwt.ObjectMeta.Namespace {
+				result = multierror.Append(result, fmt.Errorf("Kubernetes Watch Trigger %v/%v already exists", kwt.ObjectMeta.Name, kwt.ObjectMeta.Namespace))
 			}
 		}
 	}
