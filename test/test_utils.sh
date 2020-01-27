@@ -595,6 +595,9 @@ install_and_test() {
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
+
+    setupIngressController
+
     helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
@@ -603,8 +606,6 @@ install_and_test() {
         dump_tiller_logs
 	    exit 1
     fi
-
-    setupIngressController
 
     timeout 150 bash -c "wait_for_services $id"
     timeout 120 bash -c "check_gitcommit_version"
