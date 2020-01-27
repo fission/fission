@@ -70,6 +70,9 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
 			existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
 			existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
+
+			// Update with the latest deployment spec. Kubernetes will trigger
+			// rolling update if spec is different from the one in the cluster.
 			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(existingDepl)
 			if err != nil {
 				deploy.logger.Warn("error adopting deploy", zap.Error(err),

@@ -116,7 +116,6 @@ func MakeGenericPoolManager(
 	}
 
 	go gpm.service()
-	go gpm.eagerPoolCreator()
 
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -135,6 +134,9 @@ func MakeGenericPoolManager(
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
+	// eagerPoolCreator must run after CleanupOldExecutorObjects.
+	// Otherwise, the poolmanager may wrongly delete the deployment.
+	go gpm.eagerPoolCreator()
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
 	go gpm.idleObjectReaper()
