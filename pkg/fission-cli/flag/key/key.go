@@ -19,6 +19,7 @@ package flagkey
 const (
 	Verbosity = "verbosity"
 	Server    = "server"
+	ClientOnly    = "client-only"
 
 	resourceName = "name"
 	force        = "force"
