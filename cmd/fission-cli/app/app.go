@@ -44,13 +44,19 @@ func App() *cobra.Command {
 		PersistentPreRunE: wrapper.Wrapper(
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
-				serverUrl, err := util.GetServerURL(input)
-				if err != nil {
-					return err
+
+				if input.IsSet(flagkey.ClientOnly) {
+					// TODO: use fake rest client for offline spec generation
+					cmd.SetClientset(client.MakeFakeClientset(nil))
+				} else {
+					serverUrl, err := util.GetServerURL(input)
+					if err != nil {
+						return err
+					}
+					restClient := rest.NewRESTClient(serverUrl)
+					cmd.SetClientset(client.MakeClientset(restClient))
 				}
-				restClient := rest.NewRESTClient(serverUrl)
-				// TODO: use fake rest client for offline spec generation
-				cmd.SetClientset(client.MakeClientset(restClient))
+
 				return nil
 			},
 		),

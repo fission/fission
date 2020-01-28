@@ -53,15 +53,6 @@ func ActsAsRootCommand(cmd *cobra.Command, filters []string, groups ...CommandGr
 	return templater
 }
 
-func UseOptionsTemplates(cmd *cobra.Command) {
-	templater := &templater{
-		UsageTemplate: OptionsUsageTemplate(),
-		HelpTemplate:  OptionsHelpTemplate(),
-	}
-	cmd.SetUsageFunc(templater.UsageFunc())
-	cmd.SetHelpFunc(templater.HelpFunc())
-}
-
 type templater struct {
 	UsageTemplate string
 	HelpTemplate  string
@@ -73,12 +64,7 @@ type templater struct {
 func (templater *templater) FlagErrorFunc(exposedFlags ...string) func(*cobra.Command, error) error {
 	return func(c *cobra.Command, err error) error {
 		c.SilenceUsage = true
-		switch c.CalledAs() {
-		case "options":
-			return fmt.Errorf("%s\nRun '%s' without flags", err, c.CommandPath())
-		default:
-			return fmt.Errorf("%s\nSee '%s --help' for usage", err, c.CommandPath())
-		}
+		return fmt.Errorf("%s\nSee '%s --help' for usage", err, c.CommandPath())
 	}
 }
 
@@ -211,12 +197,19 @@ func (t *templater) optionsCmdFor(c *cobra.Command) string {
 }
 
 func (t *templater) usageLine(c *cobra.Command) string {
-	usage := c.UseLine()
-	suffix := "[options]"
-	if c.HasFlags() && !strings.Contains(usage, suffix) {
-		usage += " " + suffix
+	var useline string
+	if c.HasParent() {
+		useline = c.Parent().CommandPath() + " " + c.Use
+	} else {
+		useline = c.Use
 	}
-	return usage
+	if c.DisableFlagsInUseLine {
+		return useline
+	}
+	if c.HasAvailableFlags() && !strings.Contains(useline, "[options]") {
+		useline += " [options]"
+	}
+	return useline
 }
 
 func flagsUsages(f *flag.FlagSet) string {

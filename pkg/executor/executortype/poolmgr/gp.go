@@ -18,6 +18,7 @@ package poolmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -244,20 +245,41 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 			// Relabel.  If the pod already got picked and
 			// modified, this should fail; in that case just
 			// retry.
-			chosenPod.ObjectMeta.Labels = newLabels
+			labelPatch, _ := json.Marshal(newLabels)
 
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
-			chosenPod.ObjectMeta.Annotations = gp.getDeployAnnotations()
+			annotations := gp.getDeployAnnotations()
+			annotationPatch, _ := json.Marshal(annotations)
 
-			_, err = gp.kubernetesClient.CoreV1().Pods(gp.namespace).Update(chosenPod)
+			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
+			gp.logger.Info("relabel pod", zap.String("pod", patch))
+			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.ObjectMeta.Name))
+				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
 				continue
 			}
+
+			// With StrategicMergePatchType, the client-go sometimes return
+			// nil error and the labels & annotations remain the same.
+			// So we have to check both of them to ensure the patch success.
+			for k, v := range newLabels {
+				if newPod.Labels[k] != v {
+					return nil, errors.Errorf("value of necessary labels '%v' mismatch: want '%v', get '%v'",
+						k, v, newPod.Labels[k])
+				}
+			}
+			for k, v := range annotations {
+				if newPod.Annotations[k] != v {
+					return nil, errors.Errorf("value of necessary annotations '%v' mismatch: want '%v', get '%v'",
+						k, v, newPod.Annotations[k])
+				}
+			}
 		}
+
 		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
-			zap.String("pod", chosenPod.ObjectMeta.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+
 		return chosenPod, nil
 	}
 }
@@ -269,7 +291,6 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 	label[fv1.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
 	label["managed"] = "false"                         // this allows us to easily find pods not managed by the deployment
 	return label
-
 }
 
 func (gp *GenericPool) scheduleDeletePod(name string) {
@@ -462,6 +483,8 @@ func (gp *GenericPool) createPool() error {
 	if err == nil {
 		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceId {
 			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceId
+			// Update with the latest deployment spec. Kubernetes will trigger
+			// rolling update if spec is different from the one in the cluster.
 			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(deployment)
 		}
 		gp.deployment = depl
