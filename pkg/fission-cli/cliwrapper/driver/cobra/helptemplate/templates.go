@@ -29,7 +29,6 @@ const (
 		`{{$rootCmd := rootCmd .}}` +
 		`{{$visibleFlags := visibleFlags (flagsNotIntersected .LocalFlags .PersistentFlags)}}` +
 		`{{$explicitlyExposedFlags := exposed .}}` +
-		`{{$optionsCmdFor := optionsCmdFor .}}` +
 		`{{$usageLine := usageLine .}}`
 
 	// SectionAliases is the help template section that displays command aliases.
@@ -50,24 +49,24 @@ const (
 {{end}}`
 
 	// SectionFlags is the help template section that displays the command's flags.
-	SectionFlags = `{{ if or $visibleFlags.HasFlags $explicitlyExposedFlags.HasFlags}}Options
-{{ if $visibleFlags.HasFlags}}{{trimRight (flagsUsages $visibleFlags)}}{{end}}{{ if $explicitlyExposedFlags.HasFlags}}{{ if $visibleFlags.HasFlags}}
-{{end}}{{trimRight (flagsUsages $explicitlyExposedFlags)}}{{end}}
+	SectionFlags = `{{ if $visibleFlags.HasFlags}}Options:
+{{trimRight (flagsUsages $visibleFlags)}}
+
+{{end}}`
+
+	// SectionGlobalFlags is the help template section that displays the command's global flags.
+	SectionGlobalFlags = `{{ if and (not $isRootCmd) (not .HasSubCommands) }}{{ if $explicitlyExposedFlags.HasFlags}}Global Options:
+{{trimRight (flagsUsages $explicitlyExposedFlags)}}{{end}}
 
 {{end}}`
 
 	// SectionUsage is the help template section that displays the command's usage.
 	SectionUsage = `{{if and .Runnable (ne .UseLine "") (ne .UseLine $rootCmd)}}Usage:
   {{$usageLine}}
-
 {{end}}`
 
 	// SectionTipsHelp is the help template section that displays the '--help' hint.
 	SectionTipsHelp = `{{if .HasSubCommands}}Use "{{$rootCmd}} <command> --help" for more information about a given command.
-{{end}}`
-
-	// SectionTipsGlobalOptions is the help template section that displays the 'options' hint for displaying global flags.
-	SectionTipsGlobalOptions = `{{if $optionsCmdFor}}Use "{{$optionsCmdFor}}" for a list of global command-line options (applies to all commands).
 {{end}}`
 )
 
@@ -86,21 +85,9 @@ func MainUsageTemplate() string {
 		SectionExamples,
 		SectionSubcommands,
 		SectionFlags,
+		SectionGlobalFlags,
 		SectionUsage,
 		SectionTipsHelp,
-		SectionTipsGlobalOptions,
 	}
 	return strings.TrimRightFunc(strings.Join(sections, ""), unicode.IsSpace)
-}
-
-// OptionsHelpTemplate if the template for 'help' used by the 'options' command.
-func OptionsHelpTemplate() string {
-	return ""
-}
-
-// OptionsUsageTemplate if the template for 'usage' used by the 'options' command.
-func OptionsUsageTemplate() string {
-	return `{{ if .HasInheritedFlags}}The following options can be passed to any command:
-
-{{flagsUsages .InheritedFlags}}{{end}}`
 }
