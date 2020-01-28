@@ -228,15 +228,19 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 				// the SA namespace will have the value of "fission-function"/"fission-builder" depending on the SA.
 				// so now we need to look for the objects in default namespace.
 				saNs := subj.Namespace
+				isInReservedNS := false
 				if subj.Namespace == functionNs ||
 					subj.Namespace == envBuilderNs {
 					saNs = meta_v1.NamespaceDefault
+					isInReservedNS = true
 				}
 
 				// go through each function and find out if there's either at least one function with env reference in the same namespace as the Service Account in this iteration
 				// or at least one function using ndm executor in the role-binding namespace and set the corresponding flags
 				for _, fn := range funcList.Items {
-					if fn.Spec.Environment.Namespace == saNs {
+					if fn.Spec.Environment.Namespace == saNs ||
+						//  For the case that the environment is created in the reserved namespace.
+						(isInReservedNS && (fn.Spec.Environment.Namespace == functionNs || fn.Spec.Environment.Namespace == envBuilderNs)) {
 						funcEnvReference = true
 						break
 					}
