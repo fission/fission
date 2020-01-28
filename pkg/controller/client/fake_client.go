@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Fission Authors.
+Copyright 2016 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,24 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package client
 
 import (
-	"github.com/spf13/cobra"
-
-	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
-	"github.com/fission/fission/pkg/fission-cli/flag"
+	"github.com/fission/fission/pkg/controller/client/rest"
+	v1 "github.com/fission/fission/pkg/controller/client/v1"
+	"github.com/fission/fission/pkg/controller/client/v1/fake"
 )
 
-func Commands() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "version",
-		Short: "Show client/server version information",
-		RunE:  wrapper.Wrapper(Version),
+type (
+	FakeClientset struct {
+		v1 v1.V1Interface
 	}
-	wrapper.SetFlags(command, flag.FlagSet{
-		Optional: []flag.Flag{flag.ClientOnly},
-	})
+)
 
-	return command
+func MakeFakeClientset(restClient rest.Interface) Interface {
+	return &FakeClientset{
+		v1: fake.MakeV1Client(nil),
+	}
+}
+
+func (c *FakeClientset) V1() v1.V1Interface {
+	return c.v1
+}
+
+func (c *FakeClientset) ServerURL() string {
+	return ""
 }
