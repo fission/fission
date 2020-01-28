@@ -19,8 +19,8 @@ package version
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/fission/fission/pkg/fission-cli/flag"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
+	"github.com/fission/fission/pkg/fission-cli/flag"
 )
 
 func Commands() *cobra.Command {

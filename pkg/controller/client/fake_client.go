@@ -24,7 +24,7 @@ import (
 
 type (
 	FakeClientset struct {
-		v1         v1.V1Interface
+		v1 v1.V1Interface
 	}
 )
 

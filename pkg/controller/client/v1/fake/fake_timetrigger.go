@@ -25,7 +25,7 @@ import (
 )
 
 type (
-	FakeTimeTrigger struct {}
+	FakeTimeTrigger struct{}
 )
 
 func newTimeTriggerClient(c *v1.V1) v1.TimeTriggerInterface {

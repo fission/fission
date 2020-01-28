@@ -70,7 +70,7 @@ var (
 	GlobalVerbosity = Flag{Type: Int, Name: flagkey.Verbosity, Short: "v", Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose)", DefaultValue: 1}
 	GlobalServer    = Flag{Type: String, Name: flagkey.Server, Usage: "Server URL"}
 
-	ClientOnly      = Flag{Type: Bool, Name: flagkey.ClientOnly, Usage: "If set, the CLI won't connect to remote server"}
+	ClientOnly = Flag{Type: Bool, Name: flagkey.ClientOnly, Usage: "If set, the CLI won't connect to remote server"}
 
 	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", DefaultValue: metav1.NamespaceDefault}
 	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", DefaultValue: metav1.NamespaceDefault}

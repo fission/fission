@@ -19,12 +19,12 @@ package fake
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/controller/client/v1"
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	v1 "github.com/fission/fission/pkg/controller/client/v1"
 )
 
 type (
-	FakeMessageQueueTrigger struct {}
+	FakeMessageQueueTrigger struct{}
 )
 
 func newMessageQueueTrigger(c *v1.V1) v1.MessageQueueTriggerInterface {

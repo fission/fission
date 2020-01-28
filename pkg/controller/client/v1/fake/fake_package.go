@@ -25,7 +25,7 @@ import (
 )
 
 type (
-	FakePackage struct {}
+	FakePackage struct{}
 )
 
 func newPackageClient(c *v1.V1) v1.PackageInterface {

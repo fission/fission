@@ -27,7 +27,7 @@ import (
 
 // TODO: we should remove this interface, having this for now is for backward compatibility.
 type (
-	FakeMisc struct {}
+	FakeMisc struct{}
 )
 
 func newMiscClient(c *v1.V1) v1.MiscInterface {
