@@ -1,6 +1,6 @@
 # Hello World in JVM/Java on Fission
 
-The `io.fission.HelloWorld.java` class is a a very simple fission function that implements `io.fission.Function` and says "Hello, World!" .
+The `io.fission.HelloWorld.java` class is a very simple fission function that implements `io.fission.Function` and says "Hello, World!" .
 
 ## Building and deploying using Fission
 
@@ -57,5 +57,4 @@ $ fission fn create --name hello --deploy target/hello-world-1.0-SNAPSHOT-jar-wi
 $ fission route create --function hello --url /hellop --method GET
 $ fission fn test --name hello
 Hello World!
-
 ```
