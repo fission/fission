@@ -75,6 +75,10 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "functions",
 					Singular: "function",
 				},
+				// for CRD UpdateStatus() to work
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
+				},
 			},
 		},
 		// Environments (function containers)
@@ -90,6 +94,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Kind:     "Environment",
 					Plural:   "environments",
 					Singular: "environment",
+				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 				},
 			},
 		},
@@ -107,6 +114,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "httptriggers",
 					Singular: "httptrigger",
 				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
+				},
 			},
 		},
 		// Kubernetes watch triggers for functions
@@ -122,6 +132,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Kind:     "KubernetesWatchTrigger",
 					Plural:   "kuberneteswatchtriggers",
 					Singular: "kuberneteswatchtrigger",
+				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 				},
 			},
 		},
@@ -139,6 +152,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "timetriggers",
 					Singular: "timetrigger",
 				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
+				},
 			},
 		},
 		// Message queue triggers for functions
@@ -154,6 +170,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Kind:     "MessageQueueTrigger",
 					Plural:   "messagequeuetriggers",
 					Singular: "messagequeuetrigger",
+				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 				},
 			},
 		},
@@ -171,6 +190,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "packages",
 					Singular: "package",
 				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
+				},
 			},
 		},
 		// CanaryConfig: configuration for canary deployment of functions
@@ -186,6 +208,9 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Kind:     "CanaryConfig",
 					Plural:   "canaryconfigs",
 					Singular: "canaryconfig",
+				},
+				Subresources: &apiextensionsv1beta1.CustomResourceSubresources{
+					Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 				},
 			},
 		},
