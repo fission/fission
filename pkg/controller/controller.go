@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
