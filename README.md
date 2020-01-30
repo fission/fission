@@ -2,9 +2,8 @@
 
 [![Build Status](https://travis-ci.org/fission/fission.svg?branch=master)](https://travis-ci.org/fission/fission)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
-[![Fission Slack](http://slack.fission.io/badge.svg)](http://slack.fission.io)
 
-[fission.io](http://fission.io) [@fissionio](http://twitter.com/fissionio)
+[fission.io](http://fission.io) | [@fissionio](http://twitter.com/fissionio) | [Slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE)
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
@@ -75,8 +74,8 @@ You can learn more about Fission and get started from [Fission Docs](https://doc
 See the [compilation guide](https://docs.fission.io/docs/contributing/).
 
 ## Contact
-Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors). 
-Reach us on [slack](http://slack.fission.io) or [twitter](https://twitter.com/fissionio).
+Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
+Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
 
 ## Community meeting 
 
