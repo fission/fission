@@ -541,7 +541,8 @@ run_all_tests() {
         $ROOT/test/tests/test_environments/test_go_env.sh \
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
-        $ROOT/test/tests/test_huge_response/test_huge_response.sh
+        $ROOT/test/tests/test_huge_response/test_huge_response.sh \
+        $ROOT/test/tests/test_kubectl/test_kubectl.sh
     FAILURES=$?
 
     export JOBS=3

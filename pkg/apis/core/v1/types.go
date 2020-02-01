@@ -268,6 +268,9 @@ type (
 
 	// PackageStatus contains the build status of a package also the build log for examination.
 	PackageStatus struct {
+		// TODO: Add another status field to indicate whether a package
+		//   is ready for deploy instead of setting "none" in build status.
+
 		// BuildStatus is the package build status.
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
@@ -684,3 +687,7 @@ type (
 		GetObjectMeta() metav1.Object
 	}
 )
+
+func (a Archive) IsEmpty() bool {
+	return len(a.Literal) == 0 && len(a.URL) == 0
+}
