@@ -11,6 +11,8 @@ mkdir -p $tmp_dir
 
 ROOT=$(dirname $0)/../../..
 
+cd $ROOT/test/tests/test_kubectl
+
 cleanup() {
     kubectl delete -f spec-yaml -R || true
 }
@@ -21,7 +23,6 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-fn_poolmgr=hello-go-poolmgr-$TEST_ID
 name="go-spec-kubectl"
 pkgName="go-b4bbb0e0-2d93-47f0-8c4e-eea644eec2a9"
 
