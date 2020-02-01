@@ -230,7 +230,7 @@ func (pkgw *packageWatcher) watchPackages() {
 		var err error
 
 		if len(pkg.Status.BuildStatus) == 0 {
-			pkg, err = setInitialBuildStatus(pkgw.fissionClient, pkg)
+			_, err = setInitialBuildStatus(pkgw.fissionClient, pkg)
 			if err != nil {
 				pkgw.logger.Error("error filling package status", zap.Error(err))
 			}
