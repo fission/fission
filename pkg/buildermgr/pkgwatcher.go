@@ -227,8 +227,10 @@ func (pkgw *packageWatcher) watchPackages() {
 	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.CoreV1().RESTClient(), "packages", apiv1.NamespaceAll, fields.Everything())
 
 	processPkg := func(pkg *fv1.Package) {
+		var err error
+
 		if len(pkg.Status.BuildStatus) == 0 {
-			err := setInitialBuildStatus(pkgw.fissionClient, pkg)
+			pkg, err = setInitialBuildStatus(pkgw.fissionClient, pkg)
 			if err != nil {
 				pkgw.logger.Error("error filling package status", zap.Error(err))
 			}
@@ -247,20 +249,21 @@ func (pkgw *packageWatcher) watchPackages() {
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, 60*time.Minute, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)
-			err := setInitialBuildStatus(pkgw.fissionClient, pkg)
-			if err != nil {
-				pkgw.logger.Error("error filling package status", zap.Error(err))
-			}
+			processPkg(pkg)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldPkg := oldObj.(*fv1.Package)
 			pkg := newObj.(*fv1.Package)
 
+			// TODO: Once enable "/status", check generation for spec changed instead.
+			//   Before "/status" is enabled, the generation and resource version will be changed
+			//   if we update the status of a package, hence we are not able to differentiate
+			//   the spec change or status change. So we only build package which's status
+			//   us "pending" and user have to use "kubectl replace" to update a package.
 			if oldPkg.ResourceVersion == pkg.ResourceVersion &&
 				pkg.Status.BuildStatus != fv1.BuildStatusPending {
 				return
 			}
-
 			processPkg(pkg)
 		},
 	})
@@ -272,7 +275,7 @@ func (pkgw *packageWatcher) watchPackages() {
 // setInitialBuildStatus sets initial build status to a package if it is empty.
 // This normally occurs when the user applies package YAML files that have no status field
 // through kubectl.
-func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) error {
+func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (*fv1.Package, error) {
 	pkg.Status = fv1.PackageStatus{
 		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 	}
@@ -290,7 +293,5 @@ func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) e
 	}
 
 	// TODO: use UpdateStatus to update status
-	_, err := fissionClient.CoreV1().Packages(pkg.Namespace).Update(pkg)
-
-	return err
+	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(pkg)
 }

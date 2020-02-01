@@ -152,6 +152,24 @@ waitBuild() {
 }
 export -f waitBuild
 
+waitBuildExpectedStatus() {
+    pkg=$1
+    status=$2
+
+    log "Waiting for builder manager to finish the build with status $status"
+
+    set +e
+    while true; do
+      kubectl --namespace default get packages $pkg -o jsonpath='{.status.buildstatus}'|grep $status
+      if [[ $? -eq 0 ]]; then
+          break
+      fi
+      sleep 1
+    done
+    set -e
+}
+export -f waitBuildExpectedStatus
+
 
 ## Common env parameters
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
