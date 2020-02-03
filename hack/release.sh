@@ -290,7 +290,7 @@ generate_changelog() {
     create_downloads_table ${version} >> new_CHANGELOG.md
 
     # generate changelog from github
-    github_changelog_generator fission/fission -t ${GITHUB_TOKEN} --future-release ${version} --no-issues -o tmp_CHANGELOG.md
+    github_changelog_generator -u fission -p fission -t ${GITHUB_TOKEN} --future-release ${version} --no-issues -o tmp_CHANGELOG.md
     sed -i '$ d' tmp_CHANGELOG.md
 
     # concatenate two files
