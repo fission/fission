@@ -284,13 +284,13 @@ build_all() {
 }
 
 generate_swagger_doc() {
-  pushd $DIR/pkg/apis/fission.io/v1/tool
+  pushd $DIR/pkg/apis/core/v1/tool
   ./update-generated-swagger-docs.sh
   popd
 }
 
 remove_generated_swagger_doc() {
-  rm $DIR/pkg/apis/fission.io/v1/types_swagger_doc_generated.go
+  rm $DIR/pkg/apis/core/v1/types_swagger_doc_generated.go
 }
 
 version=${VERSION}
