@@ -107,12 +107,18 @@ func (cfg *Config) SharedMountPath() string {
 }
 
 func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
-	// for backward compatibility, since most v1 env
-	// still try to load user function from hard coded
-	// path /userfunc/user
 	targetFilename := "user"
 	if env.Spec.Version >= 2 {
-		targetFilename = string(fn.ObjectMeta.UID)
+		if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
+			// workflow loads multiple functions into one function pod,
+			// we have to use a Function UID to separate the function code
+			// to avoid overwritting.
+			targetFilename = string(fn.ObjectMeta.UID)
+		} else {
+			// set target file name to fix pattern for
+			// easy accessing.
+			targetFilename = "deployarchive"
+		}
 	}
 
 	return fetcher.FunctionSpecializeRequest{
