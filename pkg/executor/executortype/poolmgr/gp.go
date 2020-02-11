@@ -395,6 +395,15 @@ func (gp *GenericPool) createPool() error {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
+	podLabels := gp.env.ObjectMeta.Labels
+	if podLabels == nil {
+		podLabels = make(map[string]string)
+	}
+
+	for k, v := range deployLabels {
+		podLabels[k] = v
+	}
+
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   gp.env.ObjectMeta.Name,
 		Image:                  gp.env.Spec.Runtime.Image,
@@ -435,7 +444,7 @@ func (gp *GenericPool) createPool() error {
 
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      deployLabels,
+			Labels:      podLabels,
 			Annotations: podAnnotations,
 		},
 		Spec: apiv1.PodSpec{
