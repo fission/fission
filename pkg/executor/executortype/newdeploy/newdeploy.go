@@ -202,6 +202,16 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	if deploy.useIstio && env.Spec.AllowAccessToExternalNetwork {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
+
+	podLabels := env.ObjectMeta.Labels
+	if podLabels == nil {
+		podLabels = make(map[string]string)
+	}
+
+	for k, v := range deployLabels {
+		podLabels[k] = v
+	}
+
 	resources := deploy.getResources(env, fn)
 
 	// Set maxUnavailable and maxSurge to 20% is because we want
@@ -262,7 +272,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      deployLabels,
+			Labels:      podLabels,
 			Annotations: podAnnotations,
 		},
 		Spec: apiv1.PodSpec{
