@@ -95,10 +95,6 @@ func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messa
 	return kafka, nil
 }
 
-func isTopicValidForKafka(topic string) bool {
-	return true
-}
-
 func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
 	kafka.logger.Info("inside kakfa subscribe", zap.Any("trigger", trigger))
 	kafka.logger.Info("brokers set", zap.Strings("brokers", kafka.brokers))
