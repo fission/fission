@@ -26,8 +26,13 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
@@ -57,17 +62,39 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		}
 	}
 
-	mqCfg := messageQueue.MessageQueueConfig{
-		MQType:  mqType,
-		Url:     mqUrl,
-		Secrets: secrets,
+	mq, err := newMessageQueue(
+		logger,
+		routerUrl,
+		messageQueue.Config{
+			MQType:  mqType,
+			Url:     mqUrl,
+			Secrets: secrets,
+		},
+	)
+	if err != nil {
+		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
-	messageQueue.MakeMessageQueueTriggerManager(logger, fissionClient, routerUrl, mqCfg)
+
+	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mq).Run()
+
 	return nil
 }
 
-func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {
+func newMessageQueue(logger *zap.Logger, routerURL string, mqCfg messageQueue.Config) (messageQueue messageQueue.MessageQueue, err error) {
+	switch mqCfg.MQType {
+	case fv1.MessageQueueTypeNats:
+		messageQueue, err = nats.New(logger, routerURL, mqCfg)
+	case fv1.MessageQueueTypeASQ:
+		messageQueue, err = azurequeuestorage.New(logger, routerURL, mqCfg)
+	case fv1.MessageQueueTypeKafka:
+		messageQueue, err = kafka.New(logger, routerURL, mqCfg)
+	default:
+		err = errors.Errorf("no supported message queue type found for %q", mqCfg.MQType)
+	}
+	return messageQueue, err
+}
 
+func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {
 	// return if no secrets exist
 	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
 		return nil, err

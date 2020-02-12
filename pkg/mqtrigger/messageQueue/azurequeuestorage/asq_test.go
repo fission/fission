@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package messageQueue
+package azurequeuestorage
 
 import (
 	"fmt"
@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 )
 
 const (
@@ -112,7 +113,7 @@ func TestNewStorageConnectionMissingAccountName(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
 
-	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
+	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
 		MQType: fv1.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -125,7 +126,7 @@ func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
 	panicIf(err)
 
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
-	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
+	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
 		MQType: fv1.MessageQueueTypeASQ,
 		Url:    "",
 	})
@@ -140,7 +141,7 @@ func TestNewStorageConnection(t *testing.T) {
 
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_KEY", "bm90IGEga2V5")
-	connection, err := newAzureStorageConnection(logger, DummyRouterURL, MessageQueueConfig{
+	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
 		MQType: "azure-storage-queue",
 		Url:    "",
 	})
@@ -301,7 +302,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 		service:    service,
 		httpClient: httpClient,
 	}
-	subscription, err := connection.subscribe(&fv1.MessageQueueTrigger{
+	subscription, err := connection.Subscribe(&fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TriggerName,
 			Namespace: metav1.NamespaceDefault,
@@ -319,7 +320,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, subscription)
 
-	connection.unsubscribe(subscription)
+	connection.Unsubscribe(subscription)
 
 	mock.AssertExpectationsForObjects(t, httpClient, message, poisonMessage, queue, poisonQueue, service)
 }
@@ -449,7 +450,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 		service:    service,
 		httpClient: httpClient,
 	}
-	subscription, err := connection.subscribe(&fv1.MessageQueueTrigger{
+	subscription, err := connection.Subscribe(&fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TriggerName,
 			Namespace: metav1.NamespaceDefault,
@@ -468,7 +469,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 	require.NoError(t, err)
 	require.NotNil(t, subscription)
 
-	connection.unsubscribe(subscription)
+	connection.Unsubscribe(subscription)
 
 	mock.AssertExpectationsForObjects(t, httpClient, message, outputMessage, queue, outputQueue, service)
 }
