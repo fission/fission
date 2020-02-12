@@ -21,8 +21,8 @@ topic="foo.bar$TEST_ID"
 resptopic="foo.foo$TEST_ID"
 errortopic="foo.error$TEST_ID"
 maxretries=1
-# FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
-expectedRespOutput="[foo.error$TEST_ID]: 'Hello, World!'"
+#FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
+expectedRespOutput="subject:\"$errortopic\" data:\"Hello, World!\""
 
 env=nodejs-$TEST_ID
 fn=hello-$TEST_ID
@@ -57,22 +57,14 @@ sleep 5
 # Send a message
 #
 log "Sending message"
-go run $DIR/stan-pub.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $pubClientID $topic ""
+go run $DIR/stan-pub/main.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $pubClientID $topic ""
 
 #
 # Wait for message on error topic
 #
 log "Waiting for response"
-response=$(go run $DIR/stan-sub.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $errortopic 2>&1)
-
-log "Subscriber received response: $response"
-
-if [[ "$response" != "$expectedRespOutput" ]]; then
-    log "'$response' is not equal to '$expectedRespOutput'"
-    exit 1
-else
-    log "Responses match."
-fi
+response=$(timeout 5s go run $DIR/stan-sub/main.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $errortopic 2>&1 || true)
+echo "$response" | grep "$expectedRespOutput"
 
 log "Deleting  message queue trigger"
 fission mqtrigger delete --name $mqt
