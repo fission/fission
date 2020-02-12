@@ -19,7 +19,7 @@ pubClientID="clientPub-$TEST_ID"
 subClientID="clientSub-$TEST_ID"
 topic="foo.bar$TEST_ID"
 resptopic="foo.foo$TEST_ID"
-FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@localhost:4222"
+#FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
 expectedRespOutput="subject:\"$resptopic\" data:\"Hello, World!\""
 
 env=nodejs-$TEST_ID

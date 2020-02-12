@@ -21,7 +21,7 @@ topic="foo.bar$TEST_ID"
 resptopic="foo.foo$TEST_ID"
 errortopic="foo.error$TEST_ID"
 maxretries=1
-FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@localhost:4222"
+#FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(minikube ip):4222"
 expectedRespOutput="subject:\"$errortopic\" data:\"Hello, World!\""
 
 env=nodejs-$TEST_ID
