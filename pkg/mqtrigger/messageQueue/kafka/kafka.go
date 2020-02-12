@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package messageQueue
+package kafka
 
 import (
 	"crypto/tls"
@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -32,7 +33,13 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
+)
+
+var (
+	// Need to use raw string to support escape sequence for - & . chars
+	validKafkaTopicName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\._]*[a-zA-Z0-9]$`)
 )
 
 type (
@@ -46,7 +53,7 @@ type (
 	}
 )
 
-func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
+func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
 	if len(routerUrl) == 0 || len(mqCfg.Url) == 0 {
 		return nil, errors.New("the router URL or MQ URL is empty")
 	}
@@ -88,11 +95,7 @@ func makeKafkaMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQu
 	return kafka, nil
 }
 
-func isTopicValidForKafka(topic string) bool {
-	return true
-}
-
-func (kafka Kafka) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubscription, error) {
+func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
 	kafka.logger.Info("inside kakfa subscribe", zap.Any("trigger", trigger))
 	kafka.logger.Info("brokers set", zap.Strings("brokers", kafka.brokers))
 
@@ -194,7 +197,7 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 	return &tlsConfig, nil
 }
 
-func (kafka Kafka) unsubscribe(subscription messageQueueSubscription) error {
+func (kafka Kafka) Unsubscribe(subscription messageQueue.Subscription) error {
 	return subscription.(*cluster.Consumer).Close()
 }
 
@@ -335,4 +338,21 @@ func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer
 		logger.Error("message received to publish to error topic, but no error topic was set",
 			zap.String("message", err.Error()), zap.String("trigger", trigger.ObjectMeta.Name), zap.String("function_url", funcUrl))
 	}
+}
+
+// The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/cde6d18983b5d58199f8857d8d61d7efcbe6e54a/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L36-L47
+func IsTopicValid(topic string) bool {
+	if len(topic) == 0 {
+		return false
+	}
+	if topic == "." || topic == ".." {
+		return false
+	}
+	if len(topic) > 249 {
+		return false
+	}
+	if !validKafkaTopicName.MatchString(topic) {
+		return false
+	}
+	return true
 }

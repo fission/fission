@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package messageQueue
+package nats
 
 import (
 	"bytes"
@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -46,7 +47,7 @@ type (
 	}
 )
 
-func makeNatsMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQueueConfig) (MessageQueue, error) {
+func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
 	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url),
 		ns.SetConnectionLostHandler(func(conn ns.Conn, reason error) {
 			// TODO: Better way to handle connection lost problem.
@@ -68,10 +69,10 @@ func makeNatsMessageQueue(logger *zap.Logger, routerUrl string, mqCfg MessageQue
 	return nats, nil
 }
 
-func (nats Nats) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubscription, error) {
+func (nats Nats) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
 	subj := trigger.Spec.Topic
 
-	if !isTopicValidForNats(subj) {
+	if !IsTopicValid(subj) {
 		return nil, fmt.Errorf("not a valid topic: %q", trigger.Spec.Topic)
 	}
 
@@ -92,13 +93,8 @@ func (nats Nats) subscribe(trigger *fv1.MessageQueueTrigger) (messageQueueSubscr
 	return sub, nil
 }
 
-func (nats Nats) unsubscribe(subscription messageQueueSubscription) error {
+func (nats Nats) Unsubscribe(subscription messageQueue.Subscription) error {
 	return subscription.(ns.Subscription).Close()
-}
-
-func isTopicValidForNats(topic string) bool {
-	// nats-streaming does not support wildcard channel.
-	return nsUtil.IsChannelNameValid(topic, false)
 }
 
 func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
@@ -212,5 +208,9 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 			}
 		}
 	}
+}
 
+func IsTopicValid(topic string) bool {
+	// nats-streaming does not support wildcard channel.
+	return nsUtil.IsChannelNameValid(topic, false)
 }

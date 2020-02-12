@@ -28,13 +28,13 @@ import (
 	"go.opencensus.io/trace"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
-	messagequeue "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
@@ -72,7 +72,7 @@ func runTimer(logger *zap.Logger, routerUrl string) {
 }
 
 func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
-	err := messagequeue.Start(logger, routerUrl)
+	err := mqtrigger.Start(logger, routerUrl)
 	if err != nil {
 		logger.Fatal("error starting message queue manager", zap.Error(err))
 	}
