@@ -72,7 +72,7 @@ func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messa
 func (nats Nats) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
 	subj := trigger.Spec.Topic
 
-	if !isTopicValidForNats(subj) {
+	if !IsTopicValid(subj) {
 		return nil, fmt.Errorf("not a valid topic: %q", trigger.Spec.Topic)
 	}
 
@@ -95,11 +95,6 @@ func (nats Nats) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subsc
 
 func (nats Nats) Unsubscribe(subscription messageQueue.Subscription) error {
 	return subscription.(ns.Subscription).Close()
-}
-
-func isTopicValidForNats(topic string) bool {
-	// nats-streaming does not support wildcard channel.
-	return nsUtil.IsChannelNameValid(topic, false)
 }
 
 func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
@@ -216,5 +211,6 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 }
 
 func IsTopicValid(topic string) bool {
+	// nats-streaming does not support wildcard channel.
 	return nsUtil.IsChannelNameValid(topic, false)
 }
