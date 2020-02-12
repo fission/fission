@@ -23,8 +23,8 @@ import (
 	"net/http"
 	"strings"
 
-	ns "github.com/nats-io/stan.go"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
+	ns "github.com/nats-io/stan.go"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
