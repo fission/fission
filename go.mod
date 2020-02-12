@@ -5,7 +5,6 @@ require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
 	github.com/Shopify/sarama v1.21.0
-	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
 	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
@@ -21,8 +20,6 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/spec v0.17.2
-	github.com/go-sql-driver/mysql v1.4.1 // indirect
-	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/google/gofuzz v1.0.0 // indirect
@@ -31,10 +28,7 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb
 	github.com/hashicorp/errwrap v0.0.0-20180715044906-d6c0cd880357 // indirect
-	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
-	github.com/hashicorp/go-msgpack v0.5.3 // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20180717150148-3d5d8f294aa0
-	github.com/hashicorp/raft v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.5
 	github.com/influxdata/influxdb v1.2.0
 	github.com/kr/pretty v0.1.0 // indirect
@@ -43,16 +37,13 @@ require (
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
-	github.com/nats-io/gnatsd v1.4.1 // indirect
-	github.com/nats-io/go-nats v1.6.0 // indirect
-	github.com/nats-io/go-nats-streaming v0.4.0
-	github.com/nats-io/nats-streaming-server v0.12.0
-	github.com/nats-io/nuid v0.0.0-20180712044959-3024a71c3cbe // indirect
+	github.com/nats-io/nats-streaming-server v0.17.0
+	github.com/nats-io/nats.go v1.9.1
+	github.com/nats-io/stan.go v0.6.0
 	github.com/nwaples/rardecode v0.0.0-20171029023500-e06696f847ae // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
-	github.com/pascaldekloe/goe v0.1.0 // indirect
-	github.com/pkg/errors v0.8.0
+	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.4.1
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
@@ -62,12 +53,10 @@ require (
 	github.com/stretchr/testify v1.3.0
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
-	go.etcd.io/bbolt v1.3.2 // indirect
 	go.opencensus.io v0.22.0
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1
-	golang.org/x/crypto v0.0.0-20190618222545-ea8f1a30c443 // indirect
 	golang.org/x/image v0.0.0-20190618124811-92942e4437e2 // indirect
 	golang.org/x/net v0.0.0-20190619014844-b5b0513f8c1b
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect

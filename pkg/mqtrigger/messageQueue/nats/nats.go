@@ -23,7 +23,7 @@ import (
 	"net/http"
 	"strings"
 
-	ns "github.com/nats-io/go-nats-streaming"
+	ns "github.com/nats-io/stan.go"
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
 	"go.uber.org/zap"
 
@@ -78,7 +78,7 @@ func (nats Nats) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subsc
 
 	opts := []ns.SubscriptionOption{
 		// Create a durable subscription to nats, so that triggers could retrieve last unack message.
-		// https://github.com/nats-io/go-nats-streaming#durable-subscriptions
+		// https://github.com/nats-io/stan.go#durable-subscriptions
 		ns.DurableName(string(trigger.ObjectMeta.UID)),
 
 		// Nats-streaming server is auto-ack mode by default. Since we want nats-streaming server to

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	nats "github.com/nats-io/go-nats-streaming"
-	uuid "github.com/satori/go.uuid"
 	"log"
 	"net/http"
+
+	nats "github.com/nats-io/stan.go"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
