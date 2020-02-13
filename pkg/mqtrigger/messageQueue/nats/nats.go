@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
@@ -99,7 +100,6 @@ func (nats Nats) Unsubscribe(subscription messageQueue.Subscription) error {
 
 func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 	return func(msg *ns.Msg) {
-
 		// Support other function ref types
 		if trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
 			nats.logger.Fatal("unsupported function reference type for trigger",
@@ -110,8 +110,18 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		url := nats.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/")
+		url := nats.routerUrl + "/" + strings.TrimPrefix(
+			utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/")
 		nats.logger.Debug("making HTTP request", zap.String("url", url))
+
+		// Create request
+		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
+		if err != nil {
+			nats.logger.Error("failed to create HTTP request to invoke function",
+				zap.Error(err),
+				zap.String("function_url", url))
+			return
+		}
 
 		headers := map[string]string{
 			"X-Fission-MQTrigger-Topic":      trigger.Spec.Topic,
@@ -120,22 +130,18 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 			"Content-Type":                   trigger.Spec.ContentType,
 		}
 
-		// Create request
-		req, err := http.NewRequest("POST", url, bytes.NewReader(msg.Data))
-
-		if err != nil {
-			nats.logger.Error("failed to create HTTP request to invoke function",
-				zap.Error(err),
-				zap.String("function_url", url))
-			return
-		}
-
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
 
 		var resp *http.Response
+		var body []byte
+
 		for attempt := 0; attempt <= trigger.Spec.MaxRetries; attempt++ {
+			if attempt > 0 {
+				req.Header.Set("X-Fission-MQTrigger-RetryCount", strconv.Itoa(attempt))
+			}
+
 			// Make the request
 			resp, err = http.DefaultClient.Do(req)
 			if err != nil {
@@ -145,13 +151,44 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 					zap.String("trigger", trigger.ObjectMeta.Name))
 				continue
 			}
-			if resp == nil {
+
+			body, err = ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				nats.logger.Error("error reading function invocation response",
+					zap.Error(err),
+					zap.String("function_url", url),
+					zap.String("trigger", trigger.ObjectMeta.Name))
+				return
+			}
+
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				nats.logger.Error("function invocation request returned a failure status code",
+					zap.String("function_url", url),
+					zap.String("body", string(body)),
+					zap.Int("status_code", resp.StatusCode))
 				continue
 			}
-			if err == nil && resp.StatusCode == http.StatusOK {
-				// Success, quit retrying
-				break
+
+			if len(trigger.Spec.ResponseTopic) > 0 {
+				err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
+				if err != nil {
+					nats.logger.Error("failed to publish message with function invocation response to topic",
+						zap.Error(err),
+						zap.String("topic", trigger.Spec.ResponseTopic),
+						zap.String("trigger", trigger.ObjectMeta.Name))
+				}
 			}
+
+			// Trigger acks message only if a request was processed successfully
+			err = msg.Ack()
+			if err != nil {
+				nats.logger.Error("failed to ack message after successful function invocation from trigger",
+					zap.Error(err),
+					zap.String("function_url", url),
+					zap.String("trigger", trigger.ObjectMeta.Name))
+			}
+			return
 		}
 
 		if resp == nil {
@@ -161,51 +198,21 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 			return
 		}
 
-		defer resp.Body.Close()
-
-		body, bodyErr := ioutil.ReadAll(resp.Body)
-		if bodyErr != nil {
-			nats.logger.Error("error reading function invocation response",
-				zap.Error(err),
-				zap.String("function_url", url),
-				zap.String("trigger", trigger.ObjectMeta.Name))
-			return
-		}
-
 		// Only the latest error response will be published to error topic
-		if err != nil || resp.StatusCode != 200 {
-			if len(trigger.Spec.ErrorTopic) > 0 && len(body) > 0 {
-				publishErr := nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
-				if publishErr != nil {
-					nats.logger.Error("failed to publish function invocation error to error topic",
-						zap.Error(publishErr),
-						zap.String("topic", trigger.Spec.ErrorTopic),
-						zap.String("function_url", url),
-						zap.String("trigger", trigger.ObjectMeta.Name))
-					// TODO: We will ack this message after max retries to prevent re-processing but
-					// this may cause message loss
-				}
-			}
-			return
-		}
-
-		// Trigger acks message only if a request was processed successfully
-		err = msg.Ack()
-		if err != nil {
-			nats.logger.Error("failed to ack message after successful function invocation from trigger",
-				zap.Error(err),
-				zap.String("function_url", url),
-				zap.String("trigger", trigger.ObjectMeta.Name))
-		}
-
-		if len(trigger.Spec.ResponseTopic) > 0 {
-			err = nats.nsConn.Publish(trigger.Spec.ResponseTopic, body)
+		if len(trigger.Spec.ErrorTopic) > 0 {
+			err = nats.nsConn.Publish(trigger.Spec.ErrorTopic, body)
 			if err != nil {
-				nats.logger.Error("failed to publish message with function invocation response to topic",
+				nats.logger.Error("failed to publish function invocation error to error topic",
 					zap.Error(err),
-					zap.String("topic", trigger.Spec.ResponseTopic),
+					zap.String("topic", trigger.Spec.ErrorTopic),
+					zap.String("function_url", url),
 					zap.String("trigger", trigger.ObjectMeta.Name))
+				// TODO: We will ack this message after max retries to prevent re-processing but
+				// this may cause message loss
 			}
+		} else {
+			nats.logger.Error("message received to publish to error topic, but no error topic was set",
+				zap.String("message", err.Error()), zap.String("trigger", trigger.ObjectMeta.Name), zap.String("function_url", url))
 		}
 	}
 }

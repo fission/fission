@@ -334,9 +334,9 @@ func invokeTriggeredFunction(conn AzureStorageConnection, sub *AzureQueueSubscri
 			conn.logger.Error("sending function invocation request failed", zap.Error(err), zap.String("function_url", sub.functionURL))
 			continue
 		}
-		defer response.Body.Close()
 
 		body, err := ioutil.ReadAll(response.Body)
+		response.Body.Close()
 		if err != nil {
 			conn.logger.Error("failed to read response body from function invocation", zap.Error(err), zap.String("function_url", sub.functionURL))
 			continue

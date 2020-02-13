@@ -184,11 +184,6 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 	}
 
 	tlsConfig.Certificates = []tls.Certificate{cert}
-
-	if err != nil {
-		return nil, err
-	}
-
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(kafka.authKeys["caCert"])
 	tlsConfig.RootCAs = caCertPool
@@ -213,14 +208,6 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 	url := kafka.routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.ObjectMeta.Namespace), "/")
 	kafka.logger.Debug("making HTTP request", zap.String("url", url))
 
-	// Generate the Headers
-	fissionHeaders := map[string]string{
-		"X-Fission-MQTrigger-Topic":      trigger.Spec.Topic,
-		"X-Fission-MQTrigger-RespTopic":  trigger.Spec.ResponseTopic,
-		"X-Fission-MQTrigger-ErrorTopic": trigger.Spec.ErrorTopic,
-		"Content-Type":                   trigger.Spec.ContentType,
-	}
-
 	// Create request
 	req, err := http.NewRequest("POST", url, strings.NewReader(value))
 	if err != nil {
@@ -241,12 +228,21 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 			zap.Any("current_version", kafka.version))
 	}
 
+	// Generate the Headers
+	fissionHeaders := map[string]string{
+		"X-Fission-MQTrigger-Topic":      trigger.Spec.Topic,
+		"X-Fission-MQTrigger-RespTopic":  trigger.Spec.ResponseTopic,
+		"X-Fission-MQTrigger-ErrorTopic": trigger.Spec.ErrorTopic,
+		"Content-Type":                   trigger.Spec.ContentType,
+	}
+
 	for k, v := range fissionHeaders {
 		req.Header.Set(k, v)
 	}
 
-	// Make the request
 	var resp *http.Response
+	var body []byte
+
 	for attempt := 0; attempt <= trigger.Spec.MaxRetries; attempt++ {
 		// Make the request
 		resp, err = http.DefaultClient.Do(req)
@@ -257,68 +253,74 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 				zap.String("trigger", trigger.ObjectMeta.Name))
 			continue
 		}
-		if resp == nil {
-			continue
+
+		body, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			errorHandler(kafka.logger, trigger, producer, url,
+				errors.Wrapf(err, "request body error: %v", string(body)))
+			return
 		}
-		if err == nil && resp.StatusCode == http.StatusOK {
-			// Success, quit retrying
-			break
+
+		kafka.logger.Debug("got response from function invocation",
+			zap.String("function_url", url),
+			zap.String("trigger", trigger.ObjectMeta.Name),
+			zap.String("body", string(body)))
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			errorHandler(kafka.logger, trigger, producer, url,
+				fmt.Errorf("request returned failure: %v", resp.StatusCode))
+			return
 		}
+
+		if len(trigger.Spec.ResponseTopic) > 0 {
+			// Generate Kafka record headers
+			var kafkaRecordHeaders []sarama.RecordHeader
+			if kafka.version.IsAtLeast(sarama.V0_11_0_0) {
+				for k, v := range resp.Header {
+					// One key may have multiple values
+					for _, v := range v {
+						kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+					}
+				}
+			} else {
+				kafka.logger.Warn("headers are not supported by current Kafka version, needs v0.11+: no record headers to add in HTTP request",
+					zap.Any("current_version", kafka.version))
+			}
+
+			_, _, err := producer.SendMessage(&sarama.ProducerMessage{
+				Topic:   trigger.Spec.ResponseTopic,
+				Value:   sarama.StringEncoder(body),
+				Headers: kafkaRecordHeaders,
+			})
+			if err != nil {
+				kafka.logger.Warn("failed to publish response body from function invocation to topic",
+					zap.Error(err),
+					zap.String("topic", trigger.Spec.Topic),
+					zap.String("function_url", url))
+				return
+			}
+		}
+		consumer.MarkOffset(msg, "") // mark message as processed
+		return
 	}
 
 	if resp == nil {
 		kafka.logger.Warn("every function invocation retry failed; final retry gave empty response",
+			zap.Error(err),
 			zap.String("function_url", url),
 			zap.String("trigger", trigger.ObjectMeta.Name))
 		return
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
 
-	kafka.logger.Debug("got response from function invocation",
-		zap.String("function_url", url),
-		zap.String("trigger", trigger.ObjectMeta.Name),
-		zap.String("body", string(body)))
-
-	if err != nil {
-		errorHandler(kafka.logger, trigger, producer, url,
-			errors.Wrapf(err, "request body error: %v", string(body)))
-		return
-	}
-	if resp.StatusCode != 200 {
+	// Only the latest error response will be published to error topic
+	if len(trigger.Spec.ErrorTopic) > 0 {
 		errorHandler(kafka.logger, trigger, producer, url,
 			fmt.Errorf("request returned failure: %v", resp.StatusCode))
-		return
+	} else {
+		kafka.logger.Error("message received to publish to error topic, but no error topic was set",
+			zap.String("message", err.Error()), zap.String("trigger", trigger.ObjectMeta.Name), zap.String("function_url", url))
 	}
-	if len(trigger.Spec.ResponseTopic) > 0 {
-		// Generate Kafka record headers
-		var kafkaRecordHeaders []sarama.RecordHeader
-		if kafka.version.IsAtLeast(sarama.V0_11_0_0) {
-			for k, v := range resp.Header {
-				// One key may have multiple values
-				for _, v := range v {
-					kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
-				}
-			}
-		} else {
-			kafka.logger.Warn("headers are not supported by current Kafka version, needs v0.11+: no record headers to add in HTTP request",
-				zap.Any("current_version", kafka.version))
-		}
-
-		_, _, err := producer.SendMessage(&sarama.ProducerMessage{
-			Topic:   trigger.Spec.ResponseTopic,
-			Value:   sarama.StringEncoder(body),
-			Headers: kafkaRecordHeaders,
-		})
-		if err != nil {
-			kafka.logger.Warn("failed to publish response body from function invocation to topic",
-				zap.Error(err),
-				zap.String("topic", trigger.Spec.Topic),
-				zap.String("function_url", url))
-			return
-		}
-	}
-	consumer.MarkOffset(msg, "") // mark message as processed
 }
 
 func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer sarama.SyncProducer, funcUrl string, err error) {
