@@ -521,7 +521,10 @@ func (gp *GenericPool) waitForReadyPod() error {
 			gp.deployment.ObjectMeta.Name, metav1.GetOptions{})
 		if err != nil {
 			e := "error waiting for ready pod for deployment"
-			gp.logger.Error(e, zap.String("deployment", gp.deployment.ObjectMeta.Name), zap.String("namespace", gp.namespace))
+			gp.logger.Error(e,
+				zap.String("deployment", gp.deployment.ObjectMeta.Name),
+				zap.String("namespace", gp.namespace),
+				zap.Error(err))
 			return fmt.Errorf("%s %q in namespace %q", e, gp.deployment.ObjectMeta.Name, gp.namespace)
 		}
 
