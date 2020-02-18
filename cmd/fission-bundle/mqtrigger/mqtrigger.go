@@ -61,26 +61,23 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		}
 	}
 
-	mq, err := newMessageQueue(
+	mq, err := factory.Create(
 		logger,
-		routerUrl,
+		mqType,
 		messageQueue.Config{
 			MQType:  mqType,
 			Url:     mqUrl,
 			Secrets: secrets,
 		},
+		routerUrl,
 	)
 	if err != nil {
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
 
-	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mq).Run()
+	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq).Run()
 
 	return nil
-}
-
-func newMessageQueue(logger *zap.Logger, routerURL string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
-	return factory.Create(logger, mqCfg.MQType, mqCfg, routerURL)
 }
 
 func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {

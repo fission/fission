@@ -26,9 +26,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -46,6 +43,7 @@ type (
 		reqChan       chan request
 		triggers      map[string]*triggerSubscription
 		fissionClient *crd.FissionClient
+		messageQueueType string
 		messageQueue  messageQueue.MessageQueue
 	}
 
@@ -66,12 +64,13 @@ type (
 )
 
 func MakeMessageQueueTriggerManager(logger *zap.Logger,
-	fissionClient *crd.FissionClient, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
+	fissionClient *crd.FissionClient, mqType string, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
 	mqTriggerMgr := MessageQueueTriggerManager{
 		logger:        logger.Named("message_queue_trigger_manager"),
 		reqChan:       make(chan request),
 		triggers:      make(map[string]*triggerSubscription),
 		fissionClient: fissionClient,
+		messageQueueType: mqType,
 		messageQueue:  messageQueue,
 	}
 	return &mqTriggerMgr
@@ -154,7 +153,9 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		newTriggerMap := make(map[string]*fv1.MessageQueueTrigger)
 		for index := range newTriggers.Items {
 			newTrigger := &newTriggers.Items[index]
-			newTriggerMap[crd.CacheKey(&newTrigger.ObjectMeta)] = newTrigger
+			if (string)(newTrigger.Spec.MessageQueueType) == mqt.messageQueueType {
+				newTriggerMap[crd.CacheKey(&newTrigger.ObjectMeta)] = newTrigger
+			}
 		}
 
 		// get current set of triggers
@@ -204,16 +205,4 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		// TODO replace with a watch
 		time.Sleep(3 * time.Second)
 	}
-}
-
-func IsTopicValid(mqType fv1.MessageQueueType, topic string) bool {
-	switch mqType {
-	case fv1.MessageQueueTypeNats:
-		return nats.IsTopicValid(topic)
-	case fv1.MessageQueueTypeASQ:
-		return azurequeuestorage.IsTopicValid(topic)
-	case fv1.MessageQueueTypeKafka:
-		return kafka.IsTopicValid(topic)
-	}
-	return false
 }
