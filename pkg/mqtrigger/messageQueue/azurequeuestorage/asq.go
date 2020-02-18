@@ -36,8 +36,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/mqtrigger/validator"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func init() {
