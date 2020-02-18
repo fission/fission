@@ -37,10 +37,12 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
 
 func init() {
 	factory.Register(fv1.MessageQueueTypeASQ, &Factory{})
+	validator.Register(fv1.MessageQueueTypeKafka, IsTopicValid)
 }
 
 // TODO: some of these constants should probably be environment variables

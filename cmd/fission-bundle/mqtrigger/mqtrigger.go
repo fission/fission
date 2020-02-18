@@ -31,6 +31,8 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
@@ -46,7 +48,6 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
 
-	// Message queue type: nats is the only supported one for now
 	mqType := (fv1.MessageQueueType)(os.Getenv("MESSAGE_QUEUE_TYPE"))
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 

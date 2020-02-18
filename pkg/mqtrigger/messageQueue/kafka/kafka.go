@@ -36,10 +36,12 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
 
 func init() {
 	factory.Register(fv1.MessageQueueTypeKafka, &Factory{})
+	validator.Register(fv1.MessageQueueTypeKafka, IsTopicValid)
 }
 
 var (
