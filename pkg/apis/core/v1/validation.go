@@ -23,10 +23,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
-	nsUtil "github.com/nats-io/nats-streaming-server/util"
 	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
 
 const (
@@ -163,17 +164,17 @@ func ValidateKubeReference(refName string, name string, namespace string) error 
 	return result.ErrorOrNil()
 }
 
-func IsTopicValid(mqType MessageQueueType, topic string) bool {
-	switch mqType {
-	case MessageQueueTypeNats:
-		return nsUtil.IsChannelNameValid(topic, false)
-	case MessageQueueTypeASQ:
-		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
-	case MessageQueueTypeKafka:
-		return IsValidKafkaTopic(topic)
-	}
-	return false
-}
+//func IsTopicValid(mqType MessageQueueType, topic string) bool {
+//	switch mqType {
+//	case MessageQueueTypeNats:
+//		return nsUtil.IsChannelNameValid(topic, false)
+//	case MessageQueueTypeASQ:
+//		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
+//	case MessageQueueTypeKafka:
+//		return IsValidKafkaTopic(topic)
+//	}
+//	return false
+//}
 
 // The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java
 func IsValidKafkaTopic(topic string) bool {
@@ -528,18 +529,16 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 
 	result = multierror.Append(result, spec.FunctionReference.Validate())
 
-	switch spec.MessageQueueType {
-	case MessageQueueTypeNats, MessageQueueTypeASQ, MessageQueueTypeKafka: // no op
-	default:
+	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType)) {
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
-	}
+	} else {
+		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic) {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
+		}
 
-	if !IsTopicValid(spec.MessageQueueType, spec.Topic) {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
-	}
-
-	if len(spec.ResponseTopic) > 0 && !IsTopicValid(spec.MessageQueueType, spec.ResponseTopic) {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
+		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic) {
+			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
+		}
 	}
 
 	return result.ErrorOrNil()

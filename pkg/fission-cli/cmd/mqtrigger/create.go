@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
 
 type CreateSubCommand struct {
@@ -172,7 +173,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 func checkMQTopicAvailability(mqType fv1.MessageQueueType, topics ...string) error {
 	for _, t := range topics {
-		if len(t) > 0 && !fv1.IsTopicValid(mqType, t) {
+		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t) {
 			return errors.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}

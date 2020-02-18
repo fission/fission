@@ -26,13 +26,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger"
+	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
+
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
@@ -80,18 +79,8 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	return nil
 }
 
-func newMessageQueue(logger *zap.Logger, routerURL string, mqCfg messageQueue.Config) (messageQueue messageQueue.MessageQueue, err error) {
-	switch mqCfg.MQType {
-	case fv1.MessageQueueTypeNats:
-		messageQueue, err = nats.New(logger, routerURL, mqCfg)
-	case fv1.MessageQueueTypeASQ:
-		messageQueue, err = azurequeuestorage.New(logger, routerURL, mqCfg)
-	case fv1.MessageQueueTypeKafka:
-		messageQueue, err = kafka.New(logger, routerURL, mqCfg)
-	default:
-		err = errors.Errorf("no supported message queue type found for %q", mqCfg.MQType)
-	}
-	return messageQueue, err
+func newMessageQueue(logger *zap.Logger, routerURL string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
+	return factory.Create(logger, mqCfg.MQType, mqCfg, routerURL)
 }
 
 func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {
