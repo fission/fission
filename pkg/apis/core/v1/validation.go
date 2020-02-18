@@ -38,12 +38,6 @@ const (
 	totalAnnotationSizeLimitB int = 256 * (1 << 10) // 256 kB
 )
 
-var (
-	validAzureQueueName = regexp.MustCompile(`^[a-z0-9][a-z0-9\\-]*[a-z0-9]$`)
-	// Need to use raw string to support escape sequence for - & . chars
-	validKafkaTopicName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\._]*[a-zA-Z0-9]$`)
-)
-
 type (
 	ValidationErrorType int
 
@@ -162,35 +156,6 @@ func ValidateKubeReference(refName string, name string, namespace string) error 
 		ValidateKubeName(fmt.Sprintf("%v.Namespace", refName), namespace))
 
 	return result.ErrorOrNil()
-}
-
-//func IsTopicValid(mqType MessageQueueType, topic string) bool {
-//	switch mqType {
-//	case MessageQueueTypeNats:
-//		return nsUtil.IsChannelNameValid(topic, false)
-//	case MessageQueueTypeASQ:
-//		return len(topic) >= 3 && len(topic) <= 63 && validAzureQueueName.MatchString(topic)
-//	case MessageQueueTypeKafka:
-//		return IsValidKafkaTopic(topic)
-//	}
-//	return false
-//}
-
-// The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java
-func IsValidKafkaTopic(topic string) bool {
-	if len(topic) == 0 {
-		return false
-	}
-	if topic == "." || topic == ".." {
-		return false
-	}
-	if len(topic) > 249 {
-		return false
-	}
-	if !validKafkaTopicName.MatchString(topic) {
-		return false
-	}
-	return true
 }
 
 func IsValidCronSpec(spec string) error {
