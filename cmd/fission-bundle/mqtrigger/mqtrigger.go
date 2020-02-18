@@ -26,11 +26,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
@@ -47,7 +47,7 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	}
 
 	// Message queue type: nats is the only supported one for now
-	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
+	mqType := (fv1.MessageQueueType)(os.Getenv("MESSAGE_QUEUE_TYPE"))
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 
 	secretsPath := strings.TrimSpace(os.Getenv("MESSAGE_QUEUE_SECRETS"))
@@ -65,7 +65,7 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		logger,
 		mqType,
 		messageQueue.Config{
-			MQType:  mqType,
+			MQType:  (string)(mqType),
 			Url:     mqUrl,
 			Secrets: secrets,
 		},

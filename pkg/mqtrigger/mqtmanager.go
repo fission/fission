@@ -43,7 +43,7 @@ type (
 		reqChan          chan request
 		triggers         map[string]*triggerSubscription
 		fissionClient    *crd.FissionClient
-		messageQueueType string
+		messageQueueType fv1.MessageQueueType
 		messageQueue     messageQueue.MessageQueue
 	}
 
@@ -64,7 +64,7 @@ type (
 )
 
 func MakeMessageQueueTriggerManager(logger *zap.Logger,
-	fissionClient *crd.FissionClient, mqType string, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
+	fissionClient *crd.FissionClient, mqType fv1.MessageQueueType, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
 	mqTriggerMgr := MessageQueueTriggerManager{
 		logger:           logger.Named("message_queue_trigger_manager"),
 		reqChan:          make(chan request),
@@ -153,7 +153,7 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		newTriggerMap := make(map[string]*fv1.MessageQueueTrigger)
 		for index := range newTriggers.Items {
 			newTrigger := &newTriggers.Items[index]
-			if (string)(newTrigger.Spec.MessageQueueType) == mqt.messageQueueType {
+			if newTrigger.Spec.MessageQueueType == mqt.messageQueueType {
 				newTriggerMap[crd.CacheKey(&newTrigger.ObjectMeta)] = newTrigger
 			}
 		}

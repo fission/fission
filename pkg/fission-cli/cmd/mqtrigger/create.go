@@ -59,18 +59,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.MqtFnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	var mqType fv1.MessageQueueType
-	switch input.String(flagkey.MqtMQType) {
-	case "":
-		mqType = fv1.MessageQueueTypeNats
-	case fv1.MessageQueueTypeNats:
-		mqType = fv1.MessageQueueTypeNats
-	case fv1.MessageQueueTypeASQ:
-		mqType = fv1.MessageQueueTypeASQ
-	case fv1.MessageQueueTypeKafka:
-		mqType = fv1.MessageQueueTypeKafka
-	default:
-		return errors.New("Unknown message queue type, currently only \"nats-streaming, azure-storage-queue, kafka \" is supported")
+	mqType := (fv1.MessageQueueType)(input.String(flagkey.MqtMQType))
+	if !validator.IsValidMessageQueue((string)(mqType)) {
+		return errors.New("Unsupported message queue type")
 	}
 
 	topic := input.String(flagkey.MqtTopic)

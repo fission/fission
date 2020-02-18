@@ -17,16 +17,17 @@ limitations under the License.
 package factory
 
 import (
-	"go.uber.org/zap"
 	"sync"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 )
 
 var (
-	messageQueueFactories = make(map[string]MessageQueueFactory)
+	messageQueueFactories = make(map[fv1.MessageQueueType]MessageQueueFactory)
 	lock                  = sync.Mutex{}
 )
 
@@ -36,7 +37,7 @@ type (
 	}
 )
 
-func Register(mqType string, factory MessageQueueFactory) {
+func Register(mqType fv1.MessageQueueType, factory MessageQueueFactory) {
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -52,7 +53,7 @@ func Register(mqType string, factory MessageQueueFactory) {
 	messageQueueFactories[mqType] = factory
 }
 
-func Create(logger *zap.Logger, mqType string, mqConfig messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+func Create(logger *zap.Logger, mqType fv1.MessageQueueType, mqConfig messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	factory, registered := messageQueueFactories[mqType]
 	if !registered {
 		return nil, errors.Errorf("no supported message queue type found for %q", mqType)
