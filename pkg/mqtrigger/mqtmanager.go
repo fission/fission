@@ -39,12 +39,12 @@ type (
 	requestType int
 
 	MessageQueueTriggerManager struct {
-		logger        *zap.Logger
-		reqChan       chan request
-		triggers      map[string]*triggerSubscription
-		fissionClient *crd.FissionClient
+		logger           *zap.Logger
+		reqChan          chan request
+		triggers         map[string]*triggerSubscription
+		fissionClient    *crd.FissionClient
 		messageQueueType string
-		messageQueue  messageQueue.MessageQueue
+		messageQueue     messageQueue.MessageQueue
 	}
 
 	triggerSubscription struct {
@@ -66,12 +66,12 @@ type (
 func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	fissionClient *crd.FissionClient, mqType string, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
 	mqTriggerMgr := MessageQueueTriggerManager{
-		logger:        logger.Named("message_queue_trigger_manager"),
-		reqChan:       make(chan request),
-		triggers:      make(map[string]*triggerSubscription),
-		fissionClient: fissionClient,
+		logger:           logger.Named("message_queue_trigger_manager"),
+		reqChan:          make(chan request),
+		triggers:         make(map[string]*triggerSubscription),
+		fissionClient:    fissionClient,
 		messageQueueType: mqType,
-		messageQueue:  messageQueue,
+		messageQueue:     messageQueue,
 	}
 	return &mqTriggerMgr
 }
