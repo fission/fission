@@ -99,7 +99,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	var ctx context.Context
 
 	testTimeout := input.Duration(flagkey.FnTestTimeout)
-	if testTimeout <= 0 * time.Second {
+	if testTimeout <= 0*time.Second {
 		ctx = context.Background()
 	} else {
 		var closeCtx context.CancelFunc
