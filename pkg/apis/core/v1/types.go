@@ -343,6 +343,12 @@ type (
 		// a particular function execution should be complete.
 		// This is optional. If not specified default value will be taken as 60s
 		FunctionTimeout int `json:"functionTimeout,omitempty"`
+
+		// IdleTimeout specifies the length of time that a function is idle before the
+		// function pod(s) are eligible for deletion. If no traffic to the function
+		// is detected within the idle timeout, the executor will then recycle the
+		// function pod(s) to release resources.
+		IdleTimeout *int `json:"idletimeout,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

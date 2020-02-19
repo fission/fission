@@ -57,7 +57,6 @@ type (
 		namespace              string                        // namespace to keep our resources
 		functionNamespace      string                        // fallback namespace for fission functions
 		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
-		idlePodReapTime        time.Duration                 // pods unused for idlePodReapTime are deleted
 		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
 		useSvc                 bool                          // create k8s service for specialized pods
 		useIstio               bool
@@ -113,7 +112,6 @@ func MakeGenericPool(
 		namespace:         namespace,
 		functionNamespace: functionNamespace,
 		podReadyTimeout:   5 * time.Minute, // TODO make this an env param?
-		idlePodReapTime:   3 * time.Minute, // TODO make this configurable
 		fsCache:           fsCache,
 		poolInstanceId:    uniuri.NewLen(8),
 		fetcherConfig:     fetcherConfig,
