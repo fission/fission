@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,8 +96,16 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
-	ctx, closeCtx := context.WithTimeout(context.Background(), input.Duration(flagkey.FnTestTimeout))
-	defer closeCtx()
+	var ctx context.Context
+
+	testTimeout := input.Duration(flagkey.FnTestTimeout)
+	if testTimeout <= 0*time.Second {
+		ctx = context.Background()
+	} else {
+		var closeCtx context.CancelFunc
+		ctx, closeCtx = context.WithTimeout(context.Background(), input.Duration(flagkey.FnTestTimeout))
+		defer closeCtx()
+	}
 
 	resp, err := doHTTPRequest(ctx, functionUrl.String(),
 		input.StringSlice(flagkey.FnTestHeader),
