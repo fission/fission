@@ -555,6 +555,15 @@ func (fetcher *Fetcher) getPkgInformation(req FunctionFetchRequest) (pkg *fv1.Pa
 			return pkg, nil
 		}
 		if i < maxRetries-1 {
+			// In some cases, creating a package and querying the package info
+			// immediately, the Kubernetes API server will return "not found"
+			// error. So retry the query again after some time.
+
+			if k8serr.IsNotFound(err) {
+				time.Sleep(50 * time.Duration(i+1) * time.Millisecond)
+				continue
+			}
+
 			// All outbound requests are blocked if istio is enabled at the first seconds.
 			// So if an error is a "connection refused" or "dial" error, wait for a while
 			// before retrying so that envoy proxy will start to serve requests.
