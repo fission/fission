@@ -3,6 +3,7 @@ package io.fission;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Enumeration;
@@ -10,14 +11,20 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
-import org.springframework.boot.*;
-import org.springframework.boot.autoconfigure.*;
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import io.fission.Function;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @EnableAutoConfiguration
@@ -29,13 +36,30 @@ public class Server {
 
 	private static Logger logger = Logger.getGlobal();
 
-	@RequestMapping(value = "/", method = { RequestMethod.GET, RequestMethod.POST, RequestMethod.DELETE,
-			RequestMethod.PUT })
-	ResponseEntity<Object> home(RequestEntity<?> req) {
-		if (fn == null) {
-			return ResponseEntity.badRequest().body("Container not specialized");
-		} else {
-			return ((ResponseEntity<Object>) ((Function) fn).call(req, null));
+	@RequestMapping(value = "/", method = { RequestMethod.GET, RequestMethod.POST, RequestMethod.DELETE, RequestMethod.PUT })
+	ResponseEntity<Object> home(HttpServletRequest request) {
+
+		String body;
+		try {
+			Map<String, String> headers = new HashMap<String, String>();
+        	Enumeration headerNames = request.getHeaderNames();
+        	while (headerNames.hasMoreElements()) {
+            	String key = (String) headerNames.nextElement();
+            	String value = request.getHeader(key);
+            	headers.put(key, value);
+			}
+			
+			body = request.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
+			RequestEntity<String> rawRequest = new RequestEntity<String>(body,headers, HttpMethod.resolve(request.getMethod()), new URI(request.getRequestURI()));
+
+			if (fn == null) {
+				return ResponseEntity.badRequest().body("Container not specialized");
+			} else {
+				return ((ResponseEntity<Object>) ((Function) fn).call(rawRequest, null));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.badRequest().body(e.getMessage());
 		}
 	}
 
