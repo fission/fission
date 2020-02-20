@@ -29,10 +29,11 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger"
+	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
-	"github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
 func Start(logger *zap.Logger, routerUrl string) error {
@@ -47,8 +48,7 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
 
-	// Message queue type: nats is the only supported one for now
-	mqType := os.Getenv("MESSAGE_QUEUE_TYPE")
+	mqType := (fv1.MessageQueueType)(os.Getenv("MESSAGE_QUEUE_TYPE"))
 	mqUrl := os.Getenv("MESSAGE_QUEUE_URL")
 
 	secretsPath := strings.TrimSpace(os.Getenv("MESSAGE_QUEUE_SECRETS"))
@@ -62,36 +62,23 @@ func Start(logger *zap.Logger, routerUrl string) error {
 		}
 	}
 
-	mq, err := newMessageQueue(
+	mq, err := factory.Create(
 		logger,
-		routerUrl,
+		mqType,
 		messageQueue.Config{
-			MQType:  mqType,
+			MQType:  (string)(mqType),
 			Url:     mqUrl,
 			Secrets: secrets,
 		},
+		routerUrl,
 	)
 	if err != nil {
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
 
-	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mq).Run()
+	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq).Run()
 
 	return nil
-}
-
-func newMessageQueue(logger *zap.Logger, routerURL string, mqCfg messageQueue.Config) (messageQueue messageQueue.MessageQueue, err error) {
-	switch mqCfg.MQType {
-	case fv1.MessageQueueTypeNats:
-		messageQueue, err = nats.New(logger, routerURL, mqCfg)
-	case fv1.MessageQueueTypeASQ:
-		messageQueue, err = azurequeuestorage.New(logger, routerURL, mqCfg)
-	case fv1.MessageQueueTypeKafka:
-		messageQueue, err = kafka.New(logger, routerURL, mqCfg)
-	default:
-		err = errors.Errorf("no supported message queue type found for %q", mqCfg.MQType)
-	}
-	return messageQueue, err
 }
 
 func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {

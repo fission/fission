@@ -28,9 +28,16 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 	"github.com/fission/fission/pkg/utils"
 )
+
+func init() {
+	factory.Register(fv1.MessageQueueTypeNats, &Factory{})
+	validator.Register(fv1.MessageQueueTypeNats, IsTopicValid)
+}
 
 const (
 	natsClusterID  = "fissionMQTrigger"
@@ -45,9 +52,15 @@ type (
 		nsConn    ns.Conn
 		routerUrl string
 	}
+
+	Factory struct{}
 )
 
-func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
+func (factory *Factory) Create(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+	return New(logger, mqCfg, routerUrl)
+}
+
+func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	conn, err := ns.Connect(natsClusterID, natsClientID, ns.NatsURL(mqCfg.Url),
 		ns.SetConnectionLostHandler(func(conn ns.Conn, reason error) {
 			// TODO: Better way to handle connection lost problem.

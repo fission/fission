@@ -113,10 +113,10 @@ func TestNewStorageConnectionMissingAccountName(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
 
-	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
+	connection, err := New(logger, messageQueue.Config{
 		MQType: fv1.MessageQueueTypeASQ,
 		Url:    "",
-	})
+	}, DummyRouterURL)
 	require.Nil(t, connection)
 	require.Error(t, err, "Required environment variable 'AZURE_STORAGE_ACCOUNT_NAME' is not set")
 }
@@ -126,10 +126,10 @@ func TestNewStorageConnectionMissingAccessKey(t *testing.T) {
 	panicIf(err)
 
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
-	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
+	connection, err := New(logger, messageQueue.Config{
 		MQType: fv1.MessageQueueTypeASQ,
 		Url:    "",
-	})
+	}, DummyRouterURL)
 	_ = os.Unsetenv("AZURE_STORAGE_ACCOUNT_NAME")
 	require.Nil(t, connection)
 	require.Error(t, err, "Required environment variable 'AZURE_STORAGE_ACCOUNT_KEY' is not set")
@@ -141,10 +141,10 @@ func TestNewStorageConnection(t *testing.T) {
 
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "accountname")
 	_ = os.Setenv("AZURE_STORAGE_ACCOUNT_KEY", "bm90IGEga2V5")
-	connection, err := New(logger, DummyRouterURL, messageQueue.Config{
+	connection, err := New(logger, messageQueue.Config{
 		MQType: "azure-storage-queue",
 		Url:    "",
-	})
+	}, DummyRouterURL)
 	_ = os.Unsetenv("AZURE_STORAGE_ACCOUNT_NAME")
 	_ = os.Unsetenv("AZURE_STORAGE_ACCOUNT_KEY")
 	require.NoError(t, err)

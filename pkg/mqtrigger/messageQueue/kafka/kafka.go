@@ -33,9 +33,16 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 	"github.com/fission/fission/pkg/utils"
 )
+
+func init() {
+	factory.Register(fv1.MessageQueueTypeKafka, &Factory{})
+	validator.Register(fv1.MessageQueueTypeKafka, IsTopicValid)
+}
 
 var (
 	// Need to use raw string to support escape sequence for - & . chars
@@ -51,9 +58,15 @@ type (
 		authKeys  map[string][]byte
 		tls       bool
 	}
+
+	Factory struct{}
 )
 
-func New(logger *zap.Logger, routerUrl string, mqCfg messageQueue.Config) (messageQueue.MessageQueue, error) {
+func (factory *Factory) Create(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+	return New(logger, mqCfg, routerUrl)
+}
+
+func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	if len(routerUrl) == 0 || len(mqCfg.Url) == 0 {
 		return nil, errors.New("the router URL or MQ URL is empty")
 	}
@@ -340,7 +353,8 @@ func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer
 	}
 }
 
-// The validation is based on Kafka's internal implementation: https://github.com/apache/kafka/blob/cde6d18983b5d58199f8857d8d61d7efcbe6e54a/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L36-L47
+// The validation is based on Kafka's internal implementation:
+// https://github.com/apache/kafka/blob/cde6d18983b5d58199f8857d8d61d7efcbe6e54a/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L36-L47
 func IsTopicValid(topic string) bool {
 	if len(topic) == 0 {
 		return false
