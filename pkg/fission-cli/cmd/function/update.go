@@ -150,6 +150,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.FunctionTimeout = fnTimeout
 	}
 
+	if input.IsSet(flagkey.FnIdleTimeout) {
+		fnTimeout := input.Int(flagkey.FnIdleTimeout)
+		function.Spec.IdleTimeout = &fnTimeout
+	}
+
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}

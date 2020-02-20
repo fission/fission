@@ -107,6 +107,7 @@ var (
 	FnTestTimeout           = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 30 * time.Second}
 	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
+	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: String, Name: flagkey.HtMethod, Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD", DefaultValue: http.MethodGet}

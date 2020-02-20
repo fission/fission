@@ -91,8 +91,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 	if fnTimeout <= 0 {
-		return errors.New("fntimeout must be greater than 0")
+		return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 	}
+
+	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
 	pkgName := input.String(flagkey.FnPackageName)
 
@@ -291,6 +293,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Resources:       *resourceReq,
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,
+			IdleTimeout:     &fnIdleTimeout,
 		},
 	}
 

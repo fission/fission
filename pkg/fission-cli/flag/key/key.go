@@ -61,6 +61,7 @@ const (
 	FnTestBody              = "body"
 	FnTestHeader            = "header"
 	FnTestQuery             = "query"
+	FnIdleTimeout           = "idletimeout"
 
 	HtName              = resourceName
 	HtMethod            = "method"
