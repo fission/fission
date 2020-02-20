@@ -42,7 +42,7 @@ import (
 
 func init() {
 	factory.Register(fv1.MessageQueueTypeASQ, &Factory{})
-	validator.Register(fv1.MessageQueueTypeKafka, IsTopicValid)
+	validator.Register(fv1.MessageQueueTypeASQ, IsTopicValid)
 }
 
 // TODO: some of these constants should probably be environment variables
