@@ -239,8 +239,8 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v2/triggers/messagequeue/{mqTrigger}", api.MessageQueueTriggerApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v2/secrets/{secret}", api.SecretGet).Methods("GET")
-	r.HandleFunc("/v2/configmaps/{configmap}", api.ConfigMapGet).Methods("GET")
+	r.HandleFunc("/v2/secrets/{secret}", api.SecretExists).Methods("GET")
+	r.HandleFunc("/v2/configmaps/{configmap}", api.ConfigMapExists).Methods("GET")
 
 	r.HandleFunc("/v2/canaryconfigs", api.CanaryConfigApiCreate).Methods("POST")
 	r.HandleFunc("/v2/canaryconfigs/{canaryConfig}", api.CanaryConfigApiGet).Methods("GET")

@@ -17,11 +17,10 @@ limitations under the License.
 package fake
 
 import (
-	v1 "github.com/fission/fission/pkg/controller/client/v1"
 	"io"
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	v1 "github.com/fission/fission/pkg/controller/client/v1"
 	"github.com/fission/fission/pkg/info"
 )
 
@@ -34,12 +33,12 @@ func newMiscClient(c *v1.V1) v1.MiscInterface {
 	return &FakeMisc{}
 }
 
-func (c *FakeMisc) SecretGet(m *metav1.ObjectMeta) (*apiv1.Secret, error) {
-	return nil, nil
+func (c *FakeMisc) SecretExists(m *metav1.ObjectMeta) error {
+	return nil
 }
 
-func (c *FakeMisc) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
-	return nil, nil
+func (c *FakeMisc) ConfigMapExists(m *metav1.ObjectMeta) error {
+	return nil
 }
 
 func (c *FakeMisc) GetSvcURL(label string) (string, error) {
