@@ -24,7 +24,6 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/controller/client/rest"
@@ -39,8 +38,8 @@ type (
 	}
 
 	MiscInterface interface {
-		SecretGet(m *metav1.ObjectMeta) (*apiv1.Secret, error)
-		ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error)
+		SecretExists(m *metav1.ObjectMeta) error
+		ConfigMapExists(m *metav1.ObjectMeta) error
 		GetSvcURL(label string) (string, error)
 		ServerInfo() (*info.ServerInfo, error)
 		PodLogs(m *metav1.ObjectMeta) (io.ReadCloser, int, error)
@@ -55,52 +54,28 @@ func newMiscClient(c *V1) MiscInterface {
 	return &Misc{client: c.restClient}
 }
 
-func (c *Misc) SecretGet(m *metav1.ObjectMeta) (*apiv1.Secret, error) {
+func (c *Misc) SecretExists(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("secrets/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
 	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
-
-	body, err := handleResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	var secret apiv1.Secret
-	err = json.Unmarshal(body, &secret)
-	if err != nil {
-		return nil, err
-	}
-
-	return &secret, nil
+	return nil
 }
 
-func (c *Misc) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
+func (c *Misc) ConfigMapExists(m *metav1.ObjectMeta) error {
 	relativeUrl := fmt.Sprintf("configmaps/%v", m.Name)
 	relativeUrl += fmt.Sprintf("?namespace=%v", m.Namespace)
 
 	resp, err := c.client.Get(relativeUrl)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
-
-	body, err := handleResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	var configMap apiv1.ConfigMap
-	err = json.Unmarshal(body, &configMap)
-	if err != nil {
-		return nil, err
-	}
-
-	return &configMap, nil
+	return nil
 }
 
 func (c *Misc) GetSvcURL(label string) (string, error) {

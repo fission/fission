@@ -34,11 +34,11 @@ func newMiscClient(c *v1.V1) v1.MiscInterface {
 	return &FakeMisc{}
 }
 
-func (c *FakeMisc) SecretGet(m *metav1.ObjectMeta) (*apiv1.Secret, error) {
+func (c *FakeMisc) SecretExists(m *metav1.ObjectMeta) (*apiv1.Secret, error) {
 	return nil, nil
 }
 
-func (c *FakeMisc) ConfigMapGet(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
+func (c *FakeMisc) ConfigMapExists(m *metav1.ObjectMeta) (*apiv1.ConfigMap, error) {
 	return nil, nil
 }
 
