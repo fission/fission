@@ -12,6 +12,7 @@ import java.util.jar.JarFile;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import static java.util.Collections.singletonList;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -25,6 +26,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @RestController
 @EnableAutoConfiguration
@@ -40,23 +44,26 @@ public class Server {
 	ResponseEntity<Object> home(HttpServletRequest request) {
 
 		String body;
+		// Converting header in multimap
 		try {
-			Map<String, String> headers = new HashMap<String, String>();
-        	Enumeration headerNames = request.getHeaderNames();
-        	while (headerNames.hasMoreElements()) {
-            	String key = (String) headerNames.nextElement();
-            	String value = request.getHeader(key);
-            	headers.put(key, value);
-			}
-			
-			body = request.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
-			RequestEntity<String> rawRequest = new RequestEntity<String>(body,headers, HttpMethod.resolve(request.getMethod()), new URI(request.getRequestURI()));
+				MultiValueMap<String, String> headers = new LinkedMultiValueMap<>();
+				Enumeration headerNames = request.getHeaderNames();
+				while (headerNames.hasMoreElements()) {
+					String key = (String) headerNames.nextElement();
+					String value = request.getHeader(key);
+					headers.put(key, singletonList(value));
+				 }
 
-			if (fn == null) {
-				return ResponseEntity.badRequest().body("Container not specialized");
-			} else {
-				return ((ResponseEntity<Object>) ((Function) fn).call(rawRequest, null));
-			}
+				//Extract the body from the request
+				body = request.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
+				//Get the rawrequest
+				RequestEntity<String> rawRequest = new RequestEntity<String>(body,headers,HttpMethod.resolve(request.getMethod()), new URI(request.getRequestURI()));
+
+				if (fn == null) {
+					return ResponseEntity.badRequest().body("Container not specialized");
+				} else {
+					return ((ResponseEntity<Object>) ((Function) fn).call(rawRequest, null));
+				}
 		} catch (Exception e) {
 			e.printStackTrace();
 			return ResponseEntity.badRequest().body(e.getMessage());
