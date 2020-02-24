@@ -54,6 +54,19 @@ test_fn() {
 }
 export -f test_fn
 
+test_xml_fn() {
+    if [ -z $FISSION_ROUTER ]; then
+        log "Environment FISSION_ROUTER not set"
+        exit 1
+    fi
+    url="http://$FISSION_ROUTER/$1"
+    body=$2
+    expect=$3
+    header=$4
+    test_post_route $url $body $expect $header
+}
+export -f test_xml_fn
+
 test_ingress() {
     url="http://$INGRESS_CONTROLLER/$1"
     expect=$2
@@ -97,11 +110,12 @@ test_post_route() {
     url="http://$FISSION_ROUTER/$1"
     body=$2
     expect=$3
+    header=$4
 
     set +e
     while true; do
         log "test_post_route: call curl"
-        resp=$(curl --silent --show-error -d "$body" -X POST "$url")
+        resp=$(curl --silent --show-error -H "$header" -d "$body" -X POST "$url")
         status_code=$?
         if [ $status_code -ne 0 ]; then
             log "test_post_route: curl failed ($status_code). Retrying ..."
