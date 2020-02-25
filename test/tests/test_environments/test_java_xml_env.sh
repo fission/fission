@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#test:disabled
+test:disabled
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
@@ -34,8 +34,8 @@ log "Creating environment for Java"
 fission env create --name $env --image $JVM_RUNTIME_IMAGE --version 2 --keeparchive=true
 
 log "Creating pool manager & new deployment function for Java"
-fission fn create --name $fn_p --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env $env --entrypoint io.fission.HelloWorld
-fission fn create --name $fn_n --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env $env --executortype newdeploy --entrypoint io.fission.HelloWorld
+fission fn create --name $fn_p --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env $env --entrypoint io.fission.GetFunctionData
+fission fn create --name $fn_n --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env $env --executortype newdeploy --entrypoint io.fission.GetFunctionData
 
 log "Creating route for pool manager function"
 fission route create --name $fn_p --function $fn_p --url /$fn_p --method POST
@@ -56,8 +56,17 @@ body='<XML>
         </Book>
     </XML>'
 
-expect='Hello World!'
+expect='<XML>
+        <Book>
+	        <name>Ashish</name>
+            <subject>
+                <name>Math</name>
+                <name>Hindi</name>
+            </subject>
+        </Book>
+    </XML>'
 header='Content-type: application/xml'
+#test if the function is returning the same data as we passed
 log "Testing pool manager function"
 timeout 60 bash -c "test_xml_fn $fn_p \"$body\" \"$expect\" \"$header\""
 
