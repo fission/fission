@@ -74,7 +74,7 @@ type (
 		envStore      k8sCache.Store
 		envController k8sCache.Controller
 
-		idlePodReapTime time.Duration
+		defaultIdlePodReapTime time.Duration
 	}
 )
 
@@ -112,7 +112,7 @@ func MakeNewDeploy(
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 
-		idlePodReapTime: 2 * time.Minute,
+		defaultIdlePodReapTime: 2 * time.Minute,
 	}
 
 	if nd.crdClient != nil {
@@ -769,7 +769,7 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 // idleObjectReaper reaps objects after certain idle time
 func (deploy *NewDeploy) idleObjectReaper() {
 
-	pollSleep := time.Duration(deploy.idlePodReapTime)
+	pollSleep := 5 * time.Second
 	for {
 		time.Sleep(pollSleep)
 
@@ -783,13 +783,15 @@ func (deploy *NewDeploy) idleObjectReaper() {
 			envList[env.ObjectMeta.UID] = struct{}{}
 		}
 
-		funcSvcs, err := deploy.fsCache.ListOld(deploy.idlePodReapTime)
+		funcSvcs, err := deploy.fsCache.ListOld(pollSleep)
 		if err != nil {
 			deploy.logger.Error("error reaping idle pods", zap.Error(err))
 			continue
 		}
 
-		for _, fsvc := range funcSvcs {
+		for i := range funcSvcs {
+			fsvc := funcSvcs[i]
+
 			if fsvc.Executor != fv1.ExecutorTypeNewdeploy {
 				continue
 			}
@@ -813,30 +815,41 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				continue
 			}
 
-			deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-			if deployObj == nil {
-				deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+			idlePodReapTime := deploy.defaultIdlePodReapTime
+			if fn.Spec.IdleTimeout != nil {
+				idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+			}
+
+			if time.Since(fsvc.Atime) < idlePodReapTime {
 				continue
 			}
 
-			currentDeploy, err := deploy.kubernetesClient.AppsV1().
-				Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
-			if err != nil {
-				deploy.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-				continue
-			}
+			go func() {
+				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+				if deployObj == nil {
+					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+					return
+				}
 
-			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+				currentDeploy, err := deploy.kubernetesClient.AppsV1().
+					Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+				if err != nil {
+					deploy.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+					return
+				}
 
-			// do nothing if the current replicas is already lower than minScale
-			if *currentDeploy.Spec.Replicas <= minScale {
-				continue
-			}
+				minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
-			err = deploy.scaleDeployment(deployObj.Namespace, deployObj.Name, minScale)
-			if err != nil {
-				deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-			}
+				// do nothing if the current replicas is already lower than minScale
+				if *currentDeploy.Spec.Replicas <= minScale {
+					return
+				}
+
+				err = deploy.scaleDeployment(deployObj.Namespace, deployObj.Name, minScale)
+				if err != nil {
+					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+				}
+			}()
 		}
 	}
 }

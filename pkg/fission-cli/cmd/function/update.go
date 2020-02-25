@@ -87,7 +87,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			_, err := opts.Client().V1().Misc().SecretGet(&metav1.ObjectMeta{
+			err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      secretName,
 			})
@@ -111,7 +111,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			_, err := opts.Client().V1().Misc().ConfigMapGet(&metav1.ObjectMeta{
+			err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      cfgMapName,
 			})
@@ -148,6 +148,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
+	}
+
+	if input.IsSet(flagkey.FnIdleTimeout) {
+		fnTimeout := input.Int(flagkey.FnIdleTimeout)
+		function.Spec.IdleTimeout = &fnTimeout
 	}
 
 	if len(pkgName) == 0 {

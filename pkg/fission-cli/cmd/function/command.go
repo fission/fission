@@ -35,6 +35,7 @@ func Commands() *cobra.Command {
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
+			flag.FnIdleTimeout,
 
 			// TODO retired pkg & trigger related flags from function cmd
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -85,6 +86,7 @@ func Commands() *cobra.Command {
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
+			flag.FnIdleTimeout,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,

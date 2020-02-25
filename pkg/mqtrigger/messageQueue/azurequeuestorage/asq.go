@@ -30,13 +30,20 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/mqtrigger/validator"
+	"github.com/fission/fission/pkg/utils"
 )
+
+func init() {
+	factory.Register(fv1.MessageQueueTypeASQ, &Factory{})
+	validator.Register(fv1.MessageQueueTypeASQ, IsTopicValid)
+}
 
 // TODO: some of these constants should probably be environment variables
 const (
@@ -103,6 +110,12 @@ type AzureMessage interface {
 // This exists to enable unit testing.
 type AzureHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
+}
+
+type Factory struct{}
+
+func (factory *Factory) Create(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+	return New(logger, mqCfg, routerUrl)
 }
 
 type azureQueueService struct {
@@ -179,7 +192,7 @@ func newAzureQueueService(client storage.Client) AzureQueueService {
 	}
 }
 
-func New(logger *zap.Logger, routerURL string, config messageQueue.Config) (messageQueue.MessageQueue, error) {
+func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	account := os.Getenv("AZURE_STORAGE_ACCOUNT_NAME")
 	if len(account) == 0 {
 		return nil, errors.New("Required environment variable 'AZURE_STORAGE_ACCOUNT_NAME' is not set")
@@ -198,7 +211,7 @@ func New(logger *zap.Logger, routerURL string, config messageQueue.Config) (mess
 	}
 	return &AzureStorageConnection{
 		logger:    logger.Named("azue_storage"),
-		routerURL: routerURL,
+		routerURL: routerUrl,
 		service:   newAzureQueueService(client),
 		httpClient: &http.Client{
 			Timeout: AzureFunctionInvocationTimeout,

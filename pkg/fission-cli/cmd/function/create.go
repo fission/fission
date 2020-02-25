@@ -91,8 +91,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 	if fnTimeout <= 0 {
-		return errors.New("fntimeout must be greater than 0")
+		return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 	}
+
+	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
 	pkgName := input.String(flagkey.FnPackageName)
 
@@ -220,7 +222,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				_, err := opts.Client().V1().Misc().SecretGet(&metav1.ObjectMeta{
+				err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      secretName,
 				})
@@ -246,7 +248,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				_, err := opts.Client().V1().Misc().ConfigMapGet(&metav1.ObjectMeta{
+				err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      cfgMapName,
 				})
@@ -291,6 +293,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Resources:       *resourceReq,
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,
+			IdleTimeout:     &fnIdleTimeout,
 		},
 	}
 

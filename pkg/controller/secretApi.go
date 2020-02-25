@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -25,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (a *API) SecretGet(w http.ResponseWriter, r *http.Request) {
+func (a *API) SecretExists(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["secret"]
 	ns := a.extractQueryParamFromRequest(r, "namespace")
@@ -33,7 +32,7 @@ func (a *API) SecretGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	secret, err := a.kubernetesClient.CoreV1().Secrets(ns).Get(name, metav1.GetOptions{})
+	_, err := a.kubernetesClient.CoreV1().Secrets(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.logger.Error("error getting secret",
 			zap.Error(err),
@@ -42,11 +41,5 @@ func (a *API) SecretGet(w http.ResponseWriter, r *http.Request) {
 		a.respondWithError(w, err)
 		return
 	}
-
-	resp, err := json.Marshal(secret)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-	a.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, nil)
 }

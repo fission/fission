@@ -77,7 +77,7 @@ type (
 		pkgStore       k8sCache.Store
 		pkgController  k8sCache.Controller
 
-		idlePodReapTime time.Duration
+		defaultIdlePodReapTime time.Duration
 	}
 	request struct {
 		requestType
@@ -102,17 +102,17 @@ func MakeGenericPoolManager(
 	gpmLogger := logger.Named("generic_pool_manager")
 
 	gpm := &GenericPoolManager{
-		logger:           gpmLogger,
-		pools:            make(map[string]*GenericPool),
-		kubernetesClient: kubernetesClient,
-		namespace:        functionNamespace,
-		fissionClient:    fissionClient,
-		functionEnv:      cache.MakeCache(10*time.Second, 0),
-		fsCache:          fscache.MakeFunctionServiceCache(gpmLogger),
-		instanceId:       instanceId,
-		requestChannel:   make(chan *request),
-		idlePodReapTime:  2 * time.Minute,
-		fetcherConfig:    fetcherConfig,
+		logger:                 gpmLogger,
+		pools:                  make(map[string]*GenericPool),
+		kubernetesClient:       kubernetesClient,
+		namespace:              functionNamespace,
+		fissionClient:          fissionClient,
+		functionEnv:            cache.MakeCache(10*time.Second, 0),
+		fsCache:                fscache.MakeFunctionServiceCache(gpmLogger),
+		instanceId:             instanceId,
+		requestChannel:         make(chan *request),
+		defaultIdlePodReapTime: 2 * time.Minute,
+		fetcherConfig:          fetcherConfig,
 	}
 
 	go gpm.service()
@@ -555,13 +555,14 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *fv1.Environment) int32 {
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper() {
 
-	pollSleep := time.Duration(gpm.idlePodReapTime)
+	pollSleep := 5 * time.Second
 	for {
 		time.Sleep(pollSleep)
 
 		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
 		if err != nil {
-			gpm.logger.Fatal("failed to get environment list", zap.Error(err))
+			gpm.logger.Error("failed to get environment list", zap.Error(err))
+			continue
 		}
 
 		envList := make(map[k8sTypes.UID]struct{})
@@ -569,7 +570,18 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			envList[env.ObjectMeta.UID] = struct{}{}
 		}
 
-		funcSvcs, err := gpm.fsCache.ListOld(gpm.idlePodReapTime)
+		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+		if err != nil {
+			gpm.logger.Error("failed to get environment list", zap.Error(err))
+			continue
+		}
+
+		fnList := make(map[k8sTypes.UID]fv1.Function)
+		for i, fn := range fns.Items {
+			fnList[fn.ObjectMeta.UID] = fns.Items[i]
+		}
+
+		funcSvcs, err := gpm.fsCache.ListOld(pollSleep)
 		if err != nil {
 			gpm.logger.Error("error reaping idle pods", zap.Error(err))
 			continue
@@ -594,8 +606,19 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				continue
 			}
 
+			idlePodReapTime := gpm.defaultIdlePodReapTime
+			if fn, ok := fnList[fsvc.Function.UID]; ok {
+				if fn.Spec.IdleTimeout != nil {
+					idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+				}
+			}
+
+			if time.Since(fsvc.Atime) < idlePodReapTime {
+				continue
+			}
+
 			go func() {
-				deleted, err := gpm.fsCache.DeleteOld(fsvc, gpm.idlePodReapTime)
+				deleted, err := gpm.fsCache.DeleteOld(fsvc, idlePodReapTime)
 				if err != nil {
 					gpm.logger.Error("error deleting Kubernetes objects for function service",
 						zap.Error(err),

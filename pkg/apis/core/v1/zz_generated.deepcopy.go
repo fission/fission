@@ -426,6 +426,11 @@ func (in *FunctionSpec) DeepCopyInto(out *FunctionSpec) {
 	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	out.InvokeStrategy = in.InvokeStrategy
+	if in.IdleTimeout != nil {
+		in, out := &in.IdleTimeout, &out.IdleTimeout
+		*out = new(int)
+		**out = **in
+	}
 	return
 }
 

@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -25,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (a *API) ConfigMapGet(w http.ResponseWriter, r *http.Request) {
+func (a *API) ConfigMapExists(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["configmap"]
 	ns := a.extractQueryParamFromRequest(r, "namespace")
@@ -33,17 +32,11 @@ func (a *API) ConfigMapGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	configMap, err := a.kubernetesClient.CoreV1().ConfigMaps(ns).Get(name, metav1.GetOptions{})
+	_, err := a.kubernetesClient.CoreV1().ConfigMaps(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		a.logger.Error("error getting config map", zap.Error(err), zap.String("config_map_name", name), zap.String("namespace", ns))
 		a.respondWithError(w, err)
 		return
 	}
-
-	resp, err := json.Marshal(configMap)
-	if err != nil {
-		a.respondWithError(w, err)
-		return
-	}
-	a.respondWithSuccess(w, resp)
+	a.respondWithSuccess(w, nil)
 }
