@@ -178,6 +178,9 @@ prometheus:
   ## that is accessible by components.
   serviceEndpoint: ""
 
+  ## declare the Prometheus port that should be used on your Fission installation
+  port: 8080
+
 ## set this flag to false if you dont need canary deployment feature
 canaryDeployment:
   enabled: false

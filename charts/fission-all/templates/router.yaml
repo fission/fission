@@ -26,7 +26,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
-        prometheus.io/port: "8080"
+        prometheus.io/port: {{ .Values.prometheus.port | default 8080 }}
     spec:
       containers:
       - name: router
