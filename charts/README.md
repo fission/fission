@@ -64,6 +64,7 @@ Parameter | Description | Default
 `debugEnv` | If there are any pod specialization errors when a function is triggered and this flag is set to true, the error summary is returned as part of http response | `true`
 `prometheus.enabled` | Set to true if prometheus needs to be deployed along with fission | `true` in `fission-all`, `false` in `fission-core`
 `prometheus.serviceEndpoint` | If prometheus.enabled is false, please assign the prometheus service URL that is accessible by components. | `nil`
+`prometheus.port` | Set here the port where your Prometheus server is listening to | `8080`
 `canaryDeployment.enabled` | Set to true if you need canary deployment feature | `true` in `fission-all`, `false` in `fission-core`
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 `executor.adoptExistingResources` | If true, executor will try to adopt existing resources created by the old executor instance. | `false`
