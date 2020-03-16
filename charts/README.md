@@ -91,6 +91,8 @@ Parameter | Description | Default
 `nats.enabled` | Nats streaming enabled | `true`
 `nats.authToken` | Nats streaming auth token | `defaultFissionAuthToken`
 `nats.clusterID` | Nats streaming clusterID | `fissionMQTrigger`
+`nats.clientID`  | Client name registered with nats streaming | `fission`
+`nats.queueGroup` | Queue group registered with nats streaming | `fission-messageQueueNatsTrigger`
 `natsStreamingPort` | Nats streaming service port | `31316`
 `azureStorageQueue.enabled` | Azure storage account name | `false`
 `azureStorageQueue.key` | Azure storage account name | `""`

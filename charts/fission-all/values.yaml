@@ -29,6 +29,7 @@ controllerPort: 31313
 routerPort: 31314
 
 ## Port at which NATS streaming service should be exposed
+## (only if nats enabled and not external)
 natsStreamingPort: 31316
 
 ## Set to false if you create the namespaces manually
@@ -132,8 +133,15 @@ router:
 ### NATS Streaming, enabled by default
 nats:
   enabled: true
+  external: false
+
+  # nats URL for use with external nats. If set will override template;
+  # pass authToken explicitly if necessary
+  url: ''
   authToken: "defaultFissionAuthToken"
   clusterID: "fissionMQTrigger"
+  clientID: "fission"
+  queueGroup: "fission-messageQueueNatsTrigger"
 
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	nsUtil "github.com/nats-io/nats-streaming-server/util"
@@ -34,16 +35,32 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+var natsClusterID string
+var natsQueueGroup string
+var natsClientID string
+
 func init() {
+	natsClusterID = os.Getenv("MESSAGE_QUEUE_CLUSTER_ID")
+	if natsClusterID == "" {
+		natsClusterID = defaultNatsClusterID
+	}
+	natsClientID = os.Getenv("MESSAGE_QUEUE_CLIENT_ID")
+	if natsClientID == "" {
+		natsClientID = defaultNatsClientID
+	}
+	natsQueueGroup = os.Getenv("MESSAGE_QUEUE_QUEUE_GROUP")
+	if natsQueueGroup == "" {
+		natsQueueGroup = defaultNatsQueueGroup
+	}
 	factory.Register(fv1.MessageQueueTypeNats, &Factory{})
 	validator.Register(fv1.MessageQueueTypeNats, IsTopicValid)
 }
 
 const (
-	natsClusterID  = "fissionMQTrigger"
-	natsProtocol   = "nats://"
-	natsClientID   = "fission"
-	natsQueueGroup = "fission-messageQueueNatsTrigger"
+	natsProtocol          = "nats://"
+	defaultNatsClusterID  = "fissionMQTrigger"
+	defaultNatsClientID   = "fission"
+	defaultNatsQueueGroup = "fission-messageQueueNatsTrigger"
 )
 
 type (
