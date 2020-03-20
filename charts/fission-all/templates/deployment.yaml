@@ -380,17 +380,17 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: fission/influxdb
+        image: influxdb:1.7
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
-        - name: PRE_CREATE_DB
+        - name: INFLUXDB_DB
           value: fissionFunctionLog
-        - name: ADMIN_USER
+        - name: INFLUXDB_ADMIN_USER
           valueFrom:
             secretKeyRef:
               name: influxdb
               key: username
-        - name: INFLUXDB_INIT_PWD
+        - name: INFLUXDB_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
               name: influxdb
