@@ -1,19 +1,27 @@
-FROM ubuntu:trusty
+FROM buildpack-deps:disco
 
 ### base ###
 RUN yes | unminimize \
     && apt-get install -yq \
-    apache2-utils \
-    parallel \
-    realpath \
-    zip \
-    unzip \
-    less \
-    jq \
-    nano \
-    software-properties-common \
-    sudo \
-    && locale-gen en_US.UTF-8
+        zip \
+        unzip \
+        bash-completion \
+        build-essential \
+        htop \
+        jq \
+        less \
+        locales \
+        man-db \
+        nano \
+        software-properties-common \
+        sudo \
+        time \
+        vim \
+        multitail \
+        lsof \
+    && locale-gen en_US.UTF-8 \
+    && mkdir /var/lib/apt/dazzle-marks \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
 ENV LANG=en_US.UTF-8
 
