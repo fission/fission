@@ -1,0 +1,10 @@
+image:
+  file: .gitpod.Dockerfile
+
+#ports:
+#  - port: 3000
+#    onOpen: open-preview
+
+tasks:
+  - init: echo 'Builing Fission Go Code' # 
+    command: go mod download
