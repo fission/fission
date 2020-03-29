@@ -41,8 +41,8 @@ RUN sudo echo "Running 'sudo' for Gitpod: success" && \
     (echo; echo "for i in \$(ls \$HOME/.bashrc.d/*); do source \$i; done"; echo) >> /home/gitpod/.bashrc
 
 ### Go ###
-LABEL dazzle/layer=lang-go
-LABEL dazzle/test=tests/lang-go.yaml
+LABEL fission/layer=lang-go
+LABEL fission/test=tests/lang-go.yaml
 USER gitpod
 ENV GO_VERSION=1.12 \
     GOPATH=$HOME/go-packages \
