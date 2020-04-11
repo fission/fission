@@ -594,10 +594,10 @@ spec:
         - name: MESSAGE_QUEUE_CLIENT_ID
           value: {{ .Values.nats.clientID }}
         - name: MESSAGE_QUEUE_URL
-        {{- if not .Values.nats.url }}
-          value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
+        {{- if .Values.nats.authToken }}
+          value: nats://{{ .Values.nats.authToken }}@{{ .Values.nats.hostaddress }}
         {{- else }}
-          value: {{ .Values.nats.url }}
+          value: nats://{{ .Values.nats.hostaddress }}
         {{- end }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
           value: "{{ .Values.traceCollectorEndpoint }}"

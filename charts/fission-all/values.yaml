@@ -132,15 +132,26 @@ router:
 ## Message queue trigger config
 ### NATS Streaming, enabled by default
 nats:
+  # whether or not to use NATS
   enabled: true
+
+  # if true, don't install NATS, but
   external: false
 
-  # nats URL for use with external nats. If set will override template;
-  # pass authToken explicitly if necessary
-  url: ''
+  # Address of NATS server (domain:port)
+  # change from default for external NATS
+  hostaddress: 'nats-streaming:4222'
+
+  # Authorization token to use with NATS
   authToken: "defaultFissionAuthToken"
+
+  # NATS streaming clusterID
   clusterID: "fissionMQTrigger"
+
+  # Client name registered with NATS streaming 
   clientID: "fission"
+
+  # Queue group registered with NATS streaming 
   queueGroup: "fission-messageQueueNatsTrigger"
 
 ## Azure-storage-queue: enable and configure the details
