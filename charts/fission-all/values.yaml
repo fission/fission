@@ -83,9 +83,9 @@ logger:
    
     ## Configure additional capabilities
     additionalCapabilities:
-    # - NET_RAW
-    # - NET_ADMIN
-
+    # example values for linkerd
+    #- NET_RAW
+    #- NET_ADMIN
 
 executor:
   adoptExistingResources: false
