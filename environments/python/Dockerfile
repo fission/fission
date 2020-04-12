@@ -2,7 +2,7 @@ FROM alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 python3-dev build-base libev-dev && \
+RUN apk add --no-cache python3 python3-dev build-base libev-dev libffi-dev && \
     pip3 install --upgrade pip && \
     rm -r /root/.cache
 
