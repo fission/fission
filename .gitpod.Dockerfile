@@ -87,6 +87,17 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
 ### Kubectl & Helm To be added for deployment
+RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.16.0/bin/linux/amd64/kubectl \
+    && chmod +x ./kubectl \
+    && sudo mv kubectl /usr/local/bin
 
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 \
+    && chmod 700 get_helm.sh \
+    && ./get_helm.sh
+
+### Skaffold for Dev workflow
+RUN curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64 \
+    && chmod +x skaffold \
+    && sudo mv skaffold /usr/local/bin
 
 USER gitpod
