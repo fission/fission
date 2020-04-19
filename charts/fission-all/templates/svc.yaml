@@ -41,7 +41,7 @@ spec:
   selector:
     svc: controller
 
-{{- if .Values.nats.enabled }}
+{{- if and .Values.nats.enabled (not .Values.nats.external) }}
 ---
 apiVersion: v1
 kind: Service

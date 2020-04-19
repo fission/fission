@@ -89,8 +89,12 @@ Parameter | Description | Default
 `logger.fluentdImage` | Logger fluentbit image | `fluent/fluent-bit`
 `logger.fluentdImageTag` | Logger fluentbit image tag | `1.0.4`
 `nats.enabled` | Nats streaming enabled | `true`
+`nats.external` | Use external Nats installation | `false`
+`nats.hostaddress` | Address of NATS cluster | `nats-streaming:4222`
 `nats.authToken` | Nats streaming auth token | `defaultFissionAuthToken`
 `nats.clusterID` | Nats streaming clusterID | `fissionMQTrigger`
+`nats.clientID`  | Client name registered with nats streaming | `fission`
+`nats.queueGroup` | Queue group registered with nats streaming | `fission-messageQueueNatsTrigger`
 `natsStreamingPort` | Nats streaming service port | `31316`
 `azureStorageQueue.enabled` | Azure storage account name | `false`
 `azureStorageQueue.key` | Azure storage account name | `""`

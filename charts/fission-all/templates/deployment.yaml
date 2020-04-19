@@ -507,6 +507,7 @@ spec:
 #      serviceAccountName: fission-svc
 
 {{- if .Values.nats.enabled }}
+{{- if not .Values.nats.external }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -555,6 +556,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -585,8 +587,18 @@ spec:
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: nats-streaming
+        - name: MESSAGE_QUEUE_CLUSTER_ID
+          value: {{ .Values.nats.clusterID }}
+        - name: MESSAGE_QUEUE_QUEUE_GROUP
+          value: {{ .Values.nats.queueGroup }}
+        - name: MESSAGE_QUEUE_CLIENT_ID
+          value: {{ .Values.nats.clientID }}
         - name: MESSAGE_QUEUE_URL
-          value: nats://{{ .Values.nats.authToken }}@nats-streaming:4222
+        {{- if .Values.nats.authToken }}
+          value: nats://{{ .Values.nats.authToken }}@{{ .Values.nats.hostaddress }}
+        {{- else }}
+          value: nats://{{ .Values.nats.hostaddress }}
+        {{- end }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
           value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
