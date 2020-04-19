@@ -1,29 +1,27 @@
 ####################################
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
-#
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
-# Change <DOCKERHUB_REPO> -> to your Dockerhub username
+# Skaffold default-repo should be configured before using locally
+# $ skaffold config set default-repo <YOUR_DOCKER_BASE_REPO>
 # Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
 # Run`skaffold build` to only build and push images
 ############## Future Improvement/Limitations ##############
 # 1) [LOW]  Add profiles to suit various deployment needs
-# 2) [HIGH] Make base repo configurable as Skaffold config (ATM it works for build but not for Helm Deploy) 
-# (Related issue: https://github.com/GoogleContainerTools/skaffold/issues/3763)
 ####################################
 apiVersion: skaffold/v2beta1
 kind: Config
 build:
   artifacts:
-    - image: <DOCKERHUB_REPO>/fission
+    - image: fission
       context: .
       docker:
         dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: <DOCKERHUB_REPO>/fetcher
+    - image: fetcher
       docker:
         dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: <DOCKERHUB_REPO>/preupgradechecks
+    - image: preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
   tagPolicy:
@@ -43,9 +41,9 @@ deploy:
           repository: index.docker.io
         # The env template values only should go in setValueTemplates, all other overrides in setValues
         setValueTemplates:
-          image: <DOCKERHUB_REPO>/fission
-          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
-          fetcher.image: <DOCKERHUB_REPO>/fetcher
+          image: fission
+          preUpgradeChecksImage: preupgradechecks
+          fetcher.image: fetcher
           fetcher.imageTag: "{{.TAG}}"
           imageTag: "{{.TAG}}"
         wait: true
