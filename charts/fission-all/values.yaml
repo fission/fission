@@ -77,6 +77,17 @@ logger:
   ## security context and set privileged to true.
   enableSecurityContext: false
 
+  ## Enable PodSecurityPolicies to allow privileged container
+  ## Only required in some clusters and when enableSecurityContext is true
+  podSecurityPolicy:
+    enabled: false
+   
+    ## Configure additional capabilities
+    additionalCapabilities:
+    # example values for linkerd
+    #- NET_RAW
+    #- NET_ADMIN
+
 executor:
   adoptExistingResources: false
 

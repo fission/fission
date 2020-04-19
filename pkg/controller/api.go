@@ -113,7 +113,7 @@ func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
 		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
-		http.Error(w, string(se.ErrStatus.Reason), int(se.ErrStatus.Code))
+		http.Error(w, se.Error(), int(se.ErrStatus.Code))
 		return
 	}
 
