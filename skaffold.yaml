@@ -5,15 +5,14 @@
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
 # Change <DOCKERHUB_REPO> -> to your Dockerhub username
-# Run `skaffold run` to build and deploy with helm. 
+# Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
 # Run`skaffold build` to only build and push images
-############## Current Limitations ##############
-# 1) You can not refer to dynamically generated tag from build section in Helm values
-# - hence you have to use "latest" tag
-############### Possible enhancements ##############
-# 1) Add profiles to suit various deployment needs
+############## Future Improvement/Limitations ##############
+# 1) [LOW]  Add profiles to suit various deployment needs
+# 2) [HIGH] Make base repo configurable as Skaffold config (ATM it works for build but not for Helm Deploy) 
+# (Related issue: https://github.com/GoogleContainerTools/skaffold/issues/3763)
 ####################################
-apiVersion: skaffold/v1beta9
+apiVersion: skaffold/v2beta1
 kind: Config
 build:
   artifacts:
@@ -29,7 +28,7 @@ build:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
   tagPolicy:
     envTemplate:
-      template: "{{.IMAGE_NAME}}:skaffold-test"
+      template: "{{.IMAGE_NAME}}:{{.TAG}}"
 
 deploy:
   helm:
@@ -40,18 +39,17 @@ deploy:
           - ./charts/fission-all/values.yaml
         namespace: "fission"
         setValues:
-          image: <DOCKERHUB_REPO>/fission
-          imageTag: skaffold-test
-          fetcher:
-            image: <DOCKERHUB_REPO>/fetcher
-            imageTag: skaffold-test
           namespace: fission
-          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
           repository: index.docker.io
-        setValueTemplates: {}
+        # The env template values only should go in setValueTemplates, all other overrides in setValues
+        setValueTemplates:
+          image: <DOCKERHUB_REPO>/fission
+          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
+          fetcher.image: <DOCKERHUB_REPO>/fetcher
+          fetcher.imageTag: "{{.TAG}}"
+          imageTag: "{{.TAG}}"
         wait: true
         recreatePods: false
-        overrides: {}
         packaged: null
         imageStrategy:
           fqn: null
