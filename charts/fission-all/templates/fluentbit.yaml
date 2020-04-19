@@ -19,6 +19,64 @@ data:
 {{ else }}
 {{ fail "invalid chart" }}
 {{- end }}
+{{- if .Values.logger.podSecurityPolicy.enabled }}
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+spec:
+  privileged: true
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+  - '*'
+  {{- if .Values.logger.podSecurityPolicy.additionalCapabilities }}
+  allowedCapabilities:
+  {{- range .Values.logger.podSecurityPolicy.additionalCapabilities }}
+  - {{ . }}
+  {{- end }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: psp:{{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - {{ .Release.Name }}-fission-logger-privileged
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp:{{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+roleRef:
+  kind:     Role
+  name:     psp:{{ .Release.Name }}-fission-logger-privileged
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind:      ServiceAccount
+  name:      default
+  namespace: {{ .Release.Namespace }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
