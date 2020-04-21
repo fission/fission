@@ -64,21 +64,21 @@ router:
   deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
-  
+
   ## Display endpoint access logs
   ## To be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.
   displayAccessLog: false
-  
+
   ## Add annotations for router
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
-  
+
   ## For router to match encoded path.
   ## If true, "/foo%2Fbar" will match the path "/{var}";
   ## Otherwise, it will match the path "/foo/bar".
   useEncodedPath: false
-  
+
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.
@@ -110,10 +110,22 @@ router:
 
 ## Persist data to a persistent volume.
 persistence:
-  ## If true, fission will create/use a Persistent Volume Claim
+  ## If true, fission will create/use a Persistent Volume Claim unless storageType is set to s3
   ## If false, use emptyDir
   ##
   enabled: true
+
+  ## Must be set to either local or S3.
+  ## If storateType is set(other than local), one of its backend configuration must be set as below.
+  #storageType: local | s3
+
+  ## Sample configruation for AWS s3 storage backend
+  # s3:
+  #   bucketName: <awsBucketName>
+  #   subDir: <sub directory within a bucket>
+  #   accessKeyId: <awsAccessKeyId>
+  #   secretAccessKey: <awsSecretAccessKey>
+  #   region: <awsRegion>
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
@@ -132,7 +144,7 @@ persistence:
   accessMode: ReadWriteOnce
   size: 8Gi
 
-## Extend the container specs for the core fission pods. 
+## Extend the container specs for the core fission pods.
 ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
 ## For example:
 ## extraCoreComponentPodConfig:
@@ -173,7 +185,7 @@ debugEnv: false
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
   enabled: false
-  
+
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
   serviceEndpoint: ""
