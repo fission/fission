@@ -117,8 +117,11 @@ func globalFlags(cmd *cobra.Command, flags ...flag.Flag) {
 
 func toCobraFlag(cmd *cobra.Command, f flag.Flag, global bool) {
 	// Workaround to pass aliases to templater for generating flag aliases.
-	if len(f.Aliases) > 0 {
+	if len(f.Aliases) > 0 || len(f.Short) > 0 {
 		var aliases []string
+		if len(f.Short) > 0 {
+			f.Aliases = append(f.Aliases, f.Short)
+		}
 		for _, alias := range f.Aliases {
 			dash := "--"
 			if len(alias) == 1 {
