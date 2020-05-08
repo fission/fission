@@ -18,13 +18,14 @@ package util
 
 import (
 	"fmt"
-	"github.com/fission/fission/pkg/controller/client/rest"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/fission/fission/pkg/controller/client/rest"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -49,13 +50,13 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
-func GetApplicationUrl(selector string) (string, error) {
+func GetApplicationUrl(selector string, kubeContext string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		localPort, err := SetupPortForward(fissionNamespace, selector)
+		localPort, err := SetupPortForward(fissionNamespace, selector, kubeContext)
 		if err != nil {
 			return "", err
 		}
@@ -102,7 +103,7 @@ func KubifyName(old string) string {
 // GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
 // environment variable is empty or doesn't exist, ~/.kube/config is used for
 // the kube config path
-func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset, error) {
+func GetKubernetesClient(kubeContext string) (*restclient.Config, *kubernetes.Clientset, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")
@@ -131,7 +132,7 @@ func GetKubernetesClient() (*restclient.Config, *kubernetes.Clientset, error) {
 	}
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{}).ClientConfig()
+		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).ClientConfig()
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Failed to build Kubernetes config")
 	}
@@ -206,9 +207,10 @@ func GetServer(input cli.Input) (c client.Interface, err error) {
 
 func GetServerURL(input cli.Input) (serverUrl string, err error) {
 	serverUrl = input.GlobalString(flagkey.Server)
+	kubeContext := input.String(flagkey.KubeContext)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
-		serverUrl, err = GetApplicationUrl("application=fission-api")
+		serverUrl, err = GetApplicationUrl("application=fission-api", kubeContext)
 		if err != nil {
 			return "", err
 		}

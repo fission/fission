@@ -51,7 +51,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 	nozip := input.Bool(flagkey.SupportNoZip)
 	outputDir := input.String(flagkey.SupportOutput)
-
+	kubeContext := input.String(flagkey.KubeContext)
 	// check whether the dump directory exists.
 	_, err := os.Stat(outputDir)
 	if err != nil && os.IsNotExist(err) {
@@ -68,7 +68,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		panic(errors.Wrap(err, "Error creating dump directory for dumping files"))
 	}
 
-	_, k8sClient, err := util.GetKubernetesClient()
+	_, k8sClient, err := util.GetKubernetesClient(kubeContext)
 	if err != nil {
 		return err
 	}

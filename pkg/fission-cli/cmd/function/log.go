@@ -42,6 +42,7 @@ func Log(input cli.Input) error {
 func (opts *LogSubCommand) do(input cli.Input) error {
 	dbType := input.String(flagkey.FnLogDBType)
 	fnPod := input.String(flagkey.FnLogPod)
+	kubeContext := input.String(flagkey.KubeContext)
 
 	logReverseQuery := !input.Bool(flagkey.FnLogFollow) && input.Bool(flagkey.FnLogReverseQuery)
 
@@ -58,7 +59,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	server, err := util.GetApplicationUrl("application=fission-api")
+	server, err := util.GetApplicationUrl("application=fission-api", kubeContext)
 	if err != nil {
 		return err
 	}

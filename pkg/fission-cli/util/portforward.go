@@ -40,7 +40,7 @@ import (
 // is found by looking for a service in the same namespace and using
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
-func SetupPortForward(namespace, labelSelector string) (string, error) {
+func SetupPortForward(namespace, labelSelector string, kubeContext string) (string, error) {
 	console.Verbose(2, "Setting up port forward to %s in namespace %s",
 		labelSelector, namespace)
 
@@ -63,7 +63,7 @@ func SetupPortForward(namespace, labelSelector string) (string, error) {
 
 	console.Verbose(2, "Starting port forward from local port %v", localPort)
 	go func() {
-		err := runPortForward(labelSelector, localPort, namespace)
+		err := runPortForward(labelSelector, localPort, namespace, kubeContext)
 		if err != nil {
 			fmt.Printf("Error forwarding to port %v: %s", localPort, err.Error())
 			os.Exit(1)
@@ -103,8 +103,8 @@ func findFreePort() (string, error) {
 }
 
 // runPortForward creates a local port forward to the specified pod
-func runPortForward(labelSelector string, localPort string, ns string) error {
-	config, clientset, err := GetKubernetesClient()
+func runPortForward(labelSelector string, localPort string, ns string, kubeContext string) error {
+	config, clientset, err := GetKubernetesClient(kubeContext)
 	if err != nil {
 		return err
 	}
