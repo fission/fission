@@ -21,10 +21,6 @@ filename | sha256 hash
 
 # Changelog
 
-## [v1.9.0](https://github.com/fission/fission/tree/v1.9.0) (2020-05-10)
-
-[Full Changelog](https://github.com/fission/fission/compare/1.9.0...v1.9.0)
-
 ## [1.9.0](https://github.com/fission/fission/tree/1.9.0) (2020-05-10)
 
 [Full Changelog](https://github.com/fission/fission/compare/1.8.0...1.9.0)
@@ -56,10 +52,6 @@ filename | sha256 hash
 - Place package deploy archive to fix path [\#1529](https://github.com/fission/fission/pull/1529) ([life1347](https://github.com/life1347))
 - Fix github\_changelog\_generator error [\#1527](https://github.com/fission/fission/pull/1527) ([life1347](https://github.com/life1347))
 - Release 1.8.0 [\#1526](https://github.com/fission/fission/pull/1526) ([life1347](https://github.com/life1347))
-
-## [1.8.0](https://github.com/fission/fission/tree/1.8.0) (2020-02-03)
-
-[Full Changelog](https://github.com/fission/fission/compare/v1.8.0...1.8.0)
 
 ## [v1.8.0](https://github.com/fission/fission/tree/v1.8.0) (2020-02-03)
 
@@ -104,10 +96,6 @@ filename | sha256 hash
 - Add the not present cmname while fn create in err message \[CLI-UX\] [\#1462](https://github.com/fission/fission/pull/1462) ([viveksinghggits](https://github.com/viveksinghggits))
 - Fission 1.7.1 [\#1461](https://github.com/fission/fission/pull/1461) ([life1347](https://github.com/life1347))
 
-## [v1.7.1](https://github.com/fission/fission/tree/v1.7.1) (2019-12-09)
-
-[Full Changelog](https://github.com/fission/fission/compare/1.7.1...v1.7.1)
-
 ## [1.7.1](https://github.com/fission/fission/tree/1.7.1) (2019-12-09)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.7.0...1.7.1)
@@ -118,9 +106,6 @@ filename | sha256 hash
 - Not to exclude hidden file when creating archive [\#1458](https://github.com/fission/fission/pull/1458) ([life1347](https://github.com/life1347))
 - Fission 1.7.0 [\#1457](https://github.com/fission/fission/pull/1457) ([life1347](https://github.com/life1347))
 
-## [v1.7.0](https://github.com/fission/fission/tree/v1.7.0) (2019-12-02)
-
-[Full Changelog](https://github.com/fission/fission/compare/1.7.0...v1.7.0)
 
 ## [1.7.0](https://github.com/fission/fission/tree/1.7.0) (2019-12-02)
 
@@ -140,10 +125,6 @@ filename | sha256 hash
 - Fix adopted deployment uses old fetcher image [\#1447](https://github.com/fission/fission/pull/1447) ([life1347](https://github.com/life1347))
 - Improve executor bootstrap speed [\#1446](https://github.com/fission/fission/pull/1446) ([life1347](https://github.com/life1347))
 - Fission 1.7.0-rc.2 [\#1445](https://github.com/fission/fission/pull/1445) ([life1347](https://github.com/life1347))
-
-## [1.7.0-rc.2](https://github.com/fission/fission/tree/1.7.0-rc.2) (2019-11-27)
-
-[Full Changelog](https://github.com/fission/fission/compare/v1.7.0-rc.2...1.7.0-rc.2)
 
 ## [v1.7.0-rc.2](https://github.com/fission/fission/tree/v1.7.0-rc.2) (2019-11-27)
 
@@ -172,9 +153,6 @@ filename | sha256 hash
 - Fix truncated body returned from router [\#1420](https://github.com/fission/fission/pull/1420) ([life1347](https://github.com/life1347))
 - Fission 1.7.0-rc.1 [\#1419](https://github.com/fission/fission/pull/1419) ([life1347](https://github.com/life1347))
 
-## [v1.7.0-rc.1](https://github.com/fission/fission/tree/v1.7.0-rc.1) (2019-11-18)
-
-[Full Changelog](https://github.com/fission/fission/compare/1.7.0-rc.1...v1.7.0-rc.1)
 
 ## [1.7.0-rc.1](https://github.com/fission/fission/tree/1.7.0-rc.1) (2019-11-18)
 
@@ -238,9 +216,6 @@ filename | sha256 hash
 - Replace `AlwaysSample` with `ProbabilitySampler` in router \(\#1215\) [\#1348](https://github.com/fission/fission/pull/1348) ([ccamel](https://github.com/ccamel))
 - Refactor package CLI command [\#1345](https://github.com/fission/fission/pull/1345) ([life1347](https://github.com/life1347))
 
-## [1.6.0](https://github.com/fission/fission/tree/1.6.0) (2019-10-10)
-
-[Full Changelog](https://github.com/fission/fission/compare/v1.6.0...1.6.0)
 
 ## [v1.6.0](https://github.com/fission/fission/tree/v1.6.0) (2019-10-10)
 
