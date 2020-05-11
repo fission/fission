@@ -200,10 +200,8 @@ build_charts() {
     find . -iname *.~?~ | xargs -r rm
     for c in fission-all fission-core
     do
-    # https://github.com/kubernetes/helm/issues/1732
-    helm init --client-only
-	  helm package -u $c/
-	  mv *.tgz $BUILDDIR/charts/
+	helm package -u $c/
+	mv *.tgz $BUILDDIR/charts/
     done
     popd
 }
@@ -216,8 +214,6 @@ build_yamls() {
     find . -iname *.~?~ | xargs -r rm
 
     releaseName=fission-$(echo ${version} | sed 's/\./-/g')
-
-    helm init --client-only
 
     for c in fission-all fission-core
     do
