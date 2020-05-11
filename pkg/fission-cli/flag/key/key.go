@@ -17,9 +17,10 @@ limitations under the License.
 package flagkey
 
 const (
-	Verbosity  = "verbosity"
-	Server     = "server"
-	ClientOnly = "client-only"
+	Verbosity   = "verbosity"
+	Server      = "server"
+	ClientOnly  = "client-only"
+	KubeContext = "kube-context"
 
 	resourceName = "name"
 	force        = "force"
