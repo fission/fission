@@ -106,6 +106,11 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.TerminationGracePeriodSeconds = targetPodSpec.TerminationGracePeriodSeconds
 	}
 
+	// Possibility to disable kubernetes environment variables for functions/environments (#1599)
+	if targetPodSpec.EnableServiceLinks != nil {
+		srcPodSpec.EnableServiceLinks = targetPodSpec.EnableServiceLinks
+	}
+
 	//TODO - Security context should be merged instead of overriding.
 	if targetPodSpec.SecurityContext != nil {
 		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
