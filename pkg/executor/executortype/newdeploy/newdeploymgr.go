@@ -452,7 +452,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	if fn.ObjectMeta.Namespace != metav1.NamespaceDefault {
 		ns = fn.ObjectMeta.Namespace
 	}
-
+	deploy.updateFunctionStatus(fn, fv1.Pending, "")
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
 	// Since newdeploy waits for pods of deployment to be ready,
@@ -461,6 +461,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	svc, err := deploy.createOrGetSvc(deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
+		deploy.updateFunctionStatus(fn, fv1.Failed, err.Error())
 		go deploy.cleanupNewdeploy(ns, objName)
 		return nil, errors.Wrapf(err, "error creating service %v", objName)
 	}
@@ -469,6 +470,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
+		deploy.updateFunctionStatus(fn, fv1.Failed, err.Error())
 		go deploy.cleanupNewdeploy(ns, objName)
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
@@ -476,10 +478,11 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	hpa, err := deploy.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
+		deploy.updateFunctionStatus(fn, fv1.Failed, err.Error())
 		go deploy.cleanupNewdeploy(ns, objName)
 		return nil, errors.Wrapf(err, "error creating the HPA %v", objName)
 	}
-
+	deploy.updateFunctionStatus(fn, fv1.Succeeded, "")
 	kubeObjRefs := []apiv1.ObjectReference{
 		{
 			//obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
@@ -562,6 +565,14 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 		return err
 	}
 
+	//if the function status changed from Failed to Pending, then reCreate Function because of the deployment was deleted
+	if oldFn.Spec.Status.Phase == fv1.Failed && newFn.Spec.Status.Phase == fv1.Pending {
+		_, err := deploy.createFunction(newFn)
+		if err != nil {
+			deploy.updateStatus(oldFn, err, "error changing the function's type to newdeploy")
+		}
+		return err
+	}
 	deployChanged := false
 
 	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {

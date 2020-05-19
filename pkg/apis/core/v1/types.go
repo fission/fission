@@ -35,6 +35,13 @@ import (
 //   9. Add a getter method for your interface type to FissionClient in fission/crd/client.go
 //  10. Follow the instruction in README.md to regenerate CRD type deepcopy methods
 //
+type FunctionPhase int
+
+const (
+	Pending FunctionPhase = iota
+	Succeeded
+	Failed
+)
 
 type (
 
@@ -349,8 +356,14 @@ type (
 		// is detected within the idle timeout, the executor will then recycle the
 		// function pod(s) to release resources.
 		IdleTimeout *int `json:"idletimeout,omitempty"`
-	}
 
+		//indicates the function lifecycle
+		Status FunctionStatus `json:"status"`
+	}
+	FunctionStatus struct {
+		Phase FunctionPhase `json:"phase"`
+		Msg   string        `json:"msg"`
+	}
 	// InvokeStrategy is a set of controls over how the function executes.
 	// It affects the performance and resource usage of the function.
 	//
