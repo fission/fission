@@ -3,8 +3,7 @@
 # build and deploy Fission to Kubernetes cluster.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
-# Skaffold default-repo should be configured before using locally
-# $ skaffold config set default-repo <YOUR_DOCKER_BASE_REPO>
+# Replace <DOCKERHUB_REPO> with your registry repo/org name
 # Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
 # Run`skaffold build` to only build and push images
 ############## Future Improvement/Limitations ##############
