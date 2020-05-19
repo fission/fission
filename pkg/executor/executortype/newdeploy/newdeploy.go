@@ -609,3 +609,14 @@ func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, se
 
 	return rvCount, nil
 }
+func (deploy *NewDeploy) updateFunctionStatus(fn *fv1.Function, phase fv1.FunctionPhase, s string) {
+	fn.Spec.Status.Phase = phase
+	if len(s) > 120 {
+		s = s[0:120]
+	}
+	fn.Spec.Status.Msg = s
+	_, err := deploy.fissionClient.CoreV1().Functions(fn.Namespace).Update(fn)
+	if err != nil {
+		deploy.logger.Error("can't update function status", zap.String("functionStatus", err.Error()))
+	}
+}

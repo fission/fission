@@ -151,18 +151,26 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	gpm.logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(fn)
 	if err != nil {
+		gpm.updateFunctionStatus(fn, fv1.Failed, "getting env "+err.Error())
 		return nil, err
 	}
 
 	pool, err := gpm.getPool(env)
 	if err != nil {
+		gpm.updateFunctionStatus(fn, fv1.Failed, "getting pool "+err.Error())
 		return nil, err
 	}
 
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
-	return pool.getFuncSvc(ctx, fn)
+	svc, err2 := pool.getFuncSvc(ctx, fn)
+	if err2 != nil {
+		gpm.updateFunctionStatus(fn, fv1.Failed, err2.Error())
+	} else {
+		gpm.updateFunctionStatus(fn, fv1.Succeeded, "")
+	}
+	return svc, err2
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -638,5 +646,17 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				}
 			}()
 		}
+	}
+}
+
+func (gpm *GenericPoolManager) updateFunctionStatus(fn *fv1.Function, phase fv1.FunctionPhase, s string) {
+	if len(s) > 120 {
+		s = s[0:120]
+	}
+	fn.Spec.Status.Msg = s
+	fn.Spec.Status.Phase = phase
+	_, err := gpm.fissionClient.CoreV1().Functions(fn.Namespace).Update(fn)
+	if err != nil {
+		gpm.logger.Error("update function ", zap.String("function status", err.Error()))
 	}
 }
