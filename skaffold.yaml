@@ -14,14 +14,14 @@ apiVersion: skaffold/v2beta1
 kind: Config
 build:
   artifacts:
-    - image: fission
+    - image: <DOCKERHUB_REPO>/fission
       context: .
       docker:
         dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: fetcher
+    - image: <DOCKERHUB_REPO>/fetcher
       docker:
         dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: preupgradechecks
+    - image: <DOCKERHUB_REPO>/preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
   tagPolicy:
@@ -41,9 +41,9 @@ deploy:
           repository: index.docker.io
         # The env template values only should go in setValueTemplates, all other overrides in setValues
         setValueTemplates:
-          image: fission
-          preUpgradeChecksImage: preupgradechecks
-          fetcher.image: fetcher
+          image: <DOCKERHUB_REPO>/fission
+          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
+          fetcher.image: <DOCKERHUB_REPO>/fetcher
           fetcher.imageTag: "{{.TAG}}"
           imageTag: "{{.TAG}}"
         wait: true
