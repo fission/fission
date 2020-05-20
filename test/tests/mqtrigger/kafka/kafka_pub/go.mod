@@ -10,5 +10,3 @@ require (
 	github.com/pierrec/lz4 v2.0.2+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165 // indirect
 )
-
-go 1.13
