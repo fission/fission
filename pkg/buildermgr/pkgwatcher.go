@@ -101,10 +101,10 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 	}
 
 	// Create a new BackOff for health check on environment builder pod
-	healthCheckBackOff, err := utils.NewBackOff(500*time.Millisecond,time.Minute/10,5)
-	if err != nil {
-		pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
-	}
+	healthCheckBackOff := utils.NewDefaultBackOff()
+	//if err != nil {
+	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
+	//}
 	// Do health check for environment builder pod
 	for healthCheckBackOff.NextExists() {
 		// Informer store is not able to use label to find the pod,
@@ -117,7 +117,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 
 		if len(items) == 0 {
 			pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
-			time.Sleep(healthCheckBackOff.GetCurrentBackOffDuration())
+			time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 			continue
 		}
 
@@ -148,7 +148,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 
 			if !podIsReady {
 				pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
-				time.Sleep(healthCheckBackOff.GetCurrentBackOffDuration())
+				time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 				break
 			}
 
