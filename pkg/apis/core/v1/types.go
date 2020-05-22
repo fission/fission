@@ -645,6 +645,25 @@ type (
 
 		// Content type of payload
 		ContentType string `json:"contentType"`
+
+		// +optional
+		PollingInterval *int32 `json:"pollingInterval,omitempty"`
+
+		// +optional
+		CooldownPeriod *int32 `json:"cooldownPeriod,omitempty"`
+
+		// +optional
+		MinReplicaCount *int32 `json:"minReplicaCount,omitempty"`
+
+		// +optional
+		MaxReplicaCount *int32 `json:"maxReplicaCount,omitempty"`
+
+		// ScalerTrigger fields
+		Metadata map[string]string `json:"metadata"`
+
+		// TriggerAuthentication fields
+		// +optional
+		Authdata map[string]string `json:"authdata"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or
