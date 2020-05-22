@@ -18,6 +18,7 @@ package mqtrigger
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -93,6 +94,58 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	pollingInterval := int32(input.Int(flagkey.MqtPollingInterval))
+	if pollingInterval < 0 {
+		return errors.New("Polling interval must be greater than or equal to 0")
+	}
+
+	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
+	if cooldownPeriod < 0 {
+		return errors.New("CooldownPeriod interval must be greater than or equal to 0")
+	}
+
+	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
+	if minReplicaCount < 0 {
+		return errors.New("MinReplicaCount must be greater than or equal to 0")
+	}
+
+	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
+	if maxReplicaCount < 0 {
+		return errors.New("MaxReplicaCount must be greater than or equal to 0")
+	}
+
+	metadata := make(map[string]string)
+	metadataParams := input.StringSlice(flagkey.MqtMetadata)
+	if len(metadataParams) > 0 {
+		for _, m := range metadataParams {
+			metadataParts := strings.SplitN(m, "=", 2)
+			if len(metadataParts) == 0 {
+				continue
+			}
+			if len(metadataParts) == 2 {
+				key := metadataParts[0]
+				value := metadataParts[1]
+				metadata[key] = value
+			}
+		}
+	}
+
+	authdata := make(map[string]string)
+	authdataParams := input.StringSlice(flagkey.MqtAuthdata)
+	if len(authdataParams) > 0 {
+		for _, m := range authdataParams {
+			authdataParts := strings.SplitN(m, "=", 2)
+			if len(authdataParts) == 0 {
+				continue
+			}
+			if len(authdataParts) == 2 {
+				key := authdataParts[0]
+				value := authdataParts[1]
+				authdata[key] = value
+			}
+		}
+	}
+
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
 		fr, err := spec.ReadSpecs(specDir)
@@ -131,6 +184,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			ErrorTopic:       errorTopic,
 			MaxRetries:       maxRetries,
 			ContentType:      contentType,
+			PollingInterval:  &pollingInterval,
+			CooldownPeriod:   &cooldownPeriod,
+			MinReplicaCount:  &minReplicaCount,
+			MaxReplicaCount:  &maxReplicaCount,
+			Metadata:         metadata,
+			Authdata:         authdata,
 		},
 	}
 
