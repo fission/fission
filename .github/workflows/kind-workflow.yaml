@@ -13,6 +13,12 @@ jobs:
      
       - uses: engineerd/setup-kind@v0.4.0        
 
+      - name: Setup kubectl to kind
+        run: |
+          kubectl config use-context kind-kind
+          kubectl config current-context
+          kubectl get ns
+
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
         with:
