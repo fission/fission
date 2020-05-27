@@ -28,4 +28,5 @@ jobs:
       - name: Deploy using skaffold
         run: |
           cd /home/runner/work/fission/fission
+          sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
           TAG=213 skaffold run        
