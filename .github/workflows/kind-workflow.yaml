@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - fission-github-actions
+    types: [labeled]
 jobs:
   fission-on-kind:
     runs-on: ubuntu-18.04
