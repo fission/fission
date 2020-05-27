@@ -7,7 +7,24 @@ jobs:
   fission-on-kind:
     runs-on: ubuntu-18.04
     steps:
-      - name: Checkout opengov from master
+      - name: Checkout fisson from master
         uses: actions/checkout@v2
      
       - uses: engineerd/setup-kind@v0.4.0        
+
+      - name: Set up Go 1.12
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.12
+
+      - name: Download skaffold
+        run: |
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+          chmod +x skaffold
+          sudo mv skaffold /usr/local/bin
+          skaffold version
+
+      - name: Deploy using skaffold
+        run: |
+          cd fission/
+          TAG=213 skaffold run        
