@@ -27,5 +27,5 @@ jobs:
 
       - name: Deploy using skaffold
         run: |
-          cd fission/
+          cd /home/runner/work/fission/fission
           TAG=213 skaffold run        
