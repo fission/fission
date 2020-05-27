@@ -1,0 +1,13 @@
+name: kind-workflow
+on:
+  pull_request:
+    branches:
+      - fission-github-actions
+jobs:
+  fission-on-kind:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout opengov from master
+        uses: actions/checkout@v2
+     
+      - uses: engineerd/setup-kind@v0.4.0        
