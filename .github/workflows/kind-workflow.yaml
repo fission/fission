@@ -37,6 +37,8 @@ jobs:
           cd /home/runner/work/fission/fission
           export GO111MODULE=on
           go mod vendor
+          ./hack/verify-gofmt.sh
+          ./hack/verify-govet.sh          
           sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
           TAG=213 skaffold run        
