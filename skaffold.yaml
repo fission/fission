@@ -3,7 +3,7 @@
 # build and deploy Fission to Kubernetes cluster.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
-# Replace <DOCKERHUB_REPO> with your registry repo/org name
+# Replace fission with your registry repo/org name
 # Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
 # Run`skaffold build` to only build and push images
 ############## Future Improvement/Limitations ##############
@@ -13,14 +13,14 @@ apiVersion: skaffold/v2beta1
 kind: Config
 build:
   artifacts:
-    - image: <DOCKERHUB_REPO>/fission
+    - image: fission/fission
       context: .
       docker:
         dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: <DOCKERHUB_REPO>/fetcher
+    - image: fission/fetcher
       docker:
         dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: <DOCKERHUB_REPO>/preupgradechecks
+    - image: fission/preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
   tagPolicy:
@@ -40,9 +40,9 @@ deploy:
           repository: index.docker.io
         # The env template values only should go in setValueTemplates, all other overrides in setValues
         setValueTemplates:
-          image: <DOCKERHUB_REPO>/fission
-          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
-          fetcher.image: <DOCKERHUB_REPO>/fetcher
+          image: fission/fission
+          preUpgradeChecksImage: fission/preupgradechecks
+          fetcher.image: fission/fetcher
           fetcher.imageTag: "{{.TAG}}"
           imageTag: "{{.TAG}}"
         wait: true
@@ -51,6 +51,6 @@ deploy:
         imageStrategy:
           fqn: null
           helm: null
-    flag:
+    flags:
       upgrade: ["--timeout=10m"]
       install: ["--timeout=10m"]          
