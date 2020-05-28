@@ -53,4 +53,4 @@ deploy:
           helm: null
     flags:
       upgrade: ["--timeout=10m"]
-      install: ["--timeout=10m"]          
+      install: ["--timeout=15m"]          
