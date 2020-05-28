@@ -21,6 +21,12 @@ containerdConfigPatches:
     endpoint = ["http://${reg_name}:${reg_port}"]
 EOF
 
+# Verify if network "kind" exists
+docker network ls | grep kind
+if [ $? -ne 0 ]; then
+  docker network create kind
+fi
+
 # connect the registry to the cluster network
 docker network connect "kind" "${reg_name}"
 
@@ -29,4 +35,3 @@ docker network connect "kind" "${reg_name}"
 for node in $(kind get nodes); do
   kubectl annotate node "${node}" "kind.x-k8s.io/registry=localhost:${reg_port}";
 done
-
