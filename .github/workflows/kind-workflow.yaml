@@ -11,14 +11,21 @@ jobs:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
      
-      - uses: engineerd/setup-kind@v0.4.0        
-
+      - uses: engineerd/setup-kind@v0.4.0
+      
       - name: Setup kubectl to kind
         run: |
           kubectl config use-context kind-kind
           kubectl config current-context
           kubectl get ns
           kubectl create namespace fission
+
+      - name: Testing
+        run: |
+          kubectl cluster-info
+          kubectl get pods -n kube-system
+          echo "current-context:" $(kubectl config current-context)
+          echo "environment-kubeconfig:" ${KUBECONFIG}        
 
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
