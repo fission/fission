@@ -51,7 +51,7 @@ jobs:
           export GO111MODULE=on
           go mod download
           go mod vendor
-          ./hack/verify-staticcheck.sh
+          #          ./hack/verify-staticcheck.sh
           ./hack/verify-gofmt.sh
           ./hack/verify-govet.sh
           helm lint charts/fission-all/ charts/fission-core/
