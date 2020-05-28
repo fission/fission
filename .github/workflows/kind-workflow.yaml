@@ -10,10 +10,17 @@ jobs:
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
-        #        with:
-        #  ref: fission-github-actions
+        with:
+          ref: fission-github-actions
      
       - uses: engineerd/setup-kind@v0.4.0
+        with: 
+          skipClusterCreation: true
+
+      - name: Install kind cluster with registry
+        run: |
+          cd /home/runner/work/fission/fission 
+          ./kind-with-registry.sh 
       
       - name: Setup kubectl to kind
         run: |
@@ -49,7 +56,7 @@ jobs:
           go mod vendor
           ./hack/verify-gofmt.sh
           ./hack/verify-govet.sh
-          sed -i "s/<DOCKERHUB_REPO>/infracloud/g" skaffold.yaml
+          sed -i "s/<DOCKERHUB_REPO>/localhost:5000/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
           TAG=213 skaffold run
 
@@ -57,11 +64,6 @@ jobs:
         if: success() || failure()
         run: |
           kubectl get pods -n fission
-
-      - name: install kube-setup
-        if: success() || failure()
-        run: |
-          ./hack/travis-kube-setup.sh        
 
       - name: Before_script
         if: success() || failure()
