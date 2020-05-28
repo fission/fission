@@ -10,8 +10,8 @@ jobs:
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
-        with:
-          ref: fission-github-actions
+        #        with:
+        #  ref: fission-github-actions
      
       - uses: engineerd/setup-kind@v0.4.0
       
@@ -51,4 +51,7 @@ jobs:
           sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
           TAG=213 skaffold run
+          
+      - name: Verify the pods
+        run: |    
           kubectl get pods -n fission
