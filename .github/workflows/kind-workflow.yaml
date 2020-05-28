@@ -18,6 +18,7 @@ jobs:
           kubectl config use-context kind-kind
           kubectl config current-context
           kubectl get ns
+          kubectl create namespace fission
 
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
