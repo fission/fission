@@ -51,3 +51,6 @@ deploy:
         imageStrategy:
           fqn: null
           helm: null
+    flag:
+      upgrade: ["--timeout=10m"]
+      install: ["--timeout=10m"]          
