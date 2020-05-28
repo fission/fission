@@ -1,4 +1,5 @@
 #!/bin/sh
+set -x
 set -o errexit
 
 # create registry container unless it already exists
@@ -22,10 +23,7 @@ containerdConfigPatches:
 EOF
 
 # Verify if network "kind" exists
-docker network ls | grep kind
-if [ $? -ne 0 ]; then
-  docker network create kind
-fi
+docker network ls
 
 # connect the registry to the cluster network
 docker network connect "kind" "${reg_name}"
