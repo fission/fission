@@ -41,6 +41,10 @@ jobs:
           sudo mv skaffold /usr/local/bin
           skaffold version
 
+      - name: install kube-setup
+        run: |
+          ./hack/travis-kube-setup.sh        
+
       - name: Before_script
         run: |
           cd /home/runner/work/fission/fission
