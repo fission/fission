@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
+        with:
+          ref: fission-github-actions
      
       - uses: engineerd/setup-kind@v0.4.0
       
