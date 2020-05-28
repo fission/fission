@@ -25,6 +25,9 @@ EOF
 # Verify if network "kind" exists
 docker network ls
 
+# create network "kind"
+docker network create kind 
+
 # connect the registry to the cluster network
 docker network connect "kind" "${reg_name}"
 
