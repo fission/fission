@@ -41,36 +41,40 @@ jobs:
           sudo mv skaffold /usr/local/bin
           skaffold version
 
-      - name: install kube-setup
-        run: |
-          ./hack/travis-kube-setup.sh        
-
-      - name: Before_script
-        run: |
-          cd /home/runner/work/fission/fission
-          export GO111MODULE=on
-          go mod download
-          go mod vendor
-          #          ./hack/verify-staticcheck.sh
-          ./hack/verify-gofmt.sh
-          ./hack/verify-govet.sh
-          helm lint charts/fission-all/ charts/fission-core/
-          ./hack/runtests.sh
-          ./test/build.sh
 
       - name: Deploy using skaffold
         run: |
           cd /home/runner/work/fission/fission
+          export GO111MODULE=on
+          go mod vendor
+          ./hack/verify-gofmt.sh
+          ./hack/verify-govet.sh
           sed -i "s/<DOCKERHUB_REPO>/infracloud/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
           TAG=213 skaffold run
 
       - name: Verify the pods
-        if: failure()
+        if: succeeded() || failed()
         run: |
           kubectl get pods -n fission
 
+      - name: install kube-setup
+        if: succeeded() || failed()
+        run: |
+          ./hack/travis-kube-setup.sh        
+
+      - name: Before_script
+        if: succeeded() || failed()
+        run: |
+          cd /home/runner/work/fission/fission
+          go mod download
+          #          ./hack/verify-staticcheck.sh
+          helm lint charts/fission-all/ charts/fission-core/
+          ./hack/runtests.sh
+          ./test/build.sh
+
       - name: Upgrade steps
+        if: succeeded() || failed()
         run: |
           cd /home/runner/work/fission/fission
           ./test/test.sh        
