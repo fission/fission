@@ -53,6 +53,7 @@ jobs:
           TAG=213 skaffold run
           
       - name: Verify the pods
+        if: failure()
         run: |
           cat /home/runner/.config/gcloud/configurations/config_default
           kubectl get pods -n fission
