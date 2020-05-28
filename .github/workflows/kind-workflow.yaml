@@ -28,7 +28,6 @@ jobs:
           kubectl get pods -n kube-system
           echo "current-context:" $(kubectl config current-context)
           echo "environment-kubeconfig:" ${KUBECONFIG}        
-          cat /home/runner/.config/gcloud/configurations/config_default
 
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
