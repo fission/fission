@@ -34,5 +34,7 @@ jobs:
       - name: Deploy using skaffold
         run: |
           cd /home/runner/work/fission/fission
+          export GO111MODULE=on
+          go mod vendor
           sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
           TAG=213 skaffold run        
