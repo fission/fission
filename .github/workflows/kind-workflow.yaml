@@ -54,17 +54,17 @@ jobs:
           TAG=213 skaffold run
 
       - name: Verify the pods
-        if: succeeded() || failed()
+        if: success() || failure()
         run: |
           kubectl get pods -n fission
 
       - name: install kube-setup
-        if: succeeded() || failed()
+        if: success() || failure()
         run: |
           ./hack/travis-kube-setup.sh        
 
       - name: Before_script
-        if: succeeded() || failed()
+        if: success() || failure()
         run: |
           cd /home/runner/work/fission/fission
           go mod download
@@ -74,7 +74,7 @@ jobs:
           ./test/build.sh
 
       - name: Upgrade steps
-        if: succeeded() || failed()
+        if: success() || failure()
         run: |
           cd /home/runner/work/fission/fission
           ./test/test.sh        
