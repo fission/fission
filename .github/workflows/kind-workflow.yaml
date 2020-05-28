@@ -48,4 +48,5 @@ jobs:
           ./hack/verify-govet.sh          
           sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          TAG=213 skaffold run        
+          TAG=213 skaffold run
+          kubectl get pods -n fission
