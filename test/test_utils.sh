@@ -59,7 +59,8 @@ setupCIBuildEnv() {
     export IMAGE=fission-bundle
     export FETCHER_IMAGE=$REPO/fetcher
     export BUILDER_IMAGE=$REPO/builder
-    export TAG=test-${TRAVIS_BUILD_ID}
+#    export TAG=test-${TRAVIS_BUILD_ID}
+    export TAG=test
     export PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
     export ROUTER_SERVICE_TYPE=LoadBalancer
     export SERVICE_TYPE=LoadBalancer
