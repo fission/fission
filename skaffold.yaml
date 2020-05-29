@@ -40,7 +40,7 @@ deploy:
         namespace: "fission"
         setValues:
           namespace: fission
-          repository: "localhost:5000"
+          repository: ""
         # The env template values only should go in setValueTemplates, all other overrides in setValues
         setValueTemplates:
           image: <DOCKERHUB_REPO>/fission
