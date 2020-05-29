@@ -8,8 +8,8 @@ import (
 const (
 	DefaultInitialInterval = 500 * time.Millisecond
 	DefaultMultiplier      = 1.5
-	DefaultMaxInterval     = 60 * time.Second
-	DefaultMaxCount        = 15
+	DefaultMaxInterval     = 300 * time.Second
+	DefaultMaxCount        = 30
 )
 
 type backoff struct {
