@@ -6,7 +6,7 @@ on:
     types: [labeled]
 jobs:
   fission-on-kind:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
