@@ -12,9 +12,9 @@
 apiVersion: skaffold/v2beta1
 kind: Config
 build:
-  insecureRegistries: ["localhost:5000"]
-  local:
-    push: true
+        #  insecureRegistries: ["localhost:5000"]
+        #  local:
+        #    push: true
   artifacts:
     - image: <DOCKERHUB_REPO>/fission
       context: .
