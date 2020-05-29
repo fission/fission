@@ -58,7 +58,7 @@ jobs:
           ./hack/verify-govet.sh
           sed -i "s/<DOCKERHUB_REPO>/localhost:5000/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          skaffold run
+          TAG=213 skaffold run
 
       - name: Verify the pods
         if: success() || failure()
