@@ -37,11 +37,6 @@ jobs:
           echo "current-context:" $(kubectl config current-context)
           echo "environment-kubeconfig:" ${KUBECONFIG}    
 
-      - name: Test docker images to local registry
-        run: |
-          docker tag alpine localhost:5000/alpine
-          docker push localhost:5000/alpine
-
       - name: Run pod
         run: |
           cd /home/runner/work/fission/fission 
@@ -73,8 +68,9 @@ jobs:
       - name: Verify the pods
         if: success() || failure()
         run: |
-          kubectl get pods -n fission
-          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
+          kubectl get po -A
+          # kubectl get pods -n fission
+          # kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
 
 #      - name: Before_script
 #        if: success() || failure()
