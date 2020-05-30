@@ -18,28 +18,18 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          CLUSTER_NAME: fission-final
+          CLUSTER_NAME: fission-hackathon
           ZONE_NAME: us-central1-c
 
-          #      - name: kubectl - Google Cloud GKE cluster.
-          #        uses: ameydev/gke-kubectl-action@master
-          #        env:
-          #          PROJECT_ID: ${{ secrets.PROJECT_ID }}
-          #          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          #          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-          #          ZONE_NAME: us-central1-c
-          #        with:
-          #          args: config view 
+      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+        with:
+          version: '270.0.0'
+          project_id: ${{ secrets.PROJECT_ID }}
+          service_account_key: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          export_default_credentials: true     
 
-          #      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-          #        with:
-          #          version: '270.0.0'
-          #          service_account_email: ${{ secrets.GKE_EMAIL }}
-          #          project_id: ${{ secrets.project_id }}       
       - name: Testing
         run: |
-          echo this is ${GOOGLE_APPLICATION_CREDENTIALS}
-          gcloud auth activate-service-account --key-file ${GOOGLE_APPLICATION_CREDENTIALS} --project "$PROJECT_ID"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
@@ -50,7 +40,6 @@ jobs:
         run: |
           kubectl config current-context
           kubectl get ns
-          kubectl create namespace fission
 
           #      - name: Testing
           #        run: |
