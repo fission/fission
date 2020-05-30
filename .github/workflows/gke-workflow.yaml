@@ -18,7 +18,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          CLUSTER_NAME: fission-accelerators
+          CLUSTER_NAME: fission-final
           ZONE_NAME: us-central1-c
 
           #      - name: kubectl - Google Cloud GKE cluster.
@@ -38,7 +38,8 @@ jobs:
           #          project_id: ${{ secrets.project_id }}       
       - name: Testing
         run: |
-          gcloud auth activate-service-account --key-file ${{ env.GOOGLE_APPLICATION_CREDENTIALS }} --project "$PROJECT_ID"
+          echo this is ${GOOGLE_APPLICATION_CREDENTIALS}
+          gcloud auth activate-service-account --key-file ${GOOGLE_APPLICATION_CREDENTIALS} --project "$PROJECT_ID"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
