@@ -31,6 +31,11 @@ build:
 
 deploy:
   helm:
+    flags:
+      upgrade:
+        [--timeout=1800]
+      install:
+        [--timeout=1800]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
@@ -53,6 +58,3 @@ deploy:
         imageStrategy:
           fqn: null
           helm: null
-    flag:
-      upgrade: ["--timeout=10m"]
-      install: ["--timeout=10m"]

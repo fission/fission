@@ -71,6 +71,7 @@ jobs:
         run: |
           kubectl get pods -n fission
           kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
+          kubectl describe po -n fission
 
 #      - name: Before_script
 #        if: success() || failure()
