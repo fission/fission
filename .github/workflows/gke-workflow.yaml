@@ -1,4 +1,4 @@
-name: gke-cluster-workflow
+name: gke-cluster
 on:
   pull_request:
     branches:
@@ -12,7 +12,7 @@ jobs:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
         with:
-          ref: gke-github-actions
+          ref: fission-github-actions
     
       - uses: agiwalpooja20/spin-gke-action@master
         env:
