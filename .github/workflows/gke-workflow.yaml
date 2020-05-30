@@ -31,10 +31,15 @@ jobs:
           #        with:
           #          args: config view 
 
+          #      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+          #        with:
+          #          version: '270.0.0'
+          #          service_account_email: ${{ secrets.GKE_EMAIL }}
+          #          project_id: ${{ secrets.project_id }}       
       - name: Testing
         run: |
-          echo "$APPLICATION_CREDENTIALS" | base64 -d > /tmp/account.json
-          gcloud auth activate-service-account --key-file=/tmp/account.json --project "$PROJECT_ID"
+                #          echo "$APPLICATION_CREDENTIALS" | base64 -d > /tmp/account.json
+          gcloud auth activate-service-account --key-file=env.GITHUB_WORKSPACE/tmp/account.json --project "$PROJECT_ID"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
