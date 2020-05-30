@@ -57,7 +57,7 @@ containerdConfigPatches:
 EOF
 
 for node in $(kind get nodes --name "${KIND_CLUSTER_NAME}"); do
-  kubectl annotate node "${node}" tilt.dev/registry=localhost:${reg_port};
+  kubectl annotate node "${node}" "kind.x-k8s.io/registry=localhost:${reg_port}";
 done
 
 if [ "${kind_network}" != "bridge" ]; then
