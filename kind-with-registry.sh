@@ -1,5 +1,4 @@
 #!/bin/sh
-set -x
 set -o errexit
 
 # create registry container unless it already exists
@@ -12,6 +11,8 @@ if [ "${running}" != 'true' ]; then
     registry:2
 fi
 
+dockerGateway=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+
 # create a cluster with the local registry enabled in containerd
 cat <<EOF | kind create cluster --config=-
 kind: Cluster
@@ -19,14 +20,8 @@ apiVersion: kind.x-k8s.io/v1alpha4
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${reg_port}"]
-    endpoint = ["http://${reg_name}:${reg_port}"]
+    endpoint = ["http://${dockerGateway}:${reg_port}"]
 EOF
-
-# Verify if network "kind" exists
-docker network ls
-
-# create network "kind"
-docker network create kind 
 
 # connect the registry to the cluster network
 docker network connect "kind" "${reg_name}"
@@ -36,3 +31,4 @@ docker network connect "kind" "${reg_name}"
 for node in $(kind get nodes); do
   kubectl annotate node "${node}" "kind.x-k8s.io/registry=localhost:${reg_port}";
 done
+
