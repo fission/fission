@@ -4,6 +4,7 @@ metadata:
   name: kind-test
   labels:
     app: kind-test
+  namespace: fission
 spec:
   containers:
   - name: kind-test
