@@ -8,6 +8,11 @@ jobs:
   fission-on-gke:
     runs-on: ubuntu-latest
     if: github.event.label.name == 'gke'
+    env:
+      PROJECT_ID: ${{ secrets.PROJECT_ID }}
+      APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+      CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
+      ZONE_NAME: us-central1-c
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
