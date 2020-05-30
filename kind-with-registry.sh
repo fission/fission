@@ -21,6 +21,9 @@ containerdConfigPatches:
     endpoint = ["http://${reg_name}:${reg_port}"]
 EOF
 
+# create docker network
+docker network create kind
+
 # connect the registry to the cluster network
 docker network connect "kind" "${reg_name}"
 
