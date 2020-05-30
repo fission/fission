@@ -1,4 +1,4 @@
-name: gke-workflow
+name: gke-cluster-workflow
 on:
   pull_request:
     branches:
