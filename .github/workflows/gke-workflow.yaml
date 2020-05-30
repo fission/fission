@@ -22,62 +22,62 @@ jobs:
 
       - name: Testing
         run: |
-          kubectl config use-context gke_$PROJECT_ID_$ZONE_NAME_$CLUSTER_NAME
-          kkubectl config current-context
+          kubectl config view
+          kubectl config current-context
           kubectl get ns
           kubectl create namespace fission
 
-      - name: Testing
-        run: |
-          kubectl cluster-info
-          kubectl get pods -n kube-system
-          echo "current-context:" $(kubectl config current-context)
-          echo "environment-kubeconfig:" ${KUBECONFIG}        
-
-      - name: Set up Go 1.12
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.12
-
-      - name: Download skaffold
-        run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
-          chmod +x skaffold
-          sudo mv skaffold /usr/local/bin
-          skaffold version
-
-
-      - name: Deploy using skaffold
-        run: |
-          cd /home/runner/work/fission/fission
-          export GO111MODULE=on
-          go mod vendor
-          ./hack/verify-gofmt.sh
-          ./hack/verify-govet.sh
-          sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
-          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          TAG=213 skaffold run
-
-      - name: Verify the pods
-        if: success() || failure()
-        run: |
-          kubectl get pods -n fission
-          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
-
-      - name: Before_script
-        if: success() || failure()
-        run: |
-          cd /home/runner/work/fission/fission
-          go mod download
-          #          ./hack/verify-staticcheck.sh
-          helm lint charts/fission-all/ charts/fission-core/
-          ./hack/runtests.sh
-          ./test/build.sh
-
-      - name: Upgrade steps
-        if: success() || failure()
-        run: |
-          cd /home/runner/work/fission/fission
-          ./test/test.sh        
-          ./test/upgrade/fission_upgrade_test.sh 
-
+          #      - name: Testing
+          #        run: |
+          #          kubectl cluster-info
+          #          kubectl get pods -n kube-system
+          #          echo "current-context:" $(kubectl config current-context)
+          #          echo "environment-kubeconfig:" ${KUBECONFIG}        
+          #
+          #      - name: Set up Go 1.12
+          #        uses: actions/setup-go@v1
+          #        with:
+          #          go-version: 1.12
+          #
+          #      - name: Download skaffold
+          #        run: |
+          #          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+          #          chmod +x skaffold
+          #          sudo mv skaffold /usr/local/bin
+          #          skaffold version
+          #
+          #
+          #      - name: Deploy using skaffold
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          export GO111MODULE=on
+          #          go mod vendor
+          #          ./hack/verify-gofmt.sh
+          #          ./hack/verify-govet.sh
+          #          sed -i "s/<DOCKERHUB_REPO>/fission/g" skaffold.yaml
+          #          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
+          #          TAG=213 skaffold run
+          #
+          #      - name: Verify the pods
+          #        if: success() || failure()
+          #        run: |
+          #          kubectl get pods -n fission
+          #          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
+          #
+          #      - name: Before_script
+          #        if: success() || failure()
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          go mod download
+          #          #          ./hack/verify-staticcheck.sh
+          #          helm lint charts/fission-all/ charts/fission-core/
+          #          ./hack/runtests.sh
+          #          ./test/build.sh
+          #
+          #      - name: Upgrade steps
+          #        if: success() || failure()
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          ./test/test.sh        
+          #          ./test/upgrade/fission_upgrade_test.sh 
+          #
