@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kind-test
+  labels:
+    app: kind-test
+spec:
+  containers:
+  - name: kind-test
+    image: localhost:5000/busybox
+    command: ["sh", "-c", "busybox httpd -f -p 8000"]
+    ports:
+      - containerPort: 8000

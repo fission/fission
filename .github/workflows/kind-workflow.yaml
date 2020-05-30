@@ -18,7 +18,6 @@ jobs:
           skipClusterCreation: true
           version: "v0.7.0"
           
-
       - name: Install kind cluster with registry
         run: |
           cd /home/runner/work/fission/fission 
@@ -36,31 +35,40 @@ jobs:
           kubectl cluster-info
           kubectl get pods -n kube-system
           echo "current-context:" $(kubectl config current-context)
-          echo "environment-kubeconfig:" ${KUBECONFIG}        
+          echo "environment-kubeconfig:" ${KUBECONFIG}    
 
-      - name: Set up Go 1.12
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.12
-
-      - name: Download skaffold
+      - name: Test docker images to local registry
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
-          chmod +x skaffold
-          sudo mv skaffold /usr/local/bin
-          skaffold version
+          docker tag alpine localhost:5000/alpine
+          docker push localhost:5000/alpine
 
-
-      - name: Deploy using skaffold
+      - name: Run pod
         run: |
-          cd /home/runner/work/fission/fission
-          export GO111MODULE=on
-          go mod vendor
-          ./hack/verify-gofmt.sh
-          ./hack/verify-govet.sh
-          sed -i "s/<DOCKERHUB_REPO>/localhost:5000/g" skaffold.yaml
-          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          TAG=213 skaffold run
+          cd /home/runner/work/fission/fission 
+          ./test.sh 
+
+      # - name: Set up Go 1.12
+      #   uses: actions/setup-go@v1
+      #   with:
+      #     go-version: 1.12
+
+      # - name: Download skaffold
+      #   run: |
+      #     curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+      #     chmod +x skaffold
+      #     sudo mv skaffold /usr/local/bin
+      #     skaffold version
+
+      # - name: Deploy using skaffold
+      #   run: |
+      #     cd /home/runner/work/fission/fission
+      #     export GO111MODULE=on
+      #     go mod vendor
+      #     ./hack/verify-gofmt.sh
+      #     ./hack/verify-govet.sh
+      #     sed -i "s/<DOCKERHUB_REPO>/localhost:5000/g" skaffold.yaml
+      #     helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
+      #     TAG=213 skaffold run
 
       - name: Verify the pods
         if: success() || failure()
