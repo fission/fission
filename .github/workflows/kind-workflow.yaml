@@ -7,6 +7,7 @@ on:
 jobs:
   fission-on-kind:
     runs-on: ubuntu-latest
+    if: github.event.label.name == 'kind'
     steps:
       - name: Checkout fisson from master
         uses: actions/checkout@v2
