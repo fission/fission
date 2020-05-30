@@ -2,7 +2,7 @@ name: gcloud-workflow
 on:
   pull_request:
     branches:
-      - gke-github-actions
+      - fission-github-actions
     types: [labeled]
 jobs:
   fission-on-gke-gcloud:
