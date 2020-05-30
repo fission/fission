@@ -34,5 +34,7 @@ for node in $(kind get nodes); do
 done
 
 # Add DNS entry
-docker exec kind-control-plane bash -c "echo -e "172.17.0.1\tkind-registry" >> /etc/hosts"
+docker exec kind-control-plane bash -c "cat <<EOF >> /etc/hosts
+172.17.0.1  kind-registry
+EOF"
 docker exec kind-control-plane bash -c "cat /etc/hosts"
