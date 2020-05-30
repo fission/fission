@@ -18,7 +18,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          CLUSTER_NAME: test-fission
+          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
           ZONE_NAME: us-central1-c
 
           #      - name: kubectl - Google Cloud GKE cluster.
@@ -33,6 +33,7 @@ jobs:
 
       - name: Testing
         run: |
+          gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
           kubectl get ns
