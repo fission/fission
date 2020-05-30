@@ -38,7 +38,7 @@ jobs:
           #          project_id: ${{ secrets.project_id }}       
       - name: Testing
         run: |
-          gcloud auth activate-service-account --key-file=${{ GITHUB_WORKSPACE }}/account.json --project "$PROJECT_ID"
+          gcloud auth activate-service-account --key-file=${{ env.GITHUB_WORKSPACE }}/account.json --project "$PROJECT_ID"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
