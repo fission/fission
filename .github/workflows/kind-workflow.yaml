@@ -16,6 +16,8 @@ jobs:
       - uses: engineerd/setup-kind@v0.4.0
         with: 
           skipClusterCreation: true
+          version: "v0.7.0"
+          
 
       - name: Install kind cluster with registry
         run: |
