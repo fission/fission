@@ -11,7 +11,7 @@ jobs:
     env:
       PROJECT_ID: ${{ secrets.PROJECT_ID }}
       APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-      CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
+      CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
       ZONE_NAME: us-central1-c
     steps:
       - name: Checkout fisson from master
@@ -23,7 +23,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
+          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
           ZONE_NAME: us-central1-c
 
       - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
