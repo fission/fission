@@ -35,3 +35,4 @@ done
 
 # Add DNS entry
 docker exec kind-control-plane bash -c "echo -e "172.17.0.1\tkind-registry" >> /etc/hosts"
+docker exec kind-control-plane bash -c "cat /etc/hosts"
