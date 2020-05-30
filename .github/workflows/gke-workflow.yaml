@@ -33,6 +33,7 @@ jobs:
 
       - name: Testing
         run: |
+          gcloud config set account fission-accel@omni-163105.iam.gserviceaccount.com
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
           kubectl config current-context
