@@ -33,9 +33,9 @@ deploy:
   helm:
     flags:
       upgrade:
-        [--timeout=10m]
+        [--timeout=7m]
       install:
-        [--timeout=10m]
+        [--timeout=7m]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
@@ -52,7 +52,7 @@ deploy:
           fetcher.image: <DOCKERHUB_REPO>/fetcher
           fetcher.imageTag: "{{.TAG}}"
           imageTag: "{{.TAG}}"
-        wait: true
+        # wait: true
         recreatePods: false
         packaged: null
         imageStrategy:
