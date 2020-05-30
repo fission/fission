@@ -33,9 +33,16 @@ jobs:
 
       - name: Testing
         run: |
-          gcloud config set account fission-accel@omni-163105.iam.gserviceaccount.com
+          echo "$APPLICATION_CREDENTIALS" | base64 -d > /tmp/account.json
+          gcloud auth activate-service-account --key-file=/tmp/account.json --project "$PROJECT_ID"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$PROJECT_ID"
           kubectl config view
+          kubectl config current-context
+          kubectl get ns
+          kubectl create namespace fission
+
+      - name: Testing
+        run: |
           kubectl config current-context
           kubectl get ns
           kubectl create namespace fission
