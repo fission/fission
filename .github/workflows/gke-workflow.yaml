@@ -76,6 +76,7 @@ jobs:
         if: success() || failure()
         run: |
           export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
           cd /home/runner/work/fission/fission
           go mod download
           helm lint charts/fission-all/ charts/fission-core/
