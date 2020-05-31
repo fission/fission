@@ -12,8 +12,8 @@
 apiVersion: skaffold/v2beta1
 kind: Config
 build:
-  local:
-    useDockerCLI: true
+  local: {}
+    # useDockerCLI: true
   artifacts:
     - image: <DOCKERHUB_REPO>/fission
       context: .
