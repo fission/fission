@@ -31,15 +31,15 @@ helm_setup() {
 }
 export -f helm_setup
 
-#gcloud_login() {
-#    KEY=${HOME}/gcloud-service-key.json
-#    if [ ! -f $KEY ]
-#    then
-#	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
-#    fi
-#
-#    gcloud auth activate-service-account --key-file $KEY
-#}
+gcloud_login() {
+    KEY=${HOME}/gcloud-service-key.json
+    if [ ! -f $KEY ]
+    then
+	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
+    fi
+
+    gcloud auth activate-service-account --key-file $KEY
+}
 
 getVersion() {
     echo $(git rev-parse HEAD)
@@ -54,13 +54,11 @@ getGitCommit() {
 }
 
 setupCIBuildEnv() {
-    export REPO=gcr.io	
-#    export REPO=gcr.io/$GKE_PROJECT_NAME
+    export REPO=gcr.io/$GKE_PROJECT_NAME
     export IMAGE=fission-bundle
     export FETCHER_IMAGE=$REPO/fetcher
     export BUILDER_IMAGE=$REPO/builder
-#    export TAG=test-${TRAVIS_BUILD_ID}
-    export TAG=test
+    export TAG=test-${TRAVIS_BUILD_ID}
     export PRUNE_INTERVAL=1 # this variable controls the interval to run archivePruner. The unit is in minutes.
     export ROUTER_SERVICE_TYPE=LoadBalancer
     export SERVICE_TYPE=LoadBalancer
@@ -69,8 +67,7 @@ setupCIBuildEnv() {
 
 setupIngressController() {
     # set up NGINX ingress controller
-#    kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user $(gcloud config get-value account) || true
-    kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin  || true
+    kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user $(gcloud config get-value account) || true
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
 }
@@ -86,7 +83,7 @@ build_and_push_go_mod_cache_image() {
     image_tag=$1
     travis_fold_start go_mod_cache_image $image_tag
 
-#    gcloud_login
+    gcloud_login
 
     if ! gcloud docker -- pull $image_tag >/dev/null 2>&1 ; then
       docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
@@ -94,8 +91,7 @@ build_and_push_go_mod_cache_image() {
       docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
     fi
 
-#    gcloud docker -- push $image_tag &
-    docker push $image_tag &
+    gcloud docker -- push $image_tag &
     travis_fold_end go_mod_cache_image
 }
 
@@ -106,10 +102,9 @@ build_and_push_pre_upgrade_check_image() {
 
     docker build -q -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
-#    gcloud_login
+    gcloud_login
 
-    docker push $image_tag &
-#    gcloud docker -- push $image_tag &
+    gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_pre_upgrade_check_image
 }
 
@@ -120,10 +115,9 @@ build_and_push_fission_bundle() {
 
     docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
- #   gcloud_login
+    gcloud_login
 
-    docker push $image_tag &
-#    gcloud docker -- push $image_tag &
+    gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_fission_bundle
 }
 
@@ -134,10 +128,9 @@ build_and_push_fetcher() {
 
     docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
- #   gcloud_login
+    gcloud_login
 
-    docker push $image_tag &
-#    gcloud docker -- push $image_tag &
+    gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_fetcher
 }
 
@@ -149,10 +142,9 @@ build_and_push_builder() {
 
     docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
-#    gcloud_login
+    gcloud_login
 
-    docker push $image_tag &
-#    gcloud docker -- push $image_tag &
+    gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_builder
 }
 
@@ -172,9 +164,9 @@ build_and_push_env_runtime() {
     pushd $ROOT/environments/$env/
     docker build -q -t $image_tag . -f ${dockerfile}
 
- #   gcloud_login
-    docker push $image_tag &
-#    gcloud docker -- push $image_tag &
+    gcloud_login
+
+    gcloud docker -- push $image_tag &
     popd
     travis_fold_end build_and_push_env_runtime.$env
 }
@@ -197,10 +189,9 @@ build_and_push_env_builder() {
 
     docker build -q -t ${image_tag} --build-arg BUILDER_IMAGE=${builder_image} . -f ${dockerfile}
 
- #   gcloud_login
+    gcloud_login
 
-    docker push $image_tag &
-#    gcloud docker -- push ${image_tag} &
+    gcloud docker -- push ${image_tag} &
     popd
     travis_fold_end build_and_push_env_builder.$env
 }
@@ -509,13 +500,13 @@ run_all_tests() {
 
     export FISSION_NAMESPACE=f-$id
     export FUNCTION_NAMESPACE=f-func-$id
-    export PYTHON_RUNTIME_IMAGE=gcr.io/python-env:${imageTag}
-    export PYTHON_BUILDER_IMAGE=gcr.io/python-env-builder:${imageTag}
-    export GO_RUNTIME_IMAGE=gcr.io/go-env:${imageTag}
-    export GO_BUILDER_IMAGE=gcr.io/go-env-builder:${imageTag}
-    export JVM_RUNTIME_IMAGE=gcr.io/jvm-env:${imageTag}
-    export JVM_BUILDER_IMAGE=gcr.io/jvm-env-builder:${imageTag}
-    export TS_RUNTIME_IMAGE=gcr.io/tensorflow-serving-env:${imageTag}
+    export PYTHON_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env:${imageTag}
+    export PYTHON_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env-builder:${imageTag}
+    export GO_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env:${imageTag}
+    export GO_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env-builder:${imageTag}
+    export JVM_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env:${imageTag}
+    export JVM_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env-builder:${imageTag}
+    export TS_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/tensorflow-serving-env:${imageTag}
 
     set +e
     export TIMEOUT=900  # 15 minutes per test
