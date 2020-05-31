@@ -19,12 +19,12 @@ jobs:
         with:
           ref: fission-github-actions
     
-          #      - uses: agiwalpooja20/spin-gke-action@master
-          #        env:
-          #          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
-          #          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          #          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-          #          ZONE_NAME: us-central1-c
+      - uses: agiwalpooja20/spin-gke-action@master
+        env:
+          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
+          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+          ZONE_NAME: us-central1-c
 
       - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
         with:
