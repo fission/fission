@@ -56,12 +56,6 @@ containerdConfigPatches:
     endpoint = ["http://${reg_host}:${reg_port}"]
 EOF
 
-docker exec kind-control-plane bash -c "cat <<EOF > /etc/docker/daemon.json
-{
-    "insecure-registries": ["${reg_host}:5000"]
-}
-EOF
-
 for node in $(kind get nodes --name "${KIND_CLUSTER_NAME}"); do
   kubectl annotate node "${node}" "kind.x-k8s.io/registry=localhost:${reg_port}";
 done
