@@ -28,7 +28,7 @@ jobs:
         uses: daisaru11/setup-cd-tools@v1
         with:
           helm: "v2.16.6"
-          skaffold: "v1.10.1"
+          skaffold: "1.10.1"
 
 
       - name: Setup kubectl to kind
