@@ -13,11 +13,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: fission-github-actions
-     
-      # - uses: engineerd/setup-kind@v0.4.0
-      #   with: 
-      #     skipClusterCreation: true
-      #     version: "v0.7.0"
           
       - name: Install kind cluster with registry
         run: |
@@ -73,19 +68,19 @@ jobs:
           kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
           kubectl describe po -n fission
 
-     - name: Before_script
-       if: success() || failure()
-       run: |
-         cd /home/runner/work/fission/fission
-         go mod download
-         #          ./hack/verify-staticcheck.sh
-         helm lint charts/fission-all/ charts/fission-core/
-         ./hack/runtests.sh
-         ./test/build.sh
+      - name: Before_script
+        if: success() || failure()
+        run: |
+          cd /home/runner/work/fission/fission
+          go mod download
+          # ./hack/verify-staticcheck.sh
+          helm lint charts/fission-all/ charts/fission-core/
+          ./hack/runtests.sh
+          ./test/kind_build.sh
 
-     - name: Upgrade steps
-       if: success() || failure()
-       run: |
-         cd /home/runner/work/fission/fission
-         ./test/test.sh        
-         ./test/upgrade/fission_upgrade_test.sh 
+      - name: Upgrade steps
+        if: success() || failure()
+        run: |
+          cd /home/runner/work/fission/fission
+          ./test/kind_test.sh        
+          ./test/upgrade/kind_fission_upgrade_test.sh 
