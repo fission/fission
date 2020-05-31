@@ -12,8 +12,12 @@
 apiVersion: skaffold/v2beta1
 kind: Config
 build:
-  local: {}
-    # useDockerCLI: true
+  local:
+    useDockerCLI: false
+    useBuildkit: false
+    push: true
+  insecureRegistries:
+    - localhost:5000
   artifacts:
     - image: <DOCKERHUB_REPO>/fission
       context: .
