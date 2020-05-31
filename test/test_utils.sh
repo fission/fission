@@ -32,6 +32,7 @@ helm_setup() {
 export -f helm_setup
 
 gcloud_login() {
+     pass
 #    KEY=${HOME}/gcloud-service-key.json
 #    if [ ! -f $KEY ]
 #    then
