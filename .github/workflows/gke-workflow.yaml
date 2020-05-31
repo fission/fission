@@ -39,7 +39,7 @@ jobs:
           kubectl config view
           kubectl config current-context
           kubectl get ns
-          #          kubectl create namespace fission
+          kubectl create namespace fission
           echo "Running gcloud auth configure-docker"
           gcloud auth configure-docker
 
