@@ -76,11 +76,11 @@ jobs:
           # ./hack/verify-staticcheck.sh
           helm lint charts/fission-all/ charts/fission-core/
           ./hack/runtests.sh
-          ./test/build.sh
+          ./test/kind_build.sh
 
       - name: Upgrade steps
         if: success() || failure()
         run: |
           cd /home/runner/work/fission/fission
-          ./test/test.sh        
-          ./test/upgrade/fission_upgrade_test.sh 
+          ./test/kind_test.sh        
+          ./test/upgrade/kind_fission_upgrade_test.sh 
