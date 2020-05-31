@@ -40,6 +40,8 @@ jobs:
           kubectl config current-context
           kubectl get ns
           kubectl create namespace fission
+          echo "Running gcloud auth configure-docker"
+          gcloud auth configure-docker
 
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
