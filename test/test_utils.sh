@@ -32,13 +32,13 @@ helm_setup() {
 export -f helm_setup
 
 gcloud_login() {
-    KEY=${HOME}/gcloud-service-key.json
-    if [ ! -f $KEY ]
-    then
-	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
-    fi
-
-    gcloud auth activate-service-account --key-file $KEY
+#    KEY=${HOME}/gcloud-service-key.json
+#    if [ ! -f $KEY ]
+#    then
+#	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
+#    fi
+#
+#    gcloud auth activate-service-account --key-file $KEY
 }
 
 getVersion() {
