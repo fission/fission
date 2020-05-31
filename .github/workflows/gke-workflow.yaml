@@ -75,6 +75,7 @@ jobs:
       - name: Before_script
         if: success() || failure()
         run: |
+          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
           cd /home/runner/work/fission/fission
           go mod download
           helm lint charts/fission-all/ charts/fission-core/
