@@ -75,6 +75,9 @@ jobs:
           ./hack/verify-govet.sh
           sed -i "s/<DOCKERHUB_REPO>/gcr.io\/$GKE_PROJECT_NAME/g" skaffold.yaml
           helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
+          pushd charts/fission-all/
+          helm dep update
+          popd
           TAG=213 skaffold run
 
       - name: Verify the pods
