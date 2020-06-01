@@ -33,7 +33,7 @@ jobs:
           service_account_key: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           export_default_credentials: true     
 
-      - name: Testing
+      - name: Create cluster and verify
         run: |
           gcloud container clusters create "$CLUSTER_NAME" --zone "$ZONE_NAME"
           gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$GKE_PROJECT_NAME"
