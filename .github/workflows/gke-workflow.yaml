@@ -84,6 +84,9 @@ jobs:
 
       - name: Upgrade steps
         run: |
+          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
+          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
           cd /home/runner/work/fission/fission
           ./test/test.sh        
           ./test/upgrade/fission_upgrade_test.sh 

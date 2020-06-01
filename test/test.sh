@@ -28,8 +28,9 @@ while true; do
 
     if [[ ! -z ${previous_build_id} ]]; then
         build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
-        -H "Authorization: token ${TRAVIS_TOKEN}" \
         -H "Travis-API-Version: 3" | python -c "import sys,json; print json.load(sys.stdin)['state']")
+
+#	-H "Authorization: token ${TRAVIS_TOKEN}" \
 
         # If previous build state is not equal to "started" or the previous build id
         # equals to the current build ID means the previous build is end or restart.
