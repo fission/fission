@@ -27,8 +27,10 @@ while true; do
     previous_build_id=$(kubectl --namespace default get configmap in-test --ignore-not-found -o=jsonpath='{.metadata.labels.travisID}')
 
     if [[ ! -z ${previous_build_id} ]]; then
-        build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
-        -H "Travis-API-Version: 3" | python -c "import sys,json; print json.load(sys.stdin)['state']")
+	build_state=$(curl -s -X GET https://api.github.com/repos/infracloudio/fission/actions/runs/${previous_build_id} \
+	-H "Authorization: token $GIT_TOKEN" | python -c "import sys,json; print json.load(sys.stdin)['status']")
+#        build_state=$(curl -s -X GET https://api.travis-ci.org/build/${previous_build_id} \
+#        -H "Travis-API-Version: 3" | python -c "import sys,json; print json.load(sys.stdin)['state']")
 
 #	-H "Authorization: token ${TRAVIS_TOKEN}" \
 
