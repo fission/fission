@@ -35,7 +35,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
-	"github.com/fission/fission/pkg/mqtrigger/scalermanager"
+	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
@@ -79,8 +79,8 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
 	}
 }
 
-func runMessageScalarMgr(logger *zap.Logger, routerUrl String) {
-	err := scalermanager.StartScalerManager(logger, routerUrl)
+func runMessageScalarMgr(logger *zap.Logger, routerUrl string) {
+	err := mqt.StartScalerManager(logger, routerUrl)
 	if err != nil {
 		logger.Fatal("error starting mqt scaler manager", zap.Error(err))
 	}
@@ -291,6 +291,7 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(logger, routerUrl)
+		runMessageScalarMgr(logger, routerUrl)
 	}
 
 	if arguments["--builderMgr"] == true {
