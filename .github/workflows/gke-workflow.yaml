@@ -49,6 +49,13 @@ jobs:
         with:
           go-version: 1.12
 
+      - name: Install correct helm version
+        run: |
+          helm version
+          curl -LO https://git.io/get_helm.sh
+          chmod 700 get_helm.sh
+          ./get_helm.sh -v v2.16.6
+
       - name: Download skaffold
         run: |
           curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
