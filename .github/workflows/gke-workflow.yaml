@@ -55,6 +55,9 @@ jobs:
           curl -LO https://git.io/get_helm.sh
           chmod 700 get_helm.sh
           ./get_helm.sh -v v2.16.6
+          kubectl create serviceaccount --namespace kube-system tiller
+          kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+          helm init --service-account tiller
 
       - name: Download skaffold
         run: |
