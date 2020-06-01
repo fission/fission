@@ -35,8 +35,8 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
+	"github.com/fission/fission/pkg/mqtrigger/scalermanager"
 	"github.com/fission/fission/pkg/router"
-	"github.com/fission/fission/pkg/scalermanager"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
 )
