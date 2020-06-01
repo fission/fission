@@ -205,7 +205,10 @@ build_fission_cli() {
 }
 
 clean_crd_resources() {
+    echo "in cleaning crd resources"
     kubectl --namespace default get crd| grep -v NAME| grep "fission.io"| awk '{print $1}'|xargs -I@ bash -c "kubectl --namespace default delete crd @"  || true
+
+    echo "done with cleaning crd resources"
 }
 
 set_environment() {
@@ -592,10 +595,15 @@ install_and_test() {
     controllerPort=31234
     routerPort=31235
 
+    echo "Cleaning crd resources"
     clean_crd_resources
+
+    echo "" Proceed further
     
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
+
+    echo "Trap done"
 
     setupIngressController
 
