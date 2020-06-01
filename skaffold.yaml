@@ -37,9 +37,9 @@ deploy:
   helm:
     flags:
       upgrade:
-        [--timeout=7m]
+        [--timeout=420]
       install:
-        [--timeout=7m]
+        [--timeout=420]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
