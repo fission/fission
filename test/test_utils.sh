@@ -615,9 +615,7 @@ install_and_test() {
     fi
 
     timeout 150 bash -c "wait_for_services $id"
-    echo "which fission"
-    which fission
-    timeout 120 bash -c "check_gitcommit_version"
+#    timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
 
     run_all_tests $id $imageTag
