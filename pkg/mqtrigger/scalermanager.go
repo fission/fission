@@ -56,7 +56,10 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 	if err != nil {
 		return err
 	}
-	fissionClient.WaitForCRDs()
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		logger.Error("Error waiting for CRDs: %v", zap.Error(err))
+	}
 	crdClient := fissionClient.CoreV1().RESTClient()
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(crdClient, "messagequeuetrigger", metav1.NamespaceAll, fields.Everything())
