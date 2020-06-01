@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+set -x
+
 ROOT=`realpath $(dirname $0)/..`
 
 travis_fold_start() {
