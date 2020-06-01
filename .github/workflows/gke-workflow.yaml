@@ -19,12 +19,12 @@ jobs:
         with:
           ref: fission-github-actions
     
-          #      - uses: agiwalpooja20/spin-gke-action@master
-          #        env:
-          #          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
-          #          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          #          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-          #          ZONE_NAME: us-central1-c
+      - uses: agiwalpooja20/spin-gke-action@master
+        env:
+          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
+          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+          ZONE_NAME: us-central1-c
 
       - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
         with:
@@ -39,7 +39,7 @@ jobs:
           kubectl config view
           kubectl config current-context
           kubectl get ns
-          #          kubectl create namespace fission
+          kubectl create namespace fission
           echo "Running gcloud auth configure-docker"
           gcloud auth configure-docker
 
@@ -55,16 +55,16 @@ jobs:
           sudo mv skaffold /usr/local/bin
           skaffold version
 
-          #      - name: Deploy using skaffold
-          #        run: |
-          #          cd /home/runner/work/fission/fission
-          #          export GO111MODULE=on
-          #          go mod vendor
-          #          ./hack/verify-gofmt.sh
-          #          ./hack/verify-govet.sh
-          #          sed -i "s/<DOCKERHUB_REPO>/gcr.io\/$GKE_PROJECT_NAME/g" skaffold.yaml
-          #          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          #          TAG=213 skaffold run
+      - name: Deploy using skaffold
+        run: |
+          cd /home/runner/work/fission/fission
+          export GO111MODULE=on
+          go mod vendor
+          ./hack/verify-gofmt.sh
+          ./hack/verify-govet.sh
+          sed -i "s/<DOCKERHUB_REPO>/gcr.io\/$GKE_PROJECT_NAME/g" skaffold.yaml
+          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
+          TAG=213 skaffold run
 
       - name: Verify the pods
         if: success() || failure()
