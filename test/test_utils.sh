@@ -598,15 +598,10 @@ install_and_test() {
     controllerPort=31234
     routerPort=31235
 
-    echo "Cleaning crd resources"
     clean_crd_resources
 
-    echo "" Proceed further
-    
     id=$(generate_test_id)
     trap "helm_uninstall_fission $id" EXIT
-
-    echo "Trap done"
 
     setupIngressController
 
@@ -620,6 +615,8 @@ install_and_test() {
     fi
 
     timeout 150 bash -c "wait_for_services $id"
+    echo "which fission"
+    which fission
     timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
 
