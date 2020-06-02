@@ -100,6 +100,7 @@ jobs:
         if: success() || failure()
         run: |
           export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
+          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
           cd /home/runner/work/fission/fission
           ./test/kind_test.sh        
           ./test/upgrade/kind_fission_upgrade_test.sh 
