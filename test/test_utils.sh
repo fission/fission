@@ -215,7 +215,7 @@ clean_crd_resources() {
 
 set_environment() {
     id=$1
-    ns=f-$id
+    ns=$id
 
     # fission env
     export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
@@ -245,8 +245,8 @@ helm_install_fission() {
     preUpgradeCheckImage=${12}
     travis_fold_start helm_install_fission "helm install fission id=$id"
 
-    ns=f-$id
-    fns=f-func-$id
+    ns=$id
+    fns=fission-function
 
     helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcher.image=$fetcherImage,fetcher.imageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,debugEnv=true,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
 
@@ -279,8 +279,10 @@ helm_install_fission() {
 
 dump_kubernetes_events() {
     id=$1
-    ns=f-$id
-    fns=f-func-$id
+    ns=fission
+    fns=fission-function
+    #ns=f-$id
+    #fns=f-func-$id
     echo "--- kubectl events $fns ---"
     kubectl get events -n $fns
     echo "--- end kubectl events $fns ---"
@@ -317,7 +319,7 @@ export -f wait_for_service
 
 wait_for_services() {
     id=$1
-    ns=f-$id
+    ns=$id
 
     wait_for_service $ns controller
     wait_for_service $ns router
@@ -352,13 +354,13 @@ helm_uninstall_fission() {(set +e
 
     echo "Uninstalling fission"
     helm delete --purge $id
-    kubectl delete ns f-$id || true
+    kubectl delete ns $id || true
 )}
 export -f helm_uninstall_fission
 
 port_forward_services() {
     id=$1
-    ns=f-$id
+    ns=$id
     svc=$2
     port=$3
 
@@ -447,8 +449,8 @@ describe_pods_ns() {
 
 describe_all_pods() {
     id=$1
-    ns=f-$id
-    fns=f-func-$id
+    ns=fission
+    fns=fission-function
     bns=fission-builder
 
     describe_pods_ns $ns
@@ -479,8 +481,8 @@ dump_logs() {
     id=$1
     travis_fold_start dump_logs "dump logs $id"
 
-    ns=f-$id
-    fns=f-func-$id
+    ns=fission
+    fns=fission-function
     bns=fission-builder
 
     dump_all_fission_resources $ns
@@ -504,8 +506,8 @@ run_all_tests() {
     id=$1
     imageTag=$2
 
-    export FISSION_NAMESPACE=f-$id
-    export FUNCTION_NAMESPACE=f-func-$id
+    export FISSION_NAMESPACE=fission
+    export FUNCTION_NAMESPACE=fission-function
     export PYTHON_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env:${imageTag}
     export PYTHON_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/python-env-builder:${imageTag}
     export GO_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env:${imageTag}
@@ -600,12 +602,12 @@ install_and_test() {
 
     clean_crd_resources
 
-    id=$(generate_test_id)
+    id=fission
     trap "helm_uninstall_fission $id" EXIT
 
     setupIngressController
-
-    helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
+    id=fission
+#    helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
     helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
