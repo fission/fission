@@ -7,6 +7,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -58,11 +59,11 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 	}
 	err = fissionClient.WaitForCRDs()
 	if err != nil {
-		logger.Error("Error waiting for CRDs: %v", zap.Error(err))
+		return errors.Wrap(err, "error waiting for CRDs")
 	}
 	crdClient := fissionClient.CoreV1().RESTClient()
 	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(crdClient, "messagequeuetrigger", metav1.NamespaceAll, fields.Everything())
+	listWatch := k8sCache.NewListWatchFromClient(crdClient, "messagequeuetriggers", metav1.NamespaceAll, fields.Everything())
 	_, controller := k8sCache.NewInformer(listWatch, &fv1.MessageQueueTrigger{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			go func() {
