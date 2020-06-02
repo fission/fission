@@ -614,8 +614,10 @@ install_and_test() {
 	    exit 1
     fi
 
+    build_fission_cli    
+
     timeout 150 bash -c "wait_for_services $id"
-#    timeout 120 bash -c "check_gitcommit_version"
+    timeout 120 bash -c "check_gitcommit_version"
     set_environment $id
 
     run_all_tests $id $imageTag
