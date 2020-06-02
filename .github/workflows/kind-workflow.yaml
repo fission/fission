@@ -9,6 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.label.name == 'kind'
     steps:
+      - name: Free up some space
+        run: |
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
       - name: Checkout fisson from master
         uses: actions/checkout@v2
         with:
