@@ -10,7 +10,7 @@ log() {
 export -f log
 
 generate_test_id() {
-    echo $(cat /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
+    echo $(head -80 /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
 }
 
 clean_resource_by_id() {
