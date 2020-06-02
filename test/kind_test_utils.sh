@@ -54,7 +54,8 @@ getGitCommit() {
 }
 
 setupCIBuildEnv() {
-    export REPO=gcr.io	
+    export REPO=localhoost:5000
+#    export REPO=gcr.io	
 #    export REPO=gcr.io/$GKE_PROJECT_NAME
     export IMAGE=fission-bundle
     export FETCHER_IMAGE=$REPO/fetcher

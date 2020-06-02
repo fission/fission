@@ -94,6 +94,7 @@ jobs:
       - name: Upgrade steps
         if: success() || failure()
         run: |
+          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
           cd /home/runner/work/fission/fission
           ./test/kind_test.sh        
           ./test/upgrade/kind_fission_upgrade_test.sh 
