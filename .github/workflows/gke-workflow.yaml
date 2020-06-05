@@ -21,7 +21,7 @@ jobs:
 
       - name: Testing
         run: |
-          pushd $ROOT/cmd/fission-cli
+          pushd $HOME/cmd/fission-cli
           go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) -X github.com/fission/fission/pkg/info.Version=$(getVersion)" -o $HOME/tool/fission .
           popd          
     
