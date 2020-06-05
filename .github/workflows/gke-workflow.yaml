@@ -115,4 +115,4 @@ jobs:
       - name: Delete the GKE cluster
         if: success() || failure()
         run: |
-          gcloud container clusters delete "$CLUSTER_NAME"
+          gcloud container clusters delete "$CLUSTER_NAME" --zone "$ZONE_NAME"
