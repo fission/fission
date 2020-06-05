@@ -120,12 +120,12 @@ persistence:
   #storageType: local | s3
 
   ## Sample configruation for AWS s3 storage backend
-  # s3:
-  #   bucketName: <awsBucketName>
-  #   subDir: <sub directory within a bucket>
-  #   accessKeyId: <awsAccessKeyId>
-  #   secretAccessKey: <awsSecretAccessKey>
-  #   region: <awsRegion>
+  #s3:
+  # bucketName: <awsBucketName>
+  # subDir: <sub directory within a bucket>
+  # accessKeyId: <awsAccessKeyId>
+  # secretAccessKey: <awsSecretAccessKey>
+  # region: <awsRegion>
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true

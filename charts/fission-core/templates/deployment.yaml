@@ -411,6 +411,8 @@ spec:
         - name: TRACING_SAMPLING_RATE
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
+        - name: STORAGE_S3_ENDPOINT
+          value: {{ .Values.persistence.s3.endPoint }}
         - name: STORAGE_S3_BUCKET_NAME
           value: {{ .Values.persistence.s3.bucketName }}
         - name: STORAGE_S3_SUB_DIR
