@@ -18,97 +18,103 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: fission-github-actions
+
+      - name: Testing
+        run: |
+          pushd $ROOT/cmd/fission-cli
+          go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) -X github.com/fission/fission/pkg/info.Version=$(getVersion)" -o $HOME/tool/fission .
+          popd          
     
-          #      - uses: agiwalpooja20/spin-gke-action@master
-          #        env:
-          #          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
-          #          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          #          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-          #          ZONE_NAME: us-central1-c
-
-      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-        with:
-          version: '270.0.0'
-          project_id: ${{ env.GKE_PROJECT_NAME }}
-          service_account_key: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          export_default_credentials: true     
-
-      - name: Create cluster and verify
-        run: |
-          gcloud container clusters create "$CLUSTER_NAME" --zone "$ZONE_NAME"
-          gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$GKE_PROJECT_NAME"
-          kubectl config view
-          kubectl config current-context
-          kubectl get ns
-          kubectl create namespace fission
-          echo "Running gcloud auth configure-docker"
-          gcloud auth configure-docker
-
-      - name: Set up Go 1.12
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.12
-
-      - name: Install correct helm version
-        run: |
-          helm version
-          curl -LO https://git.io/get_helm.sh
-          chmod 700 get_helm.sh
-          ./get_helm.sh -v v2.16.6
-          kubectl create serviceaccount --namespace kube-system tiller
-          kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-          helm init --service-account tiller
-
-      - name: Download skaffold
-        run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
-          chmod +x skaffold
-          sudo mv skaffold /usr/local/bin
-          skaffold version
-
-      - name: Deploy using skaffold
-        run: |
-          cd /home/runner/work/fission/fission
-          export GO111MODULE=on
-          go mod vendor
-          ./hack/verify-gofmt.sh
-          ./hack/verify-govet.sh
-          sed -i "s/<DOCKERHUB_REPO>/gcr.io\/$GKE_PROJECT_NAME/g" skaffold.yaml
-          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
-          pushd charts/fission-all/
-          helm dep update
-          popd
-          TAG=213 skaffold run
-
-      - name: Verify the pods
-        if: success() || failure()
-        run: |
-          kubectl get pods -n fission
-          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
-
-      - name: Before_script
-        run: |
-          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
-          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
-          cd /home/runner/work/fission/fission
-          go mod download
-          helm lint charts/fission-all/ charts/fission-core/
-          ./hack/runtests.sh
-          ./test/build.sh
-
-      - name: Upgrade steps
-        run: |
-          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
-          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
-          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
-          cd /home/runner/work/fission/fission
-          ./test/test.sh        
-          ./test/upgrade/fission_upgrade_test.sh 
-
-      - name: After_script
-        run: |
-          cd /home/runner/work/fission/fission
-          bash <(curl -s https://codecov.io/bash)
-          kubectl --namespace default delete configmap -l travisID=${GITHUB_RUN_ID}
-
-
+          #          #      - uses: agiwalpooja20/spin-gke-action@master
+          #          #        env:
+          #          #          PROJECT_ID: ${{ env.GKE_PROJECT_NAME }}
+          #          #          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          #          #          CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+          #          #          ZONE_NAME: us-central1-c
+          #
+          #      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+          #        with:
+          #          version: '270.0.0'
+          #          project_id: ${{ env.GKE_PROJECT_NAME }}
+          #          service_account_key: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          #          export_default_credentials: true     
+          #
+          #      - name: Create cluster and verify
+          #        run: |
+          #          gcloud container clusters create "$CLUSTER_NAME" --zone "$ZONE_NAME"
+          #          gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE_NAME" --project "$GKE_PROJECT_NAME"
+          #          kubectl config view
+          #          kubectl config current-context
+          #          kubectl get ns
+          #          kubectl create namespace fission
+          #          echo "Running gcloud auth configure-docker"
+          #          gcloud auth configure-docker
+          #
+          #      - name: Set up Go 1.12
+          #        uses: actions/setup-go@v1
+          #        with:
+          #          go-version: 1.12
+          #
+          #      - name: Install correct helm version
+          #        run: |
+          #          helm version
+          #          curl -LO https://git.io/get_helm.sh
+          #          chmod 700 get_helm.sh
+          #          ./get_helm.sh -v v2.16.6
+          #          kubectl create serviceaccount --namespace kube-system tiller
+          #          kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+          #          helm init --service-account tiller
+          #
+          #      - name: Download skaffold
+          #        run: |
+          #          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+          #          chmod +x skaffold
+          #          sudo mv skaffold /usr/local/bin
+          #          skaffold version
+          #
+          #      - name: Deploy using skaffold
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          export GO111MODULE=on
+          #          go mod vendor
+          #          ./hack/verify-gofmt.sh
+          #          ./hack/verify-govet.sh
+          #          sed -i "s/<DOCKERHUB_REPO>/gcr.io\/$GKE_PROJECT_NAME/g" skaffold.yaml
+          #          helm repo add helm_repo https://kubernetes-charts.storage.googleapis.com
+          #          pushd charts/fission-all/
+          #          helm dep update
+          #          popd
+          #          TAG=213 skaffold run
+          #
+          #      - name: Verify the pods
+          #        if: success() || failure()
+          #        run: |
+          #          kubectl get pods -n fission
+          #          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
+          #
+          #      - name: Before_script
+          #        run: |
+          #          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          #          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
+          #          cd /home/runner/work/fission/fission
+          #          go mod download
+          #          helm lint charts/fission-all/ charts/fission-core/
+          #          ./hack/runtests.sh
+          #          ./test/build.sh
+          #
+          #      - name: Upgrade steps
+          #        run: |
+          #          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          #          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
+          #          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
+          #          cd /home/runner/work/fission/fission
+          #          ./test/test.sh        
+          #          ./test/upgrade/fission_upgrade_test.sh 
+          #
+          #      - name: After_script
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          bash <(curl -s https://codecov.io/bash)
+          #          kubectl --namespace default delete configmap -l travisID=${GITHUB_RUN_ID}
+          #
+          #
