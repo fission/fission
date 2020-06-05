@@ -22,7 +22,7 @@ jobs:
       - name: Testing
         run: |
           pushd /home/runner/work/fission/fission/cmd/fission-cli
-          go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) -X github.com/fission/fission/pkg/info.Version=$(getVersion)" -o $HOME/tool/fission .
+          go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(git rev-parse HEAD) -X github.com/fission/fission/pkg/info.BuildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ') -X github.com/fission/fission/pkg/info.Version=$(git rev-parse HEAD)" -o $HOME/tool/fission .
           popd          
     
           #          #      - uses: agiwalpooja20/spin-gke-action@master
