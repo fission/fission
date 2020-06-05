@@ -144,7 +144,7 @@ build_and_push_builder() {
 
     docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
-    gcloud_login
+    #gcloud_login
 
     gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_builder
