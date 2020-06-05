@@ -84,7 +84,6 @@ jobs:
         if: success() || failure()
         run: |
           kubectl get pods -n fission
-          kubectl get pods -n fission -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}} {{end}}"
 
       - name: Before_script
         run: |
@@ -101,7 +100,9 @@ jobs:
           export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
           export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
           export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
-          export PATH="/home/runner/work/fission/fission:$PATH"
+          export PATH="/home/runner/work/fission/fission:/home/runner/tool/fission:$PATH"
+          echo "Print variable PATH"
+          echo $PATH
           cd /home/runner/work/fission/fission
           ./test/test.sh        
           ./test/upgrade/fission_upgrade_test.sh 
