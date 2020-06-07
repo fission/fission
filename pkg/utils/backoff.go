@@ -17,29 +17,14 @@ type backoff struct {
 	InitialInterval time.Duration
 	// MaxInterval defines the maximum Backoff Interval can be
 	// After that, NextExist() returns false
-	MaxInterval     time.Duration
+	MaxInterval time.Duration
 	// Multiplier defines the multiplier applied on current backoff interval
-	Multiplier      float64
+	Multiplier float64
 	// MaxCount defines the maximum retries to be attempted
 	// After that, NextExists() returns false
-	MaxCount        float64
-	currentbackoff  time.Duration
-	currentCount    float64
-}
-
-type backoffInterface interface {
-	GetInitialInterval() time.Duration
-	GetMultiplier() float64
-	GetMaxInterval() time.Duration
-	GetMaxCount() float64
-	SetMaxCount(float64)
-	SetMultiplier(float64)
-	SetMaxInterval(time.Duration)
-	SetInitialInterval(time.Duration)
-	GetNext() time.Duration
-	GetCurrentCount() float64
-	GetCurrentBackoffDuration() time.Duration
-	NextExists() bool
+	MaxCount       float64
+	currentbackoff time.Duration
+	currentCount   float64
 }
 
 // NewBackOff returns a new backoff struct with initialized values
