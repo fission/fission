@@ -6,10 +6,11 @@ import (
 	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"hash"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pkg/errors"
 	"github.com/xdg/scram"
 	"go.uber.org/zap"
 )
@@ -26,8 +28,6 @@ import (
 type kafkaMetadata struct {
 	bootstrapServers []string
 	group            string
-	topic            string
-	lagThreshold     int64
 
 	// auth
 	authMode kafkaAuthMode
@@ -38,12 +38,18 @@ type kafkaMetadata struct {
 	cert string
 	key  string
 	ca   string
+}
 
+type fissionTriggerFields struct {
 	// fission
+	topic         string
 	responseTopic string
 	errorTopic    string
-	groupUID      string
 	functionURL   string
+	maxRetries    int
+	contentType   string
+	triggerName   string
+	consumerGroup string
 }
 
 type kafkaAuthMode string
@@ -65,8 +71,6 @@ type XDGSCRAMClient struct {
 	*scram.ClientConversation
 	scram.HashGeneratorFcn
 }
-
-var producer sarama.SyncProducer
 
 func (x *XDGSCRAMClient) Begin(userName, password, authzID string) (err error) {
 	x.Client, err = x.HashGeneratorFcn.NewClient(userName, password, authzID)
@@ -103,25 +107,6 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 		logger.Info("WARNING: usage of brokerList is deprecated. use bootstrapServers instead.")
 		meta.bootstrapServers = strings.Split(os.Getenv("BROKER_LIST"), ",")
 	}
-
-	if os.Getenv("CONSUMER_GROUP") == "" {
-		return meta, errors.New("no consumer group given")
-	}
-	meta.group = os.Getenv("CONSUMER_GROUP")
-
-	if os.Getenv("TOPIC") == "" {
-		return meta, errors.New("no topic given")
-	}
-	meta.topic = os.Getenv("TOPIC")
-
-	if os.Getenv("LAG_THRESHOLD") == "" {
-		return meta, errors.New("no lagThreshold given")
-	}
-	val, err := strconv.ParseInt(os.Getenv("LAG_THRESHOLD"), 10, 64)
-	if err != nil {
-		return meta, fmt.Errorf("error parsing lagThreshold: %s", err)
-	}
-	meta.lagThreshold = val
 
 	meta.authMode = kafkaAuthModeForNone
 	mode := kafkaAuthMode(strings.TrimSpace((os.Getenv("AUTH_MODE"))))
@@ -160,16 +145,30 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 		}
 		meta.key = os.Getenv("KEY")
 	}
-	if os.Getenv("GROUP_UID") == "" {
-		return meta, errors.New("No Group UID given")
-	}
-	meta.groupUID = os.Getenv("GROUP_UID")
 
-	if os.Getenv("ERROR_TOPIC") == "" {
-		return meta, errors.New("No Error Topic given")
-	}
-	meta.errorTopic = os.Getenv("ERROR_TOPIC")
+	return meta, nil
+}
 
+func parseFissionTriggerFields() (fissionTriggerFields, error) {
+	for _, envVars := range []string{"TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME", "CONSUMER_GROUP"} {
+		if os.Getenv(envVars) == "" {
+			return fissionTriggerFields{}, fmt.Errorf("Environment variable not found: MAX_RETRIES: %v", envVars)
+		}
+	}
+	meta := fissionTriggerFields{
+		topic:         os.Getenv("TOPIC"),
+		responseTopic: os.Getenv("RESPONSE_TOPIC"),
+		errorTopic:    os.Getenv("ERROR_TOPIC"),
+		functionURL:   os.Getenv("FUNCTION_URL"),
+		contentType:   os.Getenv("CONTENT_TYPE"),
+		triggerName:   os.Getenv("TRIGGER_NAME"),
+		consumerGroup: os.Getenv("CONSUMER_GROUP"),
+	}
+	val, err := strconv.ParseInt(os.Getenv("MAX_RETRIES"), 0, 64)
+	if err != nil {
+		return fissionTriggerFields{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
+	}
+	meta.maxRetries = int(val)
 	return meta, nil
 }
 
@@ -231,49 +230,171 @@ func getConfig(metadata kafkaMetadata) (*sarama.Config, error) {
 	return config, nil
 }
 
-// Consumer represents a Sarama consumer group consumer
-type Consumer struct {
-	ready chan bool
+// Connector represents a Sarama consumer group consumer
+type Connector struct {
+	ready                chan bool
+	logger               *zap.Logger
+	producer             sarama.SyncProducer
+	fissionTriggerFields fissionTriggerFields
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
-func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
-	close(consumer.ready)
+func (connector *Connector) Setup(sarama.ConsumerGroupSession) error {
+	close(connector.ready)
 	return nil
 }
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
-func (consumer *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
+func (connector *Connector) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages()
-func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+func (connector *Connector) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for message := range claim.Messages() {
-		log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
-		session.MarkMessage(message, "")
+		connector.logger.Info(fmt.Sprintf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic))
+		success := handleFissionFunction(message, connector.fissionTriggerFields, connector.producer, connector.logger)
+		if success {
+			session.MarkMessage(message, "")
+		}
 	}
 	return nil
 }
 
-func initProducer(metadata kafkaMetadata) error {
+func getProducer(metadata kafkaMetadata) (sarama.SyncProducer, error) {
 	config, err := getConfig(metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 10
 	config.Producer.Return.Successes = true
-	producer, err = sarama.NewSyncProducer(metadata.bootstrapServers, config)
+	producer, err := sarama.NewSyncProducer(metadata.bootstrapServers, config)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return producer, nil
 }
 
-func handleFissionFunction(msg *sarama.ConsumerMessage) {
-	// To Do
+func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionTriggerFields, producer sarama.SyncProducer, logger *zap.Logger) bool {
+	var value string = string(msg.Value[:])
+	// Generate the Headers
+	fissionHeaders := map[string]string{
+		"X-Fission-MQTrigger-Topic":      triggerFields.topic,
+		"X-Fission-MQTrigger-RespTopic":  triggerFields.responseTopic,
+		"X-Fission-MQTrigger-ErrorTopic": triggerFields.errorTopic,
+		"Content-Type":                   triggerFields.contentType,
+	}
+
+	// Create request
+	req, err := http.NewRequest("POST", triggerFields.functionURL, strings.NewReader(value))
+	if err != nil {
+		logger.Error("failed to create HTTP request to invoke function",
+			zap.Error(err),
+			zap.String("function_url", triggerFields.functionURL))
+		return false
+	}
+
+	// Set the headers came from Kafka record
+	// Using Header.Add() as msg.Headers may have keys with more than one value
+	for _, h := range msg.Headers {
+		req.Header.Add(string(h.Key), string(h.Value))
+	}
+
+	for k, v := range fissionHeaders {
+		req.Header.Set(k, v)
+	}
+
+	// Make the request
+	var resp *http.Response
+	for attempt := 0; attempt <= triggerFields.maxRetries; attempt++ {
+		// Make the request
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			logger.Error("sending function invocation request failed",
+				zap.Error(err),
+				zap.String("function_url", triggerFields.functionURL),
+				zap.String("trigger", triggerFields.triggerName))
+			continue
+		}
+		if resp == nil {
+			continue
+		}
+		if err == nil && resp.StatusCode == http.StatusOK {
+			// Success, quit retrying
+			break
+		}
+	}
+
+	if resp == nil {
+		logger.Warn("every function invocation retry failed; final retry gave empty response",
+			zap.String("function_url", triggerFields.functionURL),
+			zap.String("trigger", triggerFields.triggerName))
+		return false
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	logger.Debug("got response from function invocation",
+		zap.String("function_url", triggerFields.functionURL),
+		zap.String("trigger", triggerFields.triggerName),
+		zap.String("body", string(body)))
+
+	if err != nil {
+		errorHandler(logger, triggerFields, producer,
+			errors.Wrapf(err, "request body error: %v", string(body)))
+		return false
+	}
+	if resp.StatusCode != 200 {
+		errorHandler(logger, triggerFields, producer,
+			fmt.Errorf("request returned failure: %v", resp.StatusCode))
+		return false
+	}
+
+	// Generate Kafka record headers
+	var kafkaRecordHeaders []sarama.RecordHeader
+
+	for k, v := range resp.Header {
+		// One key may have multiple values
+		for _, v := range v {
+			kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+		}
+	}
+
+	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
+		Topic:   triggerFields.responseTopic,
+		Value:   sarama.StringEncoder(body),
+		Headers: kafkaRecordHeaders,
+	})
+	if err != nil {
+		logger.Warn("failed to publish response body from function invocation to topic",
+			zap.Error(err),
+			zap.String("topic", triggerFields.topic),
+			zap.String("function_url", triggerFields.functionURL))
+		return false
+	}
+
+	return true
+}
+
+func errorHandler(logger *zap.Logger, triggerFields fissionTriggerFields, producer sarama.SyncProducer, err error) {
+	if len(triggerFields.errorTopic) > 0 {
+		_, _, e := producer.SendMessage(&sarama.ProducerMessage{
+			Topic: triggerFields.errorTopic,
+			Value: sarama.StringEncoder(err.Error()),
+		})
+		if e != nil {
+			logger.Error("failed to publish message to error topic",
+				zap.Error(e),
+				zap.String("trigger", triggerFields.triggerName),
+				zap.String("message", err.Error()),
+				zap.String("topic", triggerFields.topic))
+		}
+	} else {
+		logger.Error("message received to publish to error topic, but no error topic was set",
+			zap.String("message", err.Error()), zap.String("trigger", triggerFields.triggerName), zap.String("function_url", triggerFields.functionURL))
+	}
 }
 
 func main() {
@@ -288,25 +409,35 @@ func main() {
 		logger.Error("Failed to fetch kafka metadata", zap.Error(err))
 		return
 	}
+
+	triggerFields, err := parseFissionTriggerFields()
+	if err != nil {
+		logger.Error("Failed to parse fission trigger fields", zap.Error(err))
+		return
+	}
+
 	config, err := getConfig(metadata)
 	if err != nil {
 		logger.Error("Failed to create kafka config", zap.Error(err))
 		return
 	}
 
-	err = initProducer(metadata)
+	producer, err := getProducer(metadata)
 	if err != nil {
 		logger.Error("Failed to create kafka producer", zap.Error(err))
 		return
 	}
 	defer producer.Close()
 
-	consumer := Consumer{
-		ready: make(chan bool),
+	connector := Connector{
+		ready:                make(chan bool),
+		logger:               logger,
+		producer:             producer,
+		fissionTriggerFields: triggerFields,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client, err := sarama.NewConsumerGroup(metadata.bootstrapServers, metadata.groupUID, config)
+	client, err := sarama.NewConsumerGroup(metadata.bootstrapServers, triggerFields.consumerGroup, config)
 	if err != nil {
 		logger.Error("Error creating consumer group client", zap.Error(err))
 		return
@@ -318,18 +449,18 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for {
-			if err := client.Consume(ctx, []string{metadata.topic}, &consumer); err != nil {
+			if err := client.Consume(ctx, []string{triggerFields.topic}, &connector); err != nil {
 				logger.Error("Error from consumer", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
 				return
 			}
-			consumer.ready = make(chan bool)
+			connector.ready = make(chan bool)
 		}
 	}()
 
-	<-consumer.ready // Await till the consumer has been set up
+	<-connector.ready // Await till the consumer has been set up
 	logger.Info("Sarama consumer up and running!...")
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)

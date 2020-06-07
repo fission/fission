@@ -3,12 +3,16 @@ package mqtrigger
 import (
 	"context"
 	"os"
+	"strings"
 	"time"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
@@ -53,7 +57,7 @@ func getKedaClient(namespace string) (dynamic.ResourceInterface, error) {
 }
 
 func StartScalerManager(logger *zap.Logger, routerUrl string) error {
-	fissionClient, _, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
 	}
@@ -62,6 +66,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
 	crdClient := fissionClient.CoreV1().RESTClient()
+	deploymentsClient := kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault)
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(crdClient, "messagequeuetriggers", metav1.NamespaceAll, fields.Everything())
 	_, controller := k8sCache.NewInformer(listWatch, &fv1.MessageQueueTrigger{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
@@ -77,6 +82,11 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				_, err = kedaClient.Create(scaledObject, metav1.CreateOptions{})
 				if err != nil {
 					logger.Error("Failed to create ScaledObject", zap.Error(err))
+				}
+				deployment := getDeploymentSpec(mqt, routerUrl)
+				_, err = deploymentsClient.Create(deployment)
+				if err != nil {
+					logger.Error("Failed to create deployment", zap.Error(err))
 				}
 			}()
 
@@ -109,6 +119,12 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				if err != nil {
 					logger.Error("Failed to Delete ScaledObject", zap.Error(err))
 				}
+				deletePolicy := metav1.DeletePropagationForeground
+				if err := deploymentsClient.Delete(mqt.ObjectMeta.Name, &metav1.DeleteOptions{
+					PropagationPolicy: &deletePolicy,
+				}); err != nil {
+					logger.Error("Failed to Delete Deployment", zap.Error(err))
+				}
 			}()
 		},
 	})
@@ -138,6 +154,108 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger) *unstructured.Unstructured {
 						"type":     mqt.ObjectMeta.Name,
 						"metadata": mqt.Spec.Metadata,
 						"authdata": mqt.Spec.Authdata,
+					},
+				},
+			},
+		},
+	}
+}
+
+func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerUrl string) *appsv1.Deployment {
+	url := routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.ObjectMeta.Namespace), "/")
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: mqt.ObjectMeta.Name,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": mqt.ObjectMeta.Name,
+				},
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": mqt.ObjectMeta.Name,
+					},
+				},
+				Spec: apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name:            mqt.ObjectMeta.Name,
+							Image:           "therahulbhati/test:latest",
+							ImagePullPolicy: "Always",
+							Env: []apiv1.EnvVar{
+								{
+									Name:  "BROKER_LIST",
+									Value: mqt.Spec.Metadata["brokerList"],
+								},
+								{
+									Name:  "BOOTSTRAP_SERVERS",
+									Value: mqt.Spec.Metadata["bootstrapServers"],
+								},
+								{
+									Name:  "CONSUMER_GROUP",
+									Value: mqt.Spec.Metadata["consumerGroup"],
+								},
+								{
+									Name:  "TOPIC",
+									Value: mqt.Spec.Topic,
+								},
+								{
+									Name:  "LAG_THRESHOLD",
+									Value: mqt.Spec.Metadata["lagThreshold"],
+								},
+								{
+									Name:  "AUTH_MODE",
+									Value: mqt.Spec.Metadata["authMode"],
+								},
+								{
+									Name:  "USERNAME",
+									Value: mqt.Spec.Metadata["username"],
+								},
+								{
+									Name:  "PASSWORD",
+									Value: mqt.Spec.Metadata["password"],
+								},
+								{
+									Name:  "CA",
+									Value: mqt.Spec.Metadata["ca"],
+								},
+								{
+									Name:  "CERT",
+									Value: mqt.Spec.Metadata["cert"],
+								},
+								{
+									Name:  "KEY",
+									Value: mqt.Spec.Metadata["key"],
+								},
+								{
+									Name:  "FUNCTION_URL",
+									Value: url,
+								},
+								{
+									Name:  "ERROR_TOPIC",
+									Value: mqt.Spec.ErrorTopic,
+								},
+								{
+									Name:  "RESPONSE_TOPIC",
+									Value: mqt.Spec.ResponseTopic,
+								},
+								{
+									Name:  "TRIGGER_NAME",
+									Value: mqt.ObjectMeta.Name,
+								},
+								{
+									Name:  "MAX_RETRIES",
+									Value: string(mqt.Spec.MaxRetries),
+								},
+								{
+									Name:  "CONTENT_TYPE",
+									Value: mqt.Spec.ContentType,
+								},
+							},
+						},
 					},
 				},
 			},
