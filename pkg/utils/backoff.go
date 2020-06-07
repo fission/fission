@@ -30,7 +30,7 @@ type backoff struct {
 // NewBackOff returns a new backoff struct with initialized values
 func NewBackOff(initialInterval time.Duration, maxInterval time.Duration, multiplier float64, maxCount float64) (*backoff, error) {
 	if multiplier < 0 || maxInterval < 0 || initialInterval < 0 || maxCount < 0 {
-		return &backoff{}, fmt.Errorf("Negative Value for multiplier and maxInternal not allowed")
+		return &backoff{}, fmt.Errorf("negative value for multiplier and max internal not allowed")
 	}
 
 	return &backoff{
