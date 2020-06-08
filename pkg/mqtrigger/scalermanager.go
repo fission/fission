@@ -3,6 +3,7 @@ package mqtrigger
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -248,7 +249,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerUrl string) *appsv1.D
 								},
 								{
 									Name:  "MAX_RETRIES",
-									Value: string(mqt.Spec.MaxRetries),
+									Value: strconv.Itoa(mqt.Spec.MaxRetries),
 								},
 								{
 									Name:  "CONTENT_TYPE",
