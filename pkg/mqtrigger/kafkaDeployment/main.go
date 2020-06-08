@@ -109,9 +109,10 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 	}
 
 	meta.authMode = kafkaAuthModeForNone
+
 	mode := kafkaAuthMode(strings.TrimSpace((os.Getenv("AUTH_MODE"))))
 
-	if mode != kafkaAuthModeForNone && mode != kafkaAuthModeForSaslPlaintext && mode != kafkaAuthModeForSaslSSL && mode != kafkaAuthModeForSaslSSLPlain && mode != kafkaAuthModeForSaslScramSha256 && mode != kafkaAuthModeForSaslScramSha512 {
+	if mode != "" && mode != kafkaAuthModeForNone && mode != kafkaAuthModeForSaslPlaintext && mode != kafkaAuthModeForSaslSSL && mode != kafkaAuthModeForSaslSSLPlain && mode != kafkaAuthModeForSaslScramSha256 && mode != kafkaAuthModeForSaslScramSha512 {
 		return meta, fmt.Errorf("err auth mode %s given", mode)
 	}
 
