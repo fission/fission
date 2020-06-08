@@ -184,7 +184,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerUrl string) *appsv1.D
 					Containers: []apiv1.Container{
 						{
 							Name:            mqt.ObjectMeta.Name,
-							Image:           "rahulbhati/test:2",
+							Image:           "rahulbhati/test:3",
 							ImagePullPolicy: "Always",
 							Env: []apiv1.EnvVar{
 								{

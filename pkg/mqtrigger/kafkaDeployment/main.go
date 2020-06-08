@@ -167,7 +167,7 @@ func parseFissionTriggerFields() (fissionTriggerFields, error) {
 		triggerName:   os.Getenv("TRIGGER_NAME"),
 		consumerGroup: os.Getenv("CONSUMER_GROUP"),
 	}
-	val, err := strconv.ParseInt(os.Getenv("MAX_RETRIES"), 0, 64)
+	val, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MAX_RETRIES")), 0, 64)
 	if err != nil {
 		return fissionTriggerFields{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
 	}
