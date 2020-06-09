@@ -79,15 +79,18 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
+					return
 				}
 				_, err = kedaClient.Create(scaledObject, metav1.CreateOptions{})
 				if err != nil {
 					logger.Error("Failed to create ScaledObject", zap.Error(err))
+					return
 				}
 				deployment := getDeploymentSpec(mqt, routerUrl)
 				_, err = deploymentsClient.Create(deployment)
 				if err != nil {
 					logger.Error("Failed to create deployment", zap.Error(err))
+					return
 				}
 			}()
 
@@ -100,6 +103,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
+					return
 				}
 				_, err = kedaClient.Update(scaledObject, metav1.UpdateOptions{})
 				if err != nil {
@@ -115,16 +119,19 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
+					return
 				}
 				err = kedaClient.Delete(name, &metav1.DeleteOptions{})
 				if err != nil {
 					logger.Error("Failed to Delete ScaledObject", zap.Error(err))
+					return
 				}
 				deletePolicy := metav1.DeletePropagationForeground
 				if err := deploymentsClient.Delete(mqt.ObjectMeta.Name, &metav1.DeleteOptions{
 					PropagationPolicy: &deletePolicy,
 				}); err != nil {
 					logger.Error("Failed to Delete Deployment", zap.Error(err))
+					return
 				}
 			}()
 		},
