@@ -27,7 +27,6 @@ import (
 
 type kafkaMetadata struct {
 	bootstrapServers []string
-	group            string
 
 	// auth
 	authMode kafkaAuthMode
@@ -40,7 +39,7 @@ type kafkaMetadata struct {
 	ca   string
 }
 
-type fissionTriggerFields struct {
+type fissionMetadata struct {
 	// fission
 	topic         string
 	responseTopic string
@@ -152,13 +151,13 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 	return meta, nil
 }
 
-func parseFissionTriggerFields() (fissionTriggerFields, error) {
+func parseFissionMetadata() (fissionMetadata, error) {
 	for _, envVars := range []string{"TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME", "CONSUMER_GROUP"} {
 		if os.Getenv(envVars) == "" {
-			return fissionTriggerFields{}, fmt.Errorf("Environment variable not found: MAX_RETRIES: %v", envVars)
+			return fissionMetadata{}, fmt.Errorf("Environment variable not found: MAX_RETRIES: %v", envVars)
 		}
 	}
-	meta := fissionTriggerFields{
+	meta := fissionMetadata{
 		topic:         os.Getenv("TOPIC"),
 		responseTopic: os.Getenv("RESPONSE_TOPIC"),
 		errorTopic:    os.Getenv("ERROR_TOPIC"),
@@ -169,7 +168,7 @@ func parseFissionTriggerFields() (fissionTriggerFields, error) {
 	}
 	val, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MAX_RETRIES")), 0, 64)
 	if err != nil {
-		return fissionTriggerFields{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
+		return fissionMetadata{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
 	}
 	meta.maxRetries = int(val)
 	return meta, nil
@@ -238,7 +237,7 @@ type Connector struct {
 	ready                chan bool
 	logger               *zap.Logger
 	producer             sarama.SyncProducer
-	fissionTriggerFields fissionTriggerFields
+	fissionTriggerFields fissionMetadata
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
@@ -280,7 +279,7 @@ func getProducer(metadata kafkaMetadata) (sarama.SyncProducer, error) {
 	return producer, nil
 }
 
-func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionTriggerFields, producer sarama.SyncProducer, logger *zap.Logger) bool {
+func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionMetadata, producer sarama.SyncProducer, logger *zap.Logger) bool {
 	var value string = string(msg.Value[:])
 	// Generate the Headers
 	fissionHeaders := map[string]string{
@@ -381,7 +380,7 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionTri
 	return true
 }
 
-func errorHandler(logger *zap.Logger, triggerFields fissionTriggerFields, producer sarama.SyncProducer, err error) {
+func errorHandler(logger *zap.Logger, triggerFields fissionMetadata, producer sarama.SyncProducer, err error) {
 	if len(triggerFields.errorTopic) > 0 {
 		_, _, e := producer.SendMessage(&sarama.ProducerMessage{
 			Topic: triggerFields.errorTopic,
@@ -413,7 +412,7 @@ func main() {
 		return
 	}
 
-	triggerFields, err := parseFissionTriggerFields()
+	triggerFields, err := parseFissionMetadata()
 	if err != nil {
 		logger.Error("Failed to parse fission trigger fields", zap.Error(err))
 		return

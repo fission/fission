@@ -7,7 +7,7 @@ require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
 	github.com/Shopify/sarama v1.23.1
-	github.com/blend/go-sdk v1.1.1
+	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
 	github.com/dchest/uniuri v0.0.0-20160212164326-8902c56451e9
@@ -56,7 +56,6 @@ require (
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
-	github.com/xdg/stringprep v1.0.0 // indirect
 	go.opencensus.io v0.22.0
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect

@@ -18,7 +18,6 @@ package mqtrigger
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,7 +86,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.ErrorTopic = errorTopic
 		updated = true
 	}
-	if maxRetries > -1 {
+	if maxRetries >= 0 {
 		mqt.Spec.MaxRetries = maxRetries
 		updated = true
 	}
@@ -99,50 +98,25 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.ContentType = contentType
 		updated = true
 	}
-	if pollingInterval > -1 {
+	if pollingInterval >= 0 {
 		mqt.Spec.PollingInterval = &pollingInterval
 		updated = true
 	}
-	if cooldownPeriod > -1 {
+	if cooldownPeriod >= 0 {
 		mqt.Spec.CooldownPeriod = &cooldownPeriod
 		updated = true
 	}
-	if minReplicaCount > -1 {
+	if minReplicaCount >= 0 {
 		mqt.Spec.MinReplicaCount = &minReplicaCount
 		updated = true
 	}
-	if maxReplicaCount > -1 {
+	if maxReplicaCount >= 0 {
 		mqt.Spec.MaxReplicaCount = &maxReplicaCount
 		updated = true
 	}
-	if len(metadataParams) > 0 {
-		for _, m := range metadataParams {
-			metadataParts := strings.SplitN(m, "=", 2)
-			if len(metadataParts) == 0 {
-				continue
-			}
-			if len(metadataParts) == 2 {
-				key := metadataParts[0]
-				value := metadataParts[1]
-				mqt.Spec.Metadata[key] = value
-				updated = true
-			}
-		}
-	}
-	if len(authdataParams) > 0 {
-		for _, m := range authdataParams {
-			authdataParts := strings.SplitN(m, "=", 2)
-			if len(authdataParts) == 0 {
-				continue
-			}
-			if len(authdataParts) == 2 {
-				key := authdataParts[0]
-				value := authdataParts[1]
-				mqt.Spec.Authdata[key] = value
-				updated = true
-			}
-		}
-	}
+	updated = updated || UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+	updated = updated || UpdateMapFromStringSlice(&mqt.Spec.Authdata, authdataParams)
+
 	if !updated {
 		return errors.New("Nothing changed, see 'help' for more details")
 	}

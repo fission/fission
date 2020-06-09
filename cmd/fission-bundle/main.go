@@ -79,7 +79,7 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
 	}
 }
 
-func runMessageScalarMgr(logger *zap.Logger, routerUrl string) {
+func runMQManager(logger *zap.Logger, routerUrl string) {
 	err := mqt.StartScalerManager(logger, routerUrl)
 	if err != nil {
 		logger.Fatal("error starting mqt scaler manager", zap.Error(err))
@@ -291,7 +291,7 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(logger, routerUrl)
-		runMessageScalarMgr(logger, routerUrl)
+		runMQManager(logger, routerUrl)
 	}
 
 	if arguments["--builderMgr"] == true {
