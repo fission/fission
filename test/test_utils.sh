@@ -202,6 +202,7 @@ build_fission_cli() {
     travis_fold_start build_fission_cli "fission cli"
     pushd $ROOT/cmd/fission-cli
     go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) -X github.com/fission/fission/pkg/info.Version=$(getVersion)" -o $HOME/tool/fission .
+    chmod +x $HOME/tool/fission
     popd
     travis_fold_end build_fission_cli
 }
