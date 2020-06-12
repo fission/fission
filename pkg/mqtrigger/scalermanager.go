@@ -2,6 +2,7 @@ package mqtrigger
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -19,20 +20,26 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
-	kedaGVR = schema.GroupVersionResource{
+	scaledObjectGVR = schema.GroupVersionResource{
 		Group:    "keda.k8s.io",
 		Version:  "v1alpha1",
 		Resource: "scaledobjects",
 	}
+	authTriggerGVR = schema.GroupVersionResource{
+		Group:    "keda.k8s.io",
+		Version:  "v1alpha1",
+		Resource: "triggerauthentications",
+	}
 )
 
-func getKedaClient(namespace string) (dynamic.ResourceInterface, error) {
+func getDynamicClient() (dynamic.Interface, error) {
 	var config *rest.Config
 	var err error
 
@@ -54,7 +61,23 @@ func getKedaClient(namespace string) (dynamic.ResourceInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dynamicClient.Resource(kedaGVR).Namespace(namespace), nil
+	return dynamicClient, nil
+}
+
+func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) {
+	dynamicClient, err := getDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	return dynamicClient.Resource(scaledObjectGVR).Namespace(namespace), nil
+}
+
+func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
+	dynamicClient, err := getDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	return dynamicClient.Resource(scaledObjectGVR).Namespace(namespace), nil
 }
 
 func StartScalerManager(logger *zap.Logger, routerUrl string) error {
@@ -75,8 +98,19 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
-				scaledObject := getScaledObject(mqt)
-				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
+
+				authenticationRef := ""
+				if len(mqt.Spec.Secret) > 0 {
+					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+					err = createAuthTrigger(authenticationRef, mqt.Spec.Secret, mqt.ObjectMeta.Namespace, kubeClient)
+					if err != nil {
+						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
+						return
+					}
+				}
+
+				scaledObject := getScaledObject(mqt, authenticationRef)
+				kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
 					return
@@ -104,12 +138,27 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 					logger.Warn("Update failed, no changes found in trigger fields")
 					return
 				}
-				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
+
+				authenticationRef := ""
+				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
+					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+					namespace := mqt.ObjectMeta.Namespace
+					if len(newMqt.ObjectMeta.Namespace) > 0 {
+						namespace = newMqt.ObjectMeta.Namespace
+					}
+					err = createAuthTrigger(authenticationRef, newMqt.Spec.Secret, namespace, kubeClient)
+					if err != nil {
+						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
+						return
+					}
+				}
+
+				kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
 					return
 				}
-				scaledObject := getScaledObject(mqt)
+				scaledObject := getScaledObject(mqt, authenticationRef)
 				resourceVersion, err := getResourceVersion(mqt.ObjectMeta.Name, kedaClient)
 				if err != nil {
 					logger.Error("Failed to get resource version", zap.Error(err))
@@ -128,7 +177,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				logger.Debug("Delete deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("maqt.Spec", mqt.Spec))
 				name := mqt.ObjectMeta.Name
-				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
+				kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
 					return
@@ -152,7 +201,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 	return nil
 }
 
-func getScaledObject(mqt *fv1.MessageQueueTrigger) *unstructured.Unstructured {
+func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ScaledObject",
@@ -171,9 +220,9 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger) *unstructured.Unstructured {
 				},
 				"triggers": []interface{}{
 					map[string]interface{}{
-						"type":     mqt.ObjectMeta.Name,
-						"metadata": mqt.Spec.Metadata,
-						"authdata": mqt.Spec.Authdata,
+						"type":              mqt.ObjectMeta.Name,
+						"metadata":          mqt.Spec.Metadata,
+						"authenticationRef": authenticationRef,
 					},
 				},
 			},
@@ -341,11 +390,46 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		}
 	}
 
-	for key, value := range newMqt.Spec.Authdata {
-		if val, ok := mqt.Spec.Authdata[key]; ok && val != value {
-			mqt.Spec.Authdata[key] = value
-			updated = true
-		}
+	if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
+		mqt.Spec.Secret = newMqt.Spec.Secret
+		updated = true
 	}
 	return updated
+}
+
+func createAuthTrigger(authenticationRef string, secretName string, namespace string, kubeClient *kubernetes.Clientset) error {
+	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(secretName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	var secretTargetRefFields []interface{}
+	for secretField := range secret.Data {
+		secretTargetRefFields = append(secretTargetRefFields, map[string]interface{}{
+			"name":      secretName,
+			"parameter": secretField,
+			"key":       secretField,
+		})
+	}
+	authTriggerObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"kind":       "TriggerAuthentication",
+			"apiVersion": "keda.k8s.io/v1alpha1",
+			"metadata": map[string]interface{}{
+				"name":      authenticationRef,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				"secretTargetRef": secretTargetRefFields,
+			},
+		},
+	}
+	authTriggerClient, err := getAuthTriggerClient(namespace)
+	if err != nil {
+		return err
+	}
+	_, err = authTriggerClient.Create(authTriggerObj, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
