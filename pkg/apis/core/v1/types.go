@@ -663,7 +663,7 @@ type (
 
 		// Secret name
 		// +optional
-		SecretName string `json:"secretName,omitempty`
+		Secret string `json:"secret,omitempty"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or

@@ -737,13 +737,6 @@ func (in *MessageQueueTriggerSpec) DeepCopyInto(out *MessageQueueTriggerSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.Authdata != nil {
-		in, out := &in.Authdata, &out.Authdata
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	return
 }
 
