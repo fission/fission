@@ -94,7 +94,7 @@ const (
 	MqtMinReplicaCount = "minreplicacount"
 	MqtMaxReplicaCount = "maxreplicacount"
 	MqtMetadata        = "metadata"
-	MqtAuthdata        = "authdata"
+	MqtSecret          = "secret"
 
 	EnvName            = resourceName
 	EnvPoolsize        = "poolsize"
