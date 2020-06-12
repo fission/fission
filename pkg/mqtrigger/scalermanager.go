@@ -74,7 +74,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 		AddFunc: func(obj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
-				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("maqt.Spec", mqt.Spec))
+				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
 				scaledObject := getScaledObject(mqt)
 				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
@@ -95,19 +95,31 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 			}()
 
 		},
-		UpdateFunc: func(_ interface{}, newObj interface{}) {
+		UpdateFunc: func(obj interface{}, newObj interface{}) {
 			go func() {
-				mqt := newObj.(*fv1.MessageQueueTrigger)
-				logger.Debug("Update deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("maqt.Spec", mqt.Spec))
-				scaledObject := getScaledObject(mqt)
+				mqt := obj.(*fv1.MessageQueueTrigger)
+				newMqt := newObj.(*fv1.MessageQueueTrigger)
+				updated := checkAndUpdateTriggerFields(mqt, newMqt)
+				if !updated {
+					logger.Warn("Update failed, no changes found in trigger fields")
+					return
+				}
 				kedaClient, err := getKedaClient(mqt.ObjectMeta.Namespace)
 				if err != nil {
 					logger.Error("Failed to create KEDA client", zap.Error(err))
 					return
 				}
+				scaledObject := getScaledObject(mqt)
+				resourceVersion, err := getResourceVersion(mqt.ObjectMeta.Name, kedaClient)
+				if err != nil {
+					logger.Error("Failed to get resource version", zap.Error(err))
+					return
+				}
+				scaledObject.SetResourceVersion(resourceVersion)
 				_, err = kedaClient.Update(scaledObject, metav1.UpdateOptions{})
 				if err != nil {
 					logger.Error("Failed to Update ScaledObject", zap.Error(err))
+					return
 				}
 			}()
 		},
@@ -269,4 +281,71 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerUrl string) *appsv1.D
 			},
 		},
 	}
+}
+
+func getResourceVersion(scaledObjectName string, kedaClient dynamic.ResourceInterface) (version string, err error) {
+	scaledObject, err := kedaClient.Get(scaledObjectName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return scaledObject.GetResourceVersion(), nil
+}
+
+func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
+	updated := false
+	if len(newMqt.Spec.Topic) > 0 && newMqt.Spec.Topic != mqt.Spec.Topic {
+		mqt.Spec.Topic = newMqt.Spec.Topic
+		updated = true
+	}
+	if len(newMqt.Spec.ResponseTopic) > 0 && newMqt.Spec.ResponseTopic != mqt.Spec.ResponseTopic {
+		mqt.Spec.ResponseTopic = newMqt.Spec.ResponseTopic
+		updated = true
+	}
+	if len(newMqt.Spec.ErrorTopic) > 0 && newMqt.Spec.ErrorTopic != mqt.Spec.ErrorTopic {
+		mqt.Spec.ErrorTopic = newMqt.Spec.ErrorTopic
+		updated = true
+	}
+	if newMqt.Spec.MaxRetries >= 0 && newMqt.Spec.MaxRetries != mqt.Spec.MaxRetries {
+		mqt.Spec.MaxRetries = newMqt.Spec.MaxRetries
+		updated = true
+	}
+	if len(newMqt.Spec.FunctionReference.Name) > 0 && newMqt.Spec.FunctionReference.Name != mqt.Spec.FunctionReference.Name {
+		mqt.Spec.FunctionReference.Name = newMqt.Spec.FunctionReference.Name
+		updated = true
+	}
+	if len(newMqt.Spec.ContentType) > 0 && newMqt.Spec.ContentType != mqt.Spec.ContentType {
+		mqt.Spec.ContentType = newMqt.Spec.ContentType
+		updated = true
+	}
+	if *newMqt.Spec.PollingInterval >= 0 && *newMqt.Spec.PollingInterval != *mqt.Spec.PollingInterval {
+		mqt.Spec.PollingInterval = newMqt.Spec.PollingInterval
+		updated = true
+	}
+	if *newMqt.Spec.CooldownPeriod >= 0 && *newMqt.Spec.CooldownPeriod != *mqt.Spec.CooldownPeriod {
+		mqt.Spec.CooldownPeriod = newMqt.Spec.CooldownPeriod
+		updated = true
+	}
+	if *newMqt.Spec.MinReplicaCount >= 0 && *newMqt.Spec.MinReplicaCount != *mqt.Spec.MinReplicaCount {
+		mqt.Spec.MinReplicaCount = newMqt.Spec.MinReplicaCount
+		updated = true
+	}
+	if *newMqt.Spec.MaxReplicaCount >= 0 && *newMqt.Spec.MaxReplicaCount != *mqt.Spec.MaxReplicaCount {
+		mqt.Spec.MaxReplicaCount = newMqt.Spec.MaxReplicaCount
+		updated = true
+	}
+
+	for key, value := range newMqt.Spec.Metadata {
+		if val, ok := mqt.Spec.Metadata[key]; ok && val != value {
+			mqt.Spec.Metadata[key] = value
+			updated = true
+		}
+	}
+
+	for key, value := range newMqt.Spec.Authdata {
+		if val, ok := mqt.Spec.Authdata[key]; ok && val != value {
+			mqt.Spec.Authdata[key] = value
+			updated = true
+		}
+	}
+	return updated
 }

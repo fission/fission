@@ -661,9 +661,9 @@ type (
 		// ScalerTrigger fields
 		Metadata map[string]string `json:"metadata"`
 
-		// TriggerAuthentication fields
+		// Secret name
 		// +optional
-		Authdata map[string]string `json:"authdata"`
+		SecretName string `json:"secretName,omitempty`
 	}
 
 	// TimeTrigger invokes the specific function at a time or
