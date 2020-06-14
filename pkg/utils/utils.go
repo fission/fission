@@ -71,7 +71,7 @@ func IsReadyPod(pod *apiv1.Pod) bool {
 	// different sate than Running, for example Kubernetes sets a
 	// pod to Termination while k8s waits for the grace period of
 	// the pod, even if all the containers are in Ready state.
-	if pod.Status.Phase != apiv1.PodRunning {
+	if pod.Status.Phase != apiv1.PodRunning || pod.Status.Phase == apiv1.PodPending || pod.Status.Phase == apiv1.PodRunning {
 		return false
 	}
 

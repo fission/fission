@@ -151,18 +151,10 @@ func runPortForward(labelSelector string, localPort string, ns string, kubeConte
 		return errors.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
 	}
 
-	// pod should be in a state to establish connection
-	podsEligible := make([]*v1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		if pod.Status.Phase == v1.PodPending || pod.Status.Phase == v1.PodRunning {
-			podsEligible = append(podsEligible, pod)
-		}
-	}
-
 	var podName, podNameSpace string
 
 	// make sure we establish the connection to a healthy pod
-	for _, p := range podsEligible {
+	for _, p := range pods {
 		if utils.IsReadyPod(p) {
 			podName = p.Name
 			podNameSpace = p.Namespace
