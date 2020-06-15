@@ -102,7 +102,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 				authenticationRef := ""
 				if len(mqt.Spec.Secret) > 0 {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					err = createAuthTrigger(authenticationRef, mqt.Spec.Secret, mqt.ObjectMeta.Namespace, kubeClient)
+					err = createAuthTrigger(authenticationRef, mqt.Spec.Secret, mqt.ObjectMeta.Namespace, kubeClient, mqt)
 					if err != nil {
 						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
 						return
@@ -146,7 +146,7 @@ func StartScalerManager(logger *zap.Logger, routerUrl string) error {
 					if len(newMqt.ObjectMeta.Namespace) > 0 {
 						namespace = newMqt.ObjectMeta.Namespace
 					}
-					err = createAuthTrigger(authenticationRef, newMqt.Spec.Secret, namespace, kubeClient)
+					err = createAuthTrigger(authenticationRef, newMqt.Spec.Secret, namespace, kubeClient, mqt)
 					if err != nil {
 						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
 						return
@@ -209,6 +209,13 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 			"metadata": map[string]interface{}{
 				"name":      mqt.ObjectMeta.Name,
 				"namespace": mqt.ObjectMeta.Namespace,
+				"ownerReferences": map[string]interface{}{
+					"kind":               "MessageQueueTrigger",
+					"apiVersion":         "fission.io/v1",
+					"name":               mqt.ObjectMeta.Name,
+					"uid":                mqt.ObjectMeta.UID,
+					"blockOwnerDeletion": true,
+				},
 			},
 			"spec": map[string]interface{}{
 				"cooldownPeriod":  &mqt.Spec.CooldownPeriod,
@@ -232,9 +239,19 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 
 func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerUrl string) *appsv1.Deployment {
 	url := routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.ObjectMeta.Namespace), "/")
+	blockOwnerDeletion := true
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: mqt.ObjectMeta.Name,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:               "MessageQueueTrigger",
+					APIVersion:         "fission.io/v1",
+					Name:               mqt.ObjectMeta.Name,
+					UID:                mqt.ObjectMeta.UID,
+					BlockOwnerDeletion: &blockOwnerDeletion,
+				},
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -397,7 +414,7 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 	return updated
 }
 
-func createAuthTrigger(authenticationRef string, secretName string, namespace string, kubeClient *kubernetes.Clientset) error {
+func createAuthTrigger(authenticationRef string, secretName string, namespace string, kubeClient *kubernetes.Clientset, mqt *fv1.MessageQueueTrigger) error {
 	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(secretName, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -417,6 +434,13 @@ func createAuthTrigger(authenticationRef string, secretName string, namespace st
 			"metadata": map[string]interface{}{
 				"name":      authenticationRef,
 				"namespace": namespace,
+				"ownerReferences": map[string]interface{}{
+					"kind":               "MessageQueueTrigger",
+					"apiVersion":         "fission.io/v1",
+					"name":               mqt.ObjectMeta.Name,
+					"uid":                mqt.ObjectMeta.UID,
+					"blockOwnerDeletion": true,
+				},
 			},
 			"spec": map[string]interface{}{
 				"secretTargetRef": secretTargetRefFields,
