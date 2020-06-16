@@ -1,7 +1,5 @@
 module github.com/fission/fission
 
-go 1.14
-
 require (
 	cloud.google.com/go v0.40.0 // indirect
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
@@ -45,6 +43,7 @@ require (
 	github.com/nwaples/rardecode v0.0.0-20171029023500-e06696f847ae // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
+	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.4.1
@@ -66,6 +65,7 @@ require (
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
