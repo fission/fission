@@ -101,6 +101,9 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 		AddFunc: func(obj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
+				if mqt.Spec.Version2 == false {
+					return
+				}
 				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
 
 				authenticationRef := ""
@@ -142,6 +145,9 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				newMqt := newObj.(*fv1.MessageQueueTrigger)
 				updated := checkAndUpdateTriggerFields(mqt, newMqt)
+				if mqt.Spec.Version2 == false {
+					return
+				}
 				if !updated {
 					logger.Warn("Update failed, no changes found in trigger fields")
 					return

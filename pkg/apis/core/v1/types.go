@@ -659,11 +659,16 @@ type (
 		MaxReplicaCount *int32 `json:"maxReplicaCount,omitempty"`
 
 		// ScalerTrigger fields
+		// +optional
 		Metadata map[string]string `json:"metadata"`
 
 		// Secret name
 		// +optional
 		Secret string `json:"secret,omitempty"`
+
+		// Version flag
+		// +optional
+		Version2 bool `json:"version2,omitempty"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or

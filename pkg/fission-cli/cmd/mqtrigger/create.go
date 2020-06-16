@@ -118,6 +118,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	_ = UpdateMapFromStringSlice(&metadata, metadataParams)
 
 	secret := input.String(flagkey.MqtSecret)
+
+	version2 := input.Bool(flagkey.MqtVersion2)
+
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
 		fr, err := spec.ReadSpecs(specDir)
@@ -162,6 +165,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			MaxReplicaCount:  &maxReplicaCount,
 			Metadata:         metadata,
 			Secret:           secret,
+			Version2:         version2,
 		},
 	}
 

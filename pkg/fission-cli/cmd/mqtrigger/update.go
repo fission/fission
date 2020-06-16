@@ -66,6 +66,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
 	metadataParams := input.StringSlice(flagkey.MqtMetadata)
 	secret := input.String(flagkey.MqtSecret)
+	version2 := input.Bool(flagkey.MqtVersion2)
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
 	err = checkMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
@@ -118,6 +119,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	if len(secret) > 0 {
 		mqt.Spec.Secret = secret
+		updated = true
+	}
+
+	if version2 != mqt.Spec.Version2 {
+		mqt.Spec.Version2 = version2
 		updated = true
 	}
 
