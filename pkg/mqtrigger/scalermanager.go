@@ -350,12 +350,14 @@ func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, 
 			"metadata": map[string]interface{}{
 				"name":      authenticationRef,
 				"namespace": mqt.ObjectMeta.Namespace,
-				"ownerReferences": map[string]interface{}{
-					"kind":               "MessageQueueTrigger",
-					"apiVersion":         "fission.io/v1",
-					"name":               mqt.ObjectMeta.Name,
-					"uid":                mqt.ObjectMeta.UID,
-					"blockOwnerDeletion": true,
+				"ownerReferences": []interface{}{
+					map[string]interface{}{
+						"kind":               "MessageQueueTrigger",
+						"apiVersion":         "fission.io/v1",
+						"name":               mqt.ObjectMeta.Name,
+						"uid":                mqt.ObjectMeta.UID,
+						"blockOwnerDeletion": true,
+					},
 				},
 			},
 			"spec": map[string]interface{}{
@@ -499,12 +501,14 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 			"metadata": map[string]interface{}{
 				"name":      mqt.ObjectMeta.Name,
 				"namespace": mqt.ObjectMeta.Namespace,
-				"ownerReferences": map[string]interface{}{
-					"kind":               "MessageQueueTrigger",
-					"apiVersion":         "fission.io/v1",
-					"name":               mqt.ObjectMeta.Name,
-					"uid":                mqt.ObjectMeta.UID,
-					"blockOwnerDeletion": true,
+				"ownerReferences": []interface{}{
+					map[string]interface{}{
+						"kind":               "MessageQueueTrigger",
+						"apiVersion":         "fission.io/v1",
+						"name":               mqt.ObjectMeta.Name,
+						"uid":                mqt.ObjectMeta.UID,
+						"blockOwnerDeletion": true,
+					},
 				},
 			},
 			"spec": map[string]interface{}{
