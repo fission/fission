@@ -173,30 +173,6 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				}
 			}()
 		},
-		// DeleteFunc: func(obj interface{}) {
-		// 	go func() {
-		// 		mqt := obj.(*fv1.MessageQueueTrigger)
-		// 		logger.Debug("Delete deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("maqt.Spec", mqt.Spec))
-		// 		name := mqt.ObjectMeta.Name
-		// 		kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
-		// 		if err != nil {
-		// 			logger.Error("Failed to create KEDA client", zap.Error(err))
-		// 			return
-		// 		}
-		// 		err = kedaClient.Delete(name, &metav1.DeleteOptions{})
-		// 		if err != nil {
-		// 			logger.Error("Failed to Delete ScaledObject", zap.Error(err))
-		// 			return
-		// 		}
-		// 		deletePolicy := metav1.DeletePropagationForeground
-		// 		if err := deploymentsClient.Delete(mqt.ObjectMeta.Name, &metav1.DeleteOptions{
-		// 			PropagationPolicy: &deletePolicy,
-		// 		}); err != nil {
-		// 			logger.Error("Failed to Delete Deployment", zap.Error(err))
-		// 			return
-		// 		}
-		// 	}()
-		// },
 	})
 	controller.Run(context.Background().Done())
 	return nil

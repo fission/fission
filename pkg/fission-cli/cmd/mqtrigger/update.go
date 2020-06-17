@@ -87,7 +87,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.ErrorTopic = errorTopic
 		updated = true
 	}
-	if maxRetries >= 0 {
+	if input.IsSet(flagkey.MqtMaxRetries) {
 		mqt.Spec.MaxRetries = maxRetries
 		updated = true
 	}
@@ -95,34 +95,36 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
 	}
-	if len(contentType) > 0 {
+	if input.IsSet(flagkey.MqtMsgContentType) {
 		mqt.Spec.ContentType = contentType
 		updated = true
 	}
-	if pollingInterval >= 0 {
+	if input.IsSet(flagkey.MqtPollingInterval) {
 		mqt.Spec.PollingInterval = &pollingInterval
 		updated = true
 	}
-	if cooldownPeriod >= 0 {
+	if input.IsSet(flagkey.MqtCooldownPeriod) {
 		mqt.Spec.CooldownPeriod = &cooldownPeriod
 		updated = true
 	}
-	if minReplicaCount >= 0 {
+	if input.IsSet(flagkey.MqtMinReplicaCount) {
 		mqt.Spec.MinReplicaCount = &minReplicaCount
 		updated = true
 	}
-	if maxReplicaCount >= 0 {
+	if input.IsSet(flagkey.MqtMaxReplicaCount) {
 		mqt.Spec.MaxReplicaCount = &maxReplicaCount
 		updated = true
 	}
-	updated = updated || UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
 
-	if len(secret) > 0 {
+	if input.IsSet(flagkey.MqtMetadata) {
+		updated = updated || UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+	}
+	if input.IsSet(flagkey.MqtSecret) {
 		mqt.Spec.Secret = secret
 		updated = true
 	}
 
-	if version2 != mqt.Spec.Version2 {
+	if input.IsSet(flagkey.MqtVersion2) {
 		mqt.Spec.Version2 = version2
 		updated = true
 	}
