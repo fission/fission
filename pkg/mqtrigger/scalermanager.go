@@ -184,7 +184,7 @@ func toEnvVar(str string) string {
 	return strings.ToUpper(envVar)
 }
 
-func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient *kubernetes.Clientset) ([]apiv1.EnvVar, error) {
+func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) ([]apiv1.EnvVar, error) {
 	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.ObjectMeta.Namespace), "/")
 	envVars := []apiv1.EnvVar{
 		{
@@ -283,6 +283,10 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		mqt.Spec.MaxReplicaCount = newMqt.Spec.MaxReplicaCount
 		updated = true
 	}
+	if len(newMqt.Spec.FunctionReference.Name) > 0 && newMqt.Spec.FunctionReference.Name != mqt.Spec.FunctionReference.Name {
+		newMqt.Spec.FunctionReference.Name = mqt.Spec.FunctionReference.Name
+		updated = true
+	}
 
 	for key, value := range newMqt.Spec.Metadata {
 		if val, ok := mqt.Spec.Metadata[key]; ok && val != value {
@@ -306,7 +310,7 @@ func getResourceVersion(scaledObjectName string, kedaClient dynamic.ResourceInte
 	return scaledObject.GetResourceVersion(), nil
 }
 
-func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient *kubernetes.Clientset) (*unstructured.Unstructured, error) {
+func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*unstructured.Unstructured, error) {
 	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(mqt.Spec.Secret, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
