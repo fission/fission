@@ -25,13 +25,23 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	_ "github.com/graymeta/stow/local"
+	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 )
 
 type (
+	// Storage is an interface to force storage level details implementation.
+	Storage interface {
+		getStorageType() StorageType
+		dial() (stow.Location, error)
+		// getSubDir() string
+		getContainerName() string
+		getUploadFileName() string
+	}
+
+	// StorageService is a struct to hold all things for storage service
 	StorageService struct {
 		logger        *zap.Logger
 		storageClient *StowClient
@@ -42,6 +52,15 @@ type (
 		ID string `json:"id"`
 	}
 )
+
+// Functions handling storage interface
+func getStorageType(storage Storage) string {
+	return string(storage.getStorageType())
+}
+
+func getStorageLocation(config *storageConfig) (stow.Location, error) {
+	return config.storage.dial()
+}
 
 // Handle multipart file uploads.
 func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -185,11 +204,13 @@ func (ss *StorageService) Start(port int) {
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
-func RunStorageService(logger *zap.Logger, storageType StorageType, storagePath string, containerName string, port int, enablePruner bool) *StorageService {
+// Start runs storage service
+func Start(logger *zap.Logger, storage Storage, port int) error {
+	enablePruner := true
 	// create a storage client
-	storageClient, err := MakeStowClient(logger, storageType, storagePath, containerName)
+	storageClient, err := MakeStowClient(logger, storage)
 	if err != nil {
-		logger.Fatal("error creating stowClient", zap.Error(err))
+		return errors.Wrap(err, "Error creating stowClient")
 	}
 
 	// create http handlers
@@ -205,11 +226,11 @@ func RunStorageService(logger *zap.Logger, storageType StorageType, storagePath 
 		}
 		pruner, err := MakeArchivePruner(logger, storageClient, time.Duration(pruneInterval))
 		if err != nil {
-			logger.Fatal("error creating archivePruner", zap.Error(err))
+			return errors.Wrap(err, "Error creating archivePruner")
 		}
 		go pruner.Start()
 	}
 
 	logger.Info("storage service started")
-	return storageService
+	return nil
 }
