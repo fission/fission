@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,10 +22,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/xdg/scram"
 	"go.uber.org/zap"
+
+	mqt "github.com/fission/fission/pkg/mqtrigger"
 )
 
 type kafkaMetadata struct {
 	bootstrapServers []string
+	consumerGroup    string
 
 	// auth
 	authMode kafkaAuthMode
@@ -39,27 +41,15 @@ type kafkaMetadata struct {
 	ca   string
 }
 
-type fissionMetadata struct {
-	// fission
-	topic         string
-	responseTopic string
-	errorTopic    string
-	functionURL   string
-	maxRetries    int
-	contentType   string
-	triggerName   string
-	consumerGroup string
-}
-
 type kafkaAuthMode string
 
 const (
-	kafkaAuthModeForNone            kafkaAuthMode = "none"
-	kafkaAuthModeForSaslPlaintext   kafkaAuthMode = "sasl_plaintext"
-	kafkaAuthModeForSaslScramSha256 kafkaAuthMode = "sasl_scram_sha256"
-	kafkaAuthModeForSaslScramSha512 kafkaAuthMode = "sasl_scram_sha512"
-	kafkaAuthModeForSaslSSL         kafkaAuthMode = "sasl_ssl"
-	kafkaAuthModeForSaslSSLPlain    kafkaAuthMode = "sasl_ssl_plain"
+	kafkaAuthModeNone            kafkaAuthMode = "none"
+	kafkaAuthModeSaslPlaintext   kafkaAuthMode = "sasl_plaintext"
+	kafkaAuthModeSaslScramSha256 kafkaAuthMode = "sasl_scram_sha256"
+	kafkaAuthModeSaslScramSha512 kafkaAuthMode = "sasl_scram_sha512"
+	kafkaAuthModeSaslSSL         kafkaAuthMode = "sasl_ssl"
+	kafkaAuthModeSaslSSLPlain    kafkaAuthMode = "sasl_ssl_plain"
 )
 
 var SHA256 scram.HashGeneratorFcn = func() hash.Hash { return sha256.New() }
@@ -106,20 +96,24 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 		logger.Info("WARNING: usage of brokerList is deprecated. use bootstrapServers instead.")
 		meta.bootstrapServers = strings.Split(os.Getenv("BROKER_LIST"), ",")
 	}
+	if os.Getenv("CONSUMER_GROUP") == "" {
+		return meta, errors.New("No consumerGroup given")
+	}
+	meta.consumerGroup = os.Getenv("CONSUMER_GROUP")
 
-	meta.authMode = kafkaAuthModeForNone
+	meta.authMode = kafkaAuthModeNone
 	mode := kafkaAuthMode(strings.TrimSpace((os.Getenv("AUTH_MODE"))))
 	if mode == "" {
-		mode = kafkaAuthModeForNone
+		mode = kafkaAuthModeNone
 	}
 
-	if mode != kafkaAuthModeForNone && mode != kafkaAuthModeForSaslPlaintext && mode != kafkaAuthModeForSaslSSL && mode != kafkaAuthModeForSaslSSLPlain && mode != kafkaAuthModeForSaslScramSha256 && mode != kafkaAuthModeForSaslScramSha512 {
+	if mode != kafkaAuthModeNone && mode != kafkaAuthModeSaslPlaintext && mode != kafkaAuthModeSaslSSL && mode != kafkaAuthModeSaslSSLPlain && mode != kafkaAuthModeSaslScramSha256 && mode != kafkaAuthModeSaslScramSha512 {
 		return meta, fmt.Errorf("err auth mode %s given", mode)
 	}
 
 	meta.authMode = mode
 
-	if meta.authMode != kafkaAuthModeForNone && meta.authMode != kafkaAuthModeForSaslSSL {
+	if meta.authMode != kafkaAuthModeNone && meta.authMode != kafkaAuthModeSaslSSL {
 		if os.Getenv("USERNAME") == "" {
 			return meta, errors.New("no username given")
 		}
@@ -131,7 +125,7 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 		meta.password = strings.TrimSpace(os.Getenv("PASSWORD"))
 	}
 
-	if meta.authMode == kafkaAuthModeForSaslSSL {
+	if meta.authMode == kafkaAuthModeSaslSSL {
 		if os.Getenv("CA") == "" {
 			return meta, errors.New("no ca given")
 		}
@@ -151,40 +145,17 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 	return meta, nil
 }
 
-func parseFissionMetadata() (fissionMetadata, error) {
-	for _, envVars := range []string{"TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME", "CONSUMER_GROUP"} {
-		if os.Getenv(envVars) == "" {
-			return fissionMetadata{}, fmt.Errorf("Environment variable not found: MAX_RETRIES: %v", envVars)
-		}
-	}
-	meta := fissionMetadata{
-		topic:         os.Getenv("TOPIC"),
-		responseTopic: os.Getenv("RESPONSE_TOPIC"),
-		errorTopic:    os.Getenv("ERROR_TOPIC"),
-		functionURL:   os.Getenv("FUNCTION_URL"),
-		contentType:   os.Getenv("CONTENT_TYPE"),
-		triggerName:   os.Getenv("TRIGGER_NAME"),
-		consumerGroup: os.Getenv("CONSUMER_GROUP"),
-	}
-	val, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MAX_RETRIES")), 0, 64)
-	if err != nil {
-		return fissionMetadata{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
-	}
-	meta.maxRetries = int(val)
-	return meta, nil
-}
-
 func getConfig(metadata kafkaMetadata) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 	config.Version = sarama.V1_0_0_0
 
-	if ok := metadata.authMode == kafkaAuthModeForSaslPlaintext || metadata.authMode == kafkaAuthModeForSaslSSLPlain || metadata.authMode == kafkaAuthModeForSaslScramSha256 || metadata.authMode == kafkaAuthModeForSaslScramSha512; ok {
+	if ok := metadata.authMode == kafkaAuthModeSaslPlaintext || metadata.authMode == kafkaAuthModeSaslSSLPlain || metadata.authMode == kafkaAuthModeSaslScramSha256 || metadata.authMode == kafkaAuthModeSaslScramSha512; ok {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.User = metadata.username
 		config.Net.SASL.Password = metadata.password
 	}
 
-	if metadata.authMode == kafkaAuthModeForSaslSSLPlain {
+	if metadata.authMode == kafkaAuthModeSaslSSLPlain {
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypePlaintext)
 
 		tlsConfig := &tls.Config{
@@ -197,7 +168,7 @@ func getConfig(metadata kafkaMetadata) (*sarama.Config, error) {
 		config.Net.DialTimeout = 10 * time.Second
 	}
 
-	if metadata.authMode == kafkaAuthModeForSaslSSL {
+	if metadata.authMode == kafkaAuthModeSaslSSL {
 		cert, err := tls.X509KeyPair([]byte(metadata.cert), []byte(metadata.key))
 		if err != nil {
 			return nil, fmt.Errorf("error parse X509KeyPair: %s", err)
@@ -215,17 +186,17 @@ func getConfig(metadata kafkaMetadata) (*sarama.Config, error) {
 		config.Net.TLS.Config = tlsConfig
 	}
 
-	if metadata.authMode == kafkaAuthModeForSaslScramSha256 {
+	if metadata.authMode == kafkaAuthModeSaslScramSha256 {
 		config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &XDGSCRAMClient{HashGeneratorFcn: SHA256} }
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA256)
 	}
 
-	if metadata.authMode == kafkaAuthModeForSaslScramSha512 {
+	if metadata.authMode == kafkaAuthModeSaslScramSha512 {
 		config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &XDGSCRAMClient{HashGeneratorFcn: SHA512} }
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)
 	}
 
-	if metadata.authMode == kafkaAuthModeForSaslPlaintext {
+	if metadata.authMode == kafkaAuthModeSaslPlaintext {
 		config.Net.SASL.Mechanism = sarama.SASLTypePlaintext
 		config.Net.TLS.Enable = true
 	}
@@ -237,7 +208,7 @@ type Connector struct {
 	ready                chan bool
 	logger               *zap.Logger
 	producer             sarama.SyncProducer
-	fissionTriggerFields fissionMetadata
+	fissionTriggerFields mqt.FissionMetadata
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
@@ -279,22 +250,22 @@ func getProducer(metadata kafkaMetadata) (sarama.SyncProducer, error) {
 	return producer, nil
 }
 
-func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionMetadata, producer sarama.SyncProducer, logger *zap.Logger) bool {
+func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields mqt.FissionMetadata, producer sarama.SyncProducer, logger *zap.Logger) bool {
 	var value string = string(msg.Value[:])
 	// Generate the Headers
 	fissionHeaders := map[string]string{
-		"X-Fission-MQTrigger-Topic":      triggerFields.topic,
-		"X-Fission-MQTrigger-RespTopic":  triggerFields.responseTopic,
-		"X-Fission-MQTrigger-ErrorTopic": triggerFields.errorTopic,
-		"Content-Type":                   triggerFields.contentType,
+		"X-Fission-MQTrigger-Topic":      triggerFields.Topic,
+		"X-Fission-MQTrigger-RespTopic":  triggerFields.ResponseTopic,
+		"X-Fission-MQTrigger-ErrorTopic": triggerFields.ErrorTopic,
+		"Content-Type":                   triggerFields.ContentType,
 	}
 
 	// Create request
-	req, err := http.NewRequest("POST", triggerFields.functionURL, strings.NewReader(value))
+	req, err := http.NewRequest("POST", triggerFields.FunctionURL, strings.NewReader(value))
 	if err != nil {
 		logger.Error("failed to create HTTP request to invoke function",
 			zap.Error(err),
-			zap.String("function_url", triggerFields.functionURL))
+			zap.String("function_url", triggerFields.FunctionURL))
 		return false
 	}
 
@@ -310,14 +281,14 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionMet
 
 	// Make the request
 	var resp *http.Response
-	for attempt := 0; attempt <= triggerFields.maxRetries; attempt++ {
+	for attempt := 0; attempt <= triggerFields.MaxRetries; attempt++ {
 		// Make the request
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
 			logger.Error("sending function invocation request failed",
 				zap.Error(err),
-				zap.String("function_url", triggerFields.functionURL),
-				zap.String("trigger", triggerFields.triggerName))
+				zap.String("function_url", triggerFields.FunctionURL),
+				zap.String("trigger", triggerFields.TriggerName))
 			continue
 		}
 		if resp == nil {
@@ -331,16 +302,16 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionMet
 
 	if resp == nil {
 		logger.Warn("every function invocation retry failed; final retry gave empty response",
-			zap.String("function_url", triggerFields.functionURL),
-			zap.String("trigger", triggerFields.triggerName))
+			zap.String("function_url", triggerFields.FunctionURL),
+			zap.String("trigger", triggerFields.TriggerName))
 		return false
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 
 	logger.Debug("got response from function invocation",
-		zap.String("function_url", triggerFields.functionURL),
-		zap.String("trigger", triggerFields.triggerName),
+		zap.String("function_url", triggerFields.FunctionURL),
+		zap.String("trigger", triggerFields.TriggerName),
 		zap.String("body", string(body)))
 
 	if err != nil {
@@ -365,37 +336,37 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields fissionMet
 	}
 
 	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
-		Topic:   triggerFields.responseTopic,
+		Topic:   triggerFields.ResponseTopic,
 		Value:   sarama.StringEncoder(body),
 		Headers: kafkaRecordHeaders,
 	})
 	if err != nil {
 		logger.Warn("failed to publish response body from function invocation to topic",
 			zap.Error(err),
-			zap.String("topic", triggerFields.topic),
-			zap.String("function_url", triggerFields.functionURL))
+			zap.String("topic", triggerFields.Topic),
+			zap.String("function_url", triggerFields.FunctionURL))
 		return false
 	}
 
 	return true
 }
 
-func errorHandler(logger *zap.Logger, triggerFields fissionMetadata, producer sarama.SyncProducer, err error) {
-	if len(triggerFields.errorTopic) > 0 {
+func errorHandler(logger *zap.Logger, triggerFields mqt.FissionMetadata, producer sarama.SyncProducer, err error) {
+	if len(triggerFields.ErrorTopic) > 0 {
 		_, _, e := producer.SendMessage(&sarama.ProducerMessage{
-			Topic: triggerFields.errorTopic,
+			Topic: triggerFields.ErrorTopic,
 			Value: sarama.StringEncoder(err.Error()),
 		})
 		if e != nil {
 			logger.Error("failed to publish message to error topic",
 				zap.Error(e),
-				zap.String("trigger", triggerFields.triggerName),
+				zap.String("trigger", triggerFields.TriggerName),
 				zap.String("message", err.Error()),
-				zap.String("topic", triggerFields.topic))
+				zap.String("topic", triggerFields.Topic))
 		}
 	} else {
 		logger.Error("message received to publish to error topic, but no error topic was set",
-			zap.String("message", err.Error()), zap.String("trigger", triggerFields.triggerName), zap.String("function_url", triggerFields.functionURL))
+			zap.String("message", err.Error()), zap.String("trigger", triggerFields.TriggerName), zap.String("function_url", triggerFields.FunctionURL))
 	}
 }
 
@@ -412,7 +383,7 @@ func main() {
 		return
 	}
 
-	triggerFields, err := parseFissionMetadata()
+	triggerFields, err := mqt.ParseFissionMetadata()
 	if err != nil {
 		logger.Error("Failed to parse fission trigger fields", zap.Error(err))
 		return
@@ -439,7 +410,7 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client, err := sarama.NewConsumerGroup(metadata.bootstrapServers, triggerFields.consumerGroup, config)
+	client, err := sarama.NewConsumerGroup(metadata.bootstrapServers, metadata.consumerGroup, config)
 	if err != nil {
 		logger.Error("Error creating consumer group client", zap.Error(err))
 		return
@@ -451,7 +422,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for {
-			if err := client.Consume(ctx, []string{triggerFields.topic}, &connector); err != nil {
+			if err := client.Consume(ctx, []string{triggerFields.Topic}, &connector); err != nil {
 				logger.Error("Error from consumer", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop

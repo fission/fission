@@ -100,7 +100,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
 	if cooldownPeriod < 0 {
-		return errors.New("CooldownPeriod interval must be greater than or equal to 0")
+		return errors.New("CooldownPeriod interval is the period to wait after the last trigger reported active before scaling the deployment back to 0, it must be greater than or equal to 0")
 	}
 
 	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
@@ -115,7 +115,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	metadata := make(map[string]string)
 	metadataParams := input.StringSlice(flagkey.MqtMetadata)
-	_ = UpdateMapFromStringSlice(&metadata, metadataParams)
+	_ = util.UpdateMapFromStringSlice(&metadata, metadataParams)
 
 	secret := input.String(flagkey.MqtSecret)
 

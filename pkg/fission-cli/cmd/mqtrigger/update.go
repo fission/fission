@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -117,7 +118,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if input.IsSet(flagkey.MqtMetadata) {
-		updated = updated || UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+		updated = updated || util.UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
 	}
 	if input.IsSet(flagkey.MqtSecret) {
 		mqt.Spec.Secret = secret

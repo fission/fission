@@ -79,8 +79,9 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
 	}
 }
 
-func runMQManager(logger *zap.Logger, routerUrl string) {
-	err := mqt.StartScalerManager(logger, routerUrl)
+// KEDA based MessageQueue Trigger Manager
+func runMQManager(logger *zap.Logger, routerURL string) {
+	err := mqt.StartScalerManager(logger, routerURL)
 	if err != nil {
 		logger.Fatal("error starting mqt scaler manager", zap.Error(err))
 	}

@@ -3,15 +3,11 @@ package mqtrigger
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,9 +18,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils"
 )
 
 var (
@@ -42,33 +40,8 @@ var (
 	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
-func getDynamicClient() (dynamic.Interface, error) {
-	var config *rest.Config
-	var err error
-
-	// get the config, either from kubeconfig or using our
-	// in-cluster service account
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) != 0 {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-	}
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return dynamicClient, nil
-}
-
 func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := getDynamicClient()
+	dynamicClient, err := crd.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +49,7 @@ func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) 
 }
 
 func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := getDynamicClient()
+	dynamicClient, err := crd.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
