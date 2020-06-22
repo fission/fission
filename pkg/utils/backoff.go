@@ -106,7 +106,7 @@ func (backoff *backoff) GetCurrentCount() float64 {
 
 // GetNext returns time.Duration to add sleep for current retry
 func (backoff *backoff) GetNext() time.Duration {
-	backoff.currentbackoff = backoff.currentbackoff * time.Duration(backoff.Multiplier)
+	backoff.currentbackoff = time.Duration(float64(backoff.currentbackoff) * backoff.Multiplier)
 	backoff.currentCount = backoff.currentCount + 1
 	return backoff.currentbackoff
 }
