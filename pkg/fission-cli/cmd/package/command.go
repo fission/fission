@@ -94,7 +94,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(infoCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.StreamLog},
 	})
 
 	rebuildCmd := &cobra.Command{

@@ -5,6 +5,7 @@ require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
 	github.com/Shopify/sarama v1.21.0
+	github.com/aws/aws-sdk-go v1.32.7 // indirect
 	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
@@ -43,14 +44,14 @@ require (
 	github.com/nwaples/rardecode v0.0.0-20171029023500-e06696f847ae // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.4.1
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
 	github.com/satori/go.uuid v1.2.0
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.22.0
@@ -58,7 +59,7 @@ require (
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1
 	golang.org/x/image v0.0.0-20190618124811-92942e4437e2 // indirect
-	golang.org/x/net v0.0.0-20190619014844-b5b0513f8c1b
+	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
@@ -69,3 +70,5 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/klog v0.3.3
 )
+
+go 1.13

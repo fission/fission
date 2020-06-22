@@ -17,8 +17,10 @@ limitations under the License.
 package _package
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -183,6 +185,25 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 		}
 		return &archive, nil
 	}
+
+	if input.Bool(flagkey.StreamLog) {
+		// TODO:
+		//	Filter a pod referring to this package
+		//  Stream its logs to console logs
+	// 	req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &podLogOpts)
+	// 	podLogs, err := req.Stream()
+	// 	if err != nil {
+	// 		return "error in opening stream"
+	// 	}
+	// 	defer podLogs.Close()
+
+	// 	buf := new(bytes.Buffer)
+	// 	_, err = io.Copy(buf, podLogs)
+	// 	if err != nil {
+	// 		return "error in copy information from podLogs to buf"
+	// 	}
+	// 	str := buf.String()
+	// }
 
 	archivePath, err := makeArchiveFile("", includeFiles, noZip)
 	if err != nil {

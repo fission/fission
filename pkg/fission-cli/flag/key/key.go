@@ -142,4 +142,6 @@ const (
 	CanaryFailureThreshold  = "failure-threshold"
 
 	DefaultSpecOutputDir = "fission-dump"
+
+	StreamLog = "streamlog"
 )

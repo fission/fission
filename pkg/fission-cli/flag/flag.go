@@ -187,4 +187,6 @@ var (
 	CanaryWeightIncrement   = Flag{Type: Int, Name: flagkey.CanaryWeightIncrement, Aliases: []string{"step"}, Usage: "Weight increment step for function", DefaultValue: 20}
 	CanaryIncrementInterval = Flag{Type: String, Name: flagkey.CanaryIncrementInterval, Aliases: []string{"internal"}, Usage: "Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d", DefaultValue: "2m"}
 	CanaryFailureThreshold  = Flag{Type: Int, Name: flagkey.CanaryFailureThreshold, Aliases: []string{"threshold"}, Usage: "Threshold in percentage beyond which the new version of the function is considered unstable", DefaultValue: 10}
+
+	StreamLog = Flag{Type: Bool, Name: flagkey.StreamLog, Usage: "View the build logs"}
 )
