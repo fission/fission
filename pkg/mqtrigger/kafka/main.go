@@ -23,7 +23,7 @@ import (
 	"github.com/xdg/scram"
 	"go.uber.org/zap"
 
-	mqt "github.com/fission/fission/pkg/mqtrigger"
+	"github.com/fission/fission/pkg/mqtrigger/util"
 )
 
 type kafkaMetadata struct {
@@ -208,7 +208,7 @@ type Connector struct {
 	ready                chan bool
 	logger               *zap.Logger
 	producer             sarama.SyncProducer
-	fissionTriggerFields mqt.FissionMetadata
+	fissionTriggerFields util.FissionMetadata
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
@@ -250,7 +250,7 @@ func getProducer(metadata kafkaMetadata) (sarama.SyncProducer, error) {
 	return producer, nil
 }
 
-func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields mqt.FissionMetadata, producer sarama.SyncProducer, logger *zap.Logger) bool {
+func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields util.FissionMetadata, producer sarama.SyncProducer, logger *zap.Logger) bool {
 	var value string = string(msg.Value[:])
 	// Generate the Headers
 	fissionHeaders := map[string]string{
@@ -351,7 +351,7 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields mqt.Fissio
 	return true
 }
 
-func errorHandler(logger *zap.Logger, triggerFields mqt.FissionMetadata, producer sarama.SyncProducer, err error) {
+func errorHandler(logger *zap.Logger, triggerFields util.FissionMetadata, producer sarama.SyncProducer, err error) {
 	if len(triggerFields.ErrorTopic) > 0 {
 		_, _, e := producer.SendMessage(&sarama.ProducerMessage{
 			Topic: triggerFields.ErrorTopic,
@@ -383,7 +383,7 @@ func main() {
 		return
 	}
 
-	triggerFields, err := mqt.ParseFissionMetadata()
+	triggerFields, err := util.ParseFissionMetadata()
 	if err != nil {
 		logger.Error("Failed to parse fission trigger fields", zap.Error(err))
 		return

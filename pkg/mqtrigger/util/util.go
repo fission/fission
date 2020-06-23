@@ -1,4 +1,4 @@
-package mqtrigger
+package util
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ type FissionMetadata struct {
 func ParseFissionMetadata() (FissionMetadata, error) {
 	for _, envVars := range []string{"TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME"} {
 		if os.Getenv(envVars) == "" {
-			return FissionMetadata{}, fmt.Errorf("Environment variable not found: %v", envVars)
+			return FissionMetadata{}, fmt.Errorf("environment variable not found: %v", envVars)
 		}
 	}
 	meta := FissionMetadata{
@@ -36,7 +36,7 @@ func ParseFissionMetadata() (FissionMetadata, error) {
 	}
 	val, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MAX_RETRIES")), 0, 64)
 	if err != nil {
-		return FissionMetadata{}, fmt.Errorf("Failed to parse value from MAX_RETRIES environment variable %v", err)
+		return FissionMetadata{}, fmt.Errorf("failed to parse value from MAX_RETRIES environment variable %v", err)
 	}
 	meta.MaxRetries = int(val)
 	return meta, nil

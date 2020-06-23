@@ -74,7 +74,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 		AddFunc: func(obj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
-				if mqt.Spec.Version2 == false {
+				if !mqt.Spec.Version2 {
 					return
 				}
 				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
@@ -118,7 +118,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				newMqt := newObj.(*fv1.MessageQueueTrigger)
 				updated := checkAndUpdateTriggerFields(mqt, newMqt)
-				if mqt.Spec.Version2 == false {
+				if !mqt.Spec.Version2 {
 					return
 				}
 				if !updated {
@@ -323,6 +323,9 @@ func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, 
 
 func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient *kubernetes.Clientset) error {
 	authTriggerObj, err := getAuthTriggerSpec(mqt, authenticationRef, kubeClient)
+	if err != nil {
+		return err
+	}
 	authTriggerClient, err := getAuthTriggerClient(mqt.ObjectMeta.Namespace)
 	if err != nil {
 		return err
@@ -340,6 +343,9 @@ func updateAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, k
 		return err
 	}
 	oldAuthTriggerObj, err := authTriggerClient.Get(authenticationRef, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
 	resourceVersion := oldAuthTriggerObj.GetResourceVersion()
 
 	authTriggerObj, err := getAuthTriggerSpec(mqt, authenticationRef, kubeClient)
