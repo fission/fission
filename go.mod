@@ -7,7 +7,7 @@ require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/Shopify/sarama v1.23.1
-	github.com/aws/aws-sdk-go v1.32.6 // indirect
+	github.com/aws/aws-sdk-go v1.32.7 // indirect
 	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
@@ -59,8 +59,7 @@ require (
 	github.com/prometheus/common v0.4.1
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
 	github.com/satori/go.uuid v1.2.0
-	github.com/sirupsen/logrus v1.5.0 // indirect
-	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
+	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
@@ -77,7 +76,7 @@ require (
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/ini.v1 v1.42.0 // indirect
+	gopkg.in/ini.v1 v1.57.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
