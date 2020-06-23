@@ -2,7 +2,7 @@
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
 ############## Usage ##############
-# Skaffold CLI should be installed on your machine.
+# Skaffold CLI should be installed on your machine. 
 # Replace <DOCKERHUB_REPO> with your registry repo/org name
 # Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
 # Run`skaffold build` to only build and push images
