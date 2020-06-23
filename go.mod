@@ -25,6 +25,7 @@ require (
 	github.com/emicklei/go-restful-openapi v1.2.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-ini/ini v1.57.0 // indirect
 	github.com/go-openapi/spec v0.17.2
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
@@ -37,13 +38,14 @@ require (
 	github.com/hashicorp/go-multierror v0.0.0-20180717150148-3d5d8f294aa0
 	github.com/imdario/mergo v0.3.5
 	github.com/influxdata/influxdb v1.2.0
+	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v0.0.0-20170427235115-8bdf7d1a087c // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
-	github.com/minio/minio-go/v6 v6.0.57
+	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/nats-io/nats-streaming-server v0.17.0
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.6.0
@@ -57,9 +59,10 @@ require (
 	github.com/prometheus/common v0.4.1
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
 	github.com/satori/go.uuid v1.2.0
+	github.com/sirupsen/logrus v1.5.0 // indirect
+	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
@@ -74,6 +77,7 @@ require (
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
