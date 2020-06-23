@@ -1,19 +1,19 @@
-ARG GO_VERSION=1.14
+FROM golang:1.12-alpine as builder
 
-FROM ubuntu:18.04 AS base
-WORKDIR /
-RUN apt update && apt install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apk add bash ca-certificates git gcc g++ libc-dev
 
-FROM golang:${GO_VERSION} AS builder
+ARG GOPKG=github.com/fission/fission
 
-ENV GOPATH /usr
-ENV APP	   ${GOPATH}/src/github.com/fission/fission/mqtrigger/kafka
+ENV GO111MODULE=on
 
-WORKDIR ${APP}
+WORKDIR /go/src/${GOPKG}
+COPY ./ ./
 
-ADD main.go ${APP}
+WORKDIR	 /go/src/${GOPKG}/pkg/mqtrigger/kafka
+RUN go build -a -o /go/bin/main
 
-RUN go get
-RUN go build -a -o main .
+FROM alpine:3.12 as base
+RUN apk add --update ca-certificates
+COPY --from=builder /go/bin/main /
 
-CMD ["./main"]
+ENTRYPOINT ["/main"]
