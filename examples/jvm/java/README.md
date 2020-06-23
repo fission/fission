@@ -38,7 +38,7 @@ You can build the jar file in one of the two ways below based on your setup:
 - You can use docker without the need to install JDK and Maven to build the jar file from source code:
 
 ```bash
-$ ./build.sh
+$ bash -x ./build.sh
 
 ```
 - If you have JDK and Maven installed, you can directly build the JAR file using command:
