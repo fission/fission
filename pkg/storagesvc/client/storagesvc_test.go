@@ -29,7 +29,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/storagesvc"
-	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go"
 	"github.com/ory/dockertest"
 	dc "github.com/ory/dockertest/docker"
 	"go.uber.org/zap"
