@@ -480,7 +480,7 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 				},
 				"triggers": []interface{}{
 					map[string]interface{}{
-						"type":     mqt.ObjectMeta.Name,
+						"type":     mqt.Spec.MessageQueueType,
 						"metadata": mqt.Spec.Metadata,
 						"authenticationRef": map[string]interface{}{
 							"name": authenticationRef,
