@@ -381,6 +381,9 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: mqt.ObjectMeta.Name,
+			Labels: map[string]string{
+				"app": mqt.ObjectMeta.Name,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind:               "MessageQueueTrigger",
