@@ -93,6 +93,34 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	pollingInterval := int32(input.Int(flagkey.MqtPollingInterval))
+	if pollingInterval < 0 {
+		return errors.New("Polling interval must be greater than or equal to 0")
+	}
+
+	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
+	if cooldownPeriod < 0 {
+		return errors.New("CooldownPeriod interval is the period to wait after the last trigger reported active before scaling the deployment back to 0, it must be greater than or equal to 0")
+	}
+
+	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
+	if minReplicaCount < 0 {
+		return errors.New("MinReplicaCount must be greater than or equal to 0")
+	}
+
+	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
+	if maxReplicaCount < 0 {
+		return errors.New("MaxReplicaCount must be greater than or equal to 0")
+	}
+
+	metadata := make(map[string]string)
+	metadataParams := input.StringSlice(flagkey.MqtMetadata)
+	_ = util.UpdateMapFromStringSlice(&metadata, metadataParams)
+
+	secret := input.String(flagkey.MqtSecret)
+
+	version2 := input.Bool(flagkey.MqtVersion2)
+
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
 		fr, err := spec.ReadSpecs(specDir)
@@ -131,6 +159,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			ErrorTopic:       errorTopic,
 			MaxRetries:       maxRetries,
 			ContentType:      contentType,
+			PollingInterval:  &pollingInterval,
+			CooldownPeriod:   &cooldownPeriod,
+			MinReplicaCount:  &minReplicaCount,
+			MaxReplicaCount:  &maxReplicaCount,
+			Metadata:         metadata,
+			Secret:           secret,
+			Version2:         version2,
 		},
 	}
 

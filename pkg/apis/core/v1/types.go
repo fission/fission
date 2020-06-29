@@ -645,6 +645,34 @@ type (
 
 		// Content type of payload
 		ContentType string `json:"contentType"`
+
+		// The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly
+		// +optional
+		PollingInterval *int32 `json:"pollingInterval,omitempty"`
+
+		// The period to wait after the last trigger reported active before scaling the deployment back to 0
+		// +optional
+		CooldownPeriod *int32 `json:"cooldownPeriod,omitempty"`
+
+		// Minimum number of replicas KEDA will scale the deployment down to
+		// +optional
+		MinReplicaCount *int32 `json:"minReplicaCount,omitempty"`
+
+		// Maximum number of replicas KEDA will scale the deployment up to
+		// +optional
+		MaxReplicaCount *int32 `json:"maxReplicaCount,omitempty"`
+
+		// ScalerTrigger fields
+		// +optional
+		Metadata map[string]string `json:"metadata"`
+
+		// Secret name
+		// +optional
+		Secret string `json:"secret,omitempty"`
+
+		// Version flag
+		// +optional
+		Version2 bool `json:"version2,omitempty"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or

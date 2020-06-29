@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
+	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
@@ -75,6 +76,14 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
 	err := mqtrigger.Start(logger, routerUrl)
 	if err != nil {
 		logger.Fatal("error starting message queue manager", zap.Error(err))
+	}
+}
+
+// KEDA based MessageQueue Trigger Manager
+func runMQManager(logger *zap.Logger, routerURL string) {
+	err := mqt.StartScalerManager(logger, routerURL)
+	if err != nil {
+		logger.Fatal("error starting mqt scaler manager", zap.Error(err))
 	}
 }
 
@@ -280,6 +289,7 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(logger, routerUrl)
+		runMQManager(logger, routerUrl)
 	}
 
 	if arguments["--builderMgr"] == true {
