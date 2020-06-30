@@ -165,6 +165,10 @@ nats:
   # Queue group registered with NATS streaming 
   queueGroup: "fission-messageQueueNatsTrigger"
 
+  # The image to use for NATS streaming server
+  streamingserver:
+    image: nats-streaming
+    
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
   enabled: false
