@@ -144,6 +144,15 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 	}
 }
 
+func GetLabelsFromENV(envName string, envNamespace string, envResourceVersion string) map[string]string {
+	return map[string]string{
+		LABEL_ENV_NAME:            envName,
+		LABEL_ENV_NAMESPACE:       envNamespace,
+		LABEL_ENV_RESOURCEVERSION: envResourceVersion,
+		LABEL_DEPLOYMENT_OWNER:    BUILDER_MGR,
+	}
+}
+
 func (envw *environmentWatcher) watchEnvironments() {
 	rv := ""
 	for {
@@ -199,14 +208,14 @@ func (envw *environmentWatcher) sync() {
 				len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
 				continue
 			}
-			_, err := envw.getEnvBuilder(&env)
+			_, err := envw.GetEnvBuilder(&env)
 			if err != nil {
 				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.ObjectMeta.Name))
 			}
 		}
 
 		// Remove environment builders no longer needed
-		envw.cleanupEnvBuilders(envList.Items)
+		envw.CleanupEnvBuilders(envList.Items)
 		break
 	}
 }
@@ -298,7 +307,7 @@ func (envw *environmentWatcher) service() {
 	}
 }
 
-func (envw *environmentWatcher) getEnvBuilder(env *fv1.Environment) (*builderInfo, error) {
+func (envw *environmentWatcher) GetEnvBuilder(env *fv1.Environment) (*builderInfo, error) {
 	respChan := make(chan envwResponse)
 	envw.requestChan <- envwRequest{
 		requestType: GET_BUILDER,
@@ -309,7 +318,7 @@ func (envw *environmentWatcher) getEnvBuilder(env *fv1.Environment) (*builderInf
 	return resp.builderInfo, resp.err
 }
 
-func (envw *environmentWatcher) cleanupEnvBuilders(envs []fv1.Environment) {
+func (envw *environmentWatcher) CleanupEnvBuilders(envs []fv1.Environment) {
 	envw.requestChan <- envwRequest{
 		requestType: CLEANUP_BUILDERS,
 		envList:     envs,
@@ -388,6 +397,17 @@ func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace st
 }
 
 func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns string) ([]apiv1.Service, error) {
+	svcList, err := envw.kubernetesClient.CoreV1().Services(ns).List(
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
+		})
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting builder service list")
+	}
+	return svcList.Items, nil
+}
+
+func (envw *environmentWatcher) etBuilderServiceList(sel map[string]string, ns string) ([]apiv1.Service, error) {
 	svcList, err := envw.kubernetesClient.CoreV1().Services(ns).List(
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),

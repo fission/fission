@@ -22,17 +22,23 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/util"
+	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -44,11 +50,12 @@ type (
 		pkgStore         k8sCache.Store
 		builderNamespace string
 		storageSvcUrl    string
+		fetcherConfig    *fetcherConfig.Config
 	}
 )
 
 func makePackageWatcher(logger *zap.Logger, fissionClient *crd.FissionClient, k8sClientSet *kubernetes.Clientset,
-	builderNamespace string, storageSvcUrl string) *packageWatcher {
+	builderNamespace string, storageSvcUrl string, fetcherConfig *fetcherConfig.Config) *packageWatcher {
 	lw := k8sCache.NewListWatchFromClient(k8sClientSet.CoreV1().RESTClient(), "pods", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(lw, &apiv1.Pod{}, 30*time.Second, k8sCache.ResourceEventHandlerFuncs{})
 	go controller.Run(make(chan struct{}))
@@ -60,8 +67,212 @@ func makePackageWatcher(logger *zap.Logger, fissionClient *crd.FissionClient, k8
 		podStore:         store,
 		builderNamespace: builderNamespace,
 		storageSvcUrl:    storageSvcUrl,
+		fetcherConfig:    fetcherConfig,
 	}
 	return pkgw
+}
+
+func (pkgw *packageWatcher) getBuilderServiceList(sel map[string]string, ns string) ([]apiv1.Service, error) {
+	svcList, err := pkgw.k8sClient.CoreV1().Services(ns).List(
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
+		})
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting builder service list")
+	}
+	return svcList.Items, nil
+}
+
+func (pkgw *packageWatcher) createBuilderService(env *fv1.Environment, ns string) (*apiv1.Service, error) {
+	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+	service := apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ns,
+			Name:      name,
+			Labels:    sel,
+		},
+		Spec: apiv1.ServiceSpec{
+			Selector: sel,
+			Type:     apiv1.ServiceTypeClusterIP,
+			Ports: []apiv1.ServicePort{
+				{
+					Name:     "fetcher-port",
+					Protocol: apiv1.ProtocolTCP,
+					Port:     8000,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8000,
+					},
+				},
+				{
+					Name:     "builder-port",
+					Protocol: apiv1.ProtocolTCP,
+					Port:     8001,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8001,
+					},
+				},
+			},
+		},
+	}
+	pkgw.logger.Info("creating builder service", zap.String("service_name", name))
+	_, err := pkgw.k8sClient.CoreV1().Services(ns).Create(&service)
+	if err != nil {
+		return nil, err
+	}
+	return &service, nil
+}
+
+func (pkgw *packageWatcher) getBuilderDeploymentList(sel map[string]string, ns string) ([]appsv1.Deployment, error) {
+	deployList, err := pkgw.k8sClient.AppsV1().Deployments(ns).List(
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
+		})
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting builder deployment list")
+	}
+	return deployList.Items, nil
+}
+
+func (pkgw *packageWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
+	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+	var replicas int32 = 1
+
+	podAnnotations := env.ObjectMeta.Annotations
+	if podAnnotations == nil {
+		podAnnotations = make(map[string]string)
+	}
+	// if envw.useIstio && env.Spec.AllowAccessToExternalNetwork {
+	// 	podAnnotations["sidecar.istio.io/inject"] = "false"
+	// }
+
+	container, err := util.MergeContainer(&apiv1.Container{
+		Name:                   "builder",
+		Image:                  env.Spec.Builder.Image,
+		ImagePullPolicy:        "Always",
+		TerminationMessagePath: "/dev/termination-log",
+		Command:                []string{"/builder", pkgw.fetcherConfig.SharedMountPath()},
+		ReadinessProbe: &apiv1.Probe{
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       2,
+			Handler: apiv1.Handler{
+				HTTPGet: &apiv1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8001,
+					},
+				},
+			},
+		},
+	}, env.Spec.Builder.Container)
+	if err != nil {
+		return nil, err
+	}
+
+	pod := apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      sel,
+			Annotations: podAnnotations,
+		},
+		Spec: apiv1.PodSpec{
+			Containers:         []apiv1.Container{*container},
+			ServiceAccountName: "fission-builder",
+		},
+	}
+
+	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ns,
+			Name:      name,
+			Labels:    sel,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: sel,
+			},
+			Template: pod,
+		},
+	}
+
+	err = pkgw.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder")
+	if err != nil {
+		return nil, err
+	}
+
+	if env.Spec.Builder.PodSpec != nil {
+		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Builder.PodSpec)
+		if err != nil {
+			return nil, err
+		}
+		deployment.Spec.Template.Spec = *newPodSpec
+	}
+
+	_, err = pkgw.k8sClient.AppsV1().Deployments(ns).Create(deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	pkgw.logger.Info("creating builder deployment", zap.String("deployment", name))
+
+	return deployment, nil
+}
+
+func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string) (*builderInfo, error) {
+	var svc *apiv1.Service
+	var deploy *appsv1.Deployment
+
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+
+	svcList, err := pkgw.getBuilderServiceList(sel, ns)
+	if err != nil {
+		return nil, err
+	}
+	// there should be only one service in svcList
+	if len(svcList) == 0 {
+		svc, err = pkgw.createBuilderService(env, ns)
+		if err != nil {
+			return nil, errors.Wrap(err, "error creating builder service")
+		}
+	} else if len(svcList) == 1 {
+		svc = &svcList[0]
+	} else {
+		return nil, fmt.Errorf("found more than one builder service for environment %q", env.ObjectMeta.Name)
+	}
+
+	deployList, err := pkgw.getBuilderDeploymentList(sel, ns)
+	if err != nil {
+		return nil, err
+	}
+	// there should be only one deploy in deployList
+	if len(deployList) == 0 {
+		// create builder SA in this ns, if not already created
+		_, err := utils.SetupSA(pkgw.k8sClient, fv1.FissionBuilderSA, ns)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fv1.FissionBuilderSA, ns)
+		}
+
+		deploy, err = pkgw.createBuilderDeployment(env, ns)
+		if err != nil {
+			return nil, errors.Wrap(err, "error creating builder deployment")
+		}
+	} else if len(deployList) == 1 {
+		deploy = &deployList[0]
+	} else {
+		return nil, fmt.Errorf("found more than one builder deployment for environment %q", env.ObjectMeta.Name)
+	}
+
+	return &builderInfo{
+		envMetadata: &env.ObjectMeta,
+		service:     svc,
+		deployment:  deploy,
+	}, nil
 }
 
 // build helps to update package status, checks environment builder pod status and
@@ -92,6 +303,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 	}
 
 	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name, metav1.GetOptions{})
+
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
 		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
