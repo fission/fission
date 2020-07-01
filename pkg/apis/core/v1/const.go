@@ -45,6 +45,7 @@ const (
 	BuildStatusSucceeded = "succeeded"
 	BuildStatusFailed    = "failed"
 	BuildStatusNone      = "none"
+	BuilderStatusDeleted = "deleted"
 )
 
 const (

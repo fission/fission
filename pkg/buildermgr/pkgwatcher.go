@@ -83,9 +83,9 @@ func (pkgw *packageWatcher) getBuilderServiceList(sel map[string]string, ns stri
 	return svcList.Items, nil
 }
 
-func (pkgw *packageWatcher) createBuilderService(env *fv1.Environment, ns string) (*apiv1.Service, error) {
-	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
-	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+func (pkgw *packageWatcher) createBuilderService(env *fv1.Environment, ns string, srcpkg *fv1.Package) (*apiv1.Service, error) {
+	name := fmt.Sprintf("%v-%v", srcpkg.ObjectMeta.Name, srcpkg.ObjectMeta.ResourceVersion)
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion, srcpkg)
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
@@ -136,9 +136,9 @@ func (pkgw *packageWatcher) getBuilderDeploymentList(sel map[string]string, ns s
 	return deployList.Items, nil
 }
 
-func (pkgw *packageWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
-	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
-	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+func (pkgw *packageWatcher) createBuilderDeployment(env *fv1.Environment, ns string, srcpkg *fv1.Package) (*appsv1.Deployment, error) {
+	name := fmt.Sprintf("%v-%v", srcpkg.ObjectMeta.Name, srcpkg.ObjectMeta.ResourceVersion)
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion, srcpkg)
 	var replicas int32 = 1
 
 	podAnnotations := env.ObjectMeta.Annotations
@@ -224,11 +224,11 @@ func (pkgw *packageWatcher) createBuilderDeployment(env *fv1.Environment, ns str
 	return deployment, nil
 }
 
-func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string) (*builderInfo, error) {
+func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string, srcpkg *fv1.Package) (*builderInfo, error) {
 	var svc *apiv1.Service
 	var deploy *appsv1.Deployment
 
-	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+	sel := GetLabelsFromENV(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion, srcpkg)
 
 	svcList, err := pkgw.getBuilderServiceList(sel, ns)
 	if err != nil {
@@ -236,7 +236,7 @@ func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string) (*bui
 	}
 	// there should be only one service in svcList
 	if len(svcList) == 0 {
-		svc, err = pkgw.createBuilderService(env, ns)
+		svc, err = pkgw.createBuilderService(env, ns, srcpkg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating builder service")
 		}
@@ -258,7 +258,7 @@ func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string) (*bui
 			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fv1.FissionBuilderSA, ns)
 		}
 
-		deploy, err = pkgw.createBuilderDeployment(env, ns)
+		deploy, err = pkgw.createBuilderDeployment(env, ns, srcpkg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating builder deployment")
 		}
@@ -274,6 +274,20 @@ func (pkgw *packageWatcher) createBuilder(env *fv1.Environment, ns string) (*bui
 		deployment:  deploy,
 	}, nil
 }
+
+func GetLabelsFromENV(envName string, envNamespace string, envResourceVersion string, srcpkg *fv1.Package) map[string]string {
+	return map[string]string{
+		LABEL_ENV_NAME:            envName,
+		LABEL_ENV_NAMESPACE:       envNamespace,
+		LABEL_ENV_RESOURCEVERSION: envResourceVersion,
+		LABEL_DEPLOYMENT_OWNER:    BUILDER_MGR,
+		"packageRef":              srcpkg.ObjectMeta.Name,
+	}
+}
+
+// func (pkgw *packageWatcher) delete(buildCache *cache.Cache, srcpkg *fv1.Package) {
+
+// }
 
 // build helps to update package status, checks environment builder pod status and
 // dispatches buildPackage to build source package into deployment package.
@@ -312,6 +326,14 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 		return
 	}
 
+	// Create Builder deployment
+	builderInfo, err := pkgw.createBuilder(env, pkgw.builderNamespace, pkg)
+	if err != nil {
+		pkgw.logger.Error("error creating builder", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
+	}
+
+	pkgw.logger.Info("builder info", zap.String("builder deployment", builderInfo.deployment.String()), zap.String("builder service", builderInfo.service.String()), zap.String("builder env metadata", builderInfo.envMetadata.String()))
+
 	// Create a new BackOff for health check on environment builder pod
 	healthCheckBackOff := utils.NewDefaultBackOff()
 	//if err != nil {
@@ -328,7 +350,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 		}
 
 		if len(items) == 0 {
-			pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+			pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", srcpkg.Spec.Environment.Name))
 			time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 			continue
 		}
@@ -346,7 +368,8 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||
 				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
-				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.ObjectMeta.ResourceVersion {
+				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.ObjectMeta.ResourceVersion ||
+				pod.ObjectMeta.Labels["packageRef"] != srcpkg.ObjectMeta.Name {
 				continue
 			}
 
@@ -359,7 +382,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			}
 
 			if !podIsReady {
-				pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+				pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", srcpkg.Spec.Environment.Name))
 				time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 				break
 			}
@@ -372,19 +395,22 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 				pkgw.logger.Error("error setting up role binding for package",
 					zap.Error(err),
 					zap.String("role_binding", fv1.PackageGetterRB),
-					zap.String("package_name", pkg.ObjectMeta.Name),
-					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
+					zap.String("package_name", srcpkg.ObjectMeta.Name),
+					zap.String("package_namespace", srcpkg.ObjectMeta.Namespace))
 				continue
 			} else {
 				pkgw.logger.Info("setup rolebinding for sa package",
 					zap.String("sa", fmt.Sprintf("%s.%s", fv1.FissionBuilderSA, builderNs)),
-					zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
+					zap.String("package", fmt.Sprintf("%s.%s", srcpkg.ObjectMeta.Name, srcpkg.ObjectMeta.Namespace)))
 			}
 
 			ctx := context.Background()
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
-				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
+				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", srcpkg.ObjectMeta.Name))
+
+				// When trying to update the package, using the updated pkg object
+				// just so it doesn't cause update error because of package resource version
 				updatePackage(pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				return
 			}
@@ -419,7 +445,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 				}
 			}
 
-			_, err = updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
+			pkg, err = updatePackage(pkgw.logger, pkgw.fissionClient, pkg,
 				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
 			if err != nil {
 				pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
@@ -444,7 +470,7 @@ func (pkgw *packageWatcher) watchPackages() {
 	buildCache := cache.MakeCache(0, 0)
 	lw := k8sCache.NewListWatchFromClient(pkgw.fissionClient.CoreV1().RESTClient(), "packages", apiv1.NamespaceAll, fields.Everything())
 
-	processPkg := func(pkg *fv1.Package) {
+	processCreationPkg := func(pkg *fv1.Package) {
 		var err error
 
 		if len(pkg.Status.BuildStatus) == 0 {
@@ -464,10 +490,31 @@ func (pkgw *packageWatcher) watchPackages() {
 		}
 	}
 
+	// processDeletionPkg := func(pkg *fv1.Package) {
+	// 	var err error
+
+	// 	if len(pkg.Status.BuildStatus) == 0 {
+	// 		_, err = setFinalBuildStatus(pkgw.fissionClient, pkg)
+	// 		if err != nil {
+	// 			pkgw.logger.Error("error filling package status", zap.Error(err))
+	// 		}
+	// 		// once we update the package status, an update event
+	// 		// will arrive and handle by UpdateFunc later. So we
+	// 		// don't need to build the package at this moment.
+	// 		return
+	// 	}
+
+	// 	// Only build pending state packages.
+	// 	if pkg.Status.BuildStatus == fv1.BuildStatusPending {
+	// 		go pkgw.delete(buildCache, pkg)
+	// 	}
+	// }
+
 	pkgStore, controller := k8sCache.NewInformer(lw, &fv1.Package{}, 60*time.Minute, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)
-			processPkg(pkg)
+			// Will create a deployment for builder and tag it with valid details
+			processCreationPkg(pkg)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldPkg := oldObj.(*fv1.Package)
@@ -482,8 +529,13 @@ func (pkgw *packageWatcher) watchPackages() {
 				pkg.Status.BuildStatus != fv1.BuildStatusPending {
 				return
 			}
-			processPkg(pkg)
+			processCreationPkg(pkg)
 		},
+		// DeleteFunc: func(obj interface{}) {
+		// 	pkg := obj.(*fv1.Package)
+		// 	//
+		// 	processDeletionPkg(pkg)
+		// }
 	})
 
 	pkgw.pkgStore = pkgStore
@@ -509,6 +561,19 @@ func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (
 		pkg.Status.BuildStatus = fv1.BuildStatusFailed
 		pkg.Status.BuildLog = "Both deploy and source archive are empty"
 	}
+
+	// TODO: use UpdateStatus to update status
+	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(pkg)
+}
+
+// setFinalBuildStatus sets initial build status to a package if it is empty.
+// This normally occurs when the user applies package YAML files that have no status field
+// through kubectl.
+func setFinalBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (*fv1.Package, error) {
+	pkg.Status = fv1.PackageStatus{
+		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+	}
+	pkg.Status.BuildStatus = fv1.BuilderStatusDeleted
 
 	// TODO: use UpdateStatus to update status
 	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(pkg)

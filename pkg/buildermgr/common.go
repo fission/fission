@@ -55,7 +55,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	svcName := fmt.Sprintf("%v-%v.%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion, envBuilderNamespace)
+	svcName := fmt.Sprintf("%v-%v.%v", pkg.ObjectMeta.Name, pkg.ObjectMeta.ResourceVersion, envBuilderNamespace)
 	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.ObjectMeta.Name, strings.ToLower(uniuri.NewLen(6)))
 	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%v:8000", svcName))
 	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%v:8001", svcName))
