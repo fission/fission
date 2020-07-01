@@ -122,7 +122,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 					return
 				}
 				if !updated {
-					logger.Warn("Update failed, no changes found in trigger fields")
+					logger.Warn(fmt.Sprintf("%s remains unchanged. No changes found in trigger fields", mqt.ObjectMeta.Name))
 					return
 				}
 
@@ -272,6 +272,12 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		mqt.Spec.Secret = newMqt.Spec.Secret
 		updated = true
 	}
+
+	if newMqt.Spec.Version2 != mqt.Spec.Version2 {
+		mqt.Spec.Version2 = newMqt.Spec.Version2
+		updated = true
+	}
+
 	return updated
 }
 
