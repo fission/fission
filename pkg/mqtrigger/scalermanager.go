@@ -416,7 +416,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 					Containers: []apiv1.Container{
 						{
 							Name:            mqt.ObjectMeta.Name,
-							Image:           "rahulbhati/test:4",
+							Image:           "rahulbhati/test:10",
 							ImagePullPolicy: "Always",
 							Env:             envVars,
 						},
