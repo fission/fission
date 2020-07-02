@@ -349,6 +349,7 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 			CooldownPeriod:  &cooldownPeriod,
 			MinReplicaCount: &minReplicaCount,
 			MaxReplicaCount: &maxReplicaCount,
+			Version2:        true,
 		},
 	}
 	type args struct {
