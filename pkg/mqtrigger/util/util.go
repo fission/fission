@@ -21,7 +21,7 @@ type FissionMetadata struct {
 
 // ParseFissionMetadata parses fission side common fields and returns as fissionMetadata or returns error
 func ParseFissionMetadata() (FissionMetadata, error) {
-	for _, envVars := range []string{"TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME"} {
+	for _, envVars := range []string{"TOPIC", "FUNCTION_URL", "MAX_RETRIES", "CONTENT_TYPE", "TRIGGER_NAME"} {
 		if os.Getenv(envVars) == "" {
 			return FissionMetadata{}, fmt.Errorf("environment variable not found: %v", envVars)
 		}

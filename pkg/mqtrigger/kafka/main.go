@@ -325,27 +325,29 @@ func handleFissionFunction(msg *sarama.ConsumerMessage, triggerFields util.Fissi
 		return false
 	}
 
-	// Generate Kafka record headers
-	var kafkaRecordHeaders []sarama.RecordHeader
+	if len(triggerFields.ResponseTopic) > 0 {
+		// Generate Kafka record headers
+		var kafkaRecordHeaders []sarama.RecordHeader
 
-	for k, v := range resp.Header {
-		// One key may have multiple values
-		for _, v := range v {
-			kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+		for k, v := range resp.Header {
+			// One key may have multiple values
+			for _, v := range v {
+				kafkaRecordHeaders = append(kafkaRecordHeaders, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+			}
 		}
-	}
 
-	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
-		Topic:   triggerFields.ResponseTopic,
-		Value:   sarama.StringEncoder(body),
-		Headers: kafkaRecordHeaders,
-	})
-	if err != nil {
-		logger.Warn("failed to publish response body from function invocation to topic",
-			zap.Error(err),
-			zap.String("topic", triggerFields.Topic),
-			zap.String("function_url", triggerFields.FunctionURL))
-		return false
+		_, _, err = producer.SendMessage(&sarama.ProducerMessage{
+			Topic:   triggerFields.ResponseTopic,
+			Value:   sarama.StringEncoder(body),
+			Headers: kafkaRecordHeaders,
+		})
+		if err != nil {
+			logger.Warn("failed to publish response body from function invocation to topic",
+				zap.Error(err),
+				zap.String("topic", triggerFields.Topic),
+				zap.String("function_url", triggerFields.FunctionURL))
+			return false
+		}
 	}
 
 	return true
