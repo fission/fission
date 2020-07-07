@@ -85,7 +85,7 @@ jobs:
         run: |
           kubectl get pods -n fission
 
-      - name: Before_script
+      - name: Build Script
         run: |
           export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
           export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
