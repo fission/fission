@@ -95,26 +95,26 @@ jobs:
           ./hack/runtests.sh
           ./test/build.sh
 
-      - name: Upgrade steps
-        run: |
-          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
-          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
-          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
-          export PATH="/home/runner/tool/fission:$PATH"
-          echo "Print variable PATH"
-          echo $PATH
-          ls -lrth /home/runner/tool
-          which fission
-          whereis fission
-          cd /home/runner/work/fission/fission
-          ./test/test.sh        
-          ./test/upgrade/fission_upgrade_test.sh 
-
-      - name: After_script
-        run: |
-          cd /home/runner/work/fission/fission
-          bash <(curl -s https://codecov.io/bash)
-          kubectl --namespace default delete configmap -l travisID=${GITHUB_RUN_ID}
+          #      - name: Upgrade steps
+          #        run: |
+          #          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          #          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
+          #          export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
+          #          export PATH="/home/runner/tool/fission:$PATH"
+          #          echo "Print variable PATH"
+          #          echo $PATH
+          #          ls -lrth /home/runner/tool
+          #          which fission
+          #          whereis fission
+          #          cd /home/runner/work/fission/fission
+          #          ./test/test.sh        
+          #          ./test/upgrade/fission_upgrade_test.sh 
+          #
+          #      - name: After_script
+          #        run: |
+          #          cd /home/runner/work/fission/fission
+          #          bash <(curl -s https://codecov.io/bash)
+          #          kubectl --namespace default delete configmap -l travisID=${GITHUB_RUN_ID}
 
       - name: Delete the GKE cluster
         if: success() || failure()
