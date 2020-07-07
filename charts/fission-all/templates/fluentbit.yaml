@@ -96,7 +96,7 @@ spec:
     spec:
       initContainers:
         - name: init
-          image: busybox
+          image: {{ .Values.busyboxImage | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           command: ['mkdir', '-p', '/var/log/fission']
           volumeMounts:
