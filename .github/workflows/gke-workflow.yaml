@@ -85,15 +85,15 @@ jobs:
         run: |
           kubectl get pods -n fission
 
-          #      - name: Before_script
-          #        run: |
-          #          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
-          #          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
-          #          cd /home/runner/work/fission/fission
-          #          go mod download
-          #          helm lint charts/fission-all/ charts/fission-core/
-          #          ./hack/runtests.sh
-          #          ./test/build.sh
+      - name: Before_script
+        run: |
+          export GKE_PROJECT_NAME=$GKE_PROJECT_NAME
+          export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
+          cd /home/runner/work/fission/fission
+          go mod download
+          helm lint charts/fission-all/ charts/fission-core/
+          ./hack/runtests.sh
+          ./test/build.sh
 
       - name: Upgrade steps
         run: |
@@ -103,6 +103,7 @@ jobs:
           export PATH="/home/runner/tool/fission:$PATH"
           echo "Print variable PATH"
           echo $PATH
+          ls -lrth /home/runner/tool
           which fission
           whereis fission
           cd /home/runner/work/fission/fission
