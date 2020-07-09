@@ -877,4 +877,8 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: KAFKA_IMAGE
           value: {{ .Values.mqt_keda.connector_images.kafka }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
