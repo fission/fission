@@ -119,7 +119,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	secret := input.String(flagkey.MqtSecret)
 
-	version2 := input.Bool(flagkey.MqtVersion2)
+	mqtKind := input.String(flagkey.MqtKind)
 
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
@@ -165,7 +165,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			MaxReplicaCount:  &maxReplicaCount,
 			Metadata:         metadata,
 			Secret:           secret,
-			Version2:         version2,
+			MqtKind:          mqtKind,
 		},
 	}
 

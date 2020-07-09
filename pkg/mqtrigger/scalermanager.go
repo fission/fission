@@ -74,7 +74,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 		AddFunc: func(obj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
-				if !mqt.Spec.Version2 {
+				if mqt.Spec.MqtKind == "fission" {
 					return
 				}
 				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
@@ -118,7 +118,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				newMqt := newObj.(*fv1.MessageQueueTrigger)
 				updated := checkAndUpdateTriggerFields(mqt, newMqt)
-				if !mqt.Spec.Version2 {
+				if mqt.Spec.MqtKind == "fission" {
 					return
 				}
 				if !updated {
@@ -273,8 +273,8 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		updated = true
 	}
 
-	if newMqt.Spec.Version2 != mqt.Spec.Version2 {
-		mqt.Spec.Version2 = newMqt.Spec.Version2
+	if newMqt.Spec.MqtKind != mqt.Spec.MqtKind {
+		mqt.Spec.MqtKind = newMqt.Spec.MqtKind
 		updated = true
 	}
 

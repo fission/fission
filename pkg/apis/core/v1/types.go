@@ -670,9 +670,9 @@ type (
 		// +optional
 		Secret string `json:"secret,omitempty"`
 
-		// Version flag
+		// Kind of Message Queue Trigger to be created, by default its fission
 		// +optional
-		Version2 bool `json:"version2,omitempty"`
+		MqtKind string `json:"mqtkind,omitempty"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or
