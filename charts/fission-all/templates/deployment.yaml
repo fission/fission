@@ -527,7 +527,7 @@ spec:
     spec:
       containers:
       - name: nats-streaming
-        image: nats-streaming
+        image: {{ .Values.nats.streamingserver.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",

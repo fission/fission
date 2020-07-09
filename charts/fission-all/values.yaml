@@ -20,7 +20,7 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.9.0
+imageTag: 1.10.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -50,7 +50,7 @@ fetcher:
   ## Fetcher repository
   image: fission/fetcher
   ## Fetcher image version
-  imageTag: 1.9.0
+  imageTag: 1.10.0
   
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -165,6 +165,10 @@ nats:
   # Queue group registered with NATS streaming 
   queueGroup: "fission-messageQueueNatsTrigger"
 
+  # The image to use for NATS streaming server
+  streamingserver:
+    image: nats-streaming
+    
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
   enabled: false
@@ -264,6 +268,9 @@ analyticsNonHelmInstall: false
 
 ## Enable Heapster only in clusters where heapster does not exist already
 heapster: false
+
+# Allow user to override busybox image used in fluent-bit init container
+busyboxImage: busybox
 
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
