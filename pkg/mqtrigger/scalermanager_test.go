@@ -74,8 +74,8 @@ func Test_getEnvVarlist(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-secrets",
-			Version2: true,
+			Secret:  "test-kafka-secrets",
+			MqtKind: "keda",
 		},
 	}
 
@@ -198,8 +198,8 @@ func Test_getEnvVarlist(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-secrets-invalid",
-			Version2: true,
+			Secret:  "test-kafka-secrets-invalid",
+			MqtKind: "keda",
 		},
 	}
 
@@ -270,8 +270,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-secrets",
-			Version2: true,
+			Secret:  "test-kafka-secrets",
+			MqtKind: "keda",
 		},
 	}
 	newMqt1 := &fv1.MessageQueueTrigger{
@@ -299,8 +299,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 				"consumerGroup":    "my-group-2",
 				"topic":            "my-topic",
 			},
-			Secret:   "new-test-kafka-secrets",
-			Version2: true,
+			Secret:  "new-test-kafka-secrets",
+			MqtKind: "keda",
 		},
 	}
 
@@ -330,8 +330,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-secrets",
-			Version2: true,
+			Secret:  "test-kafka-secrets",
+			MqtKind: "keda",
 		},
 	}
 	newMqt2 := &fv1.MessageQueueTrigger{
@@ -349,7 +349,7 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 			CooldownPeriod:  &cooldownPeriod,
 			MinReplicaCount: &minReplicaCount,
 			MaxReplicaCount: &maxReplicaCount,
-			Version2:        true,
+			MqtKind:         "keda",
 		},
 	}
 	type args struct {
@@ -456,8 +456,8 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-secrets",
-			Version2: true,
+			Secret:  "test-kafka-secrets",
+			MqtKind: "keda",
 		},
 	}
 
@@ -568,8 +568,8 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
 			},
-			Secret:   "test-kafka-no-secret",
-			Version2: true,
+			Secret:  "test-kafka-no-secret",
+			MqtKind: "keda",
 		},
 	}
 
