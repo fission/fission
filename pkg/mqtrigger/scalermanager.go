@@ -3,6 +3,7 @@ package mqtrigger
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -383,6 +384,9 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	if err != nil {
 		return nil, err
 	}
+	mqType := os.Getenv(string(mqt.Spec.MessageQueueType))
+	image := fmt.Sprintf("%s_IMAGE", strings.ToUpper(mqType))
+
 	blockOwnerDeletion := true
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -416,7 +420,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 					Containers: []apiv1.Container{
 						{
 							Name:            mqt.ObjectMeta.Name,
-							Image:           "rahulbhati/test:10",
+							Image:           image,
 							ImagePullPolicy: "Always",
 							Env:             envVars,
 						},

@@ -142,7 +142,7 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 		serviceName = "Fission-KubeWatcher"
 	} else if arguments["--timer"] == true {
 		serviceName = "Fission-Timer"
-	} else if arguments["--mqt"] == true {
+	} else if arguments["--mqt"] == true || arguments["--mqt_keda"] == true {
 		serviceName = "Fission-MessageQueueTrigger"
 	} else if arguments["--builderMgr"] == true {
 		serviceName = "Fission-BuilderMgr"
@@ -210,6 +210,7 @@ Usage:
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
+  fission-bundle --mqt_keda [--routerUrl=<url>]
   fission-bundle --logger
   fission-bundle --version
 Options:
@@ -226,6 +227,7 @@ Options:
   --kubewatcher                   Start Kubernetes events watcher.
   --timer                         Start Timer.
   --mqt                           Start message queue trigger.
+  --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
@@ -289,6 +291,9 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(logger, routerUrl)
+	}
+
+	if arguments["--mqt_keda"] == true {
 		runMQManager(logger, routerUrl)
 	}
 

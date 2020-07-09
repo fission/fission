@@ -839,3 +839,42 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
+
+{{- if .Values.mqt_keda.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-keda
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: keda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: keda
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger
+        messagequeue: keda
+    spec:
+      containers:
+      - name: mqtrigger
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: KAFKA_IMAGE
+          value: {{ .Values.mqt_keda.connector_images.kafka }}
+{{- end }}
