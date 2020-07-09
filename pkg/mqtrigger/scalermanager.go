@@ -384,8 +384,8 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	if err != nil {
 		return nil, err
 	}
-	mqType := os.Getenv(string(mqt.Spec.MessageQueueType))
-	image := fmt.Sprintf("%s_IMAGE", strings.ToUpper(mqType))
+	imageName := fmt.Sprintf("%s_image", string(mqt.Spec.MessageQueueType))
+	image := os.Getenv(strings.ToUpper(imageName))
 
 	blockOwnerDeletion := true
 	return &appsv1.Deployment{
