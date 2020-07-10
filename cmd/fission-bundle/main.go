@@ -142,12 +142,14 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 		serviceName = "Fission-KubeWatcher"
 	} else if arguments["--timer"] == true {
 		serviceName = "Fission-Timer"
-	} else if arguments["--mqt"] == true || arguments["--mqt_keda"] == true {
+	} else if arguments["--mqt"] == true {
 		serviceName = "Fission-MessageQueueTrigger"
 	} else if arguments["--builderMgr"] == true {
 		serviceName = "Fission-BuilderMgr"
 	} else if arguments["--storageServicePort"] != nil {
 		serviceName = "Fission-StorageSvc"
+	} else if arguments["--mqt_keda"] == true {
+		serviceName = "Fission-Keda-MQTrigger"
 	}
 
 	exporter, err := jaeger.NewExporter(jaeger.Options{
