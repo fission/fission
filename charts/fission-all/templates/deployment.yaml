@@ -864,7 +864,7 @@ spec:
     spec:
       containers:
       - name:  mqtrigger-keda
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
