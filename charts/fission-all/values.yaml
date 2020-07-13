@@ -305,4 +305,4 @@ canaryDeployment:
 mqt_keda:
   enabled: true
   connector_images:
-    kafka: rahulbhati/test:10
+    kafka: fission/keda-kafka

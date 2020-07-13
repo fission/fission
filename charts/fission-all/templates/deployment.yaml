@@ -848,22 +848,22 @@ metadata:
   name: mqtrigger-keda
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    svc: mqtrigger
+    svc: mqtrigger-keda
     messagequeue: keda
 spec:
   replicas: 1
   selector:
     matchLabels:
-      svc: mqtrigger
+      svc: mqtrigger-keda
       messagequeue: keda
   template:
     metadata:
       labels:
-        svc: mqtrigger
+        svc: mqtrigger-keda
         messagequeue: keda
     spec:
       containers:
-      - name: mqtrigger
+      - name:  mqtrigger-keda
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
