@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
+	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
@@ -75,6 +76,14 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) {
 	err := mqtrigger.Start(logger, routerUrl)
 	if err != nil {
 		logger.Fatal("error starting message queue manager", zap.Error(err))
+	}
+}
+
+// KEDA based MessageQueue Trigger Manager
+func runMQManager(logger *zap.Logger, routerURL string) {
+	err := mqt.StartScalerManager(logger, routerURL)
+	if err != nil {
+		logger.Fatal("error starting mqt scaler manager", zap.Error(err))
 	}
 }
 
@@ -139,6 +148,8 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 		serviceName = "Fission-BuilderMgr"
 	} else if arguments["--storageServicePort"] != nil {
 		serviceName = "Fission-StorageSvc"
+	} else if arguments["--mqt_keda"] == true {
+		serviceName = "Fission-Keda-MQTrigger"
 	}
 
 	exporter, err := jaeger.NewExporter(jaeger.Options{
@@ -201,6 +212,7 @@ Usage:
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
+  fission-bundle --mqt_keda [--routerUrl=<url>]
   fission-bundle --logger
   fission-bundle --version
 Options:
@@ -217,6 +229,7 @@ Options:
   --kubewatcher                   Start Kubernetes events watcher.
   --timer                         Start Timer.
   --mqt                           Start message queue trigger.
+  --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
@@ -280,6 +293,10 @@ Options:
 
 	if arguments["--mqt"] == true {
 		runMessageQueueMgr(logger, routerUrl)
+	}
+
+	if arguments["--mqt_keda"] == true {
+		runMQManager(logger, routerUrl)
 	}
 
 	if arguments["--builderMgr"] == true {

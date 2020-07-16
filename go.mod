@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/Shopify/sarama v1.21.0
+	github.com/Shopify/sarama v1.23.1
 	github.com/aws/aws-sdk-go v1.32.7 // indirect
 	github.com/blend/go-sdk v1.1.1 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
@@ -29,7 +29,6 @@ require (
 	github.com/go-openapi/spec v0.17.2
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
-	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.2.0 // indirect
 	github.com/gorilla/mux v1.7.0
@@ -39,6 +38,7 @@ require (
 	github.com/hashicorp/go-multierror v0.0.0-20180717150148-3d5d8f294aa0
 	github.com/imdario/mergo v0.3.5
 	github.com/influxdata/influxdb v1.2.0
+	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v0.0.0-20170427235115-8bdf7d1a087c // indirect
@@ -53,6 +53,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
+	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.4.1
@@ -64,6 +65,7 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.opencensus.io v0.22.0
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
@@ -75,6 +77,7 @@ require (
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.57.0 // indirect
+	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
