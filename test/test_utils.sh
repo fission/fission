@@ -404,7 +404,7 @@ dump_fission_logs() {
     component=$3
 
     echo --- $component logs ---
-    kubectl -n $ns get pod -o name | grep $component | xargs kubectl -n $ns logs
+    kubectl -n $ns get pod -o name | grep $component | xargs -n1 kubectl -n $ns logs
     echo --- end $component logs ---
 }
 

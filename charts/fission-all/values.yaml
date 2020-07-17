@@ -20,7 +20,7 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.9.0
+imageTag: 1.10.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -50,7 +50,7 @@ fetcher:
   ## Fetcher repository
   image: fission/fetcher
   ## Fetcher image version
-  imageTag: 1.9.0
+  imageTag: 1.10.0
   
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -165,6 +165,10 @@ nats:
   # Queue group registered with NATS streaming 
   queueGroup: "fission-messageQueueNatsTrigger"
 
+  # The image to use for NATS streaming server
+  streamingserver:
+    image: nats-streaming
+    
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
   enabled: false
@@ -203,10 +207,22 @@ kafka:
 
 ## Persist data to a persistent volume.
 persistence:
-  ## If true, fission will create/use a Persistent Volume Claim
+  ## If true, fission will create/use a Persistent Volume Claim unless storageType is set to s3
   ## If false, use emptyDir
   ##
   enabled: true
+
+  ## Must be set to either local or S3.
+  ## If storateType is set(other than local), one of its backend configuration must be set as below.
+  #storageType: local | s3
+
+  ## Sample configruation for AWS s3 storage backend
+  #s3:
+  # bucketName: <awsBucketName>
+  # subDir: <sub directory within a bucket>
+  # accessKeyId: <awsAccessKeyId>
+  # secretAccessKey: <awsSecretAccessKey>
+  # region: <awsRegion>
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
@@ -258,6 +274,9 @@ influxdb:
   enabled: true
   image: influxdb:1.7
 
+# Allow user to override busybox image used in fluent-bit init container
+busyboxImage: busybox
+
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
@@ -286,3 +305,9 @@ canaryDeployment:
 # Use these flags to enable opentracing, the variable is endpoint of Jaeger collector in the format shown below
 #traceCollectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
 #traceSamplingRate: 0.75
+
+## Message Queue Trigger Kind, KEDA: enable and configuration
+mqt_keda:
+  enabled: true
+  connector_images:
+    kafka: fission/keda-kafka
