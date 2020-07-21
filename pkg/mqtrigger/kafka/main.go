@@ -26,6 +26,13 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/util"
 )
 
+// Following code snippet is from KEDA project and adapted for Fission.
+// Copyright 2020 The KEDA Authors.
+// and others that have contributed code to the public domain.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// https://github.com/kedacore/keda/blob/v1.5.0/LICENSE
+
+// https://github.com/kedacore/keda/blob/v1.5.0/pkg/scalers/kafka_scaler.go#L28
 type kafkaMetadata struct {
 	bootstrapServers []string
 	consumerGroup    string
@@ -52,6 +59,7 @@ const (
 	kafkaAuthModeSaslSSLPlain    kafkaAuthMode = "sasl_ssl_plain"
 )
 
+// https://github.com/kedacore/keda/blob/master/pkg/scalers/kafka_scram_client.go
 var SHA256 scram.HashGeneratorFcn = func() hash.Hash { return sha256.New() }
 var SHA512 scram.HashGeneratorFcn = func() hash.Hash { return sha512.New() }
 
@@ -79,6 +87,7 @@ func (x *XDGSCRAMClient) Done() bool {
 	return x.ClientConversation.Done()
 }
 
+// https://github.com/kedacore/keda/blob/v1.5.0/pkg/scalers/kafka_scaler.go#L83
 func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 	meta := kafkaMetadata{}
 
@@ -144,6 +153,8 @@ func parseKafkaMetadata(logger *zap.Logger) (kafkaMetadata, error) {
 
 	return meta, nil
 }
+
+// End of code snippet from KEDA project.
 
 func getConfig(metadata kafkaMetadata) (*sarama.Config, error) {
 	config := sarama.NewConfig()

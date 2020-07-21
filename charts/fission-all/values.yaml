@@ -303,6 +303,6 @@ canaryDeployment:
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 mqt_keda:
-  enabled: true
+  enabled: false
   connector_images:
     kafka: fission/keda-kafka
