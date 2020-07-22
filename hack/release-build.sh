@@ -148,6 +148,8 @@ build_all_envs() {
     build_env_image "$version" "python"               "python-env"          "2.7"
     build_env_image "$version" "ruby"                 "ruby-env"            ""
     build_env_image "$version" "jvm"                  "jvm-env"             ""
+    build_env_image "$version" "jvm"                  "jvm-env"             "9"
+    build_env_image "$version" "jvm"                  "jvm-env"             "11"
     build_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      ""
     build_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      "11"
     build_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
