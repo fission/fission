@@ -81,14 +81,21 @@ const (
 	TtFnName = "function"
 	TtRound  = "round"
 
-	MqtName           = resourceName
-	MqtFnName         = "function"
-	MqtMQType         = "mqtype"
-	MqtTopic          = "topic"
-	MqtRespTopic      = "resptopic"
-	MqtErrorTopic     = "errortopic"
-	MqtMaxRetries     = "maxretries"
-	MqtMsgContentType = "contenttype"
+	MqtName            = resourceName
+	MqtFnName          = "function"
+	MqtMQType          = "mqtype"
+	MqtTopic           = "topic"
+	MqtRespTopic       = "resptopic"
+	MqtErrorTopic      = "errortopic"
+	MqtMaxRetries      = "maxretries"
+	MqtMsgContentType  = "contenttype"
+	MqtPollingInterval = "pollinginterval"
+	MqtCooldownPeriod  = "cooldownperiod"
+	MqtMinReplicaCount = "minreplicacount"
+	MqtMaxReplicaCount = "maxreplicacount"
+	MqtMetadata        = "metadata"
+	MqtSecret          = "secret"
+	MqtKind            = "mqtkind"
 
 	EnvName            = resourceName
 	EnvPoolsize        = "poolsize"

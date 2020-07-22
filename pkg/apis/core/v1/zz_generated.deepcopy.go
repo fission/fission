@@ -710,6 +710,33 @@ func (in *MessageQueueTriggerList) DeepCopyObject() runtime.Object {
 func (in *MessageQueueTriggerSpec) DeepCopyInto(out *MessageQueueTriggerSpec) {
 	*out = *in
 	in.FunctionReference.DeepCopyInto(&out.FunctionReference)
+	if in.PollingInterval != nil {
+		in, out := &in.PollingInterval, &out.PollingInterval
+		*out = new(int32)
+		**out = **in
+	}
+	if in.CooldownPeriod != nil {
+		in, out := &in.CooldownPeriod, &out.CooldownPeriod
+		*out = new(int32)
+		**out = **in
+	}
+	if in.MinReplicaCount != nil {
+		in, out := &in.MinReplicaCount, &out.MinReplicaCount
+		*out = new(int32)
+		**out = **in
+	}
+	if in.MaxReplicaCount != nil {
+		in, out := &in.MaxReplicaCount, &out.MaxReplicaCount
+		*out = new(int32)
+		**out = **in
+	}
+	if in.Metadata != nil {
+		in, out := &in.Metadata, &out.Metadata
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 
