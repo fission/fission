@@ -269,6 +269,11 @@ analyticsNonHelmInstall: false
 ## Enable Heapster only in clusters where heapster does not exist already
 heapster: false
 
+## Enable InfluxDB
+influxdb: 
+  enabled: true
+  image: influxdb:1.7
+
 # Allow user to override busybox image used in fluent-bit init container
 busyboxImage: busybox
 
