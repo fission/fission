@@ -306,3 +306,4 @@ mqt_keda:
   enabled: true
   connector_images:
     kafka: fission/keda-kafka
+    rabbitmq: fission/keda-rabbitmq
