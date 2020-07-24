@@ -192,6 +192,8 @@ build_all_env_builders() {
     build_env_builder_image "$version" "go"         "go-builder"         "1.13"
     build_env_builder_image "$version" "go"         "go-builder"         "1.14"
     build_env_builder_image "$version" "jvm"        "jvm-builder"        ""
+    build_env_builder_image "$version" "jvm"        "jvm-builder"      "9"
+    build_env_builder_image "$version" "jvm"        "jvm-builder"      "11"
     build_env_builder_image "$version" "jvm-jersey" "jvm-jersey-builder" ""
     build_env_builder_image "$version" "jvm-jersey" "jvm-jersey-builder" "11"
     build_env_builder_image "$version" "nodejs"     "node-builder"       ""
