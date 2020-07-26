@@ -11,10 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
 	"go.uber.org/zap"
-	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/fission/fission/pkg/mqtrigger/util"
 )
@@ -55,27 +51,7 @@ func parseRabbitMQConnData() (rabbitMQConnData, error) {
 	if host == "" {
 		return data, fmt.Errorf("received empty host field")
 	}
-
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return data, err
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return data, err
-	}
-	secretName := data.fissionMetadata.TriggerName
-
-	secret, err := clientset.CoreV1().Secrets(apiv1.NamespaceDefault).Get(secretName, metav1.GetOptions{})
-	if err != nil {
-		return data, err
-	}
-	if val, ok := secret.Data[host]; ok {
-		data.url = string(val)
-	} else {
-		return data, fmt.Errorf("failed to resolve host value from secret")
-	}
+	data.url = host
 	return data, nil
 }
 
