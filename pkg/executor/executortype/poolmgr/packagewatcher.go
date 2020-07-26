@@ -86,7 +86,7 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 				for _, fn := range funcs {
 					if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
 						fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace {
-						go executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
+						executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
 					}
 				}
 			},

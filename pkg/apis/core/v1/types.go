@@ -272,12 +272,6 @@ type (
 	// BuildStatus indicates the current build status of a package.
 	BuildStatus string
 
-	// FnStatus ... indicates the current status of a function.
-	FnStatus string
-
-	// EnvironmentStatus ... indicates the status of the environment.
-	EnvironmentStatus string
-
 	// PackageSpec includes source/deploy archives and the reference of environment to build the package.
 	PackageSpec struct {
 		// Environment is a reference to the environment for building source archive.

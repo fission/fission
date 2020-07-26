@@ -47,7 +47,6 @@ const (
 	BuildStatusNone      = "none"
 )
 
-// These are valid conditions of a deployment.
 const (
 	// Available means the CR is available
 	CRReady CRConditionType = "Ready"
