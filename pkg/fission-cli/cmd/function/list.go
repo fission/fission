@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -62,7 +63,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.ObjectMeta.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
-			f.Status.FnStatus,
+			getFnStatus(f),
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
 			f.Spec.Resources.Requests.Cpu().String(),
@@ -76,4 +77,37 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	w.Flush()
 
 	return nil
+}
+
+func getFnStatus(fn fv1.Function) fv1.CRConditionType {
+	pkgStatus := fv1.CRNone
+	envStatus := fv1.CRNone
+	fnCondition := fv1.CRNone
+
+	for _, c := range fn.Status.Conditions {
+		if c.CRName == "package" {
+			pkgStatus = c.Type
+		}
+		if c.CRName == "environment" {
+			envStatus = c.Type
+		}
+	}
+
+	if pkgStatus == fv1.CRNone && envStatus == fv1.CRNone {
+		return fnCondition
+	}
+	if pkgStatus == fv1.CRReady && envStatus == fv1.CRReady {
+		fnCondition = fv1.CRReady
+	}
+	if pkgStatus == fv1.CRProgressing || envStatus == fv1.CRProgressing {
+		fnCondition = fv1.CRProgressing
+	}
+	if pkgStatus == fv1.CRPending || envStatus == fv1.CRPending {
+		fnCondition = fv1.CRPending
+	}
+	if pkgStatus == fv1.CRFailure || envStatus == fv1.CRFailure {
+		fnCondition = fv1.CRFailure
+	}
+
+	return fnCondition
 }

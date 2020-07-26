@@ -77,27 +77,28 @@ type (
 		Items           []Function `json:"items"`
 	}
 
-	//FunctionStatus ...
+	//FunctionStatus consists of CRConditions of the fission resource dependencies
 	FunctionStatus struct {
-		// FnStatus is the function status.
-		FnStatus BuildStatus `json:"functionstatus,omitempty"`
+		Conditions []CRCondition `json:"conditions"`
+	}
 
-		// EnvStatus is the environment status
-		EnvStatus BuildStatus `json:"envStatus,omitempty"`
+	//CRConditionType ... this indicates type of the customresource in status object
+	CRConditionType string
 
-		// EnvStatusdLog stores build log of the environment
-		EnvStatusLog string `json:"envStatuslog,omitempty"`
-
-		// PkgStatus is the package status
-		PackageStatus BuildStatus `json:"packageStatus,omitempty"`
-
-		// PkgStatusLog stores build log of the package
-		PkgStatusLog string `json:"pkgStatuslog,omitempty"` // output of the build (errors etc)
-
-		// LastUpdateTimestamp will store the timestamp the function was last updated
-		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
-		// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
-		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
+	// CRCondition ... a type to describe status condition of the custom resource
+	CRCondition struct {
+		//Name of the fission resource whose status condition is being described
+		CRName string
+		// Type of CR condition. one of
+		Type CRConditionType `json:"type"`
+		// Status of the condition, one of True, False, Unknown.
+		Status apiv1.ConditionStatus `json:"status"`
+		// The last time this condition was updated.
+		LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+		// The reason for the condition's last transition.
+		Reason string `json:"reason,omitempty"`
+		// A human readable message indicating details about the transition.
+		Message string `json:"message,omitempty"`
 	}
 
 	// Environment is environment for building and running user functions.

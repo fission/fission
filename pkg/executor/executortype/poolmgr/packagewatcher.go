@@ -19,6 +19,7 @@ package poolmgr
 import (
 	"time"
 
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,8 +68,28 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 					zap.String("service_account_namespace", envNs),
 					zap.String("package_name", pkg.ObjectMeta.Name),
 					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
-			},
 
+				// Update package's CRCondition (i.e. statusObject) for all related functions
+				gpm.updateFnPkgStatus(pkg)
+			},
+			DeleteFunc: func(obj interface{}) {
+				pkg := obj.(*fv1.Package)
+				pkgCondition := fv1.CRCondition{
+					CRName:         "package",
+					Type:           fv1.CRFailure,
+					Reason:         "Package deleted.",
+					Status:         "false",
+					LastUpdateTime: metav1.Time{Time: time.Now().UTC()},
+				}
+				gpm.logger.Info("Updating CRCondition object for all functions of the deleted package:", zap.Any("package_name", pkg.Name))
+				funcs := gpm.getPkgFunctions(&pkg.ObjectMeta)
+				for _, fn := range funcs {
+					if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
+						fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace {
+						go executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
+					}
+				}
+			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldPkg := oldObj.(*fv1.Package)
 				newPkg := newObj.(*fv1.Package)
@@ -104,8 +125,43 @@ func (gpm *GenericPoolManager) makePkgController(fissionClient *crd.FissionClien
 						zap.String("package_name", newPkg.ObjectMeta.Name),
 						zap.String("package_namespace", newPkg.ObjectMeta.Namespace))
 				}
+				// Update package's CRCondition (i.e. statusObject) for all related functions
+				gpm.updateFnPkgStatus(newPkg)
 			},
 		})
 
 	return pkgStore, controller
+}
+
+func (gpm *GenericPoolManager) updateFnPkgStatus(pkg *fv1.Package) {
+	pkgCondition := executorUtil.GetPkgCondition(pkg)
+	funcs := gpm.getPkgFunctions(&pkg.ObjectMeta)
+	/*
+		A package may be used by multiple functions.
+		Update package's CRCondition (i.e. statusObject) for all related functions
+	*/
+	gpm.logger.Debug("Updating CRCondition object for all the functions of this package:", zap.Any("package_name", pkg.Name))
+	for _, fn := range funcs {
+		if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
+			fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace {
+			executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
+		}
+	}
+}
+
+func (gpm *GenericPoolManager) getPkgFunctions(m *metav1.ObjectMeta) []fv1.Function {
+	fnList, err := gpm.fissionClient.CoreV1().
+		Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		e := "error getting function list"
+		gpm.logger.Error(e, zap.Error(err))
+		return []fv1.Function{}
+	}
+	relatedFunctions := make([]fv1.Function, 0)
+	for _, f := range fnList.Items {
+		if (f.Spec.Package.PackageRef.Name == m.Name) && (f.Spec.Package.PackageRef.Namespace == m.Namespace) {
+			relatedFunctions = append(relatedFunctions, f)
+		}
+	}
+	return relatedFunctions
 }

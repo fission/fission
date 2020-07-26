@@ -19,6 +19,7 @@ package newdeploy
 import (
 	"context"
 	"fmt"
+	appsv1 "k8s.io/api/apps/v1"
 	"os"
 	"strconv"
 	"strings"
@@ -44,9 +45,15 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+)
+
+const (
+	LABEL_ENV_NAME            = "envName"
+	LABEL_ENV_RESOURCEVERSION = "envResourceVersion"
 )
 
 var _ executortype.ExecutorType = &NewDeploy{}
@@ -353,16 +360,46 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "environments", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &fv1.Environment{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
-		DeleteFunc: func(obj interface{}) {},
+		AddFunc: func(obj interface{}) {
+			env := obj.(*fv1.Environment)
+			envCondition := deploy.GetEnvCondition(env)
+			deploy.logger.Debug("Updating env condition object for all functions of this environment:", zap.Any("environment", env))
+			funcs := deploy.getEnvFunctions(&env.ObjectMeta)
+			for _, f := range funcs {
+				//update env's CRCondition (i.e. status) object
+				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			env := obj.(*fv1.Environment)
+			funcs := deploy.getEnvFunctions(&env.ObjectMeta)
+			envCondition := fv1.CRCondition{
+				CRName:         "environment",
+				Type:           fv1.CRFailure,
+				Reason:         "Environment deleted.",
+				Status:         "false",
+				LastUpdateTime: metav1.Time{Time: time.Now().UTC()},
+			}
+			deploy.logger.Debug("Updating env condition object for all functions of the deleted environment:", zap.Any("environment_name", env.Name))
+			for _, f := range funcs {
+				//update env's CRCondition (i.e. status) object
+				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+			}
+		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*fv1.Environment)
 			oldEnv := oldObj.(*fv1.Environment)
-			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
-			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
-				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
-				funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
-				for _, f := range funcs {
+
+			envCondition := deploy.GetEnvCondition(oldEnv)
+			deploy.logger.Debug("Updating all functions of the environment that changed, old env:", zap.Any("environment", oldEnv))
+			funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
+			for _, f := range funcs {
+				//update env's CRCondition (i.e. status) object
+				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+
+				//update function deployments
+				// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
+				if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
 					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(f.ObjectMeta.Name, metav1.GetOptions{})
 					if err != nil {
 						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
@@ -378,6 +415,88 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 		},
 	})
 	return store, controller
+}
+
+//GetEnvCondition ...
+//TODO: move this method to "github.com/fission/fission/pkg/executor/util"
+func (deploy *NewDeploy) GetEnvCondition(env *fv1.Environment) fv1.CRCondition {
+
+	envCondition := fv1.CRCondition{
+		CRName:         "environment",
+		Status:         "false",
+		LastUpdateTime: metav1.Time{Time: time.Now().UTC()},
+	}
+
+	var deployList []appsv1.Deployment
+	builderdeployList, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(deploy.getBuilderDeployLabels(env.ObjectMeta)).AsSelector().String(),
+	})
+	if err != nil {
+		e := "error getting builder deployment"
+		envCondition.Reason = e
+		return envCondition
+	}
+
+	if len(builderdeployList.Items) > 0 {
+		deployList = append(deployList, builderdeployList.Items...)
+	}
+
+	poolMgrdeployList, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
+		LabelSelector: labels.Set(deploy.getPoolMgrDeployLabels(env.ObjectMeta)).AsSelector().String(),
+	})
+	if err != nil {
+		e := "error getting poolmgr deployment"
+		envCondition.Reason = e
+		return envCondition
+	}
+
+	deployList = append(deployList, poolMgrdeployList.Items...)
+
+	// TODO: move this logic to envStatusWatcher once we introduce environment status subresource
+	/*
+		1) Fetch the deployments which corresponds to this 'env'
+		2) There could be two types of deploymnet for an environment
+		   2.a) builder deployment
+		   2.b) poolmgr deployment
+		4) The environment is 'succeeded' iff; 2.a) && 2.b) are available
+	*/
+	ready := true
+	if len(deployList) == 0 {
+		e := "No deployments found for the environment"
+		envCondition.Type = fv1.CRFailure
+		envCondition.Reason = e
+		return envCondition
+	}
+	for _, dl := range deployList {
+		for _, c := range dl.Status.Conditions {
+			if c.Status == "false" {
+				ready = false
+				break
+			}
+		}
+		if !ready {
+			envCondition.Type = fv1.CRProgressing
+			return envCondition
+		}
+	}
+	envCondition.Status = "true"
+	envCondition.Type = fv1.CRReady
+	envCondition.Message = "All deployments ready"
+	return envCondition
+}
+
+func (deploy *NewDeploy) getPoolMgrDeployLabels(m metav1.ObjectMeta) map[string]string {
+	return map[string]string{
+		fv1.ENVIRONMENT_NAME: m.Name,
+		fv1.ENVIRONMENT_UID:  string(m.UID),
+	}
+}
+
+func (deploy *NewDeploy) getBuilderDeployLabels(m metav1.ObjectMeta) map[string]string {
+	return map[string]string{
+		LABEL_ENV_NAME:            m.Name,
+		LABEL_ENV_RESOURCEVERSION: m.ResourceVersion,
+	}
 }
 
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {

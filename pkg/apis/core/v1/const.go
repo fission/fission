@@ -47,6 +47,20 @@ const (
 	BuildStatusNone      = "none"
 )
 
+// These are valid conditions of a deployment.
+const (
+	// Available means the CR is available
+	CRReady CRConditionType = "Ready"
+	// Progressing means the CR is progressing.
+	CRProgressing CRConditionType = "Progressing"
+	// CRFailure indicated CR creation is falied
+	CRFailure CRConditionType = "Failed"
+	//CRPending indicates CR creation is pending
+	CRPending CRConditionType = "pending"
+	//CRNone indicates that CRCondition is unavailable
+	CRNone CRConditionType = "unavailable"
+)
+
 const (
 	AllowedFunctionsPerContainerSingle   = "single"
 	AllowedFunctionsPerContainerInfinite = "infinite"
