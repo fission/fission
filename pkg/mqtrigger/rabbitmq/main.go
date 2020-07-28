@@ -161,12 +161,12 @@ func handleFissionFunction(d amqp.Delivery, data rabbitMQConnData, logger *zap.L
 func errorHandler(data rabbitMQConnData, logger *zap.Logger, producerChannel *amqp.Channel, err error) {
 	if len(data.fissionMetadata.ErrorTopic) > 0 {
 		err = producerChannel.Publish(
-			"",             // exchange
-			data.queueName, // routing key
-			false,          // mandatory
-			false,          // immediate
+			"",                              // exchange
+			data.fissionMetadata.ErrorTopic, // routing key
+			false,                           // mandatory
+			false,                           // immediate
 			amqp.Publishing{
-				ContentType: "text/plain",
+				ContentType: data.fissionMetadata.ContentType,
 				Body:        []byte(err.Error()),
 			})
 		if err != nil {
@@ -174,7 +174,7 @@ func errorHandler(data rabbitMQConnData, logger *zap.Logger, producerChannel *am
 				zap.Error(err),
 				zap.String("trigger", data.fissionMetadata.TriggerName),
 				zap.String("message", err.Error()),
-				zap.String("topic", data.fissionMetadata.Topic))
+				zap.String("topic", data.fissionMetadata.ErrorTopic))
 		}
 	} else {
 		logger.Error("message received to publish to error topic, but no error topic was set",
@@ -185,18 +185,18 @@ func errorHandler(data rabbitMQConnData, logger *zap.Logger, producerChannel *am
 func responseHandler(response string, data rabbitMQConnData, logger *zap.Logger, producerChannel *amqp.Channel) bool {
 	if len(data.fissionMetadata.ResponseTopic) > 0 {
 		err := producerChannel.Publish(
-			"",             // exchange
-			data.queueName, // routing key
-			false,          // mandatory
-			false,          // immediate
+			"",                                 // exchange
+			data.fissionMetadata.ResponseTopic, // routing key
+			false,                              // mandatory
+			false,                              // immediate
 			amqp.Publishing{
-				ContentType: "text/plain",
+				ContentType: data.fissionMetadata.ContentType,
 				Body:        []byte(response),
 			})
 		if err != nil {
 			logger.Warn("failed to publish response body from function invocation to topic",
 				zap.Error(err),
-				zap.String("topic", data.fissionMetadata.Topic),
+				zap.String("topic", data.fissionMetadata.ResponseTopic),
 				zap.String("function_url", data.fissionMetadata.FunctionURL))
 			return false
 		}
