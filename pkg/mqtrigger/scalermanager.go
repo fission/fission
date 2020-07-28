@@ -54,7 +54,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dynamicClient.Resource(scaledObjectGVR).Namespace(namespace), nil
+	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
 }
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
