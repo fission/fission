@@ -17,6 +17,7 @@ limitations under the License.
 package poolmgr
 
 import (
+	"sync"
 	"time"
 
 	executorUtil "github.com/fission/fission/pkg/executor/util"
@@ -140,13 +141,19 @@ func (gpm *GenericPoolManager) updateFnPkgStatus(pkg *fv1.Package) {
 		A package may be used by multiple functions.
 		Update package's CRCondition (i.e. statusObject) for all related functions
 	*/
+	wg := &sync.WaitGroup{}
 	gpm.logger.Debug("Updating CRCondition object for all the functions of this package:", zap.Any("package_name", pkg.Name))
 	for _, fn := range funcs {
+		wg.Add(1)
 		if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
 			fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace {
-			executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
+			go func() {
+				defer wg.Done()
+				executorUtil.UpdateFunctionStatus(&fn, pkgCondition, gpm.fissionClient, gpm.logger)
+			}()
 		}
 	}
+	wg.Wait()
 }
 
 func (gpm *GenericPoolManager) getPkgFunctions(m *metav1.ObjectMeta) []fv1.Function {

@@ -363,12 +363,18 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 		AddFunc: func(obj interface{}) {
 			env := obj.(*fv1.Environment)
 			envCondition := deploy.GetEnvCondition(env)
+			wg := &sync.WaitGroup{}
 			deploy.logger.Debug("Updating env condition object for all functions of this environment:", zap.Any("environment", env))
 			funcs := deploy.getEnvFunctions(&env.ObjectMeta)
 			for _, f := range funcs {
-				//update env's CRCondition (i.e. status) object
-				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					//update env's CRCondition (i.e. status) object
+					executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				}()
 			}
+			wg.Wait()
 		},
 		DeleteFunc: func(obj interface{}) {
 			env := obj.(*fv1.Environment)
@@ -380,22 +386,33 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 				Status:         "false",
 				LastUpdateTime: metav1.Time{Time: time.Now().UTC()},
 			}
+			wg := &sync.WaitGroup{}
 			deploy.logger.Debug("Updating env condition object for all functions of the deleted environment:", zap.Any("environment_name", env.Name))
 			for _, f := range funcs {
-				//update env's CRCondition (i.e. status) object
-				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					//update env's CRCondition (i.e. status) object
+					executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				}()
 			}
+			wg.Wait()
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*fv1.Environment)
 			oldEnv := oldObj.(*fv1.Environment)
 
 			envCondition := deploy.GetEnvCondition(oldEnv)
+			wg := &sync.WaitGroup{}
 			deploy.logger.Debug("Updating all functions of the environment that changed, old env:", zap.Any("environment", oldEnv))
 			funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
 			for _, f := range funcs {
-				//update env's CRCondition (i.e. status) object
-				executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					//update env's CRCondition (i.e. status) object
+					executorUtil.UpdateFunctionStatus(&f, envCondition, deploy.fissionClient, deploy.logger)
+				}()
 
 				//update function deployments
 				// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
@@ -412,6 +429,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 					}
 				}
 			}
+			wg.Wait()
 		},
 	})
 	return store, controller
