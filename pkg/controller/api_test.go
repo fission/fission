@@ -111,18 +111,19 @@ func TestFunctionApi(t *testing.T) {
 
 	m, err := g.Client().V1().Function().Create(testFunc)
 	panicIf(err)
-	defer func() {
-		err := g.Client().V1().Function().Delete(m)
-		panicIf(err)
-	}()
 
 	_, err = g.Client().V1().Function().Create(testFunc)
 	assertNameReuseFailure(err, "function")
 
 	testFunc.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testFunc.Spec.Package.FunctionName = "yyy"
-	_, err = g.Client().V1().Function().Update(testFunc)
+	m, err = g.Client().V1().Function().Update(testFunc)
 	panicIf(err)
+
+	defer func() {
+		err := g.Client().V1().Function().Delete(m)
+		panicIf(err)
+	}()
 
 	testFunc.ObjectMeta.ResourceVersion = ""
 	testFunc.ObjectMeta.Name = "bar"
