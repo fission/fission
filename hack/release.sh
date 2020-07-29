@@ -89,6 +89,7 @@ push_all_envs() {
     push_env_image "$version" "python"               "python-env"          "2.7"
     push_env_image "$version" "ruby"                 "ruby-env"            ""
     push_env_image "$version" "jvm"                  "jvm-env"             ""
+    push_env_image "$version" "jvm-jersey"           "jvm-env-jersey"      ""
     push_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
 }
 
@@ -125,6 +126,7 @@ push_all_env_builders() {
     push_env_builder_image "$version" "go"       "go-builder"         "1.13"
     push_env_builder_image "$version" "go"       "go-builder"         "1.14"
     push_env_builder_image "$version" "jvm"      "jvm-builder"        ""
+    push_env_builder_image "$version" "jvm-jersey"      "jvm-jersey-builder"        ""
     push_env_builder_image "$version" "nodejs"   "node-builder"       ""
     push_env_builder_image "$version" "ruby"     "ruby-builder"       ""
     push_env_builder_image "$version" "dotnet20" "dotnet20-builder"   ""
