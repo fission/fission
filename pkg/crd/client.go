@@ -23,6 +23,7 @@ import (
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -106,4 +107,30 @@ func (fc *FissionClient) WaitForCRDs() error {
 			return errors.New("timeout waiting for CRDs")
 		}
 	}
+}
+
+// GetDynamicClient creates and returns new dynamic client or returns an error
+func GetDynamicClient() (dynamic.Interface, error) {
+	var config *rest.Config
+	var err error
+
+	// get the config, either from kubeconfig or using our
+	// in-cluster service account
+	kubeConfig := os.Getenv("KUBECONFIG")
+	if len(kubeConfig) != 0 {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return dynamicClient, nil
 }

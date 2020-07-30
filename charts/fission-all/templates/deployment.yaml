@@ -343,7 +343,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- if .Values.influxdb.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -380,7 +380,7 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: influxdb:1.7
+        image: {{ .Values.influxdb.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
         - name: INFLUXDB_DB
@@ -398,7 +398,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- end }}
 {{- if .Values.heapster }}
 ---
 apiVersion: v1
@@ -527,7 +527,7 @@ spec:
     spec:
       containers:
       - name: nats-streaming
-        image: nats-streaming
+        image: {{ .Values.nats.streamingserver.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
@@ -776,7 +776,11 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--storageServicePort", "8000", "--filePath", "/fission"]
+        {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
+        args: ["--storageServicePort", "8000", "--storageType", "s3"]
+        {{- else }}
+        args: ["--storageServicePort", "8000", "--storageType", "local"]
+        {{- end }}
         env:
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
           value: "{{ .Values.traceCollectorEndpoint }}"
@@ -786,9 +790,25 @@ spec:
           value: "{{.Values.pruneInterval}}"
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
+        - name: STORAGE_S3_ENDPOINT
+          value: {{ .Values.persistence.s3.endPoint }}
+        - name: STORAGE_S3_BUCKET_NAME
+          value: {{ .Values.persistence.s3.bucketName }}
+        - name: STORAGE_S3_SUB_DIR
+          value: {{ .Values.persistence.s3.subDir }}
+        - name: STORAGE_S3_ACCESS_KEY_ID
+          value: {{ .Values.persistence.s3.accessKeyId }}
+        - name: STORAGE_S3_SECRET_ACCESS_KEY
+          value: {{ .Values.persistence.s3.secretAccessKey }}
+        - name: STORAGE_S3_REGION
+          value: {{ .Values.persistence.s3.region }}
+        {{- end }}
+        {{- if ne (.Values.persistence.storageType | default "local") "s3" }}
         volumeMounts:
         - name: fission-storage
           mountPath: /fission
+        {{- end }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -806,14 +826,59 @@ spec:
           - containerPort: 8000
             name: http
       serviceAccountName: fission-svc
+      {{- if and (.Values.persistence.enabled) (ne (.Values.persistence.storageType | default "local") "s3") }}
       volumes:
       - name: fission-storage
-      {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
           claimName: {{ .Values.persistence.existingClaim | default "fission-storage-pvc" }}
       {{- else }}
+      volumes:
+      - name: fission-storage
         emptyDir: {}
       {{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+
+{{- if .Values.mqt_keda.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-keda
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger-keda
+    messagequeue: keda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger-keda
+      messagequeue: keda
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger-keda
+        messagequeue: keda
+    spec:
+      containers:
+      - name:  mqtrigger-keda
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: KAFKA_IMAGE
+          value: {{ .Values.mqt_keda.connector_images.kafka }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
