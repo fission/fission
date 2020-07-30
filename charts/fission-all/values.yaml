@@ -68,7 +68,7 @@ logger:
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.0.4
+  fluentdImageTag: 1.5.1
   
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
