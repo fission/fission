@@ -509,6 +509,12 @@ spec:
 {{- if .Values.nats.enabled }}
 {{- if not .Values.nats.external }}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-nats-streaming
+  namespace: {{ .Release.Namespace }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -525,6 +531,7 @@ spec:
       labels:
         svc: nats-streaming
     spec:
+      serviceAccount: fission-nats-streaming
       containers:
       - name: nats-streaming
         image: {{ .Values.nats.streamingserver.image | quote }}
