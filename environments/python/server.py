@@ -7,9 +7,22 @@ import sys
 from flask import Flask, request, abort, g
 from gevent.pywsgi import WSGIServer
 import bjoern
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
 
 
 IS_PY2 = (sys.version_info.major == 2)
+SENTRY_DSN = os.environ.get('SENTRY_DSN', None)
+SENTRY_RELEASE = os.environ.get('SENTRY_RELEASE', None)
+
+if SENTRY_DSN:
+    params = {
+        'dsn': SENTRY_DSN,
+        'integrations': [FlaskIntegration()]
+    }
+    if SENTRY_RELEASE:
+        params['release'] = SENTRY_RELEASE
+    sentry_sdk.init(**params)
 
 
 def import_src(path):
@@ -71,7 +84,7 @@ class FuncApp(Flask):
                 moduleName = parts[0]
                 funcName = parts[1]
             self.logger.debug('moduleName = "{}"    funcName = "{}"'.format(moduleName, funcName))
-            
+
             # check whether the destination is a directory or a file
             if os.path.isdir(filepath):
                 # add package directory path into module search path

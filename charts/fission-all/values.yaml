@@ -20,7 +20,7 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.9.0
+imageTag: 1.10.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -50,7 +50,7 @@ fetcher:
   ## Fetcher repository
   image: fission/fetcher
   ## Fetcher image version
-  imageTag: 1.9.0
+  imageTag: 1.10.0
   
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -68,7 +68,7 @@ logger:
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.0.4
+  fluentdImageTag: 1.5.1
   
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
@@ -165,6 +165,10 @@ nats:
   # Queue group registered with NATS streaming 
   queueGroup: "fission-messageQueueNatsTrigger"
 
+  # The image to use for NATS streaming server
+  streamingserver:
+    image: nats-streaming
+    
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
   enabled: false
@@ -265,6 +269,14 @@ analyticsNonHelmInstall: false
 ## Enable Heapster only in clusters where heapster does not exist already
 heapster: false
 
+## Enable InfluxDB
+influxdb: 
+  enabled: true
+  image: influxdb:1.7
+
+# Allow user to override busybox image used in fluent-bit init container
+busyboxImage: busybox
+
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
@@ -293,3 +305,9 @@ canaryDeployment:
 # Use these flags to enable opentracing, the variable is endpoint of Jaeger collector in the format shown below
 #traceCollectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
 #traceSamplingRate: 0.75
+
+## Message Queue Trigger Kind, KEDA: enable and configuration
+mqt_keda:
+  enabled: true
+  connector_images:
+    kafka: fission/keda-kafka

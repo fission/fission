@@ -343,7 +343,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- if .Values.influxdb.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -380,7 +380,7 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: influxdb:1.7
+        image: {{ .Values.influxdb.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
         - name: INFLUXDB_DB
@@ -398,7 +398,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- end }}
 {{- if .Values.heapster }}
 ---
 apiVersion: v1
@@ -509,6 +509,12 @@ spec:
 {{- if .Values.nats.enabled }}
 {{- if not .Values.nats.external }}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-nats-streaming
+  namespace: {{ .Release.Namespace }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -525,9 +531,10 @@ spec:
       labels:
         svc: nats-streaming
     spec:
+      serviceAccount: fission-nats-streaming
       containers:
       - name: nats-streaming
-        image: nats-streaming
+        image: {{ .Values.nats.streamingserver.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
@@ -838,4 +845,47 @@ spec:
       {{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+
+{{- if .Values.mqt_keda.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-keda
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger-keda
+    messagequeue: keda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger-keda
+      messagequeue: keda
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger-keda
+        messagequeue: keda
+    spec:
+      containers:
+      - name:  mqtrigger-keda
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: "{{ .Values.traceCollectorEndpoint }}"
+        - name: TRACING_SAMPLING_RATE
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: KAFKA_IMAGE
+          value: {{ .Values.mqt_keda.connector_images.kafka }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
