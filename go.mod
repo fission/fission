@@ -65,7 +65,6 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
-	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.opencensus.io v0.22.0
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
