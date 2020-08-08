@@ -111,7 +111,7 @@ func Test_getEnvVarlist(t *testing.T) {
 			Value: mqt.Spec.Topic,
 		},
 		{
-			Name:  "FUNCTION_URL",
+			Name:  "HTTP_ENDPOINT",
 			Value: "http://router.fission/fission-function/fission-function/test",
 		},
 		{
@@ -123,7 +123,7 @@ func Test_getEnvVarlist(t *testing.T) {
 			Value: "response-topic",
 		},
 		{
-			Name:  "TRIGGER_NAME",
+			Name:  "SOURCE_NAME",
 			Value: "Test",
 		},
 		{

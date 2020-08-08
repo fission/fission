@@ -343,7 +343,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- if .Values.influxdb.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -380,7 +380,7 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: influxdb:1.7
+        image: {{ .Values.influxdb.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
         - name: INFLUXDB_DB
@@ -398,7 +398,7 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
-
+{{- end }}
 {{- if .Values.heapster }}
 ---
 apiVersion: v1
@@ -509,6 +509,12 @@ spec:
 {{- if .Values.nats.enabled }}
 {{- if not .Values.nats.external }}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-nats-streaming
+  namespace: {{ .Release.Namespace }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -525,6 +531,7 @@ spec:
       labels:
         svc: nats-streaming
     spec:
+      serviceAccount: fission-nats-streaming
       containers:
       - name: nats-streaming
         image: {{ .Values.nats.streamingserver.image | quote }}

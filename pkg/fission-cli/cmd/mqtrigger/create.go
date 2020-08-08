@@ -59,8 +59,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.MqtFnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
+	mqtKind := input.String(flagkey.MqtKind)
+
 	mqType := (fv1.MessageQueueType)(input.String(flagkey.MqtMQType))
-	if !validator.IsValidMessageQueue((string)(mqType)) {
+	if !validator.IsValidMessageQueue((string)(mqType), mqtKind) {
 		return errors.New("Unsupported message queue type")
 	}
 
@@ -88,7 +90,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		contentType = "application/json"
 	}
 
-	err := checkMQTopicAvailability(mqType, topic, respTopic)
+	err := checkMQTopicAvailability(mqType, mqtKind, topic, respTopic)
 	if err != nil {
 		return err
 	}
@@ -118,8 +120,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	_ = util.UpdateMapFromStringSlice(&metadata, metadataParams)
 
 	secret := input.String(flagkey.MqtSecret)
-
-	mqtKind := input.String(flagkey.MqtKind)
 
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
@@ -197,9 +197,9 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func checkMQTopicAvailability(mqType fv1.MessageQueueType, topics ...string) error {
+func checkMQTopicAvailability(mqType fv1.MessageQueueType, mqtKind string, topics ...string) error {
 	for _, t := range topics {
-		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t) {
+		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t, mqtKind) {
 			return errors.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}

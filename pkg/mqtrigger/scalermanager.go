@@ -54,7 +54,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dynamicClient.Resource(scaledObjectGVR).Namespace(namespace), nil
+	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
 }
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
@@ -166,7 +166,7 @@ func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient ku
 			Value: mqt.Spec.Topic,
 		},
 		{
-			Name:  "FUNCTION_URL",
+			Name:  "HTTP_ENDPOINT",
 			Value: url,
 		},
 		{
@@ -178,7 +178,7 @@ func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient ku
 			Value: mqt.Spec.ResponseTopic,
 		},
 		{
-			Name:  "TRIGGER_NAME",
+			Name:  "SOURCE_NAME",
 			Value: mqt.ObjectMeta.Name,
 		},
 		{
