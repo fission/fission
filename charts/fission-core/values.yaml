@@ -202,4 +202,9 @@ canaryDeployment:
 mqt_keda:
   enabled: false
   connector_images:
-    kafka: fission/keda-kafka:1
+    kafka:
+      image: fission/keda-kafka
+      tag: 1
+    rabbitmq:
+      image: fission/keda-rabbitmq
+      tag: 1
