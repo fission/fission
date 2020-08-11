@@ -55,6 +55,7 @@ const (
 const (
 	ExecutorTypePoolmgr   ExecutorType = "poolmgr"
 	ExecutorTypeNewdeploy ExecutorType = "newdeploy"
+	ExecutorTypeContainer ExecutorType = "container"
 )
 
 const (

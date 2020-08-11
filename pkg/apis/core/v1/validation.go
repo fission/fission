@@ -300,7 +300,7 @@ func (es ExecutionStrategy) Validate() error {
 	result := &multierror.Error{}
 
 	switch es.ExecutorType {
-	case ExecutorTypeNewdeploy, ExecutorTypePoolmgr: // no op
+	case ExecutorTypeNewdeploy, ExecutorTypePoolmgr, ExecutorTypeContainer: // no op
 	default:
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
 	}

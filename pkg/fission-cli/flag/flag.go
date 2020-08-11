@@ -96,11 +96,12 @@ var (
 	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
 	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
 	FnPkgName               = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
+	FnImageName             = Flag{Type: String, Name: flagkey.FnImageName, Usage: "Name of the Docker image to be deployed as a function. Valid only when executorType is set to 'container'"}
 	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
 	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
 	FnSecret                = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the the secrets will be replaced by the provided list of secrets."}
 	FnCfgMap                = Flag{Type: StringSlice, Name: flagkey.FnCfgMap, Usage: "Function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags. In case of fn update the configmaps will be replaced by the provided list of configmaps."}
-	FnExecutorType          = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
+	FnExecutorType          = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy', 'container'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
 	FnExecutionTimeout      = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
 	FnLogPod                = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
 	FnLogFollow             = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}

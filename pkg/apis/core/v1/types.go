@@ -409,6 +409,9 @@ type (
 		// This is optional. If not specified default value will be taken as false
 		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
+
+		// Image for containing the language runtime.
+		Image string `json:"image"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

@@ -32,7 +32,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
-			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
+			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName, flag.FnImageName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
@@ -84,7 +84,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
-			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
+			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName, flag.FnImageName,
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,

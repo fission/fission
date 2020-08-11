@@ -76,6 +76,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	pkgName := input.String(flagkey.FnPackageName)
 	entrypoint := input.String(flagkey.FnEntrypoint)
+	imageName := input.String(flagkey.FnImageName)
 
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
@@ -183,62 +184,70 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function.Spec.Resources = *resReqs
 
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: fnNamespace,
-		Name:      pkgName,
-	})
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
-	}
+	if strategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 
-	forceUpdate := input.Bool(flagkey.PkgForce)
+		pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+			Namespace: fnNamespace,
+			Name:      pkgName,
+		})
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+		}
 
-	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "error getting function list")
-	}
+		forceUpdate := input.Bool(flagkey.PkgForce)
 
-	if !forceUpdate && len(fnList) > 1 {
-		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
-	}
+		fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+		if err != nil {
+			return errors.Wrap(err, "error getting function list")
+		}
 
-	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
-	}
+		if !forceUpdate && len(fnList) > 1 {
+			return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		}
 
-	// the package resource version of function has been changed,
-	// we need to update function resource version to prevent conflict.
-	// TODO: remove this block when deprecating pkg flags of function command.
-	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
-		var fns []fv1.Function
-		// don't update the package resource version of the function we are currently
-		// updating to prevent update conflict.
-		for _, fn := range fnList {
-			if fn.ObjectMeta.UID != function.ObjectMeta.UID {
-				fns = append(fns, fn)
+		newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
+		}
+
+		// the package resource version of function has been changed,
+		// we need to update function resource version to prevent conflict.
+		// TODO: remove this block when deprecating pkg flags of function command.
+		if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
+			var fns []fv1.Function
+			// don't update the package resource version of the function we are currently
+			// updating to prevent update conflict.
+			for _, fn := range fnList {
+				if fn.ObjectMeta.UID != function.ObjectMeta.UID {
+					fns = append(fns, fn)
+				}
+			}
+			err = _package.UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fns...)
+			if err != nil {
+				return errors.Wrap(err, "error updating function package reference resource version")
 			}
 		}
-		err = _package.UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fns...)
-		if err != nil {
-			return errors.Wrap(err, "error updating function package reference resource version")
+
+		// TODO : One corner case where user just updates the pkg reference with fnUpdate, but internally this new pkg reference
+		// references a diff env than the spec
+
+		// update function spec with new package metadata
+		function.Spec.Package.PackageRef = fv1.PackageRef{
+			Namespace:       newPkgMeta.Namespace,
+			Name:            newPkgMeta.Name,
+			ResourceVersion: newPkgMeta.ResourceVersion,
 		}
-	}
 
-	// TODO : One corner case where user just updates the pkg reference with fnUpdate, but internally this new pkg reference
-	// references a diff env than the spec
+		if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
+			console.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
+			function.Spec.Environment.Name = pkg.Spec.Environment.Name
+			function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
+		}
 
-	// update function spec with new package metadata
-	function.Spec.Package.PackageRef = fv1.PackageRef{
-		Namespace:       newPkgMeta.Namespace,
-		Name:            newPkgMeta.Name,
-		ResourceVersion: newPkgMeta.ResourceVersion,
-	}
-
-	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
-		console.Warn("Function's environment is different than package's environment, package's environment will be used for updating function")
-		function.Spec.Environment.Name = pkg.Spec.Environment.Name
-		function.Spec.Environment.Namespace = pkg.Spec.Environment.Namespace
+	} else {
+		function.Spec.Image = imageName
+		function.Spec.Environment = fv1.EnvironmentReference{}
+		function.Spec.Package = fv1.FunctionPackageRef{}
 	}
 
 	opts.function = function
@@ -254,9 +263,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().V1().Function().Update(opts.function)
 	if err != nil {
-		return errors.Wrap(err, "error updating function")
+		return errors.Wrap(err, "error updating function>>")
 	}
 
-	fmt.Printf("Function '%v' updated\n", opts.function.ObjectMeta.Name)
 	return nil
 }

@@ -48,6 +48,7 @@ const (
 	FnSpecializationTimeout = "specializationtimeout"
 	FnEnvironmentName       = "env"
 	FnPackageName           = "pkgname"
+	FnImageName             = "image"
 	FnEntrypoint            = "entrypoint"
 	FnBuildCmd              = "buildcmd"
 	FnSecret                = "secret"
