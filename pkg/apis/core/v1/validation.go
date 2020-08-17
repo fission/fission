@@ -494,14 +494,14 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 
 	result = multierror.Append(result, spec.FunctionReference.Validate())
 
-	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType)) {
+	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType), spec.MqtKind) {
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	} else {
-		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic) {
+		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
 		}
 
-		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic) {
+		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 		}
 	}

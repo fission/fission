@@ -33,7 +33,9 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
 		Optional: []flag.Flag{flag.MqtName, flag.MqtMQType, flag.MqtRespTopic,
 			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry, flag.MqtPollingInterval,
+			flag.MqtCooldownPeriod, flag.MqtMinReplicaCount, flag.MqtMaxReplicaCount, flag.MqtSecret,
+			flag.MqtMetadata, flag.MqtKind},
 	})
 
 	updateCmd := &cobra.Command{
@@ -45,7 +47,9 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
 		Optional: []flag.Flag{flag.MqtFnName, flag.MqtTopic, flag.MqtRespTopic, flag.MqtErrorTopic,
-			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.NamespaceTrigger},
+			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.NamespaceTrigger, flag.MqtPollingInterval,
+			flag.MqtCooldownPeriod, flag.MqtMinReplicaCount, flag.MqtMaxReplicaCount, flag.MqtMetadata,
+			flag.MqtSecret, flag.MqtKind},
 	})
 
 	deleteCmd := &cobra.Command{

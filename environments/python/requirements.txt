@@ -6,3 +6,4 @@ requests==2.20.0
 redis
 hiredis
 gevent
+sentry-sdk[flask]

@@ -45,7 +45,10 @@ func Register(mqType string, validator TopicValidator) {
 	topicValidators[mqType] = validator
 }
 
-func IsValidTopic(mqType string, topic string) bool {
+func IsValidTopic(mqType, topic, mqtKind string) bool {
+	if mqtKind == "keda" {
+		return true
+	}
 	validator, registered := topicValidators[mqType]
 	if !registered {
 		return false
@@ -53,7 +56,10 @@ func IsValidTopic(mqType string, topic string) bool {
 	return validator(topic)
 }
 
-func IsValidMessageQueue(mqType string) bool {
+func IsValidMessageQueue(mqType, mqtKind string) bool {
+	if mqtKind == "keda" {
+		return true
+	}
 	_, registered := topicValidators[mqType]
 	return registered
 }

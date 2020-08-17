@@ -59,8 +59,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.MqtFnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
+	mqtKind := input.String(flagkey.MqtKind)
+
 	mqType := (fv1.MessageQueueType)(input.String(flagkey.MqtMQType))
-	if !validator.IsValidMessageQueue((string)(mqType)) {
+	if !validator.IsValidMessageQueue((string)(mqType), mqtKind) {
 		return errors.New("Unsupported message queue type")
 	}
 
@@ -88,10 +90,36 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		contentType = "application/json"
 	}
 
-	err := checkMQTopicAvailability(mqType, topic, respTopic)
+	err := checkMQTopicAvailability(mqType, mqtKind, topic, respTopic)
 	if err != nil {
 		return err
 	}
+
+	pollingInterval := int32(input.Int(flagkey.MqtPollingInterval))
+	if pollingInterval < 0 {
+		return errors.New("Polling interval must be greater than or equal to 0")
+	}
+
+	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
+	if cooldownPeriod < 0 {
+		return errors.New("CooldownPeriod interval is the period to wait after the last trigger reported active before scaling the deployment back to 0, it must be greater than or equal to 0")
+	}
+
+	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
+	if minReplicaCount < 0 {
+		return errors.New("MinReplicaCount must be greater than or equal to 0")
+	}
+
+	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
+	if maxReplicaCount < 0 {
+		return errors.New("MaxReplicaCount must be greater than or equal to 0")
+	}
+
+	metadata := make(map[string]string)
+	metadataParams := input.StringSlice(flagkey.MqtMetadata)
+	_ = util.UpdateMapFromStringSlice(&metadata, metadataParams)
+
+	secret := input.String(flagkey.MqtSecret)
 
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
@@ -131,6 +159,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			ErrorTopic:       errorTopic,
 			MaxRetries:       maxRetries,
 			ContentType:      contentType,
+			PollingInterval:  &pollingInterval,
+			CooldownPeriod:   &cooldownPeriod,
+			MinReplicaCount:  &minReplicaCount,
+			MaxReplicaCount:  &maxReplicaCount,
+			Metadata:         metadata,
+			Secret:           secret,
+			MqtKind:          mqtKind,
 		},
 	}
 
@@ -162,9 +197,9 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func checkMQTopicAvailability(mqType fv1.MessageQueueType, topics ...string) error {
+func checkMQTopicAvailability(mqType fv1.MessageQueueType, mqtKind string, topics ...string) error {
 	for _, t := range topics {
-		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t) {
+		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t, mqtKind) {
 			return errors.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}

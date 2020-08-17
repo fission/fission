@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -60,7 +61,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	maxRetries := input.Int(flagkey.MqtMaxRetries)
 	fnName := input.String(flagkey.MqtFnName)
 	contentType := input.String(flagkey.MqtMsgContentType)
-
+	pollingInterval := int32(input.Int(flagkey.MqtPollingInterval))
+	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
+	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
+	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
+	metadataParams := input.StringSlice(flagkey.MqtMetadata)
+	secret := input.String(flagkey.MqtSecret)
+	mqtKind := input.String(flagkey.MqtKind)
 	// TODO : Find out if we can make a call to checkIfFunctionExists, in the same ns more importantly.
 
 	err = checkMQTopicAvailability(mqt.Spec.MessageQueueType, topic, respTopic)
@@ -81,7 +88,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.ErrorTopic = errorTopic
 		updated = true
 	}
-	if maxRetries > -1 {
+	if input.IsSet(flagkey.MqtMaxRetries) {
 		mqt.Spec.MaxRetries = maxRetries
 		updated = true
 	}
@@ -89,8 +96,37 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
 	}
-	if len(contentType) > 0 {
+	if input.IsSet(flagkey.MqtMsgContentType) {
 		mqt.Spec.ContentType = contentType
+		updated = true
+	}
+	if input.IsSet(flagkey.MqtPollingInterval) {
+		mqt.Spec.PollingInterval = &pollingInterval
+		updated = true
+	}
+	if input.IsSet(flagkey.MqtCooldownPeriod) {
+		mqt.Spec.CooldownPeriod = &cooldownPeriod
+		updated = true
+	}
+	if input.IsSet(flagkey.MqtMinReplicaCount) {
+		mqt.Spec.MinReplicaCount = &minReplicaCount
+		updated = true
+	}
+	if input.IsSet(flagkey.MqtMaxReplicaCount) {
+		mqt.Spec.MaxReplicaCount = &maxReplicaCount
+		updated = true
+	}
+
+	if input.IsSet(flagkey.MqtMetadata) {
+		updated = updated || util.UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+	}
+	if input.IsSet(flagkey.MqtSecret) {
+		mqt.Spec.Secret = secret
+		updated = true
+	}
+
+	if input.IsSet(flagkey.MqtKind) {
+		mqt.Spec.MqtKind = mqtKind
 		updated = true
 	}
 
