@@ -28,7 +28,6 @@ fn1=test-nodejs-env-1-$TEST_ID
 fn2=test-nodejs-env-2-$TEST_ID
 fn3=test-nodejs-env-3-$TEST_ID
 fn4=test-nodejs-env-4-$TEST_ID
-fn5=test-nodejs-env-5-$TEST_ID
 
 log "Creating v1api environment ..."
 log "NODE_RUNTIME_IMAGE = $NODE_RUNTIME_IMAGE"
