@@ -97,7 +97,9 @@ test_post_route() {
     url="http://$FISSION_ROUTER/$1"
     body=$2
     expect=$3
-
+    echo $url
+    echo $body
+    echo $expect
     set +e
     while true; do
         log "test_post_route: call curl"
