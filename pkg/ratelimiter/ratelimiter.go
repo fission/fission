@@ -1,6 +1,7 @@
 package ratelimiter
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -28,25 +29,26 @@ func MakeRateLimiter(r rate.Limit, b int, timeExpiry time.Duration) *RateLimiter
 		b:          b,
 		timeExpiry: timeExpiry,
 	}
-
+	log.Printf("RateLimiter created: %+v\n", limiter)
 	go limiter.cleanResources()
 	return limiter
 }
 
 func (rl *RateLimiter) cleanResources() {
 	for {
+		log.Printf("Ratelimiter resource cleaning service\n")
 		time.Sleep(30 * time.Second)
 		rl.mu.Lock()
-		defer rl.mu.Unlock()
 		for key, resource := range rl.resources {
 			if time.Since(resource.lastTime) > rl.timeExpiry {
 				delete(rl.resources, key)
 			}
 		}
+		rl.mu.Unlock()
 	}
 }
 
-func (rl *RateLimiter) addResource(resourceKey string) *rate.Limiter {
+func (rl *RateLimiter) getRateLimiter(resourceKey string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	res, exist := rl.resources[resourceKey]
@@ -62,19 +64,10 @@ func (rl *RateLimiter) addResource(resourceKey string) *rate.Limiter {
 	return res.limiter
 }
 
-func (rl *RateLimiter) getRateLimiter(resourceKey string) *rate.Limiter {
-	rl.mu.Lock()
-
-	res, exist := rl.resources[resourceKey]
-	if !exist {
-		rl.mu.Unlock()
-		return rl.addResource(resourceKey)
-	}
-	rl.mu.Unlock()
-	return res.limiter
-}
-
-func (rl *RateLimiter) RateLimit(resourceKey string, callbackFunc func(bool) (interface{}, error)) (interface{}, error) {
+func (rl *RateLimiter) RateLimit(resourceKey string,
+	callbackFunc func(bool) (interface{}, error)) (interface{}, error) {
+	log.Printf("RateLimit fun called 1")
 	limiter := rl.getRateLimiter(resourceKey)
+	log.Printf("RateLimit func Called ")
 	return callbackFunc(limiter.Allow())
 }
