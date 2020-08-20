@@ -56,7 +56,7 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
-	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/ratelimiter"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -227,7 +227,7 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, ratelimiter.MakeRateLimiter(5, 5, svcAddrUpdateTimeout))
 
 	resolver := makeFunctionReferenceResolver(fnStore)
 
