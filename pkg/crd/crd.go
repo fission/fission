@@ -31,6 +31,119 @@ const (
 	crdVersion   = "v1"
 )
 
+var (
+	functionValidation = &apiextensionsv1beta1.CustomResourceValidation{
+		OpenAPIV3Schema: &apiextensionsv1beta1.JSONSchemaProps{
+			Type:        "object",
+			Description: "Function in fission is something that Fission executes. It’s usually a module with one entry point, and that entry point is a function with a certain interface.",
+			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				"spec": {
+					Type:        "object",
+					Description: "Specification of the desired behaviour of the Function",
+					Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+						"environment": {
+							Type:        "object",
+							Description: "Environments are the language-specific parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
+						},
+						"package": {
+							Type:        "object",
+							Description: "A Package is a Fission object containing a Deployment Archive and a Source Archive (if any). A Package also references a certain environment.",
+						},
+						"secrets": {
+							Type:        "array",
+							Description: "Reference to a list of secrets.",
+							Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+								Schema: &apiextensionsv1beta1.JSONSchemaProps{
+									Type: "object",
+								},
+							},
+						},
+						"configmaps": {
+							Type:        "array",
+							Description: "Reference to a list of configmaps.",
+							Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+								Schema: &apiextensionsv1beta1.JSONSchemaProps{
+									Type: "object",
+								},
+							},
+						},
+						"resources": {
+							Type:        "object",
+							Description: "ResourceRequirements describes the compute resource requirements. This is only for newdeploy to set up resource limitation when creating deployment for a function.",
+						},
+						"invokeStrategy": {
+							Type:        "object",
+							Description: "InvokeStrategy is a set of controls which affect how function executes",
+						},
+						"functionTimeout": {
+							Type:        "integer",
+							Description: " FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete.\nThis is optional. If not specified default value will be taken as 60s",
+						},
+						"idletimeout": {
+							Type:        "object",
+							Description: "IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.",
+						},
+					},
+				},
+			},
+		},
+	}
+	environmentValidation = &apiextensionsv1beta1.CustomResourceValidation{
+		OpenAPIV3Schema: &apiextensionsv1beta1.JSONSchemaProps{
+			Type:        "object",
+			Description: "Environments are the language-specific parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
+			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				"spec": {
+					Type:        "object",
+					Description: "Specification of the desired behaviour of the Environment",
+					Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+						"version": {
+							Type:        "integer",
+							Description: "Version is the Environment API version",
+						},
+						"runtime": {
+							Type:        "object",
+							Description: "Runtime is configuration for running function, like container image etc.",
+						},
+						"builder": {
+							Type:        "object",
+							Description: "Builder is configuration for builder manager to launch environment builder to build source code into deployable binary.",
+						},
+						"allowedFunctionsPerContainer": {
+							Type:        "object",
+							Description: "Allowed functions per container. Allowed Values: single, multiple",
+						},
+						"allowAccessToExternalNetwork": {
+							Type:        "boolean",
+							Description: "To enable accessibility of external network for builder/function pod, set to 'true'.",
+						},
+						"resources": {
+							Type:        "object",
+							Description: "The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.",
+						},
+						"poolsize": {
+							Type:        "integer",
+							Description: "The initial pool size for environment",
+						},
+						"terminationGracePeriod": {
+							Type:        "integer",
+							Description: "The grace time for pod to perform connection draining before termination. The unit is in seconds.",
+						},
+						"keeparchive": {
+							Type:        "boolean",
+							Description: "KeepArchive is used by fetcher to determine if the extracted archive or unarchived file should be placed, which is then used by specialize handler.",
+						},
+						"imagepullsecret": {
+							Type:        "string",
+							Description: "ImagePullSecret is the secret for Kubernetes to pull an image from a private registry.",
+						},
+					},
+				},
+			},
+		},
+	}
+)
+
 // ensureCRD checks if the given CRD type exists, and creates it if
 // needed. (Note that this creates the CRD type; it doesn't create any
 // _instances_ of that type.)
@@ -58,6 +171,10 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 	return err
 }
 
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // Ensure CRDs
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
 	crds := []apiextensionsv1beta1.CustomResourceDefinition{
@@ -75,6 +192,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "functions",
 					Singular: "function",
 				},
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            functionValidation,
 			},
 		},
 		// Environments (function containers)
@@ -91,6 +210,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "environments",
 					Singular: "environment",
 				},
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            environmentValidation,
 			},
 		},
 		// HTTP triggers for functions
