@@ -21,6 +21,7 @@ import (
 )
 
 var (
+	// Function validation schema properties
 	functionSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
@@ -33,33 +34,36 @@ var (
 				"resources": {
 					Type:        "object",
 					Description: "ResourceRequirements describes the compute resource requirements. This is only for newdeploy to set up resource limitation when creating deployment for a function.",
+					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 				},
-				"invokeStrategy": {
-					Type:        "object",
-					Description: "InvokeStrategy is a set of controls which affect how function executes",
-				},
+				"InvokeStrategy": invokeStrategySchema,
 				"functionTimeout": {
 					Type:        "integer",
 					Description: " FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete.\nThis is optional. If not specified default value will be taken as 60s",
 				},
 				"idletimeout": {
-					Type:        "object",
+					Type:        "integer",
 					Description: "IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.",
 				},
 			},
 		},
 	}
+
+	// Function validation schema
 	functionSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
 		Description: "Function in fission is something that Fission executes. It’s usually a module with one entry point, and that entry point is a function with a certain interface.",
 		Properties:  functionSchemaProps,
 	}
+
+	// Function validation object
 	functionValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &functionSchema,
 	}
 )
 
 var (
+	// Environment validation schema properties
 	environmentSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
@@ -69,16 +73,14 @@ var (
 					Type:        "integer",
 					Description: "Version is the Environment API version",
 				},
-				"runtime": {
-					Type:        "object",
-					Description: "Runtime is configuration for running function, like container image etc.",
-				},
+				"runtime": runtimeSchema,
 				"builder": {
 					Type:        "object",
 					Description: "Builder is configuration for builder manager to launch environment builder to build source code into deployable binary.",
+					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 				},
 				"allowedFunctionsPerContainer": {
-					Type:        "object",
+					Type:        "string",
 					Description: "Allowed functions per container. Allowed Values: single, multiple",
 				},
 				"allowAccessToExternalNetwork": {
@@ -88,6 +90,7 @@ var (
 				"resources": {
 					Type:        "object",
 					Description: "The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.",
+					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 				},
 				"poolsize": {
 					Type:        "integer",
@@ -95,6 +98,7 @@ var (
 				},
 				"terminationGracePeriod": {
 					Type:        "integer",
+					Format:      "int64",
 					Description: "The grace time for pod to perform connection draining before termination. The unit is in seconds.",
 				},
 				"keeparchive": {
@@ -109,17 +113,22 @@ var (
 		},
 	}
 
+	// Environment validation schema
 	environmentSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
 		Description: "Environments are the language-specific parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
 		Properties:  environmentSchemaProps,
 	}
+
+	// Environment validation object
 	environmentValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &environmentSchema,
 	}
 )
 
 var (
+
+	// Package validation schema properties
 	packageSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
@@ -136,35 +145,21 @@ var (
 			},
 		},
 	}
+
+	// Package validation schema
 	packageSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
 		Description: "A Package is a Fission object containing a Deployment Archive and a Source Archive (if any). A Package also references a certain environment.",
 		Properties:  packageSchemaProps,
 	}
 
+	// Environment validation object
 	packageValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &packageSchema,
 	}
 )
 
-var (
-	checksumSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
-		"sum": {
-			Type:        "string",
-			Description: " Sum is hex encoded chechsum value.",
-		},
-		"type": {
-			Type:        "string",
-			Description: "ChecksumType specifies the checksum algorithm, such as sha256, used for a checksum.",
-		},
-	}
-	checksumSchema = apiextensionsv1beta1.JSONSchemaProps{
-		Type:        "object",
-		Description: "Checksum of package contents when the contents are stored outside the Package struct. Type is the checksum algorithm;  sha256 is the only currently supported one. Sum is hex  encoded.",
-		Properties:  checksumSchemaProps,
-	}
-)
-
+// Children of Package crd schema
 var (
 	archiveSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"type": {
@@ -190,6 +185,25 @@ var (
 )
 
 var (
+	checksumSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"sum": {
+			Type:        "string",
+			Description: " Sum is hex encoded chechsum value.",
+		},
+		"type": {
+			Type:        "string",
+			Description: "ChecksumType specifies the checksum algorithm, such as sha256, used for a checksum.",
+		},
+	}
+	checksumSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "Checksum of package contents when the contents are stored outside the Package struct. Type is the checksum algorithm;  sha256 is the only currently supported one. Sum is hex  encoded.",
+		Properties:  checksumSchemaProps,
+	}
+)
+
+// Children of Function crd schema
+var (
 	secretReferenceSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"namespace": {
 			Type:        "string",
@@ -206,7 +220,8 @@ var (
 		Properties:  secretReferenceSchemaProps,
 	}
 	secretReferenceSchema = apiextensionsv1beta1.JSONSchemaProps{
-		Type: "array",
+		Type:     "array",
+		Nullable: true,
 		Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
 			Schema: &secretReferenceObjectSchema,
 		},
@@ -231,9 +246,103 @@ var (
 	}
 
 	configMapReferenceSchema = apiextensionsv1beta1.JSONSchemaProps{
-		Type: "array",
+		Type:     "array",
+		Nullable: true,
 		Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
 			Schema: &configMapReferenceObjectSchema,
 		},
+	}
+)
+
+var (
+	executionStrategySchema = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"ExecutorType": {
+			Type:        "string",
+			Description: "ExecutorType is the executor type of a function used. Defaults to poolmgr. Available value: poolmgr, newdeploy",
+		},
+		"MinScale": {
+			Type:        "integer",
+			Description: "Only for newdeploy to set up minimum replicas of deployment.",
+		},
+		"MaxScale": {
+			Type:        "integer",
+			Description: "Only for newdeploy to set up maximum replicas of deployment.",
+		},
+		"TargetCPUPercent": {
+			Type:        "integer",
+			Description: "Only for newdeploy to set up target CPU utilization of HPA.",
+		},
+		"SpecializationTimeout": {
+			Type:        "integer",
+			Description: "Timeout setting for executor to wait for pod specialization.",
+		},
+	}
+	invokeStrategySchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"ExecutionStrategy": {
+			Type:        "object",
+			Description: "ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.",
+			Properties:  executionStrategySchema,
+		},
+		"StrategyType": {
+			Type:        "string",
+			Description: "StrategyType is the strategy type of a function.",
+		},
+	}
+	invokeStrategySchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "InvokeStrategy is a set of controls over how the function executes. It affects the performance and resource usage of the function. An InvokeStrategy is of one of two types: ExecutionStrategy, which controls low-level parameters such as which ExecutorType to use, when to autoscale, minimum and maximum number of running instances, etc.",
+		Properties:  invokeStrategySchemaProps,
+	}
+)
+
+// Children of Environment crd schema
+var (
+	runtimeSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"image": {
+			Type:        "string",
+			Description: "Image for containing the language runtime.",
+		},
+		"container": {
+			Type:        "object",
+			Description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy\n You can set either PodSpec or Container, but not both.",
+			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
+		},
+		"podspec": {
+			Type:        "object",
+			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.",
+			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
+		},
+	}
+	runtimeSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "Runtime is configuration for running function, like container image etc.",
+		Properties:  runtimeSchemaProps,
+	}
+)
+var (
+	builderSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"image": {
+			Type:        "string",
+			Description: "Image for containing the language runtime.",
+		},
+		"command": {
+			Type:        "string",
+			Description: "(Optional) Default build command to run for this build environment.",
+		},
+		"container": {
+			Type:        "object",
+			Description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy\n You can set either PodSpec or Container, but not both.",
+			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
+		},
+		"podspec": {
+			Type:        "object",
+			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.",
+			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
+		},
+	}
+	builderSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "(Optional) Builder is configuration for builder manager to launch environment builder to build source code into deployable binary.",
+		Properties:  builderSchemaProps,
 	}
 )
