@@ -33,15 +33,15 @@ helm_setup() {
 }
 export -f helm_setup
 
-##gcloud_login() {
-#    KEY=${HOME}/gcloud-service-key.json
-#    if [ ! -f $KEY ]
-#    then
-#	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
-#    fi
-#
-#    gcloud auth activate-service-account --key-file $KEY
-#}
+gcloud_login() {
+   KEY=${HOME}/gcloud-service-key.json
+   if [ ! -f $KEY ]
+   then
+	echo $FISSION_CI_SERVICE_ACCOUNT | base64 -d - > $KEY
+   fi
+
+   gcloud auth activate-service-account --key-file $KEY
+}
 
 getVersion() {
     echo $(git rev-parse HEAD)
@@ -65,18 +65,31 @@ setupCIBuildEnv() {
     export ROUTER_SERVICE_TYPE=LoadBalancer
     export SERVICE_TYPE=LoadBalancer
     export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
+
+    if [ "$IS_KIND" -eq "true" ]
+    then
+        export REPO=localhost:5000
+        export TAG=test
+    fi
 }
 
 setupIngressController() {
     # set up NGINX ingress controller
-    kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user $(gcloud config get-value account) || true
+    
+    if [ "$IS_KIND" -ne "true" ]
+    then 
+        kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user $(gcloud config get-value account) || true
+    fi
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
 }
 
 removeIngressController() {
     # set up NGINX ingress controller
-    kubectl delete clusterrolebinding cluster-admin-binding || true
+    if [ "$IS_KIND" -ne "true" ]
+    then
+        kubectl delete clusterrolebinding cluster-admin-binding || true
+    fi
     kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/provider/cloud-generic.yaml || true
     kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/nginx-0.25.1/deploy/static/mandatory.yaml || true
 }
@@ -85,7 +98,7 @@ build_and_push_go_mod_cache_image() {
     image_tag=$1
     travis_fold_start go_mod_cache_image $image_tag
 
-    #gcloud_login
+    gcloud_login
 
     if ! gcloud docker -- pull $image_tag >/dev/null 2>&1 ; then
       docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .

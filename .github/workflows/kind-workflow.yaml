@@ -2,26 +2,31 @@ name: kind-workflow
 on:
   pull_request:
     branches:
-      - fission-github-actions
-    types: [labeled]
+      - *
+    types: [published, created, edited]
 jobs:
   fission-on-kind:
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'kind'
     steps:
-      - name: Free up some space
+      name: Cache paths
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/bin/skaffold
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+
+    steps:
+      - name: Free up space from the instance
         run: |
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - name: Checkout fisson from master
+      - name: Checkout the code
         uses: actions/checkout@v2
-        with:
-          ref: fission-github-actions
           
       - name: Install kind cluster with registry
         run: |
-          cd /home/runner/work/fission/fission 
+          cd /home/runner/work/fission/fission/test/kind 
           ./kind-with-registry.sh 
 
       - name: Setup kubectl to kind
@@ -31,17 +36,14 @@ jobs:
           kubectl get ns
           kubectl create namespace fission
 
-      - name: Testing
+      - name: Printing information before calling test scripts 
         run: |
+          echo "kubectl cluster-info:"
           kubectl cluster-info
+          echo "kubectl get pods -n kube-system:"
           kubectl get pods -n kube-system
           echo "current-context:" $(kubectl config current-context)
           echo "environment-kubeconfig:" ${KUBECONFIG}    
-
-      # - name: Run pod
-      #   run: |
-      #     cd /home/runner/work/fission/fission 
-      #     ./test.sh 
 
       - name: Set up Go 1.12
         uses: actions/setup-go@v1
@@ -50,13 +52,10 @@ jobs:
 
       - name: Install correct helm version
         run: |
+          sudo snap install helm --classic
+          echo "Helm version is:"
           helm version
-          curl -LO https://git.io/get_helm.sh
-          chmod 700 get_helm.sh
-          ./get_helm.sh -v v2.16.6
-          kubectl create serviceaccount --namespace kube-system tiller
-          kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-          helm init --service-account tiller
+
 
       - name: Download skaffold
         run: |
@@ -77,7 +76,7 @@ jobs:
           pushd charts/fission-all/
           helm dep update
           popd
-          TAG=213 skaffold run -v debug
+          TAG=latest skaffold run -v debug
 
       - name: Verify the pods
         if: success() || failure()
@@ -88,16 +87,20 @@ jobs:
 
       - name: Before_script
         if: success() || failure()
+        with:
+          IS_KIND: true
         run: |
           cd /home/runner/work/fission/fission
           go mod download
-          # ./hack/verify-staticcheck.sh
+          #./hack/verify-staticcheck.sh
           helm lint charts/fission-all/ charts/fission-core/
           ./hack/runtests.sh
           ./test/kind_build.sh
 
       - name: Upgrade steps
         if: success() || failure()
+        with:
+          IS_KIND: true
         run: |
           export TRAVIS_EVENT_TYPE=$GITHUB_EVENT_NAME
           export TRAVIS_BUILD_ID=$GITHUB_RUN_ID
