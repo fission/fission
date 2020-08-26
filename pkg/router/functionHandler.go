@@ -148,9 +148,6 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
 // if it returned an error.
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Set forwarded host header if not exists
-	roundTripper.addForwardedHostHeader(req)
-
 	// set the timeout for transport context
 	transport := roundTripper.getDefaultTransport()
 	ocRoundTripper := &ochttp.Transport{Base: transport}
@@ -184,6 +181,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var retryCounter int
 	var err error
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
+
+	// Do NOT assign returned request to "req"
+	// because the request used in the last round
+	// will be canceled when calling setContext.
+	newReq := roundTripper.setContext(req)
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -220,20 +222,20 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 			// modify the request to reflect the service url
 			// this service url may have come from the cache lookup or from executor response
-			req.URL.Scheme = roundTripper.serviceUrl.Scheme
-			req.URL.Host = roundTripper.serviceUrl.Host
+			newReq.URL.Scheme = roundTripper.serviceUrl.Scheme
+			newReq.URL.Host = roundTripper.serviceUrl.Host
 
 			// To keep the function run container simple, it
 			// doesn't do any routing.  In the future if we have
 			// multiple functions per container, we could use the
 			// function metadata here.
 			// leave the query string intact (req.URL.RawQuery)
-			req.URL.Path = "/"
+			newReq.URL.Path = "/"
 
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)
-			req.Host = roundTripper.serviceUrl.Host
+			newReq.Host = roundTripper.serviceUrl.Host
 		}
 
 		// over-riding default settings.
@@ -242,11 +244,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAliveTime,
 		}).DialContext
 
-		// Do NOT assign returned request to "req"
-		// because the request used in the last round
-		// will be canceled when calling setContext.
-		newReq := roundTripper.setContext(req)
-
 		// forward the request to the function service
 		resp, err := ocRoundTripper.RoundTrip(newReq)
 		if err == nil {
@@ -254,7 +251,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			return resp, nil
 		}
 
-		roundTripper.totalRetry += 1
+		roundTripper.totalRetry++
 
 		if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			// return here if we are in the last round
@@ -276,6 +273,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// if transport.RoundTrip returns a non-network dial error (e.g. "context canceled"), then relay it back to user
 		if !isNetDialErr {
+			roundTripper.logger.Error("encountered a non-network dial error", zap.Error(err))
 			return resp, err
 		}
 
@@ -345,7 +343,7 @@ func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Re
 	// that user aborts connection before timeout. Otherwise,
 	// the request won't be canceled until the deadline exceeded
 	// which may be a potential security issue.
-	ctx, closeCtx := context.WithTimeout(req.Context(), roundTripper.funcTimeout)
+	ctx, closeCtx := context.WithTimeout(context.Background(), roundTripper.funcTimeout)
 	roundTripper.closeContextFunc = &closeCtx
 
 	return req.WithContext(ctx)
@@ -391,6 +389,8 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 			// explicitly disable User-Agent so it's not set to default value
 			req.Header.Set("User-Agent", "")
 		}
+		// Set forwarded host header if not exists
+		fh.addForwardedHostHeader(req)
 	}
 
 	fnTimeout := fh.functionTimeoutMap[fh.function.ObjectMeta.GetUID()]
@@ -466,7 +466,7 @@ func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []Fun
 }
 
 // addForwardedHostHeader add "forwarded host" to request header
-func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Request) {
+func (fh *functionHandler) addForwardedHostHeader(req *http.Request) {
 	// for more detailed information, please visit:
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
 
@@ -478,12 +478,12 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 	// Format of req.Host is <host>:<port>
 	// We need to extract hostname from it, than
 	// check whether a host is ipv4 or ipv6 or FQDN
-	reqUrl := fmt.Sprintf("%s://%s", req.Proto, req.Host)
-	u, err := url.Parse(reqUrl)
+	reqURL := fmt.Sprintf("%s://%s", req.Proto, req.Host)
+	u, err := url.Parse(reqURL)
 	if err != nil {
-		roundTripper.logger.Error("error parsing request url while adding forwarded host headers",
+		fh.logger.Error("error parsing request url while adding forwarded host headers",
 			zap.Error(err),
-			zap.String("url", reqUrl))
+			zap.String("url", reqURL))
 		return
 	}
 
@@ -572,7 +572,7 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 	if !ok {
 		return nil, false, errors.Errorf("Received unknown service record type")
 	}
-
+	fh.logger.Info(fmt.Sprintf("Service URL %v", record.svcUrl))
 	return record.svcUrl, record.fromCache, nil
 }
 
