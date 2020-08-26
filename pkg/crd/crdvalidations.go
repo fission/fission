@@ -27,14 +27,13 @@ var (
 			Type:        "object",
 			Description: "Specification of the desired behaviour of the Function",
 			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"environment": environmentSchema,
-				"package":     packageSchema,
+				"environment": environmentReferenceSchema,
+				"package":     functionPackageRefSchema,
 				"secrets":     secretReferenceSchema,
 				"configmaps":  configMapReferenceSchema,
 				"resources": {
 					Type:        "object",
 					Description: "ResourceRequirements describes the compute resource requirements. This is only for newdeploy to set up resource limitation when creating deployment for a function.",
-					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 				},
 				"InvokeStrategy": invokeStrategySchema,
 				"functionTimeout": {
@@ -74,11 +73,7 @@ var (
 					Description: "Version is the Environment API version",
 				},
 				"runtime": runtimeSchema,
-				"builder": {
-					Type:        "object",
-					Description: "Builder is configuration for builder manager to launch environment builder to build source code into deployable binary.",
-					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
-				},
+				"builder": builderSchema,
 				"allowedFunctionsPerContainer": {
 					Type:        "string",
 					Description: "Allowed functions per container. Allowed Values: single, multiple",
@@ -90,7 +85,6 @@ var (
 				"resources": {
 					Type:        "object",
 					Description: "The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.",
-					Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 				},
 				"poolsize": {
 					Type:        "integer",
@@ -134,7 +128,7 @@ var (
 			Type:        "object",
 			Description: "Specification of the desired behaviour of the package",
 			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"environment": environmentSchema,
+				"environment": environmentReferenceSchema,
 				"source":      archiveSchema,
 				"deployment":  archiveSchema,
 				"configmaps":  configMapReferenceSchema,
@@ -186,13 +180,13 @@ var (
 
 var (
 	checksumSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
-		"sum": {
-			Type:        "string",
-			Description: " Sum is hex encoded chechsum value.",
-		},
 		"type": {
 			Type:        "string",
 			Description: "ChecksumType specifies the checksum algorithm, such as sha256, used for a checksum.",
+		},
+		"sum": {
+			Type:        "string",
+			Description: " Sum is hex encoded chechsum value.",
 		},
 	}
 	checksumSchema = apiextensionsv1beta1.JSONSchemaProps{
@@ -203,6 +197,57 @@ var (
 )
 
 // Children of Function crd schema
+var (
+	environmentReferenceSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"namespace": {
+			Type:        "string",
+			Description: "Namespace for corresponding Environment",
+		},
+		"name": {
+			Type:        "string",
+			Description: "Name of the Environment to use",
+		},
+	}
+	environmentReferenceSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "Reference to Fission Environment type custom resource.",
+		Properties:  environmentReferenceSchemaProps,
+	}
+)
+
+var (
+	packageRefSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"namespace": {
+			Type:        "string",
+			Description: "Namespace for corresponding Package",
+		},
+		"name": {
+			Type:        "string",
+			Description: "Name of the Package to use",
+		},
+		"resourceversion": {
+			Type:        "string",
+			Description: "Including resource version in the reference forces the function to be updated on package update, making it possible to cache the function based on its metadata.",
+		},
+	}
+	functionPackageRefSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"packageref": {
+			Type:        "object",
+			Description: "Package Reference",
+			Properties:  packageRefSchemaProps,
+		},
+		"functionName": {
+			Type:        "string",
+			Description: "FunctionName specifies a specific function within the package. This allows functions to share packages, by having different functions within the same package.",
+		},
+	}
+	functionPackageRefSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "FunctionPackageRef includes the reference to the package.",
+		Properties:  functionPackageRefSchemaProps,
+	}
+)
+
 var (
 	secretReferenceSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"namespace": {
@@ -305,12 +350,10 @@ var (
 		"container": {
 			Type:        "object",
 			Description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy\n You can set either PodSpec or Container, but not both.",
-			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 		},
 		"podspec": {
 			Type:        "object",
 			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.",
-			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 		},
 	}
 	runtimeSchema = apiextensionsv1beta1.JSONSchemaProps{
@@ -332,12 +375,10 @@ var (
 		"container": {
 			Type:        "object",
 			Description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy\n You can set either PodSpec or Container, but not both.",
-			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 		},
 		"podspec": {
 			Type:        "object",
 			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.",
-			Properties:  map[string]apiextensionsv1beta1.JSONSchemaProps{},
 		},
 	}
 	builderSchema = apiextensionsv1beta1.JSONSchemaProps{
@@ -346,3 +387,7 @@ var (
 		Properties:  builderSchemaProps,
 	}
 )
+
+func boolPtr(b bool) *bool {
+	return &b
+}
