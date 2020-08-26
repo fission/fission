@@ -249,6 +249,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// forward the request to the function service
 		resp, err := ocRoundTripper.RoundTrip(newReq)
+		roundTripper.logger.Info(fmt.Sprintf("Response Received, Response: %v, Error %v", resp, err))
 		if err == nil {
 			// return response back to user
 			return resp, nil
