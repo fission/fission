@@ -39,7 +39,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
-	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/ratelimiter"
 )
 
 const (
@@ -58,7 +58,7 @@ type (
 		fnWeightDistributionList []FunctionWeightDistribution
 		tsRoundTripperParams     *tsRoundTripperParams
 		isDebugEnv               bool
-		svcAddrUpdateThrottler   *throttler.Throttler
+		svcAddrUpdateThrottler   *ratelimiter.RateLimiter
 		functionTimeoutMap       map[k8stypes.UID]int
 	}
 
@@ -526,7 +526,7 @@ func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFro
 
 	// Use throttle to limit the total amount of requests sent
 	// to the executor to prevent it from overloaded.
-	recordObj, err := fh.svcAddrUpdateThrottler.RunOnce(
+	recordObj, err := fh.svcAddrUpdateThrottler.RateLimit(
 		crd.CacheKey(fnMeta),
 		func(firstToTheLock bool) (interface{}, error) {
 			var u *url.URL
