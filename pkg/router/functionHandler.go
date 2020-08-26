@@ -186,6 +186,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// because the request used in the last round
 	// will be canceled when calling setContext.
 	newReq := roundTripper.setContext(req)
+	roundTripper.logger.Info(fmt.Sprintf("RoundTripper: %+v", roundTripper))
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -193,6 +194,8 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		if retryCounter == 0 {
 			// get function service url from cache or executor
 			roundTripper.serviceUrl, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry()
+			roundTripper.logger.Info(fmt.Sprintf("From getServiceEntry, serviceURL: %v", roundTripper.serviceUrl))
+
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -510,6 +513,7 @@ func (fh *functionHandler) addForwardedHostHeader(req *http.Request) {
 
 // getServiceEntry is a short-hand for developers to get service url entry that may returns from executor or cache
 func (fh *functionHandler) getServiceEntry() (serviceUrl *url.URL, serviceUrlFromCache bool, err error) {
+	fh.logger.Info("Get Service Called")
 	// try to find service url from cache first
 	serviceUrl, err = fh.getServiceEntryFromCache()
 	if err == nil && serviceUrl != nil {
