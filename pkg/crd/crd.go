@@ -58,10 +58,6 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 	return err
 }
 
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 // Ensure CRDs
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
 	crds := []apiextensionsv1beta1.CustomResourceDefinition{
@@ -179,8 +175,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "packages",
 					Singular: "package",
 				},
-				PreserveUnknownFields: boolPtr(false),
-				Validation:            packageValidation,
+				Validation: packageValidation,
 			},
 		},
 		// CanaryConfig: configuration for canary deployment of functions
