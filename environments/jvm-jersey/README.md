@@ -26,6 +26,8 @@ called USER.  Build and push the image to the the registry:
    docker build -t USER/jvm-env-jersey . && docker push USER/jvm-env-jersey
 ```
 
+You can also create environment image based on JVM 11 using Dockerfile-11 in this directory.
+
 ## Using the image in fission
 
 You can add this customized image to fission with "fission env
@@ -63,4 +65,4 @@ JVM Jersey environment uses an embedded Jetty HTTP server by default, as can be 
 
 ## Java and JVM builder
 
-JVM environment builder is based on OpenJDK8 and Maven 3.5.4 version. The default build command runs `mvn clean package` and uses the target/*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to ${DEPLOY_PKG}.
+There are two JVM environment builder based on OpenJDK8 and OpenJDK 11 and using Maven 3.5.4. The default build command runs `mvn clean package` and uses the target/*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to ${DEPLOY_PKG}.

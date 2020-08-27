@@ -186,6 +186,7 @@ export PYTHON_BUILDER_IMAGE=${PYTHON_BUILDER_IMAGE:-fission/python-builder}
 export GO_RUNTIME_IMAGE=${GO_RUNTIME_IMAGE:-fission/go-env-1.12}
 export GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-fission/go-builder-1.12}
 export JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-fission/jvm-env}
+export JVM_JERSEY_RUNTIME_IMAGE=${JVM_JERSEY_RUNTIME_IMAGE:-fission/jvm-jersey-env}
 export JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-fission/jvm-builder}
 export NODE_RUNTIME_IMAGE=${NODE_RUNTIME_IMAGE:-fission/node-env}
 export NODE_BUILDER_IMAGE=${NODE_BUILDER_IMAGE:-fission/node-env-builder}

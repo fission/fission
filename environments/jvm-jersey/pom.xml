@@ -4,8 +4,8 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>io.fission</groupId>
-	<artifactId>env-java-jersey</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<artifactId>env-jvm-jersey</artifactId>
+	<version>0.0.1</version>
 
 	<properties>
 		<java.source.level>1.6</java.source.level>
@@ -15,7 +15,7 @@
 	<dependencies>
 		<dependency>
 			<groupId>io.fission</groupId>
-			<artifactId>fission-java-jersey</artifactId>
+			<artifactId>fission-jvm-jersey</artifactId>
 			<version>0.0.1</version>			
 		</dependency>
 		<dependency>
@@ -83,13 +83,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
-	<!-- Adding Sonatype repository to pull snapshots -->
-	<repositories>
-		<repository>
-			<id>fission-java-core</id>
-			<name>fission-java-jersey-snapshot</name>
-			<url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-		</repository>
-	</repositories>
 </project>

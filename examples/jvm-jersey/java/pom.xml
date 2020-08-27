@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>io.fission</groupId>
 	<artifactId>jersey-hello-world</artifactId>
-	<version>1.0-SNAPSHOT</version>
+	<version>0.0.1</version>
 	<packaging>jar</packaging>
 
 	<name>hello-world</name>
@@ -12,12 +12,14 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.source>1.6</maven.compiler.source>
+		<maven.compiler.target>1.6</maven.compiler.target>
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>io.fission</groupId>
-			<artifactId>fission-java-core</artifactId>
+			<artifactId>fission-jvm-jersey</artifactId>
 			<version>0.0.1</version>
 			<scope>provided</scope>
 		</dependency>
@@ -70,4 +72,5 @@
 			</plugin>
 		</plugins>
 	</build>
+
 </project>
