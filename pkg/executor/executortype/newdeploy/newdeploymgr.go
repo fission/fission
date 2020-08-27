@@ -718,7 +718,7 @@ func (deploy *NewDeploy) fnDelete(fn *fv1.Function) error {
 	_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
 	if err != nil {
 		multierr = multierror.Append(multierr,
-			errors.Wrap(err, fmt.Sprintf("error deleting the function from cache")))
+			errors.Wrap(err, "error deleting the function from cache"))
 	}
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the

@@ -14,11 +14,19 @@ then
 fi
 
 # Get staticcheck
-STATICCHECK_VERSION=2019.2.3
+STATICCHECK_VERSION=2020.1.4
+
+if [ "$(uname -m)" == "aarch64" ]
+then
+    arch="arm64"
+else
+    arch="amd64"
+fi
+
 if [ ! -f $TOOL_DIR/staticcheck ] || (staticcheck -version | grep -v $STATICCHECK_VERSION)
 then
-    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_amd64.tar.gz
-    tar xzvf staticcheck_linux_amd64.tar.gz
+    curl -LO https://github.com/dominikh/go-tools/releases/download/${STATICCHECK_VERSION}/staticcheck_linux_${arch}.tar.gz
+    tar xzvf staticcheck_linux_${arch}.tar.gz
     mv staticcheck/staticcheck $TOOL_DIR/staticcheck
 fi
 
@@ -33,9 +41,9 @@ fi
 HELM_VERSION=2.14.0
 if [ ! -f $K8SCLI_DIR/helm ] || (helm version --client | grep -v $HELM_VERSION)
 then
-    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v${HELM_VERSION}-linux-amd64.tar.gz
+    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v${HELM_VERSION}-linux-${arch}.tar.gz
     tar xzvf helm-*.tar.gz
-    mv linux-amd64/helm $K8SCLI_DIR/helm
+    mv linux-${arch}/helm $K8SCLI_DIR/helm
 fi
 
 # If we don't have gcloud credentials, bail out of these tests.
@@ -48,7 +56,7 @@ fi
 # Get kubectl
 if [ ! -f $K8SCLI_DIR/kubectl ]
 then
-   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/${arch}/kubectl
    chmod +x ./kubectl
    mv kubectl $K8SCLI_DIR/kubectl
 fi

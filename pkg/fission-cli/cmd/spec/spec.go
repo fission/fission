@@ -441,7 +441,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 		}
 
 		if len(t.Spec.Host) > 0 {
-			warnings = append(warnings, (fmt.Sprintf("Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details")))
+			warnings = append(warnings, "Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details")
 		}
 		result = multierror.Append(result, t.Validate())
 	}
@@ -475,12 +475,12 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	for _, e := range fr.Environments {
 		environments[fmt.Sprintf("%s:%s", e.ObjectMeta.Name, e.ObjectMeta.Namespace)] = struct{}{}
 		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
-			warnings = append(warnings, fmt.Sprintf("You have provided both - container spec and pod spec and while merging the pod spec will take precedence."))
+			warnings = append(warnings, "You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 		}
 		// Unlike CLI can change the environment version silently,
 		// we have to warn the user to modify spec file when this takes place.
 		if e.Spec.Poolsize != 3 && e.Spec.Version < 3 {
-			warnings = append(warnings, fmt.Sprintf("Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool."))
+			warnings = append(warnings, "Poolsize can only be configured when environment version equals to 3, default poolsize 3 will be used for creating environment pool.")
 		}
 	}
 
@@ -493,7 +493,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 			warnings = append(warnings, fmt.Sprintf("SpecializationTimeout in function spec.InvokeStrategy.ExecutionStrategy should be a value equal to or greater than %v", fv1.DefaultSpecializationTimeOut))
 		}
 		if f.Spec.FunctionTimeout <= 0 {
-			warnings = append(warnings, fmt.Sprintf("FunctionTimeout in function spec should be a field which should have a value greater than 0"))
+			warnings = append(warnings, "FunctionTimeout in function spec should be a field which should have a value greater than 0")
 		}
 	}
 	// (ErrorOrNil returns nil if there were no errors appended.)
