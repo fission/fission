@@ -883,7 +883,9 @@ spec:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: KAFKA_IMAGE
-          value: {{ .Values.mqt_keda.connector_images.kafka }}
+          value: "{{ .Values.mqt_keda.connector_images.kafka.image }}:{{ .Values.mqt_keda.connector_images.kafka.tag }}"
+        - name: RABBITMQ_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.rabbitmq.image }}:{{ .Values.mqt_keda.connector_images.rabbitmq.tag }}"
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
