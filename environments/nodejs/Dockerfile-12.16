@@ -1,6 +1,3 @@
-# A docker image for the func container.
-
-# default variant is the official alpine node image (much smaller than the standard image)
 FROM node:12.16-alpine3.11
 
 ARG NODE_ENV
