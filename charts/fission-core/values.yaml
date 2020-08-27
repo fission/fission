@@ -44,7 +44,7 @@ fetcher:
   image: fission/fetcher
   ## Fetcher image version
   imageTag: 1.10.0
-  
+
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
   resource:
@@ -64,21 +64,21 @@ router:
   deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
-  
+
   ## Display endpoint access logs
   ## To be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.
   displayAccessLog: false
-  
+
   ## Add annotations for router
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
-  
+
   ## For router to match encoded path.
   ## If true, "/foo%2Fbar" will match the path "/{var}";
   ## Otherwise, it will match the path "/foo/bar".
   useEncodedPath: false
-  
+
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.
@@ -144,7 +144,7 @@ persistence:
   accessMode: ReadWriteOnce
   size: 8Gi
 
-## Extend the container specs for the core fission pods. 
+## Extend the container specs for the core fission pods.
 ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
 ## For example:
 ## extraCoreComponentPodConfig:
@@ -185,7 +185,7 @@ debugEnv: false
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
   enabled: false
-  
+
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
   serviceEndpoint: ""
@@ -203,8 +203,8 @@ mqt_keda:
   enabled: false
   connector_images:
     kafka:
-      image: fission/keda-kafka
+      image: fission/keda-kafka-http-connector
       tag: 1
     rabbitmq:
-      image: fission/keda-rabbitmq
+      image: fission/keda-rabbitmq-http-connector
       tag: 1

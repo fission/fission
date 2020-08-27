@@ -51,7 +51,7 @@ fetcher:
   image: fission/fetcher
   ## Fetcher image version
   imageTag: 1.10.0
-  
+
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
   resource:
@@ -69,7 +69,7 @@ logger:
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
   fluentdImageTag: 1.5.1
-  
+
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
   ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
@@ -81,7 +81,7 @@ logger:
   ## Only required in some clusters and when enableSecurityContext is true
   podSecurityPolicy:
     enabled: false
-   
+
     ## Configure additional capabilities
     additionalCapabilities:
     # example values for linkerd
@@ -96,21 +96,21 @@ router:
   deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
-  
+
   ## Display endpoint access logs
   ## To be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.
   displayAccessLog: false
-  
+
   ## Add annotations for router
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
-  
+
   ## For router to match encoded path.
   ## If true, "/foo%2Fbar" will match the path "/{var}";
   ## Otherwise, it will match the path "/foo/bar".
   useEncodedPath: false
-  
+
   roundTrip:
     ## If true, router will disable the HTTP keep-alive which result in performance degradation.
     ## But it ensures that router can redirect new coming requests to new function pods.
@@ -151,7 +151,7 @@ nats:
 
   # Address of NATS server (domain:port)
   # change from default for external NATS
-  hostaddress: 'nats-streaming:4222'
+  hostaddress: "nats-streaming:4222"
 
   # Authorization token to use with NATS
   authToken: "defaultFissionAuthToken"
@@ -159,34 +159,35 @@ nats:
   # NATS streaming clusterID
   clusterID: "fissionMQTrigger"
 
-  # Client name registered with NATS streaming 
+  # Client name registered with NATS streaming
   clientID: "fission"
 
-  # Queue group registered with NATS streaming 
+  # Queue group registered with NATS streaming
   queueGroup: "fission-messageQueueNatsTrigger"
 
   # The image to use for NATS streaming server
   streamingserver:
     image: nats-streaming
-    
+
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
   enabled: false
   key: ""
   accountName: ""
-  
+
 ## Kafka: enable and configure the details
 kafka:
   enabled: false
-  # note: below link is only for reference. 
-  # Please use the brokers link for your kafka here. 
-  brokers: 'broker.kafka:9092' # or your-bootstrap-server.kafka:9092/9093
+  # note: below link is only for reference.
+  # Please use the brokers link for your kafka here.
+  brokers: "broker.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
   authentication:
     tls:
       enabled: false
-      caCert: '' # path to certificate containing public key of CA authority
-      userCert: '' # path to certificate containing public key of the user signed by CA authority
-      userKey: '' # path to private key of the user
+      caCert: "" # path to certificate containing public key of CA authority
+      userCert: "" # path to certificate containing public key of the user signed by CA authority
+      userKey: "" # path to private key of the user
+
 
   # brokers: 'my-broker.kafka:9092' # or my-bootstrap-server.kafka:9092/9093
   # Sample config for authentication
@@ -241,7 +242,7 @@ persistence:
   accessMode: ReadWriteOnce
   size: 8Gi
 
-## Extend the container specs for the core fission pods. 
+## Extend the container specs for the core fission pods.
 ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
 ## For example:
 ## extraCoreComponentPodConfig:
@@ -270,7 +271,7 @@ analyticsNonHelmInstall: false
 heapster: false
 
 ## Enable InfluxDB
-influxdb: 
+influxdb:
   enabled: true
   image: influxdb:1.7
 
@@ -293,7 +294,7 @@ debugEnv: false
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
   enabled: true
-  
+
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
   serviceEndpoint: ""
@@ -311,8 +312,8 @@ mqt_keda:
   enabled: false
   connector_images:
     kafka:
-      image: fission/keda-kafka
+      image: fission/keda-kafka-http-connector
       tag: 1
     rabbitmq:
-      image: fission/keda-rabbitmq
+      image: fission/keda-rabbitmq-http-connector
       tag: 1
