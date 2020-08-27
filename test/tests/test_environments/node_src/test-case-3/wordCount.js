@@ -1,8 +1,8 @@
 module.exports = async function (context) {
-  // var splitStringArray = context.request.body["sentence"].split(" ");
+  var splitStringArray = context.request.split(" ");
 
   return {
     status: 200,
-    body: context.request.body,
+    body: splitStringArray.length,
   };
 };
