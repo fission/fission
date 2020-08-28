@@ -97,7 +97,6 @@ test_post_route() {
     url="http://$FISSION_ROUTER/$1"
     body=$2
     expect=$3
-
     set +e
     while true; do
         log "test_post_route: call curl"
@@ -189,5 +188,6 @@ export GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE:-fission/go-builder-1.12}
 export JVM_RUNTIME_IMAGE=${JVM_RUNTIME_IMAGE:-fission/jvm-env}
 export JVM_BUILDER_IMAGE=${JVM_BUILDER_IMAGE:-fission/jvm-builder}
 export NODE_RUNTIME_IMAGE=${NODE_RUNTIME_IMAGE:-fission/node-env}
+export NODE_BUILDER_IMAGE=${NODE_BUILDER_IMAGE:-fission/node-env-builder}
 export TS_RUNTIME_IMAGE=${TS_RUNTIME_IMAGE:-fission/tensorflow-serving-env}
 

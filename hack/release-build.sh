@@ -133,6 +133,7 @@ build_all_envs() {
     # call with version, env dir, image name base, image name variant
     build_env_image "$version" "nodejs"               "node-env"            ""
     build_env_image "$version" "nodejs"               "node-env"            "debian"
+    build_env_image "$version" "nodejs"               "node-env"            "12.16"
     build_env_image "$version" "binary"               "binary-env"          ""
     build_env_image "$version" "dotnet"               "dotnet-env"          ""
     build_env_image "$version" "dotnet20"             "dotnet20-env"        ""
@@ -188,6 +189,7 @@ build_all_env_builders() {
     build_env_builder_image "$version" "go"       "go-builder"       "1.14"
     build_env_builder_image "$version" "jvm"      "jvm-builder"      ""
     build_env_builder_image "$version" "nodejs"   "node-builder"     ""
+    build_env_builder_image "$version" "nodejs"   "node-builder"     "12.16"
     build_env_builder_image "$version" "php7"     "php-builder"      ""
     build_env_builder_image "$version" "ruby"     "ruby-builder"     ""
     build_env_builder_image "$version" "dotnet20" "dotnet20-builder" ""
