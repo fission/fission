@@ -175,7 +175,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "packages",
 					Singular: "package",
 				},
-				Validation: packageValidation,
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            packageValidation,
 			},
 		},
 		// CanaryConfig: configuration for canary deployment of functions
