@@ -126,7 +126,7 @@ var (
 	packageSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
-			Description: "Specification of the desired behaviour of the package",
+			Description: "Specification of the desired behaviour of the package.",
 			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
 				"environment": environmentReferenceSchema,
 				"source":      archiveSchema,
@@ -135,6 +135,24 @@ var (
 				"buildcmd": {
 					Type:        "string",
 					Description: "BuildCommand is a custom build command that builder used to build the source archive.",
+				},
+			},
+		},
+		"status": {
+			Type:        "object",
+			Description: "PackageStatus contains the build status of a package also the build log for examination.",
+			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				"buildstatus": {
+					Type:        "string",
+					Description: "BuildStatus is the package build status.",
+				},
+				"buildlog": {
+					Type:        "string",
+					Description: "BuildCommand is a custom build command that builder used to build the source archive.",
+				},
+				"lastUpdateTimestamp": {
+					Type:        "string",
+					Description: "LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.",
 				},
 			},
 		},
