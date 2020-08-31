@@ -58,7 +58,7 @@ type (
 )
 
 func makeVolumeDir(dirPath string) error {
-	return os.MkdirAll(dirPath, os.ModeDir|0700)
+	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
 func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
@@ -106,7 +106,7 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 	for key, val := range dataMap {
 		writeFilePath := filepath.Join(dirPath, key)
-		err := ioutil.WriteFile(writeFilePath, val, 0600)
+		err := ioutil.WriteFile(writeFilePath, val, 0750)
 		if err != nil {
 			return errors.Wrapf(err, "Failed to write file %s", writeFilePath)
 		}
