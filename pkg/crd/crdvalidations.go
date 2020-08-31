@@ -152,6 +152,7 @@ var (
 				},
 				"lastUpdateTimestamp": {
 					Type:        "string",
+					Nullable:    true,
 					Description: "LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.",
 				},
 			},
