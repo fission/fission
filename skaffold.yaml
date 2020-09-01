@@ -1,6 +1,7 @@
 ####################################
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
+# Skaffold version v1.10.1 is used for this configuration.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
 # Replace <DOCKERHUB_REPO> with your registry repo/org name
@@ -9,45 +10,102 @@
 ############## Future Improvement/Limitations ##############
 # 1) [LOW]  Add profiles to suit various deployment needs
 ####################################
-apiVersion: skaffold/v2beta1
+apiVersion: skaffold/v2beta4
 kind: Config
 build:
   artifacts:
-    - image: <DOCKERHUB_REPO>/fission
+    - image: "fission"
       context: .
       docker:
         dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: <DOCKERHUB_REPO>/fetcher
+    - image: "fetcher"
       docker:
         dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: <DOCKERHUB_REPO>/preupgradechecks
+    - image: "preupgradechecks"
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
-  tagPolicy:
-    envTemplate:
-      template: "{{.IMAGE_NAME}}:{{.TAG}}"
+  # tagPolicy:
+  #   envTemplate:
+  #     template: "{{.IMAGE_NAME}}:{{.TAG}}"
 
 deploy:
   helm:
+    flags:
+      upgrade:
+        ["--timeout=3m", "--install", "--force", "--debug"]
+      install:
+        ["--timeout=3m","--debug"]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
         valuesFiles:
           - ./charts/fission-all/values.yaml
         namespace: "fission"
+        artifactOverrides:
+          image: "fission"
+          preUpgradeChecksImage: "preupgradechecks"
+          fetcher.image: "fetcher"        
         setValues:
           namespace: fission
-          repository: index.docker.io
-        # The env template values only should go in setValueTemplates, all other overrides in setValues
-        setValueTemplates:
-          image: <DOCKERHUB_REPO>/fission
-          preUpgradeChecksImage: <DOCKERHUB_REPO>/preupgradechecks
-          fetcher.image: <DOCKERHUB_REPO>/fetcher
-          fetcher.imageTag: "{{.TAG}}"
-          imageTag: "{{.TAG}}"
+          fetcher.imageTag: "latest"
+          imageTag: "latest"
+          repository: "index.docker.io"
+          routerServiceType: LoadBalancer
+        # setValueTemplates:
+        #   # image: fission
+        #   # preUpgradeChecksImage: preupgradechecks
+        #   # fetcher.image: fetcher
+        #   fetcher.imageTag: ""
+        #   imageTag: ""
         wait: true
         recreatePods: false
         packaged: null
         imageStrategy:
           fqn: null
           helm: null
+
+profiles:
+  - name: cloud
+    patches:
+      # - op: replace
+      #   path: /deploy/helm/releases/0/setValues
+      #   value: {}
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/imageTag
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/fetcher.imageTag
+        value: ""
+     # - op: replace
+      #   path: /deploy/helm/releases/0/artifactOverrides
+      #   value: {}
+        
+  - name: kind
+    patches:
+      # - op: replace
+      #   path: /deploy/helm/releases/0/setValueTemplates
+      #   value: {}
+      # - op: replace
+      #   path: /build/tagPolicy
+      #   value: {}
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/imageTag
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/fetcher.imageTag
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/repository
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/routerServiceType
+        value: "NodePort"
+      - op: replace
+        path: /deploy/helm/releases/0/artifactOverrides/image
+        value: "fission"
+      - op: replace
+        path: /deploy/helm/releases/0/artifactOverrides/preUpgradeChecksImage
+        value: "preupgradechecks"
+      - op: replace
+        path: /deploy/helm/releases/0/artifactOverrides/fetcher.image
+        value: "fetcher"        

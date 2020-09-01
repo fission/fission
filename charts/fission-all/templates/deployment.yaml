@@ -210,7 +210,11 @@ spec:
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
         env:
         - name: FETCHER_IMAGE
+        {{- if .Values.fetcher.imageTag }}
           value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
+        {{- else }}
+          value: "{{ .Values.fetcher.image }}"
+        {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: RUNTIME_IMAGE_PULL_POLICY
@@ -282,7 +286,11 @@ spec:
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
+        {{- if .Values.fetcher.imageTag }}
           value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
+        {{- else }}
+          value: "{{ .Values.fetcher.image }}"
+        {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY
@@ -642,7 +650,11 @@ spec:
     spec:
       containers:
       - name: mqtrigger
+      {{- if .Values.imageTag }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+      {{- else }}
+        image: "{{ .Values.image }}"
+      {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
@@ -732,7 +744,11 @@ spec:
     spec:
       containers:
       - name: mqtrigger
+      {{- if .Values.imageTag }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+      {{- else }}
+        image: "{{ .Values.image }}"
+      {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]

@@ -40,6 +40,10 @@ This template generates the image name for the deployment depending on the value
 {{- if .Values.repository -}}
     {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
 {{- else -}}
+  {{- if .Values.imageTag -}}
     {{ .Values.image }}:{{ .Values.imageTag }}    
+  {{- else -}}
+    {{ .Values.image }}
+  {{- end }}
 {{- end }}
 {{- end -}}
