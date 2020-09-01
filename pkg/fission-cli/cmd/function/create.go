@@ -96,6 +96,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
+	fnConcurrency := input.Int(flagkey.FnConcurrency)
+
 	pkgName := input.String(flagkey.FnPackageName)
 
 	secretNames := input.StringSlice(flagkey.FnSecret)
@@ -294,6 +296,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,
 			IdleTimeout:     &fnIdleTimeout,
+			Concurrency:     fnConcurrency,
 		},
 	}
 
