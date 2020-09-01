@@ -97,11 +97,6 @@ type (
 	fakeCloseReadCloser struct {
 		io.ReadCloser
 	}
-
-	svcEntryRecord struct {
-		svcUrl    *url.URL
-		fromCache bool
-	}
 )
 
 func init() {
