@@ -506,6 +506,8 @@ run_all_tests() {
     export GO_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/go-env-builder:${imageTag}
     export JVM_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env:${imageTag}
     export JVM_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/jvm-env-builder:${imageTag}
+    export NODE_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/node-env:${imageTag}
+    export NODE_BUILDER_IMAGE=gcr.io/$GKE_PROJECT_NAME/node-env-builder:${imageTag}
     export TS_RUNTIME_IMAGE=gcr.io/$GKE_PROJECT_NAME/tensorflow-serving-env:${imageTag}
 
     set +e
@@ -550,6 +552,7 @@ run_all_tests() {
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
+        $ROOT/test/tests/test_environments/test_nodejs_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
         $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
