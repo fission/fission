@@ -143,6 +143,8 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // if it returned an error.
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// set the timeout for transport context
+
+	roundTripper.addForwardedHostHeader(req)
 	transport := roundTripper.getDefaultTransport()
 	ocRoundTripper := &ochttp.Transport{Base: transport}
 
@@ -368,7 +370,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		if _, ok := req.Header["User-Agent"]; !ok {
 			// explicitly disable User-Agent so it's not set to default value
 			req.Header.Set("User-Agent", "")
-			fh.addForwardedHostHeader(req)
+			// fh.addForwardedHostHeader(req)
 		}
 	}
 
@@ -445,7 +447,7 @@ func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []Fun
 }
 
 // addForwardedHostHeader add "forwarded host" to request header
-func (fh functionHandler) addForwardedHostHeader(req *http.Request) {
+func (roundTripper *RetryingRoundTripper) addForwardedHostHeader(req *http.Request) {
 	// for more detailed information, please visit:
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
 
@@ -460,7 +462,7 @@ func (fh functionHandler) addForwardedHostHeader(req *http.Request) {
 	reqURL := fmt.Sprintf("%s://%s", req.Proto, req.Host)
 	u, err := url.Parse(reqURL)
 	if err != nil {
-		fh.logger.Error("error parsing request url while adding forwarded host headers",
+		roundTripper.logger.Error("error parsing request url while adding forwarded host headers",
 			zap.Error(err),
 			zap.String("url", reqURL))
 		return
