@@ -4,29 +4,25 @@
 # Skaffold version v1.10.1 is used for this configuration.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
-# Replace <DOCKERHUB_REPO> with your registry repo/org name
-# Run `TAG=1313 skaffold run` to build and deploy with helm - where replace value of tag to what you want to use as tag for image
-# Run`skaffold build` to only build and push images
-############## Future Improvement/Limitations ##############
-# 1) [LOW]  Add profiles to suit various deployment needs
+# For building & deploying to Cloud Provider
+# $ `skaffold run` 
+# For building & deploying to Kind cluster use Kind profile
+# $ `skaffold run -p kind`
 ####################################
 apiVersion: skaffold/v2beta4
 kind: Config
 build:
   artifacts:
-    - image: "fission"
+    - image: fission
       context: .
       docker:
         dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: "fetcher"
+    - image: fetcher
       docker:
         dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: "preupgradechecks"
+    - image: preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
-  # tagPolicy:
-  #   envTemplate:
-  #     template: "{{.IMAGE_NAME}}:{{.TAG}}"
 
 deploy:
   helm:
@@ -47,16 +43,10 @@ deploy:
           fetcher.image: "fetcher"        
         setValues:
           namespace: fission
-          fetcher.imageTag: "latest"
-          imageTag: "latest"
           repository: "index.docker.io"
           routerServiceType: LoadBalancer
-        # setValueTemplates:
-        #   # image: fission
-        #   # preUpgradeChecksImage: preupgradechecks
-        #   # fetcher.image: fetcher
-        #   fetcher.imageTag: ""
-        #   imageTag: ""
+          fetcher.imageTag: ""
+          imageTag: ""
         wait: true
         recreatePods: false
         packaged: null
@@ -65,47 +55,25 @@ deploy:
           helm: null
 
 profiles:
-  - name: cloud
+  - name: fast1
+    build:
+      artifacts:
+        - image: fission
+          context: .
+          docker:
+            dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+  - name: fast2
     patches:
-      # - op: replace
-      #   path: /deploy/helm/releases/0/setValues
-      #   value: {}
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/imageTag
-        value: ""
       - op: replace
         path: /deploy/helm/releases/0/setValues/fetcher.imageTag
-        value: ""
-     # - op: replace
-      #   path: /deploy/helm/releases/0/artifactOverrides
-      #   value: {}
-        
+        value: "latest"
+
+
   - name: kind
     patches:
-      # - op: replace
-      #   path: /deploy/helm/releases/0/setValueTemplates
-      #   value: {}
-      # - op: replace
-      #   path: /build/tagPolicy
-      #   value: {}
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/imageTag
-        value: ""
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/fetcher.imageTag
-        value: ""
       - op: replace
         path: /deploy/helm/releases/0/setValues/repository
         value: ""
       - op: replace
         path: /deploy/helm/releases/0/setValues/routerServiceType
         value: "NodePort"
-      - op: replace
-        path: /deploy/helm/releases/0/artifactOverrides/image
-        value: "fission"
-      - op: replace
-        path: /deploy/helm/releases/0/artifactOverrides/preUpgradeChecksImage
-        value: "preupgradechecks"
-      - op: replace
-        path: /deploy/helm/releases/0/artifactOverrides/fetcher.image
-        value: "fetcher"        

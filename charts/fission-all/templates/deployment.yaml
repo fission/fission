@@ -210,10 +210,10 @@ spec:
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
         env:
         - name: FETCHER_IMAGE
-        {{- if .Values.fetcher.imageTag }}
-          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
-        {{- else }}
+        {{- if eq .Values.fetcher.imageTag "" }}
           value: "{{ .Values.fetcher.image }}"
+        {{- else }}
+          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
         {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
@@ -286,10 +286,10 @@ spec:
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
         env:
         - name: FETCHER_IMAGE
-        {{- if .Values.fetcher.imageTag }}
-          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
-        {{- else }}
+        {{- if eq .Values.fetcher.imageTag "" }}
           value: "{{ .Values.fetcher.image }}"
+        {{- else }}
+          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
         {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
@@ -650,10 +650,10 @@ spec:
     spec:
       containers:
       - name: mqtrigger
-      {{- if .Values.imageTag }}
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-      {{- else }}
+      {{- if eq .Values.imageTag "" }}
         image: "{{ .Values.image }}"
+      {{- else }}
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
       {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
@@ -744,10 +744,10 @@ spec:
     spec:
       containers:
       - name: mqtrigger
-      {{- if .Values.imageTag }}
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-      {{- else }}
+      {{- if eq .Values.imageTag "" }}
         image: "{{ .Values.image }}"
+      {{- else }}
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
       {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]

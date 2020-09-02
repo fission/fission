@@ -38,12 +38,16 @@ This template generates the image name for the deployment depending on the value
 */}}
 {{- define "fission-bundleImage" -}}
 {{- if .Values.repository -}}
-    {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
-{{- else -}}
-  {{- if .Values.imageTag -}}
-    {{ .Values.image }}:{{ .Values.imageTag }}    
+  {{- if eq .Values.imageTag "" -}}
+    {{ .Values.repository }}/{{ .Values.image }}
   {{- else -}}
-    {{ .Values.image }}
+    {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
+  {{- end }}
+{{- else -}}
+  {{- if eq .Values.imageTag "" -}}
+    {{ .Values.image }}:
+  {{- else -}}
+    {{ .Values.image }}:{{ .Values.imageTag }}
   {{- end }}
 {{- end }}
 {{- end -}}
