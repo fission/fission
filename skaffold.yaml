@@ -47,6 +47,7 @@ deploy:
           routerServiceType: LoadBalancer
           fetcher.imageTag: ""
           imageTag: ""
+          prometheus.enable: false
         wait: true
         recreatePods: false
         packaged: null
@@ -55,20 +56,6 @@ deploy:
           helm: null
 
 profiles:
-  - name: fast1
-    build:
-      artifacts:
-        - image: fission
-          context: .
-          docker:
-            dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-  - name: fast2
-    patches:
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/fetcher.imageTag
-        value: "latest"
-
-
   - name: kind
     patches:
       - op: replace

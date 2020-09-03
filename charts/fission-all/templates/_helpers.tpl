@@ -45,7 +45,7 @@ This template generates the image name for the deployment depending on the value
   {{- end }}
 {{- else -}}
   {{- if eq .Values.imageTag "" -}}
-    {{ .Values.image }}:
+    {{ .Values.image }}
   {{- else -}}
     {{ .Values.image }}:{{ .Values.imageTag }}
   {{- end }}
