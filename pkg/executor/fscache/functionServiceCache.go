@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/newcache"
 )
 
 type fscRequestType int
@@ -56,10 +57,11 @@ type (
 	}
 
 	FunctionServiceCache struct {
-		logger        *zap.Logger
-		byFunction    *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress     *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID *cache.Cache // function uid -> function : map[string]metav1.ObjectMeta
+		logger            *zap.Logger
+		byFunction        *cache.Cache    // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress         *cache.Cache    // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID     *cache.Cache    // function uid -> function : map[string]metav1.ObjectMeta
+		connFunctionCache *newcache.Cache // function-key -> funcSvc : map[string]*funcSvc
 
 		requestChannel chan *fscRequest
 	}
@@ -91,11 +93,12 @@ func IsNameExistError(err error) bool {
 
 func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
-		logger:         logger.Named("function_service_cache"),
-		byFunction:     cache.MakeCache(0, 0),
-		byAddress:      cache.MakeCache(0, 0),
-		byFunctionUID:  cache.MakeCache(0, 0),
-		requestChannel: make(chan *fscRequest),
+		logger:            logger.Named("function_service_cache"),
+		byFunction:        cache.MakeCache(0, 0),
+		byAddress:         cache.MakeCache(0, 0),
+		byFunctionUID:     cache.MakeCache(0, 0),
+		connFunctionCache: newcache.MakeCache(0, 0),
+		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
 	return fsc
@@ -152,6 +155,22 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
+func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
+	key := crd.CacheKey(m)
+
+	fsvcI, err := fsc.connFunctionCache.Get(key)
+	if err != nil {
+		return nil, err
+	}
+
+	// update atime
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
+
+	fsvcCopy := *fsvc
+	return &fsvcCopy, nil
+}
+
 func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, error) {
 	mI, err := fsc.byFunctionUID.Get(uid)
 	if err != nil {
@@ -171,6 +190,20 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 	fsvcCopy := *fsvc
 	return &fsvcCopy, nil
+}
+
+func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
+	fsc.connFunctionCache.Set(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	now := time.Now()
+	fsvc.Ctime = now
+	fsvc.Atime = now
+
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
+}
+
+func (fsc *FunctionServiceCache) GetActiveInstances(fsvc *FuncSvc) int {
+	return fsc.connFunctionCache.GetTotalActive(crd.CacheKey(fsvc.Function))
+
 }
 
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
@@ -253,6 +286,10 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Since(fsvc.Ctime).Seconds())
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
+}
+
+func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
+	fsc.connFunctionCache.Delete(crd.CacheKey(fsvc.Function), fsvc.Address)
 }
 
 func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {

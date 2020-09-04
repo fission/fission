@@ -166,11 +166,15 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return gpm.fsCache.GetByFunction(&fn.ObjectMeta)
+	return gpm.fsCache.GetConnFunction(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
-	gpm.fsCache.DeleteEntry(fsvc)
+	gpm.fsCache.DeleteFunctionSvc(fsvc)
+}
+
+func (gpm *GenericPoolManager) GetActiveInstances(fsvc *fscache.FuncSvc) int {
+	return gpm.fsCache.GetActiveInstances(fsvc)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {

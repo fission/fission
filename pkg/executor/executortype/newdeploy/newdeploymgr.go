@@ -153,6 +153,10 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
+func (deploy *NewDeploy) GetActiveInstances(fsvc *fscache.FuncSvc) int {
+	return 0
+}
+
 func (deploy *NewDeploy) TapService(svcHost string) error {
 	err := deploy.fsCache.TouchByAddress(svcHost)
 	if err != nil {

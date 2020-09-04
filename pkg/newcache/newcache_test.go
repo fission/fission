@@ -15,17 +15,18 @@ func checkErr(err error) {
 func TestNewCache(t *testing.T) {
 	c := MakeCache(100*time.Millisecond, 100*time.Millisecond)
 
-	_, err := c.Set("func", "ip", "value")
-	checkErr(err)
+	c.Set("func", "ip", "value")
 
-	_, err = c.Set("func2", "ip2", "value2")
-	checkErr(err)
+	c.Set("func2", "ip2", "value2")
 
-	_, err = c.Set("func2", "ip22", "value22")
-	checkErr(err)
+	c.Set("func2", "ip22", "value22")
 
 	cc := c.Copy()
 	if len(cc) != 2 {
+		log.Panicf("expected 2 items")
+	}
+	active := c.GetTotalActive("func2")
+	if active != 2 {
 		log.Panicf("expected 2 items")
 	}
 
@@ -33,7 +34,7 @@ func TestNewCache(t *testing.T) {
 
 	c.UnSet("func", "ip")
 
-	_, err = c.Get("func")
+	_, err := c.Get("func")
 	checkErr(err)
 
 	c.Delete("func", "ip")
@@ -43,8 +44,8 @@ func TestNewCache(t *testing.T) {
 		log.Panicf("found deleted element")
 	}
 
-	_, err = c.Set("expires", "42", "all answers")
-	checkErr(err)
+	c.Set("expires", "42", "all answers")
+
 	time.Sleep(150 * time.Millisecond)
 	_, err = c.Get("expires")
 	if err == nil {

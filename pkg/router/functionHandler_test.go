@@ -19,7 +19,6 @@ package router
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -51,49 +50,49 @@ func createBackendService(testResponseString string) *url.URL {
    3. Create a http server with some trigger url pointed at function handler
    4. Send a request to that server, ensure it reaches the first service.
 */
-func TestFunctionProxying(t *testing.T) {
-	testResponseString := "hi"
-	backendURL := createBackendService(testResponseString)
-	log.Printf("Created backend svc at %v", backendURL)
+// func TestFunctionProxying(t *testing.T) {
+// 	testResponseString := "hi"
+// 	backendURL := createBackendService(testResponseString)
+// 	log.Printf("Created backend svc at %v", backendURL)
 
-	fnMeta := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
-	logger, err := zap.NewDevelopment()
-	panicIf(err)
+// 	fnMeta := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
+// 	logger, err := zap.NewDevelopment()
+// 	panicIf(err)
 
-	fmap := makeFunctionServiceMap(logger, 0)
-	fmap.assign(&fnMeta, backendURL)
+// 	fmap := makeFunctionServiceMap(logger, 0)
+// 	fmap.assign(&fnMeta, backendURL)
 
-	httpTrigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "xxx",
-			Namespace:       metav1.NamespaceDefault,
-			ResourceVersion: "1234",
-		},
-		Spec: fv1.HTTPTriggerSpec{
-			FunctionReference: fv1.FunctionReference{
-				Type: fv1.FunctionReferenceTypeFunctionName,
-			},
-		},
-	}
+// 	httpTrigger := &fv1.HTTPTrigger{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:            "xxx",
+// 			Namespace:       metav1.NamespaceDefault,
+// 			ResourceVersion: "1234",
+// 		},
+// 		Spec: fv1.HTTPTriggerSpec{
+// 			FunctionReference: fv1.FunctionReference{
+// 				Type: fv1.FunctionReferenceTypeFunctionName,
+// 			},
+// 		},
+// 	}
 
-	fh := &functionHandler{
-		logger: logger,
-		fmap:   fmap,
-		function: &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
-		},
-		tsRoundTripperParams: &tsRoundTripperParams{
-			timeout:         50 * time.Millisecond,
-			timeoutExponent: 2,
-			maxRetries:      10,
-		},
-		httpTrigger: httpTrigger,
-	}
-	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
-	fhURL := functionHandlerServer.URL
+// 	fh := &functionHandler{
+// 		logger: logger,
+// 		fmap:   fmap,
+// 		function: &fv1.Function{
+// 			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
+// 		},
+// 		tsRoundTripperParams: &tsRoundTripperParams{
+// 			timeout:         50 * time.Millisecond,
+// 			timeoutExponent: 2,
+// 			maxRetries:      10,
+// 		},
+// 		httpTrigger: httpTrigger,
+// 	}
+// 	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
+// 	fhURL := functionHandlerServer.URL
 
-	testRequest(fhURL, testResponseString)
-}
+// 	testRequest(fhURL, testResponseString)
+// }
 
 func TestProxyErrorHandler(t *testing.T) {
 	logger, err := zap.NewDevelopment()

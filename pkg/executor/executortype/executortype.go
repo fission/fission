@@ -18,6 +18,7 @@ package executortype
 
 import (
 	"context"
+
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -56,4 +57,7 @@ type ExecutorType interface {
 
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
 	CleanupOldExecutorObjects()
+
+	// GetActiveInstances returns total active instances of particular function
+	GetActiveInstances(*fscache.FuncSvc) int
 }

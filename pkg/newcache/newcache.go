@@ -32,6 +32,7 @@ const (
 	EXPIRE
 	COPY
 	UNSET
+	TOTALACTIVE
 )
 
 type (
@@ -50,7 +51,7 @@ type (
 
 	request struct {
 		requestType
-		functionName    interface{}
+		function        interface{}
 		address         interface{}
 		value           interface{}
 		responseChannel chan *response
@@ -60,6 +61,7 @@ type (
 		existingValue interface{}
 		mapCopy       map[interface{}]interface{}
 		value         interface{}
+		totalActive   int
 	}
 )
 
@@ -95,17 +97,15 @@ func (c *Cache) service() {
 		resp := &response{}
 		switch req.requestType {
 		case GET:
-			values, ok := c.cache[req.functionName]
+			values, ok := c.cache[req.function]
 			found := false
 			if !ok {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("function Name '%v' not found", req.functionName))
+					fmt.Sprintf("function Name '%v' not found", req.function))
 
 			} else {
 				for addr := range values {
 					if c.IsOld(values[addr]) {
-						resp.error = ferror.MakeError(ferror.ErrorNotFound,
-							fmt.Sprintf("function '%v' expired (atime %v)", req.functionName, values[addr].atime))
 						delete(values, addr)
 					} else if !values[addr].isActive {
 						// update atime
@@ -119,36 +119,29 @@ func (c *Cache) service() {
 				}
 			}
 			if !found {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No active function found", req.functionName))
+				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No active function found", req.function))
 			}
 			req.responseChannel <- resp
 		case SET:
 			now := time.Now()
-			if values, ok := c.cache[req.functionName]; ok {
-				if val, ok := values[req.address]; ok {
-					val.atime = time.Now()
-					resp.existingValue = val.value
-					resp.error = ferror.MakeError(ferror.ErrorNameExists, "key already exists")
-				} else {
-					c.cache[req.functionName][req.address] = &Value{
-						value:    req.value,
-						ctime:    now,
-						atime:    now,
-						isActive: true,
-					}
+			if _, ok := c.cache[req.function]; ok {
+				c.cache[req.function][req.address] = &Value{
+					value:    req.value,
+					ctime:    now,
+					atime:    now,
+					isActive: true,
 				}
 			} else {
-				c.cache[req.functionName] = make(map[interface{}]*Value)
-				c.cache[req.functionName][req.address] = &Value{
+				c.cache[req.function] = make(map[interface{}]*Value)
+				c.cache[req.function][req.address] = &Value{
 					value:    req.value,
 					ctime:    now,
 					atime:    now,
 					isActive: true,
 				}
 			}
-			req.responseChannel <- resp
 		case DELETE:
-			delete(c.cache[req.functionName], req.address)
+			delete(c.cache[req.function], req.address)
 			req.responseChannel <- resp
 		case EXPIRE:
 			for funcName, values := range c.cache {
@@ -166,9 +159,23 @@ func (c *Cache) service() {
 			}
 			req.responseChannel <- resp
 		case UNSET:
-			if _, ok := c.cache[req.functionName]; ok {
-				c.cache[req.functionName][req.address].isActive = false
+			if _, ok := c.cache[req.function]; ok {
+				if _, ok = c.cache[req.function][req.address]; ok {
+					c.cache[req.function][req.address].isActive = false
+				}
 			}
+		case TOTALACTIVE:
+			if values, ok := c.cache[req.function]; ok {
+				for addr := range values {
+					if c.IsOld(values[addr]) {
+						delete(values, addr)
+					} else if values[addr].isActive {
+						resp.totalActive++
+					}
+				}
+			}
+
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -177,47 +184,54 @@ func (c *Cache) service() {
 	}
 }
 
-func (c *Cache) Get(functionName interface{}) (interface{}, error) {
+func (c *Cache) Get(function interface{}) (interface{}, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     GET,
-		functionName:    functionName,
+		function:        function,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
 	return resp.value, resp.error
 }
 
-// if key exists in the cache, the new value is NOT set; instead an
-// error and the old value are returned
-func (c *Cache) Set(functionName, address, value interface{}) (interface{}, error) {
+func (c *Cache) GetTotalActive(function interface{}) int {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     TOTALACTIVE,
+		function:        function,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.totalActive
+}
+
+func (c *Cache) Set(function, address, value interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     SET,
-		functionName:    functionName,
+		function:        function,
 		address:         address,
 		value:           value,
 		responseChannel: respChannel,
 	}
-	resp := <-respChannel
-	return resp.existingValue, resp.error
 }
 
-func (c *Cache) UnSet(functionName, address interface{}) {
+func (c *Cache) UnSet(function, address interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     UNSET,
-		functionName:    functionName,
+		function:        function,
 		address:         address,
 		responseChannel: respChannel,
 	}
 }
 
-func (c *Cache) Delete(functionName, address interface{}) error {
+func (c *Cache) Delete(function, address interface{}) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     DELETE,
-		functionName:    functionName,
+		function:        function,
 		address:         address,
 		responseChannel: respChannel,
 	}

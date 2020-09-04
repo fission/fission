@@ -109,6 +109,11 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 			et.DeleteFuncSvcFromCache(fsvc)
 		}
 	}
+	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fsvc) >= fn.Spec.Concurrency {
+		err = errors.Errorf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
+		executor.logger.Error("error occured", zap.Error(err))
+		return "", err
+	}
 
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
