@@ -119,3 +119,61 @@ func TestFunctionServiceCache(t *testing.T) {
 		log.Panicf("found fsvc by function uid while expecting empty cache: %v", err)
 	}
 }
+
+func TestFunctionServiceNewCache(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
+	fsc := MakeFunctionServiceCache(logger)
+	if fsc == nil {
+		log.Panicf("error creating cache")
+	}
+
+	var fsvc *FuncSvc
+	now := time.Now()
+
+	objects := []apiv1.ObjectReference{
+		{
+			Kind:       "pod",
+			Name:       "xxx",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+		{
+			Kind:       "pod",
+			Name:       "xxx2",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+	}
+
+	fsvc = &FuncSvc{
+		Function: &metav1.ObjectMeta{
+			Name: "foo",
+			UID:  "1212",
+		},
+		Environment: &fv1.Environment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "foo-env",
+				UID:  "2323",
+			},
+			Spec: fv1.EnvironmentSpec{
+				Version: 1,
+				Runtime: fv1.Runtime{
+					Image: "fission/foo-env",
+				},
+				Builder: fv1.Builder{},
+			},
+		},
+		Address:           "xxx",
+		KubernetesObjects: objects,
+		Ctime:             now,
+		Atime:             now,
+	}
+	fsc.AddFunc(*fsvc)
+	active := fsc.GetActiveInstances(fsvc)
+	if active != 1 {
+		log.Panicln("Active instances not matched expected 1, found ", active)
+	}
+
+}

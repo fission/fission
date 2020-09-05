@@ -173,8 +173,8 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	gpm.fsCache.DeleteFunctionSvc(fsvc)
 }
 
-func (gpm *GenericPoolManager) GetActiveInstances(fsvc *fscache.FuncSvc) int {
-	return gpm.fsCache.GetActiveInstances(fsvc)
+func (gpm *GenericPoolManager) GetActiveInstances(fn *fv1.Function) int {
+	return gpm.fsCache.GetActiveInstances(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {

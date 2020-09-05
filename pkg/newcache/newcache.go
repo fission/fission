@@ -21,6 +21,7 @@ import (
 	"time"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/prometheus/common/log"
 )
 
 type requestType int
@@ -196,6 +197,7 @@ func (c *Cache) Get(function interface{}) (interface{}, error) {
 }
 
 func (c *Cache) GetTotalActive(function interface{}) int {
+	log.Info("Inside GetTotalActive")
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     TOTALACTIVE,

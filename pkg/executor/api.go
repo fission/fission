@@ -95,6 +95,11 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 	if !exists {
 		return "", errors.Errorf("Unknown executor type '%v'", t)
 	}
+	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= fn.Spec.Concurrency {
+		err := errors.Errorf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
+		executor.logger.Error("error occured", zap.Error(err))
+		return "", err
+	}
 
 	fsvc, err := et.GetFuncSvcFromCache(fn)
 	if err == nil {
@@ -109,11 +114,6 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 			et.DeleteFuncSvcFromCache(fsvc)
 		}
 	}
-	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fsvc) >= fn.Spec.Concurrency {
-		err = errors.Errorf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
-		executor.logger.Error("error occured", zap.Error(err))
-		return "", err
-	}
 
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
@@ -124,6 +124,7 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 	if resp.err != nil {
 		return "", resp.err
 	}
+	executor.logger.Info(fmt.Sprintf("response: %+v", resp))
 	return resp.funcSvc.Address, resp.err
 }
 

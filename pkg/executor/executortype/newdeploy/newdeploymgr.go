@@ -153,7 +153,7 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
-func (deploy *NewDeploy) GetActiveInstances(fsvc *fscache.FuncSvc) int {
+func (deploy *NewDeploy) GetActiveInstances(fn *fv1.Function) int {
 	return 0
 }
 

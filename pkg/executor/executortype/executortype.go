@@ -59,5 +59,5 @@ type ExecutorType interface {
 	CleanupOldExecutorObjects()
 
 	// GetActiveInstances returns total active instances of particular function
-	GetActiveInstances(*fscache.FuncSvc) int
+	GetActiveInstances(*fv1.Function) int
 }

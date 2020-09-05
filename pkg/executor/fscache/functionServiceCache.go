@@ -160,6 +160,7 @@ func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc
 
 	fsvcI, err := fsc.connFunctionCache.Get(key)
 	if err != nil {
+		fsc.logger.Info("Not found in Cache")
 		return nil, err
 	}
 
@@ -168,6 +169,7 @@ func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
+	fsc.logger.Info(fmt.Sprintf("Got object from cache %+v", fsvc))
 	return &fsvcCopy, nil
 }
 
@@ -201,9 +203,8 @@ func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 }
 
-func (fsc *FunctionServiceCache) GetActiveInstances(fsvc *FuncSvc) int {
-	return fsc.connFunctionCache.GetTotalActive(crd.CacheKey(fsvc.Function))
-
+func (fsc *FunctionServiceCache) GetActiveInstances(m *metav1.ObjectMeta) int {
+	return fsc.connFunctionCache.GetTotalActive(crd.CacheKey(m))
 }
 
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
