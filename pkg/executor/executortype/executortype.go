@@ -45,6 +45,9 @@ type ExecutorType interface {
 	// avoid idle pod reaper recycles pods.
 	TapService(serviceUrl string) error
 
+	// UnTapService updates the isActive to false
+	UnTapService(*fscache.FuncSvc)
+
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.
 	IsValid(*fscache.FuncSvc) bool

@@ -173,6 +173,10 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	gpm.fsCache.DeleteFunctionSvc(fsvc)
 }
 
+func (gpm *GenericPoolManager) UnTapService(fn *fv1.Function, svcHost string) {
+	gpm.fsCache.SetInActive(fn, svcHost)
+}
+
 func (gpm *GenericPoolManager) GetActiveInstances(fn *fv1.Function) int {
 	return gpm.fsCache.GetActiveInstances(&fn.ObjectMeta)
 }

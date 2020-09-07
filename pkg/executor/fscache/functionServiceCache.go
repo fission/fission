@@ -207,6 +207,10 @@ func (fsc *FunctionServiceCache) GetActiveInstances(m *metav1.ObjectMeta) int {
 	return fsc.connFunctionCache.GetTotalActive(crd.CacheKey(m))
 }
 
+func (fsc *FunctionServiceCache) SetInActive(fn *fv1.Function, svcHost string) {
+	fsc.connFunctionCache.UnSet(crd.CacheKey(&fn.ObjectMeta), svcHost)
+}
+
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	existing, err := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
 	if err != nil {

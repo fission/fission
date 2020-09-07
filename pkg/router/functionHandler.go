@@ -202,6 +202,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
 			}
+			defer roundTripper.funcHandler.unTapService(roundTripper.funcHandler.function, roundTripper.serviceUrl)
 
 			// modify the request to reflect the service url
 			// this service url comes from executor response
@@ -487,6 +488,22 @@ func (roundTripper *RetryingRoundTripper) addForwardedHostHeader(req *http.Reque
 
 	req.Header.Set(FORWARDED, host)
 	req.Header.Set(X_FORWARDED_HOST, req.Host)
+}
+
+func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
+	if err != nil {
+		statusCode, errMsg := ferror.GetHTTPError(err)
+		fh.logger.Error("error from UnTapService",
+			zap.Error(err),
+			zap.String("error_message", errMsg),
+			zap.Any("function", fh.function),
+			zap.Int("status_code", statusCode))
+		return err
+	}
+	return nil
 }
 
 // getServiceEntryFromExecutor returns service url entry returns from executor

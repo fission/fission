@@ -187,12 +187,50 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
+		return
+	}
+	tapSvcReq := client.TapServiceRequest{}
+	err = json.Unmarshal(body, &tapSvcReq)
+	if err != nil {
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+
+	fn, err := executor.fissionClient.CoreV1().Functions(tapSvcReq.FnMetadata.Namespace).Get(tapSvcReq.FnMetadata.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			http.Error(w, "Failed to find function", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to get function", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	if t != fv1.ExecutorTypePoolmgr {
+		msg := fmt.Sprintf("Unknown executor type '%v'", t)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	et, _ := executor.executorTypes[t]
+
+	et.UnTapService(fn, tapSvcReq.ServiceUrl)
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
+	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
 	return r
 }
 

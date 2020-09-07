@@ -153,6 +153,10 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
+func (deploy *NewDeploy) UnTapService(*fscache.FuncSvc) {
+	// TO DO
+}
+
 func (deploy *NewDeploy) GetActiveInstances(fn *fv1.Function) int {
 	return 0
 }
