@@ -109,11 +109,7 @@ spec:
 {{- end }}
       containers:
         - name: logger
-{{ if .Values.repository }}
-          image: "{{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}"
-{{ else }}
-          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-{{ end }}
+          image: {{ include "fission-bundleImage" . | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: NODE_NAME
