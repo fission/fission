@@ -96,7 +96,7 @@ func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	tapSvc := TapServiceRequest{
 		FnMetadata:     fnMeta,
 		FnExecutorType: executorType,
-		ServiceUrl:     serviceUrl.String(),
+		ServiceUrl:     strings.TrimPrefix(serviceUrl.String(), "http://"),
 	}
 
 	body, err := json.Marshal(tapSvc)

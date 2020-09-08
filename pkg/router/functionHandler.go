@@ -491,6 +491,7 @@ func (roundTripper *RetryingRoundTripper) addForwardedHostHeader(req *http.Reque
 }
 
 func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
+	fh.logger.Info("UnTapService Called")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)

@@ -113,7 +113,7 @@ func (c *Cache) service() {
 						// mark active
 						values[addr].atime = time.Now()
 						values[addr].isActive = true
-						resp.value = values[addr]
+						resp.value = values[addr].value
 						found = true
 						break
 					}
@@ -160,8 +160,10 @@ func (c *Cache) service() {
 			}
 			req.responseChannel <- resp
 		case UNSET:
+			log.Infof("Inside CASE UNSET")
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
+					log.Infof("UNSET CALLED: %v %v", req.function, req.address)
 					c.cache[req.function][req.address].isActive = false
 				}
 			}
@@ -182,6 +184,13 @@ func (c *Cache) service() {
 				fmt.Sprintf("invalid request type: %v", req.requestType))
 			req.responseChannel <- resp
 		}
+		for x, val := range c.cache {
+			log.Info("Function:", x)
+			for k, p := range val {
+				log.Infof("Address %+v, Value %+v\n", k, p)
+				log.Infof("Value %+v\n", p.value)
+			}
+		}
 	}
 }
 
@@ -197,7 +206,7 @@ func (c *Cache) Get(function interface{}) (interface{}, error) {
 }
 
 func (c *Cache) GetTotalActive(function interface{}) int {
-	log.Info("Inside GetTotalActive")
+
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     TOTALACTIVE,
@@ -220,6 +229,7 @@ func (c *Cache) Set(function, address, value interface{}) {
 }
 
 func (c *Cache) UnSet(function, address interface{}) {
+	log.Infof("Inside UnSet %v %v", function, address)
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     UNSET,

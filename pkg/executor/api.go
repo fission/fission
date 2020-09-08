@@ -95,6 +95,9 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 	if !exists {
 		return "", errors.Errorf("Unknown executor type '%v'", t)
 	}
+
+	executor.logger.Info(fmt.Sprintf("active instances: %v", et.GetActiveInstances(fn)))
+
 	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= fn.Spec.Concurrency {
 		err := errors.Errorf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
 		executor.logger.Error("error occured", zap.Error(err))
@@ -102,6 +105,8 @@ func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error
 	}
 
 	fsvc, err := et.GetFuncSvcFromCache(fn)
+	executor.logger.Info(fmt.Sprintf("fsvc %+v type %T", fsvc, fsvc))
+
 	if err == nil {
 		if et.IsValid(fsvc) {
 			// Cached, return svc address
@@ -188,6 +193,7 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
+	executor.logger.Info("UnTap Service Called")
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)

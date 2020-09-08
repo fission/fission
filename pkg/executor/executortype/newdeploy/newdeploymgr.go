@@ -153,7 +153,7 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
-func (deploy *NewDeploy) UnTapService(*fscache.FuncSvc) {
+func (deploy *NewDeploy) UnTapService(fn *fv1.Function, svcHost string) {
 	// TO DO
 }
 
