@@ -13,5 +13,5 @@ spec:
   poolsize: 3
   resources: {}
   runtime:
-    image: fission/jvm-env-jersey
+    image: fission/jvm-jersey-env
   version: 2

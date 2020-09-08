@@ -23,7 +23,7 @@ gcr.io, quay.io, etc.  Let's assume you're using a docker hub account
 called USER.  Build and push the image to the the registry:
 
 ```
-   docker build -t USER/jvm-env-jersey . && docker push USER/jvm-env-jersey
+   docker build -t USER/jvm-jersey-env . && docker push USER/jvm-jersey-env
 ```
 
 You can also create environment image based on JVM 11 using Dockerfile-11 in this directory.
@@ -34,13 +34,13 @@ You can add this customized image to fission with "fission env
 create":
 
 ```
-   fission env create --name jvm --image USER/jvm-env-jersey
+   fission env create --name jvm --image USER/jvm-jersey-env
 ```
 
 Or, if you already have an environment, you can update its image:
 
 ```
-   fission env update --name jvm --image USER/jvm-env-jersey 
+   fission env update --name jvm --image USER/jvm-jersey-env 
 ```
 
 After this, fission functions that have the env parameter set to the

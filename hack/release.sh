@@ -89,8 +89,8 @@ push_all_envs() {
     push_env_image "$version" "python"               "python-env"          "2.7"
     push_env_image "$version" "ruby"                 "ruby-env"            ""
     push_env_image "$version" "jvm"                  "jvm-env"             ""
-    push_env_image "$version" "jvm-jersey"           "jvm-env-jersey"      ""
-    push_env_image "$version" "jvm-jersey"           "jvm-env-jersey"      "11"
+    push_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      ""
+    push_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      "11"
     push_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
 }
 
