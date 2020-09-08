@@ -257,7 +257,7 @@ var (
 		},
 		"functionName": {
 			Type:        "string",
-			Description: "FunctionName specifies a specific function within the package. This allows functions to share packages, by having different functions within the same package.",
+			Description: "FunctionName specifies a specific function within the package using the path and specific function and varies based on language/environment",
 		},
 	}
 	functionPackageRefSchema = apiextensionsv1beta1.JSONSchemaProps{
@@ -372,7 +372,7 @@ var (
 		},
 		"podspec": {
 			Type:        "object",
-			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.",
+			Description: "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.\n You can set either PodSpec or Container, but not both.\n More info for podspec:\n https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#podspec-v1-core",
 		},
 	}
 	runtimeSchema = apiextensionsv1beta1.JSONSchemaProps{
