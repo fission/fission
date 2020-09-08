@@ -159,16 +159,13 @@ func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc
 	key := crd.CacheKey(m)
 
 	fsvcI, err := fsc.connFunctionCache.Get(key)
-	fsc.logger.Info(fmt.Sprintf("fsvcI %+v type %T", fsvcI, fsvcI))
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, err
 	}
 
-	fsc.logger.Info(fmt.Sprintf("Got object from cache %+v", fsvcI))
 	// update atime
 	fsvc := fsvcI.(*FuncSvc)
-	fsc.logger.Info(fmt.Sprintf("fsvc %+v type %T", fsvc, fsvc))
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc

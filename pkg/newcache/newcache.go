@@ -21,7 +21,6 @@ import (
 	"time"
 
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/prometheus/common/log"
 )
 
 type requestType int
@@ -59,10 +58,9 @@ type (
 	}
 	response struct {
 		error
-		existingValue interface{}
-		mapCopy       map[interface{}]interface{}
-		value         interface{}
-		totalActive   int
+		mapCopy     map[interface{}]interface{}
+		value       interface{}
+		totalActive int
 	}
 )
 
@@ -160,10 +158,8 @@ func (c *Cache) service() {
 			}
 			req.responseChannel <- resp
 		case UNSET:
-			log.Infof("Inside CASE UNSET")
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
-					log.Infof("UNSET CALLED: %v %v", req.function, req.address)
 					c.cache[req.function][req.address].isActive = false
 				}
 			}
@@ -183,13 +179,6 @@ func (c *Cache) service() {
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
 			req.responseChannel <- resp
-		}
-		for x, val := range c.cache {
-			log.Info("Function:", x)
-			for k, p := range val {
-				log.Infof("Address %+v, Value %+v\n", k, p)
-				log.Infof("Value %+v\n", p.value)
-			}
 		}
 	}
 }
@@ -229,7 +218,6 @@ func (c *Cache) Set(function, address, value interface{}) {
 }
 
 func (c *Cache) UnSet(function, address interface{}) {
-	log.Infof("Inside UnSet %v %v", function, address)
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     UNSET,

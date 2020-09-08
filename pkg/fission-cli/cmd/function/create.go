@@ -276,7 +276,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
-	fmt.Println("Concurrency", fnConcurrency)
 	opts.function = &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
