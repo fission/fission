@@ -51,7 +51,7 @@ var (
 	// Function validation schema
 	functionSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
-		Description: "Function in fission is something that Fission executes. It’s usually a module with one entry point, and that entry point is a function with a certain interface.",
+		Description: "A Function is a code and a runtime environment which can be used to execute code",
 		Properties:  functionSchemaProps,
 	}
 
@@ -84,7 +84,7 @@ var (
 				},
 				"resources": {
 					Type:        "object",
-					Description: "The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.",
+					Description: "The request and limit CPU/MEM resource setting for the pods of the function. Can be overridden at Function in case of newdeployment executor type",
 				},
 				"poolsize": {
 					Type:        "integer",
@@ -97,7 +97,7 @@ var (
 				},
 				"keeparchive": {
 					Type:        "boolean",
-					Description: "KeepArchive is used by fetcher to determine if the extracted archive or unarchived file should be placed, which is then used by specialize handler.",
+					Description: "KeepArchive is used by fetcher to determine if the extracted archive should be extracted. For compiled languages such as Java, it should be true",
 				},
 				"imagepullsecret": {
 					Type:        "string",
@@ -110,7 +110,7 @@ var (
 	// Environment validation schema
 	environmentSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
-		Description: "Environments are the language-specific parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
+		Description: "Environments are the language-specific runtime parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
 		Properties:  environmentSchemaProps,
 	}
 
@@ -134,7 +134,7 @@ var (
 				"configmaps":  configMapReferenceSchema,
 				"buildcmd": {
 					Type:        "string",
-					Description: "BuildCommand is a custom build command that builder used to build the source archive.",
+					Description: "BuildCommand is a custom build command that builder uses to build the source archive.",
 				},
 			},
 		},
@@ -326,15 +326,15 @@ var (
 		},
 		"MinScale": {
 			Type:        "integer",
-			Description: "Only for newdeploy to set up minimum replicas of deployment.",
+			Description: "Only for newdeploy executor to set up minimum replicas of deployment.",
 		},
 		"MaxScale": {
 			Type:        "integer",
-			Description: "Only for newdeploy to set up maximum replicas of deployment.",
+			Description: "Only for newdeploy executor to set up maximum replicas of deployment.",
 		},
 		"TargetCPUPercent": {
 			Type:        "integer",
-			Description: "Only for newdeploy to set up target CPU utilization of HPA.",
+			Description: "Only for newdeploy executor to set up target CPU utilization of HPA.",
 		},
 		"SpecializationTimeout": {
 			Type:        "integer",
@@ -344,7 +344,7 @@ var (
 	invokeStrategySchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"ExecutionStrategy": {
 			Type:        "object",
-			Description: "ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.",
+			Description: "ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances, scaling strategy etc.",
 			Properties:  executionStrategySchema,
 		},
 		"StrategyType": {
