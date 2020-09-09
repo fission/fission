@@ -30,7 +30,8 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
-	"k8s.io/api/core/v1"
+	"go.uber.org/zap/zapcore"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -365,7 +366,10 @@ func TestMain(m *testing.M) {
 	})
 	defer kubeClient.CoreV1().Namespaces().Delete(testNS, nil)
 
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
+
 	panicIf(err)
 
 	go Start(logger, 8888, true)

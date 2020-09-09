@@ -24,7 +24,8 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
-	"k8s.io/api/core/v1"
+	"go.uber.org/zap/zapcore"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -428,7 +429,10 @@ func TestCrd(t *testing.T) {
 		return
 	}
 
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
+
 	panicIf(err)
 
 	fc, kubeClient, apiExtClient, err := MakeFissionClient()

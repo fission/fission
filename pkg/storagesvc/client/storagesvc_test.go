@@ -33,6 +33,7 @@ import (
 	"github.com/ory/dockertest"
 	dc "github.com/ory/dockertest/docker"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -79,7 +80,9 @@ func startS3StorageService(endpoint, bucketName, subDir string) {
 	// testID := uniuri.NewLen(8)
 	port := 8081
 
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
 	panicIf(err)
 
 	log.Println("starting storage svc")
@@ -195,7 +198,9 @@ func TestLocalStorageService(t *testing.T) {
 	testID := uniuri.NewLen(8)
 	port := 8080
 
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
 	panicIf(err)
 
 	log.Println("starting storage svc")
