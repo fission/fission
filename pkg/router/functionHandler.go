@@ -202,7 +202,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
 			}
-			defer roundTripper.funcHandler.unTapService(roundTripper.funcHandler.function, roundTripper.serviceUrl)
+			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+				defer roundTripper.funcHandler.unTapService(roundTripper.funcHandler.function, roundTripper.serviceUrl)
+			}
 
 			// modify the request to reflect the service url
 			// this service url comes from executor response
