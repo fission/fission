@@ -21,7 +21,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -32,17 +31,17 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func createBackendService(testResponseString string) *url.URL {
-	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(testResponseString))
-	}))
+// func createBackendService(testResponseString string) *url.URL {
+// 	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		w.Write([]byte(testResponseString))
+// 	}))
 
-	backendURL, err := url.Parse(backendServer.URL)
-	if err != nil {
-		panic("error parsing url")
-	}
-	return backendURL
-}
+// 	backendURL, err := url.Parse(backendServer.URL)
+// 	if err != nil {
+// 		panic("error parsing url")
+// 	}
+// 	return backendURL
+// }
 
 /*
    1. Create a service at some URL
