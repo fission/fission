@@ -47,7 +47,7 @@ deploy:
           routerServiceType: LoadBalancer
           fetcher.imageTag: ""
           imageTag: ""
-          prometheus.enable: false
+          prometheus.enabled: false
         wait: true
         recreatePods: false
         packaged: null
