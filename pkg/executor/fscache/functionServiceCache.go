@@ -313,7 +313,7 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 		return false, nil
 	}
 
-	fsc.DeleteEntry(fsvc)
+	fsc.DeleteFunctionSvc(fsvc)
 
 	return true, nil
 }
