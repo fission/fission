@@ -598,11 +598,12 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 			hpaChanged = true
 		}
 
-		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
-			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
-			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
-			hpaChanged = true
-		}
+		// TODO : Not needed, TargetCPU handled using custom metrics now. Add checks for custom metrics.
+		// if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
+		// 	targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
+		// 	hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+		// 	hpaChanged = true
+		// }
 
 		if hpaChanged {
 			err := deploy.updateHpa(hpa)
