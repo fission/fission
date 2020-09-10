@@ -5,6 +5,7 @@
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine. 
 # For building & deploying to Cloud Provider
+# $ skaffold config set default-repo vishalbiyani (vishalbiyani - should be your registry/Dockerhub handle)
 # $ `skaffold run` 
 # For building & deploying to Kind cluster use Kind profile
 # $ `skaffold run -p kind`
