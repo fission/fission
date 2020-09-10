@@ -41,6 +41,7 @@ const (
 	TOUCH fscRequestType = iota
 	LISTOLD
 	LOG
+	LISTOLDPOOL
 )
 
 type (
@@ -134,6 +135,17 @@ func (fsc *FunctionServiceCache) service() {
 				}
 			}
 			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
+		case LISTOLDPOOL:
+			fscs := fsc.connFunctionCache.Copy()
+			funcObjects := make([]*FuncSvc, 0)
+			for _, funcSvc := range fscs {
+				fsvc := funcSvc.(*FuncSvc)
+				if time.Since(fsvc.Atime) > req.age {
+					funcObjects = append(funcObjects, fsvc)
+				}
+			}
+			resp.objects = funcObjects
+
 		}
 		req.responseChannel <- resp
 	}
@@ -310,6 +322,17 @@ func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) 
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
+		age:             age,
+		responseChannel: responseChannel,
+	}
+	resp := <-responseChannel
+	return resp.objects, resp.error
+}
+
+func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, error) {
+	responseChannel := make(chan *fscResponse)
+	fsc.requestChannel <- &fscRequest{
+		requestType:     LISTOLDPOOL,
 		age:             age,
 		responseChannel: responseChannel,
 	}

@@ -188,6 +188,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
 				statusCode, errMsg := ferror.GetHTTPError(err)
+				// if statusCode == http.StatusTooManyRequests {
+				// 	time.Sleep(executingTimeout)
+				// 	executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
+				// 	continue
+				// } else {
 				if roundTripper.funcHandler.isDebugEnv {
 					return &http.Response{
 						StatusCode:    statusCode,
@@ -201,6 +206,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 					}, nil
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
+				// }
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer roundTripper.funcHandler.unTapService(roundTripper.funcHandler.function, roundTripper.serviceUrl)

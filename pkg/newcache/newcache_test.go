@@ -22,7 +22,7 @@ func TestNewCache(t *testing.T) {
 	c.Set("func2", "ip22", "value22")
 
 	cc := c.Copy()
-	if len(cc) != 2 {
+	if len(cc) != 3 {
 		log.Panicf("expected 2 items")
 	}
 	active := c.GetTotalActive("func2")

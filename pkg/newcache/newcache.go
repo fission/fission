@@ -58,7 +58,7 @@ type (
 	}
 	response struct {
 		error
-		mapCopy     map[interface{}]interface{}
+		allFsvcs    []interface{}
 		value       interface{}
 		totalActive int
 	}
@@ -101,7 +101,6 @@ func (c *Cache) service() {
 			if !ok {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
-
 			} else {
 				for addr := range values {
 					if c.IsOld(values[addr]) {
@@ -152,10 +151,13 @@ func (c *Cache) service() {
 			}
 			// no response
 		case COPY:
-			resp.mapCopy = make(map[interface{}]interface{})
-			for funcName, values := range c.cache {
-				resp.mapCopy[funcName] = values
+			vals := make([]interface{}, 0)
+			for _, values := range c.cache {
+				for _, value := range values {
+					vals = append(vals, value.value)
+				}
 			}
+			resp.allFsvcs = vals
 			req.responseChannel <- resp
 		case UNSET:
 			if _, ok := c.cache[req.function]; ok {
@@ -239,14 +241,14 @@ func (c *Cache) Delete(function, address interface{}) error {
 	return resp.error
 }
 
-func (c *Cache) Copy() map[interface{}]interface{} {
+func (c *Cache) Copy() []interface{} {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     COPY,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.mapCopy
+	return resp.allFsvcs
 }
 
 func (c *Cache) expiryService() {

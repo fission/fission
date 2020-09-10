@@ -34,6 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/executor/executortype"
 )
 
 func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +62,28 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
-	serviceName, err := executor.getServiceForFunction(fn)
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	et, exists := executor.executorTypes[t]
+	if !exists {
+		http.Error(w, fmt.Sprintf("Unknown executor type '%v'", t), http.StatusNotFound)
+		return
+	}
+
+	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetActiveInstances(fn)))
+
+	conncurrency := fn.Spec.Concurrency
+	if conncurrency == 0 {
+		// set to default conncurrency
+		conncurrency = 5
+	}
+	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= fn.Spec.Concurrency {
+		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
+		executor.logger.Error("error occured", zap.String("error", errMsg))
+		http.Error(w, errMsg, http.StatusTooManyRequests)
+		return
+	}
+
+	serviceName, err := executor.getServiceForFunction(fn, et)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
@@ -84,25 +106,11 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 // stale addresses are not returned to the router.
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
-func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
+func (executor *Executor) getServiceForFunction(fn *fv1.Function, et executortype.ExecutorType) (string, error) {
 	// Check function -> svc cache
 	executor.logger.Debug("checking for cached function service",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et, exists := executor.executorTypes[t]
-	if !exists {
-		return "", errors.Errorf("Unknown executor type '%v'", t)
-	}
-
-	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetActiveInstances(fn)))
-
-	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= fn.Spec.Concurrency {
-		err := errors.Errorf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
-		executor.logger.Error("error occured", zap.Error(err))
-		return "", err
-	}
 
 	fsvc, err := et.GetFuncSvcFromCache(fn)
 	if err == nil {

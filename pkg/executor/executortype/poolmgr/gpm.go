@@ -589,7 +589,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			fnList[fn.ObjectMeta.UID] = fns.Items[i]
 		}
 
-		funcSvcs, err := gpm.fsCache.ListOld(pollSleep)
+		funcSvcs, err := gpm.fsCache.ListOldForPool(pollSleep)
 		if err != nil {
 			gpm.logger.Error("error reaping idle pods", zap.Error(err))
 			continue
