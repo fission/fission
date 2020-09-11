@@ -24,6 +24,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func OldHandler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -64,7 +65,9 @@ func TestMutableMux(t *testing.T) {
 	log.Print("Create mutable router")
 	muxRouter := mux.NewRouter()
 	muxRouter.HandleFunc("/", OldHandler)
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
 	panicIf(err)
 
 	mr := NewMutableRouter(logger, muxRouter)

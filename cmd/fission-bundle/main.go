@@ -27,6 +27,7 @@ import (
 	docopt "github.com/docopt/docopt-go"
 	"go.opencensus.io/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
@@ -236,17 +237,21 @@ Options:
 
 	var logger *zap.Logger
 	var err error
+	var config zap.Config
 
 	isDebugEnv, _ := strconv.ParseBool(os.Getenv("DEBUG_ENV"))
 	if isDebugEnv {
-		logger, err = zap.NewDevelopment()
-	} else {
-		config := zap.NewProductionConfig()
+		config = zap.NewDevelopmentConfig()
 		config.DisableStacktrace = true
-		logger, err = config.Build()
+		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	} else {
+		config = zap.NewProductionConfig()
+		config.DisableStacktrace = true
+		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	}
+	logger, err = config.Build()
 	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
+		log.Fatalf("I can't initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
 
