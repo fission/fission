@@ -75,6 +75,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "functions",
 					Singular: "function",
 				},
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            functionValidation,
 			},
 		},
 		// Environments (function containers)
@@ -91,6 +93,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "environments",
 					Singular: "environment",
 				},
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            environmentValidation,
 			},
 		},
 		// HTTP triggers for functions
@@ -171,6 +175,8 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "packages",
 					Singular: "package",
 				},
+				PreserveUnknownFields: boolPtr(false),
+				Validation:            packageValidation,
 			},
 		},
 		// CanaryConfig: configuration for canary deployment of functions
