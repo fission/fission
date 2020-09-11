@@ -58,7 +58,7 @@ type (
 )
 
 func makeVolumeDir(dirPath string) error {
-	return os.MkdirAll(dirPath, os.ModeDir|0700)
+	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
 func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
@@ -106,7 +106,7 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 	for key, val := range dataMap {
 		writeFilePath := filepath.Join(dirPath, key)
-		err := ioutil.WriteFile(writeFilePath, val, 0600)
+		err := ioutil.WriteFile(writeFilePath, val, 0750)
 		if err != nil {
 			return errors.Wrapf(err, "Failed to write file %s", writeFilePath)
 		}
@@ -347,7 +347,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cf
 
 			secretPath := filepath.Join(secret.Namespace, secret.Name)
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
-			err = os.MkdirAll(secretDir, os.ModeDir|0644)
+			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
 				fetcher.logger.Error(e,
@@ -391,7 +391,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cf
 
 			configPath := filepath.Join(config.Namespace, config.Name)
 			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
-			err = os.MkdirAll(configDir, os.ModeDir|0644)
+			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
 				fetcher.logger.Error(e,
