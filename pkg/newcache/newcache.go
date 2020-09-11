@@ -30,22 +30,18 @@ const (
 	SET
 	DELETE
 	EXPIRE
-	COPY
+	GETALL
 	UNSET
 	TOTALACTIVE
 )
 
 type (
 	Value struct {
-		ctime    time.Time
-		atime    time.Time
 		value    interface{}
 		isActive bool
 	}
 	Cache struct {
 		cache          map[interface{}]map[interface{}]*Value
-		ctimeExpiry    time.Duration
-		atimeExpiry    time.Duration
 		requestChannel chan *request
 	}
 
@@ -64,29 +60,12 @@ type (
 	}
 )
 
-func (c *Cache) IsOld(v *Value) bool {
-	if (c.ctimeExpiry != time.Duration(0)) && (time.Since(v.ctime) > c.ctimeExpiry) {
-		return true
-	}
-
-	if (c.atimeExpiry != time.Duration(0)) && (time.Since(v.atime) > c.atimeExpiry) {
-		return true
-	}
-
-	return false
-}
-
 func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
 	c := &Cache{
 		cache:          make(map[interface{}]map[interface{}]*Value),
-		ctimeExpiry:    ctimeExpiry,
-		atimeExpiry:    atimeExpiry,
 		requestChannel: make(chan *request),
 	}
 	go c.service()
-	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
-		go c.expiryService()
-	}
 	return c
 }
 
@@ -103,12 +82,9 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if c.IsOld(values[addr]) {
-						delete(values, addr)
-					} else if !values[addr].isActive {
+					if !values[addr].isActive {
 						// update atime
 						// mark active
-						values[addr].atime = time.Now()
 						values[addr].isActive = true
 						resp.value = values[addr].value
 						found = true
@@ -117,40 +93,26 @@ func (c *Cache) service() {
 				}
 			}
 			if !found {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No active function found", req.function))
+				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No inactive function found", req.function))
 			}
 			req.responseChannel <- resp
 		case SET:
-			now := time.Now()
 			if _, ok := c.cache[req.function]; ok {
 				c.cache[req.function][req.address] = &Value{
 					value:    req.value,
-					ctime:    now,
-					atime:    now,
 					isActive: true,
 				}
 			} else {
 				c.cache[req.function] = make(map[interface{}]*Value)
 				c.cache[req.function][req.address] = &Value{
 					value:    req.value,
-					ctime:    now,
-					atime:    now,
 					isActive: true,
 				}
 			}
 		case DELETE:
 			delete(c.cache[req.function], req.address)
 			req.responseChannel <- resp
-		case EXPIRE:
-			for funcName, values := range c.cache {
-				for addr, val := range values {
-					if c.IsOld(val) {
-						delete(c.cache[funcName], addr)
-					}
-				}
-			}
-			// no response
-		case COPY:
+		case GETALL:
 			vals := make([]interface{}, 0)
 			for _, values := range c.cache {
 				for _, value := range values {
@@ -168,9 +130,7 @@ func (c *Cache) service() {
 		case TOTALACTIVE:
 			if values, ok := c.cache[req.function]; ok {
 				for addr := range values {
-					if c.IsOld(values[addr]) {
-						delete(values, addr)
-					} else if values[addr].isActive {
+					if values[addr].isActive {
 						resp.totalActive++
 					}
 				}
@@ -241,21 +201,12 @@ func (c *Cache) Delete(function, address interface{}) error {
 	return resp.error
 }
 
-func (c *Cache) Copy() []interface{} {
+func (c *Cache) GetAll() []interface{} {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     COPY,
+		requestType:     GETALL,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
 	return resp.allFsvcs
-}
-
-func (c *Cache) expiryService() {
-	for {
-		time.Sleep(time.Minute)
-		c.requestChannel <- &request{
-			requestType: EXPIRE,
-		}
-	}
 }

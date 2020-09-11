@@ -136,7 +136,7 @@ func (fsc *FunctionServiceCache) service() {
 			}
 			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
 		case LISTOLDPOOL:
-			fscs := fsc.connFunctionCache.Copy()
+			fscs := fsc.connFunctionCache.GetAll()
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
 				fsvc := funcSvc.(*FuncSvc)

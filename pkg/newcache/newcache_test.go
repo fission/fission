@@ -21,7 +21,7 @@ func TestNewCache(t *testing.T) {
 
 	c.Set("func2", "ip22", "value22")
 
-	cc := c.Copy()
+	cc := c.getAll()
 	if len(cc) != 3 {
 		log.Panicf("expected 2 items")
 	}
