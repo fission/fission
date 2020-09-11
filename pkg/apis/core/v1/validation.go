@@ -269,9 +269,10 @@ func (spec FunctionSpec) Validate() error {
 		result = multierror.Append(result, c.Validate())
 	}
 
-	if spec.InvokeStrategy != (InvokeStrategy{}) {
-		result = multierror.Append(result, spec.InvokeStrategy.Validate())
-	}
+	// TODO : Update below check as per updated struct due to custom metrics
+	// if spec.InvokeStrategy != (InvokeStrategy{}) {
+	// 	result = multierror.Append(result, spec.InvokeStrategy.Validate())
+	// }
 
 	// TODO Add below validation warning
 	/*if spec.FunctionTimeout <= 0 {
@@ -295,6 +296,21 @@ func (is InvokeStrategy) Validate() error {
 	return result.ErrorOrNil()
 }
 
+// Function to check if Target CPU utilization is added through custom metrics
+// func checkIfCPUDefinedThroughCustomMetrics(es ExecutionStrategy) bool {
+
+// 	if es.CustomMetrics == nil || len(es.CustomMetrics) == 0 {
+// 		return false
+// 	}
+// 	for _, cm := range es.CustomMetrics {
+// 		if cm.Type == "Resource" && cm.Resource.Name == "cpu" && cm.Resource.Target.Type == "Utilization" {
+// 			return true
+// 		}
+// 	}
+// 	return false
+
+// }
+
 func (es ExecutionStrategy) Validate() error {
 	result := &multierror.Error{}
 
@@ -317,9 +333,10 @@ func (es ExecutionStrategy) Validate() error {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than or equal to minimum scale"))
 		}
 
-		if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
-		}
+		// TODO Add validation for custom metric
+		// if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
+		// 	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
+		// }
 
 		// TODO Add validation warning
 		//if es.SpecializationTimeout < 120 {

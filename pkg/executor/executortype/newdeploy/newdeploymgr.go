@@ -564,55 +564,56 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 
 	deployChanged := false
 
-	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
+	// TODO : Check if this cases backward compatibility issue, add handling accordingly
+	// if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
 
-		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
-		// deployment of the function in fission-function ns, so cleaning up resources there
-		ns := deploy.namespace
-		if newFn.ObjectMeta.Namespace != metav1.NamespaceDefault {
-			ns = newFn.ObjectMeta.Namespace
-		}
+	// 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
+	// 	// deployment of the function in fission-function ns, so cleaning up resources there
+	// 	ns := deploy.namespace
+	// 	if newFn.ObjectMeta.Namespace != metav1.NamespaceDefault {
+	// 		ns = newFn.ObjectMeta.Namespace
+	// 	}
 
-		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
-		if err != nil {
-			err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
-			return err
-		}
+	// 	fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
+	// 	if err != nil {
+	// 		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
+	// 		return err
+	// 	}
 
-		hpa, err := deploy.getHpa(ns, fsvc.Name)
-		if err != nil {
-			deploy.updateStatus(oldFn, err, "error getting HPA while updating function")
-			return err
-		}
+	// 	hpa, err := deploy.getHpa(ns, fsvc.Name)
+	// 	if err != nil {
+	// 		deploy.updateStatus(oldFn, err, "error getting HPA while updating function")
+	// 		return err
+	// 	}
 
-		hpaChanged := false
+	// 	hpaChanged := false
 
-		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
-			replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-			hpa.Spec.MinReplicas = &replicas
-			hpaChanged = true
-		}
+	// 	if newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale {
+	// 		replicas := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+	// 		hpa.Spec.MinReplicas = &replicas
+	// 		hpaChanged = true
+	// 	}
 
-		if newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
-			hpa.Spec.MaxReplicas = int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
-			hpaChanged = true
-		}
+	// 	if newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale != oldFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale {
+	// 		hpa.Spec.MaxReplicas = int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.MaxScale)
+	// 		hpaChanged = true
+	// 	}
 
-		// TODO : Not needed, TargetCPU handled using custom metrics now. Add checks for custom metrics.
-		// if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
-		// 	targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
-		// 	hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
-		// 	hpaChanged = true
-		// }
+	// 	// TODO : Not needed, TargetCPU handled using custom metrics now. Add checks for custom metrics.
+	// 	// if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
+	// 	// 	targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
+	// 	// 	hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+	// 	// 	hpaChanged = true
+	// 	// }
 
-		if hpaChanged {
-			err := deploy.updateHpa(hpa)
-			if err != nil {
-				deploy.updateStatus(oldFn, err, "error updating HPA while updating function")
-				return err
-			}
-		}
-	}
+	// 	if hpaChanged {
+	// 		err := deploy.updateHpa(hpa)
+	// 		if err != nil {
+	// 			deploy.updateStatus(oldFn, err, "error updating HPA while updating function")
+	// 			return err
+	// 		}
+	// 	}
+	// }
 
 	if oldFn.Spec.Environment != newFn.Spec.Environment ||
 		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||

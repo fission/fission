@@ -391,8 +391,16 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	if maxRepl == 0 {
 		maxRepl = minRepl
 	}
+	// TODO: Check if target CPU is from both, custom metric and TargetCPU field. Use CustomMetric one in that case.
+	var customMetrics []asv2beta2.MetricSpec
+	for _, cm := range execStrategy.CustomMetrics {
+		customMetrics = append(customMetrics, cm)
+	}
 	targetCPU := int32(execStrategy.TargetCPUPercent)
-	targetCPUmetricSpec := convertTargetCPUToCustomMetric(targetCPU)
+	if targetCPU != 0 {
+		targetCPUmetricSpec := convertTargetCPUToCustomMetric(targetCPU)
+		customMetrics = append(customMetrics, targetCPUmetricSpec)
+	}
 	hpa := &asv2beta2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        hpaName,
@@ -407,9 +415,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 			},
 			MinReplicas: &minRepl,
 			MaxReplicas: maxRepl,
-			Metrics: []asv2beta2.MetricSpec{
-				targetCPUmetricSpec,
-			},
+			Metrics:     customMetrics,
 		},
 	}
 
