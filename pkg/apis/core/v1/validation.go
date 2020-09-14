@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -269,10 +270,10 @@ func (spec FunctionSpec) Validate() error {
 		result = multierror.Append(result, c.Validate())
 	}
 
-	// TODO : Update below check as per updated struct due to custom metrics
-	// if spec.InvokeStrategy != (InvokeStrategy{}) {
-	// 	result = multierror.Append(result, spec.InvokeStrategy.Validate())
-	// }
+	// TODO : Replace with custom equal function if required
+	if !reflect.DeepEqual(spec.InvokeStrategy, (InvokeStrategy{})) {
+		result = multierror.Append(result, spec.InvokeStrategy.Validate())
+	}
 
 	// TODO Add below validation warning
 	/*if spec.FunctionTimeout <= 0 {
