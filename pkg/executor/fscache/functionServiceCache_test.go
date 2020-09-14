@@ -184,14 +184,14 @@ func TestFunctionServiceNewCache(t *testing.T) {
 
 	fsc.AddFunc(*fsvc)
 
-	active := fsc.GetActiveInstances(fsvc.Function)
+	active := fsc.GetTotalAvailable(fsvc.Function)
 	if active != 1 {
 		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
 	}
 
-	fsc.SetInActive(fn, fsvc.Address)
+	fsc.MarkAvailable(fn, fsvc.Address)
 
-	if fsc.GetActiveInstances(fsvc.Function) != 0 {
+	if fsc.GetTotalAvailable(fsvc.Function) != 0 {
 		log.Panicln("active instances not matched")
 	}
 

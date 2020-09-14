@@ -108,8 +108,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 // invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et, _ := executor.executorTypes[t] // ignored error as its already checked in calling function
-
+	et := executor.executorTypes[t]
 	// Check function -> svc cache
 	executor.logger.Debug("checking for cached function service",
 		zap.String("function_name", fn.ObjectMeta.Name),
