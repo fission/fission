@@ -30,7 +30,9 @@ package router
 // 	testResponseString := "hi"
 // 	testServiceUrl := createBackendService(testResponseString)
 
-// 	logger, err := zap.NewDevelopment()
+// 	config := zap.NewDevelopmentConfig()
+// 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+// 	logger, err := config.Build()
 // 	panicIf(err)
 
 // 	// set up the cache with this fake service

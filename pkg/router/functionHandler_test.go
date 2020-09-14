@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -43,19 +44,23 @@ import (
 // 	return backendURL
 // }
 
-/*
-   1. Create a service at some URL
-   2. Add it to the function service map
-   3. Create a http server with some trigger url pointed at function handler
-   4. Send a request to that server, ensure it reaches the first service.
-*/
+// /*
+//    1. Create a service at some URL
+//    2. Add it to the function service map
+//    3. Create a http server with some trigger url pointed at function handler
+//    4. Send a request to that server, ensure it reaches the first service.
+// */
 // func TestFunctionProxying(t *testing.T) {
 // 	testResponseString := "hi"
 // 	backendURL := createBackendService(testResponseString)
 // 	log.Printf("Created backend svc at %v", backendURL)
 
 // 	fnMeta := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
-// 	logger, err := zap.NewDevelopment()
+
+// 	config := zap.NewDevelopmentConfig()
+// 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+// 	logger, err := config.Build()
+
 // 	panicIf(err)
 
 // 	fmap := makeFunctionServiceMap(logger, 0)
@@ -94,7 +99,10 @@ import (
 // }
 
 func TestProxyErrorHandler(t *testing.T) {
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
+
 	assert.Nil(t, err)
 
 	fh := &functionHandler{
