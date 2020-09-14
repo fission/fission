@@ -61,6 +61,6 @@ type ExecutorType interface {
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
 	CleanupOldExecutorObjects()
 
-	// GetActiveInstances returns total active instances of particular function
-	GetActiveInstances(*fv1.Function) int
+	// getTotalAvailable returns total active instances of particular function
+	GetTotalAvailable(*fv1.Function) int
 }

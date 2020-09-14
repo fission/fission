@@ -154,10 +154,11 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 }
 
 func (deploy *NewDeploy) UnTapService(fn *fv1.Function, svcHost string) {
-	// TO DO
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
-func (deploy *NewDeploy) GetActiveInstances(fn *fv1.Function) int {
+func (deploy *NewDeploy) GetTotalAvailable(fn *fv1.Function) int {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return 0
 }
 

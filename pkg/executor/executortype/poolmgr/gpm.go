@@ -174,11 +174,11 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 }
 
 func (gpm *GenericPoolManager) UnTapService(fn *fv1.Function, svcHost string) {
-	gpm.fsCache.SetInActive(fn, svcHost)
+	gpm.fsCache.MarkAvailable(fn, svcHost)
 }
 
-func (gpm *GenericPoolManager) GetActiveInstances(fn *fv1.Function) int {
-	return gpm.fsCache.GetActiveInstances(&fn.ObjectMeta)
+func (gpm *GenericPoolManager) GetTotalAvailable(fn *fv1.Function) int {
+	return gpm.fsCache.GetTotalAvailable(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {
@@ -626,7 +626,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			}
 
 			go func() {
-				deleted, err := gpm.fsCache.DeleteOld(fsvc, idlePodReapTime)
+				deleted, err := gpm.fsCache.DeleteOldNewCache(fsvc, idlePodReapTime)
 				if err != nil {
 					gpm.logger.Error("error deleting Kubernetes objects for function service",
 						zap.Error(err),

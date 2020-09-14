@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package newcache implements a simple cache implementation having one value mapped by two keys.
+// Package poolcache implements a simple cache implementation having values mapped by two keys.
 // As of now this package is only used by poolmanager executor
-package newcache
+package poolcache
 
 import (
 	"fmt"
@@ -27,24 +27,23 @@ import (
 type requestType int
 
 const (
-	GET requestType = iota
-	SET
-	DELETE
-	EXPIRE
-	GETALL
-	UNSET
-	TOTALACTIVE
+	getValue requestType = iota
+	listValue
+	getTotalAvailable
+	setValue
+	markAvailable
+	deleteValue
 )
 
 type (
-	// Value used as "value" in cache
-	Value struct {
-		value    interface{}
+	// value used as "value" in cache
+	value struct {
+		val      interface{}
 		isActive bool
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
-		cache          map[interface{}]map[interface{}]*Value
+		cache          map[interface{}]map[interface{}]*value
 		requestChannel chan *request
 	}
 
@@ -57,16 +56,16 @@ type (
 	}
 	response struct {
 		error
-		allFsvcs    []interface{}
-		value       interface{}
-		totalActive int
+		allValues      []interface{}
+		value          interface{}
+		totalAvailable int
 	}
 )
 
-// MakeCache create a Cache object
-func MakeCache() *Cache {
+// NewPoolCache create a Cache object
+func NewPoolCache() *Cache {
 	c := &Cache{
-		cache:          make(map[interface{}]map[interface{}]*Value),
+		cache:          make(map[interface{}]map[interface{}]*value),
 		requestChannel: make(chan *request),
 	}
 	go c.service()
@@ -78,7 +77,7 @@ func (c *Cache) service() {
 		req := <-c.requestChannel
 		resp := &response{}
 		switch req.requestType {
-		case GET:
+		case getValue:
 			values, ok := c.cache[req.function]
 			found := false
 			if !ok {
@@ -90,7 +89,7 @@ func (c *Cache) service() {
 						// update atime
 						// mark active
 						values[addr].isActive = true
-						resp.value = values[addr].value
+						resp.value = values[addr].val
 						found = true
 						break
 					}
@@ -100,46 +99,45 @@ func (c *Cache) service() {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No inactive function found", req.function))
 			}
 			req.responseChannel <- resp
-		case SET:
-			if _, ok := c.cache[req.function]; ok {
-				c.cache[req.function][req.address] = &Value{
-					value:    req.value,
-					isActive: true,
-				}
-			} else {
-				c.cache[req.function] = make(map[interface{}]*Value)
-				c.cache[req.function][req.address] = &Value{
-					value:    req.value,
-					isActive: true,
-				}
-			}
-		case DELETE:
-			delete(c.cache[req.function], req.address)
-			req.responseChannel <- resp
-		case GETALL:
+		case listValue:
 			vals := make([]interface{}, 0)
 			for _, values := range c.cache {
 				for _, value := range values {
-					vals = append(vals, value.value)
+					vals = append(vals, value.val)
 				}
 			}
-			resp.allFsvcs = vals
+			resp.allValues = vals
 			req.responseChannel <- resp
-		case UNSET:
+		case getTotalAvailable:
+			if values, ok := c.cache[req.function]; ok {
+				for addr := range values {
+					if values[addr].isActive {
+						resp.totalAvailable++
+					}
+				}
+			}
+			req.responseChannel <- resp
+		case setValue:
+			if _, ok := c.cache[req.function]; ok {
+				c.cache[req.function][req.address] = &value{
+					val:      req.value,
+					isActive: true,
+				}
+			} else {
+				c.cache[req.function] = make(map[interface{}]*value)
+				c.cache[req.function][req.address] = &value{
+					val:      req.value,
+					isActive: true,
+				}
+			}
+		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
 					c.cache[req.function][req.address].isActive = false
 				}
 			}
-		case TOTALACTIVE:
-			if values, ok := c.cache[req.function]; ok {
-				for addr := range values {
-					if values[addr].isActive {
-						resp.totalActive++
-					}
-				}
-			}
-
+		case deleteValue:
+			delete(c.cache[req.function], req.address)
 			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
@@ -149,11 +147,11 @@ func (c *Cache) service() {
 	}
 }
 
-// Get returns a value interface with status inActive else return error
-func (c *Cache) Get(function interface{}) (interface{}, error) {
+// GetValue returns a value interface with status inActive else return error
+func (c *Cache) GetValue(function interface{}) (interface{}, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     GET,
+		requestType:     getValue,
 		function:        function,
 		responseChannel: respChannel,
 	}
@@ -161,24 +159,34 @@ func (c *Cache) Get(function interface{}) (interface{}, error) {
 	return resp.value, resp.error
 }
 
-// GetTotalActive returns a total number active function services
-func (c *Cache) GetTotalActive(function interface{}) int {
-
+// ListValue returns a list of the function services stored in the Cache
+func (c *Cache) ListValue() []interface{} {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     TOTALACTIVE,
+		requestType:     listValue,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.allValues
+}
+
+// GetTotalAvailable returns a total number active function services
+func (c *Cache) GetTotalAvailable(function interface{}) int {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     getTotalAvailable,
 		function:        function,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.totalActive
+	return resp.totalAvailable
 }
 
-// Set marks the value at key [function][address] as active(begin used)
-func (c *Cache) Set(function, address, value interface{}) {
+// SetValue marks the value at key [function][address] as active(begin used)
+func (c *Cache) SetValue(function, address, value interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     SET,
+		requestType:     setValue,
 		function:        function,
 		address:         address,
 		value:           value,
@@ -186,37 +194,26 @@ func (c *Cache) Set(function, address, value interface{}) {
 	}
 }
 
-// UnSet marks the value at key [function][address] as inactive(not being used)
-func (c *Cache) UnSet(function, address interface{}) {
+// MarkAvailable marks the value at key [function][address] as available
+func (c *Cache) MarkAvailable(function, address interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     UNSET,
+		requestType:     markAvailable,
 		function:        function,
 		address:         address,
 		responseChannel: respChannel,
 	}
 }
 
-// Delete deletes the value at key composed of [function][address]
-func (c *Cache) Delete(function, address interface{}) error {
+// DeleteValue deletes the value at key composed of [function][address]
+func (c *Cache) DeleteValue(function, address interface{}) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     DELETE,
+		requestType:     deleteValue,
 		function:        function,
 		address:         address,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
 	return resp.error
-}
-
-// GetAll returns a list of the function services stored in the Cache
-func (c *Cache) GetAll() []interface{} {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     GETALL,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-	return resp.allFsvcs
 }

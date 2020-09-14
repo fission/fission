@@ -30,7 +30,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/newcache"
+	poolcache "github.com/fission/fission/pkg/newcache"
 )
 
 type fscRequestType int
@@ -59,10 +59,10 @@ type (
 
 	FunctionServiceCache struct {
 		logger            *zap.Logger
-		byFunction        *cache.Cache    // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress         *cache.Cache    // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID     *cache.Cache    // function uid -> function : map[string]metav1.ObjectMeta
-		connFunctionCache *newcache.Cache // function-key -> funcSvc : map[string]*funcSvc
+		byFunction        *cache.Cache     // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
+		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
 
 		requestChannel chan *fscRequest
 	}
@@ -98,7 +98,7 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunction:        cache.MakeCache(0, 0),
 		byAddress:         cache.MakeCache(0, 0),
 		byFunctionUID:     cache.MakeCache(0, 0),
-		connFunctionCache: newcache.MakeCache(),
+		connFunctionCache: poolcache.NewPoolCache(),
 		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -136,7 +136,7 @@ func (fsc *FunctionServiceCache) service() {
 			}
 			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
 		case LISTOLDPOOL:
-			fscs := fsc.connFunctionCache.GetAll()
+			fscs := fsc.connFunctionCache.ListValue()
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
 				fsvc := funcSvc.(*FuncSvc)
@@ -170,7 +170,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, err := fsc.connFunctionCache.Get(key)
+	fsvcI, err := fsc.connFunctionCache.GetValue(key)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, err
@@ -206,7 +206,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 }
 
 func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
-	fsc.connFunctionCache.Set(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
@@ -214,12 +214,12 @@ func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 }
 
-func (fsc *FunctionServiceCache) GetActiveInstances(m *metav1.ObjectMeta) int {
-	return fsc.connFunctionCache.GetTotalActive(crd.CacheKey(m))
+func (fsc *FunctionServiceCache) GetTotalAvailable(m *metav1.ObjectMeta) int {
+	return fsc.connFunctionCache.GetTotalAvailable(crd.CacheKey(m))
 }
 
-func (fsc *FunctionServiceCache) SetInActive(fn *fv1.Function, svcHost string) {
-	fsc.connFunctionCache.UnSet(crd.CacheKey(&fn.ObjectMeta), svcHost)
+func (fsc *FunctionServiceCache) MarkAvailable(fn *fv1.Function, svcHost string) {
+	fsc.connFunctionCache.MarkAvailable(crd.CacheKey(&fn.ObjectMeta), svcHost)
 }
 
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
@@ -305,10 +305,20 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 }
 
 func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
-	fsc.connFunctionCache.Delete(crd.CacheKey(fsvc.Function), fsvc.Address)
+	fsc.connFunctionCache.DeleteValue(crd.CacheKey(fsvc.Function), fsvc.Address)
 }
 
 func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
+	if time.Since(fsvc.Atime) < minAge {
+		return false, nil
+	}
+
+	fsc.DeleteEntry(fsvc)
+
+	return true, nil
+}
+
+func (fsc *FunctionServiceCache) DeleteOldNewCache(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
 	if time.Since(fsvc.Atime) < minAge {
 		return false, nil
 	}
