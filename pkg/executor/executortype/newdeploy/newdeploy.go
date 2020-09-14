@@ -393,9 +393,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	}
 	// TODO: Check if target CPU is from both, custom metric and TargetCPU field. Use CustomMetric one in that case.
 	var customMetrics []asv2beta2.MetricSpec
-	for _, cm := range execStrategy.CustomMetrics {
-		customMetrics = append(customMetrics, cm)
-	}
+	customMetrics = append(customMetrics, execStrategy.CustomMetrics...)
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 	if targetCPU != 0 {
 		targetCPUmetricSpec := convertTargetCPUToCustomMetric(targetCPU)
