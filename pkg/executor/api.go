@@ -70,13 +70,14 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 	}
 
 	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetActiveInstances(fn)))
-
+	executor.logger.Debug(fmt.Sprintf("concurrency specified in function: %v", fn.Spec.Concurrency))
 	conncurrency := fn.Spec.Concurrency
 	if conncurrency == 0 {
 		// set to default conncurrency
 		conncurrency = 5
+		executor.logger.Debug("setting concurrency to 5 as default is 0")
 	}
-	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= fn.Spec.Concurrency {
+	if t == fv1.ExecutorTypePoolmgr && et.GetActiveInstances(fn) >= conncurrency {
 		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
 		executor.logger.Error("error occured", zap.String("error", errMsg))
 		http.Error(w, errMsg, http.StatusTooManyRequests)

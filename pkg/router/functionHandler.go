@@ -517,7 +517,12 @@ func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) er
 // getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
 	// send a request to executor to specialize a new pod
-	timeout := 30*time.Second + time.Duration(fh.function.Spec.FunctionTimeout)
+	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
+	timeout := 30 * time.Second
+	if fh.function.Spec.FunctionTimeout > 0 {
+		timeout = time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	service, err := fh.executor.GetServiceForFunction(ctx, &fh.function.ObjectMeta)
