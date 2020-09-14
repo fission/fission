@@ -270,7 +270,7 @@ analyticsNonHelmInstall: false
 # ## Enable Heapster only in clusters where heapster does not exist already
 # heapster: false
 ## Enable metrics-server only in clusters where metrics-server does not exist already
-metricsServer: true
+metricsServer: false
 
 ## Enable InfluxDB
 influxdb:

@@ -422,6 +422,7 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: metrics-server
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   selector:
     matchLabels:
