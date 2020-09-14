@@ -535,7 +535,6 @@ run_all_tests() {
         $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
         $ROOT/test/tests/test_pass.sh \
-        $ROOT/test/tests/test_router_cache_invalidation.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \

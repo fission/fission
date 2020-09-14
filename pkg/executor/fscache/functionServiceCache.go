@@ -98,7 +98,7 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunction:        cache.MakeCache(0, 0),
 		byAddress:         cache.MakeCache(0, 0),
 		byFunctionUID:     cache.MakeCache(0, 0),
-		connFunctionCache: newcache.MakeCache(0, 0),
+		connFunctionCache: newcache.MakeCache(),
 		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()

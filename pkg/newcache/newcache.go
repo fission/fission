@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package newcache implements a simple cache implementation having one value mapped by two keys.
+// As of now this package is only used by poolmanager executor
 package newcache
 
 import (
 	"fmt"
-	"time"
 
 	ferror "github.com/fission/fission/pkg/error"
 )
@@ -36,10 +37,12 @@ const (
 )
 
 type (
+	// Value used as "value" in cache
 	Value struct {
 		value    interface{}
 		isActive bool
 	}
+	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
 		cache          map[interface{}]map[interface{}]*Value
 		requestChannel chan *request
@@ -60,7 +63,8 @@ type (
 	}
 )
 
-func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
+// MakeCache create a Cache object
+func MakeCache() *Cache {
 	c := &Cache{
 		cache:          make(map[interface{}]map[interface{}]*Value),
 		requestChannel: make(chan *request),
@@ -145,6 +149,7 @@ func (c *Cache) service() {
 	}
 }
 
+// Get returns a value interface with status inActive else return error
 func (c *Cache) Get(function interface{}) (interface{}, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -156,6 +161,7 @@ func (c *Cache) Get(function interface{}) (interface{}, error) {
 	return resp.value, resp.error
 }
 
+// GetTotalActive returns a total number active function services
 func (c *Cache) GetTotalActive(function interface{}) int {
 
 	respChannel := make(chan *response)
@@ -168,6 +174,7 @@ func (c *Cache) GetTotalActive(function interface{}) int {
 	return resp.totalActive
 }
 
+// Set marks the value at key [function][address] as active(begin used)
 func (c *Cache) Set(function, address, value interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -179,6 +186,7 @@ func (c *Cache) Set(function, address, value interface{}) {
 	}
 }
 
+// UnSet marks the value at key [function][address] as inactive(not being used)
 func (c *Cache) UnSet(function, address interface{}) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -189,6 +197,7 @@ func (c *Cache) UnSet(function, address interface{}) {
 	}
 }
 
+// Delete deletes the value at key composed of [function][address]
 func (c *Cache) Delete(function, address interface{}) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -201,6 +210,7 @@ func (c *Cache) Delete(function, address interface{}) error {
 	return resp.error
 }
 
+// GetAll returns a list of the function services stored in the Cache
 func (c *Cache) GetAll() []interface{} {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{

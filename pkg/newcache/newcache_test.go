@@ -13,7 +13,7 @@ func checkErr(err error) {
 }
 
 func TestNewCache(t *testing.T) {
-	c := MakeCache(100*time.Millisecond, 100*time.Millisecond)
+	c := MakeCache()
 
 	c.Set("func", "ip", "value")
 
