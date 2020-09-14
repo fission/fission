@@ -350,7 +350,7 @@ type (
 		// function pod(s) to release resources.
 		IdleTimeout *int `json:"idletimeout,omitempty"`
 
-		// Maximum number of concurrent requests to be served
+		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 5
 		Concurrency int `json:"concurrency,omitempty"`
 	}
