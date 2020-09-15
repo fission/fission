@@ -238,10 +238,10 @@ helm_install_fission() {
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     # deleting ns does take a while after command is issued
-    while kubectl get ns| grep "fission-builder"
-    do
-        sleep 5
-    done
+    # while kubectl get ns| grep "fission-builder"
+    # do
+    #     sleep 5
+    # done
 
     helm dependency update $ROOT/charts/fission-all
 
