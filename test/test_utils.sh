@@ -248,8 +248,6 @@ helm_install_fission() {
     echo "Creating namespace $ns"
     kubectl create ns $ns
     pushd $ROOT/charts/fission-all
-    echo "Cleaning up resources in default namespace"
-    helm template . -ndefault| kubectl delete -f -
     echo "Installing fission"
     helm install $id		\
 	 --wait			\
