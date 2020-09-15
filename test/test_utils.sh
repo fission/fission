@@ -593,11 +593,9 @@ install_and_test() {
     setupIngressController
 
     helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
-    helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
         dump_kubernetes_events $id
-        dump_tiller_logs
 	    exit 1
     fi
 
