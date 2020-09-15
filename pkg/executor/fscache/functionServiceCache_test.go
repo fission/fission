@@ -195,7 +195,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		log.Panicln("active instances not matched")
 	}
 
-	_, err = fsc.GetConnFunction(fsvc.Function)
+	_, err = fsc.GetFuncSvc(fsvc.Function)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}

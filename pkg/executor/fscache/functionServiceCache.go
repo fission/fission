@@ -167,7 +167,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-func (fsc *FunctionServiceCache) GetConnFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
 	fsvcI, err := fsc.connFunctionCache.GetValue(key)
