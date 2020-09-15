@@ -37,7 +37,6 @@ helmVars=functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Al
 
 dump_system_info
 
-timeout 30 bash -c "helm_setup"
 
 echo "Deleting old releases"
 helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
