@@ -47,6 +47,8 @@ do
     sleep 5
 done
 
+echo "Creating namespace $ns"
+kubectl create ns $ns
 helm install $id \
 --wait \
 --timeout 540s \

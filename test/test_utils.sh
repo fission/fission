@@ -245,6 +245,8 @@ helm_install_fission() {
 
     helm dependency update $ROOT/charts/fission-all
 
+    echo "Creating namespace $ns"
+    kubectl create ns $ns
     echo "Installing fission"
     helm install $id		\
 	 --wait			\
