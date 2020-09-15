@@ -246,10 +246,9 @@ helm_install_fission() {
     helm dependency update $ROOT/charts/fission-all
 
     echo "Installing fission"
-    helm install		\
+    helm install $id		\
 	 --wait			\
-	 --timeout 540	        \
-	 --name $id		\
+	 --timeout 540s	        \
 	 --set $helmVars	\
 	 --namespace $ns        \
 	 $ROOT/charts/fission-all
@@ -332,7 +331,7 @@ helm_uninstall_fission() {(set +e
     fi
 
     echo "Uninstalling fission"
-    helm delete --purge $id
+    helm delete $id
     kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission

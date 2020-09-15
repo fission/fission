@@ -47,10 +47,9 @@ do
     sleep 5
 done
 
-helm install \
---name $id \
+helm install $id \
 --wait \
---timeout 540 \
+--timeout 540s \
 --set $helmVars \
 --namespace $ns \
 https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-all-${CURRENT_VERSION}.tgz
@@ -94,7 +93,7 @@ helmVars=repository=$repo,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAG
 echo "Upgrading fission"
 helm upgrade	\
  --wait			\
- --timeout 540	        \
+ --timeout 540s	        \
  --set $helmVars	\
  --namespace $ns        \
  $id $ROOT/charts/fission-all
