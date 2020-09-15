@@ -247,14 +247,15 @@ helm_install_fission() {
 
     echo "Creating namespace $ns"
     kubectl create ns $ns
+    pushd $ROOT/charts/fission-all
     echo "Installing fission"
     helm install $id		\
 	 --wait			\
 	 --timeout 540s	        \
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 $ROOT/charts/fission-all
-
+	 .
+    popd
     helm list
     travis_fold_end helm_install_fission
 }
