@@ -391,14 +391,22 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	if maxRepl == 0 {
 		maxRepl = minRepl
 	}
+	deploy.logger.Info("ExecutionStrategy to publish: ", zap.Any("execStr", execStrategy))
 	// TODO: Check if target CPU is from both, custom metric and TargetCPU field. Use CustomMetric one in that case.
 	var customMetrics []asv2beta2.MetricSpec
-	customMetrics = append(customMetrics, execStrategy.CustomMetrics...)
+	var passedFromCM bool = false
+	for _, cm := range execStrategy.CustomMetrics {
+		if cm.Type == "Resource" && cm.Resource.Name == "cpu" && cm.Resource.Target.Type == "Utilization" {
+			passedFromCM = true
+		}
+		customMetrics = append(customMetrics, cm)
+	}
 	targetCPU := int32(execStrategy.TargetCPUPercent)
-	if targetCPU != 0 {
+	if targetCPU != 0 && !passedFromCM {
 		targetCPUmetricSpec := convertTargetCPUToCustomMetric(targetCPU)
 		customMetrics = append(customMetrics, targetCPUmetricSpec)
 	}
+	deploy.logger.Info("CustomMetrics to publish: ", zap.Any("customMetric", customMetrics))
 	hpa := &asv2beta2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        hpaName,
@@ -416,7 +424,6 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 			Metrics:     customMetrics,
 		},
 	}
-
 	existingHpa, err := deploy.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
