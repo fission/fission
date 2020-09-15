@@ -18,18 +18,6 @@ travis_fold_end() {
     echo -e "travis_fold:end:$1\r"
 }
 
-helm_setup() {
-    helm init
-    # wait for tiller ready
-    while true; do
-      kubectl --namespace kube-system get pod|grep tiller|grep Running
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-}
-export -f helm_setup
 
 gcloud_login() {
     KEY=${HOME}/gcloud-service-key.json
