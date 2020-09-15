@@ -318,7 +318,7 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 	return true, nil
 }
 
-func (fsc *FunctionServiceCache) DeleteOldNewCache(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) DeleteOldPoolCache(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
 	if time.Since(fsvc.Atime) < minAge {
 		return false, nil
 	}
