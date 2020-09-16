@@ -338,7 +338,7 @@ helm_uninstall_fission() {(set +e
 
     ns=f-$id
     echo "Uninstalling fission"
-    helm delete $id -n $ns
+    helm delete $id -n $ns || true
     kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission
