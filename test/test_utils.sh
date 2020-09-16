@@ -248,6 +248,8 @@ helm_install_fission() {
     echo "Creating namespace $ns"
     kubectl create ns $ns
     pushd $ROOT/charts/fission-all
+    echo "Cleaning up stale resources"
+    helm template . -ndefault| kubectl delete -f - || true
     echo "Installing fission"
     helm install $id		\
 	 --wait			\
@@ -333,8 +335,9 @@ helm_uninstall_fission() {(set +e
 	    return
     fi
 
+    ns=f-$id
     echo "Uninstalling fission"
-    helm delete $id
+    helm delete $id -n $ns
     kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission
