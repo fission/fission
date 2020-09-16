@@ -30,10 +30,10 @@ then
 fi
 
 # Get helm
-HELM_VERSION=2.14.0
+HELM_VERSION=3.3.0
 if [ ! -f $K8SCLI_DIR/helm ] || (helm version --client | grep -v $HELM_VERSION)
 then
-    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v${HELM_VERSION}-linux-amd64.tar.gz
+    curl -LO https://get.helm.sh/helm-v3.3.0-linux-amd64.tar.gz
     tar xzvf helm-*.tar.gz
     mv linux-amd64/helm $K8SCLI_DIR/helm
 fi
@@ -91,19 +91,3 @@ then
 fi
 
 kubectl get node
-
-# install helm tiller. It will no longer needed as we upgrade to Helmv3.
-if ! helm list >/dev/null 2>&1 ; then
-    echo "Installing helm..."
-    kubectl -n kube-system create sa tiller
-    kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
-    helm init --service-account tiller
-
-    printf "Waiting for Helm"
-    until helm list >/dev/null 2>&1
-    do
-      printf "."
-      sleep 3
-    done
-    printf "\n"
-fi
