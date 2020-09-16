@@ -49,7 +49,7 @@ cleanup_fission_objects() {
     fission fn delete --name upgradehello || true
 
     echo "Uninstalling fission"
-    helm delete --purge $id
+    helm delete $id
     kubectl delete ns f-$id || true
     log "==== Cleanup End ===="
 }

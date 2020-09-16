@@ -37,7 +37,6 @@ helmVars=functionNamespace=$fns,controllerPort=$controllerNodeport,pullPolicy=Al
 
 dump_system_info
 
-timeout 30 bash -c "helm_setup"
 
 echo "Deleting old releases"
 helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
@@ -48,13 +47,14 @@ do
     sleep 5
 done
 
-helm install \
---name $id \
+echo "Creating namespace $ns"
+kubectl create ns $ns
+helm install $id \
 --wait \
---timeout 540 \
+--timeout 540s \
 --set $helmVars \
 --namespace $ns \
-https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-all-${CURRENT_VERSION}.tgz
+--force https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-all-${CURRENT_VERSION}.tgz
 
 mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
 
@@ -95,7 +95,7 @@ helmVars=repository=$repo,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAG
 echo "Upgrading fission"
 helm upgrade	\
  --wait			\
- --timeout 540	        \
+ --timeout 540s	        \
  --set $helmVars	\
  --namespace $ns        \
  $id $ROOT/charts/fission-all
