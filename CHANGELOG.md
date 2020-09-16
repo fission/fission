@@ -1,23 +1,52 @@
-# 1.10.0
+# 1.11.0
 [Documentation](https://docs.fission.io/)
-## Downloads for 1.10.0
+## Downloads for 1.11.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-all-1.10.0.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-all-1.10.0.yaml) | `3dfe9aee6d9a506f042c6b6ce4e70bd41e7e58021151bb101d997d25b3e69836`
-[fission-core-1.10.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-core-1.10.0-openshift.yaml) | `098b5fe5707ba91bf7f2c67c06939b2a900e1c58e72ede006773e8937bbcc094`
-[fission-core-1.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-core-1.10.0-minikube.yaml) | `7cf07da78be65fa310fed063110d8b902b9789ae55e944602cbdc014448838b2`
-[fission-all-1.10.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-all-1.10.0-minikube.yaml) | `0296a97489ad8f6dd85f94d7f67cd3735e1d2a1cc2c1c32b0b71e280cca3f119`
-[fission-all-1.10.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-all-1.10.0-openshift.yaml) | `6475f29ff970efb8e5cb48f9ffb72174af5c2c19a387a79d78a40349dd835bc0`
-[fission-core-1.10.0.yaml](https://github.com/fission/fission/releases/download/1.10.0/fission-core-1.10.0.yaml) | `8d49d2db82cfade065b6376fb536b4600dc06d9c2adb2bd59fbe4574a3369993`
-[fission-core-1.10.0.tgz](https://github.com/fission/fission/releases/download/1.10.0/fission-core-1.10.0.tgz) | `16153b122889ff93d7e1633cf88c25a47d0681cfccc1dcb6385510eb7ea24ae0`
-[fission-all-1.10.0.tgz](https://github.com/fission/fission/releases/download/1.10.0/fission-all-1.10.0.tgz) | `96ab8005652644fca454eb9451494f3b6464afb272302a76a1879c13a8c405bc`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.10.0/fission-cli-osx) | `785cd26b711aa47f73ef9c8ff0b8e5f5f74cf79c31a09940f5794ced186a44c1`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.10.0/fission-cli-linux) | `d764e72f388d5cba50a8d52ecdf587ad78c137f0aac8001d250494f8d79798c4`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.10.0/fission-cli-windows.exe) | `c36c032a194136926ebe11cb85bfad206978380b4f3ac8bef43aef33788f7289`
+[fission-core-1.11.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-core-1.11.0-openshift.yaml) | `8965a6862251b2b916360477dbb8d6166074db81087f639f5b07e42b0ec1a798`
+[fission-core-1.11.0.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-core-1.11.0.yaml) | `d9c611914363f5da10b5af82c73e5c6a5d16e0ad5c2161870a15d9d0d4019381`
+[fission-all-1.11.0.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-all-1.11.0.yaml) | `a531cd62b916a4e1d0250e53f2786ae42685f0b1f9bee649893451818e5680e4`
+[fission-core-1.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-core-1.11.0-minikube.yaml) | `ac30f39a325d01b1d8f2055edc9579d4fea09684491e59a6600f2fe472c80027`
+[fission-all-1.11.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-all-1.11.0-openshift.yaml) | `5efcea7762e66cb43977a7c06d7316c1aa82bc0379df93819fdf54596d68a94b`
+[fission-all-1.11.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.11.0/fission-all-1.11.0-minikube.yaml) | `1dae64ce25109ca7cab70bf5d6950a1d010bb8494400b328d32b22c0df715eb5`
+[fission-all-1.11.0.tgz](https://github.com/fission/fission/releases/download/1.11.0/fission-all-1.11.0.tgz) | `ba9ff8b5e6b4b0056668fd0b27efc43953df9ade407fb3e594ff4597c3065700`
+[fission-core-1.11.0.tgz](https://github.com/fission/fission/releases/download/1.11.0/fission-core-1.11.0.tgz) | `28d02d65ad57455e857df5db17f2c05bcf7c1f78f16c4997656994517e1de6e0`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.11.0/fission-cli-osx) | `f9f13c074d0851328137a2c32fd4b91fad1017d810128b18c382d16c6c0df15c`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.11.0/fission-cli-linux) | `9441bb4f1f2464d50d0f57f8a5327feb85dd36ace364cacc2d72e9e417821bc4`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.11.0/fission-cli-windows.exe) | `7217b069b01d29c71d43dae9e673a939960df03b545e8894a7487af1b0f4fde8`
 
 # Changelog
+
+## [1.11.0](https://github.com/fission/fission/tree/1.11.0) (2020-09-16)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.10.0...1.11.0)
+
+**Merged pull requests:**
+
+- Bumping up release of Helm for release script [\#1715](https://github.com/fission/fission/pull/1715) ([vishal-biyani](https://github.com/vishal-biyani))
+- Skaffold: Typo in Helm values for Prometheus [\#1709](https://github.com/fission/fission/pull/1709) ([vishal-biyani](https://github.com/vishal-biyani))
+- logs: change timestamp to ISO [\#1708](https://github.com/fission/fission/pull/1708) ([sahil-lakhwani](https://github.com/sahil-lakhwani))
+- Bump jetty-server from 9.0.4.v20130625 to 9.4.17.v20190418 in /environments/jvm-jersey [\#1706](https://github.com/fission/fission/pull/1706) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Addition of openapischemav3 to fission CRDs to support kubectl explain [\#1702](https://github.com/fission/fission/pull/1702) ([ankitjain235](https://github.com/ankitjain235))
+- Skaffold kind [\#1700](https://github.com/fission/fission/pull/1700) ([vishal-biyani](https://github.com/vishal-biyani))
+- Adding Concurrency in Pool Manager [\#1698](https://github.com/fission/fission/pull/1698) ([therahulbhati](https://github.com/therahulbhati))
+- Adding NodeJS version 12 env [\#1683](https://github.com/fission/fission/pull/1683) ([vishal-biyani](https://github.com/vishal-biyani))
+- Removed code related to mqtrigger [\#1680](https://github.com/fission/fission/pull/1680) ([therahulbhati](https://github.com/therahulbhati))
+- jvm-jersey-env [\#1677](https://github.com/fission/fission/pull/1677) ([sahil-lakhwani](https://github.com/sahil-lakhwani))
+- Update values.yaml with mqt keda configuration [\#1670](https://github.com/fission/fission/pull/1670) ([therahulbhati](https://github.com/therahulbhati))
+- Release 1.10.0 [\#1658](https://github.com/fission/fission/pull/1658) ([vishal-biyani](https://github.com/vishal-biyani))
+- \(fix\) Dependencies and steps for building examples/java locally [\#1653](https://github.com/fission/fission/pull/1653) ([rahulchheda](https://github.com/rahulchheda))
+- Allow user to override nats-streaming image [\#1645](https://github.com/fission/fission/pull/1645) ([funkypenguin](https://github.com/funkypenguin))
+- Allow user to define busybox image [\#1643](https://github.com/fission/fission/pull/1643) ([funkypenguin](https://github.com/funkypenguin))
+- Add headers to Kafka MQT error topics [\#1701](https://github.com/fission/fission/pull/1701) ([ankitjain235](https://github.com/ankitjain235))
+- Non-root users access Secrets and ConfigMaps  [\#1697](https://github.com/fission/fission/pull/1697) ([atsai1220](https://github.com/atsai1220))
+- Added prefix tag in fluentbit filter stanza [\#1671](https://github.com/fission/fission/pull/1671) ([therahulbhati](https://github.com/therahulbhati))
+- 1665: Python env sentry integration [\#1669](https://github.com/fission/fission/pull/1669) ([vir-mir](https://github.com/vir-mir))
+- Fission MQT integration with keda [\#1657](https://github.com/fission/fission/pull/1657) ([therahulbhati](https://github.com/therahulbhati))
+- Add serviceaccount for nats-streaming [\#1646](https://github.com/fission/fission/pull/1646) ([funkypenguin](https://github.com/funkypenguin))
+- Allow user to override value of influxdb image [\#1642](https://github.com/fission/fission/pull/1642) ([funkypenguin](https://github.com/funkypenguin))
 
 ## [1.10.0](https://github.com/fission/fission/tree/1.10.0) (2020-06-29)
 
@@ -73,7 +102,7 @@ filename | sha256 hash
 
 ## [1.8.0](https://github.com/fission/fission/tree/1.8.0) (2020-02-03)
 
-[Full Changelog](https://github.com/fission/fission/compare/v1.8.0...1.8.0)
+[Full Changelog](https://github.com/fission/fission/compare/1.7.1...1.8.0)
 
 **Merged pull requests:**
 
@@ -115,9 +144,9 @@ filename | sha256 hash
 - Fission 1.7.1 [\#1461](https://github.com/fission/fission/pull/1461) ([life1347](https://github.com/life1347))
 
 
-## [1.7.1](https://github.com/fission/fission/tree/1.7.1) (2019-12-09)
+## [v1.7.1](https://github.com/fission/fission/tree/v1.7.1) (2019-12-09)
 
-[Full Changelog](https://github.com/fission/fission/compare/1.7.0...1.7.1)
+[Full Changelog](https://github.com/fission/fission/compare/v1.7.0...v1.7.1)
 
 **Merged pull requests:**
 
@@ -127,7 +156,7 @@ filename | sha256 hash
 
 ## [1.7.0](https://github.com/fission/fission/tree/1.7.0) (2019-12-02)
 
-[Full Changelog](https://github.com/fission/fission/compare/v1.7.0...1.7.0)
+[Full Changelog](https://github.com/fission/fission/compare/1.7.0-rc.2...1.7.0)
 
 **Merged pull requests:**
 
@@ -146,7 +175,7 @@ filename | sha256 hash
 
 ## [1.7.0-rc.2](https://github.com/fission/fission/tree/1.7.0-rc.2) (2019-11-27)
 
-[Full Changelog](https://github.com/fission/fission/compare/v1.7.0-rc.1...1.7.0-rc.2)
+[Full Changelog](https://github.com/fission/fission/compare/v1.7.0-rc.1...v1.7.0-rc.2)
 
 **Merged pull requests:**
 
@@ -311,6 +340,7 @@ filename | sha256 hash
 - Fix environment version validation [\#1253](https://github.com/fission/fission/pull/1253) ([davidsmf](https://github.com/davidsmf))
 - Allow to set deployment config uid during initialization [\#1249](https://github.com/fission/fission/pull/1249) ([life1347](https://github.com/life1347))
 - Add swagger \(OpenAPI 2.0\) support [\#1245](https://github.com/fission/fission/pull/1245) ([life1347](https://github.com/life1347))
+- Update go dependencies [\#1240](https://github.com/fission/fission/pull/1240) ([life1347](https://github.com/life1347))
 
 ## [1.4.1](https://github.com/fission/fission/tree/1.4.1) (2019-07-29)
 
@@ -323,7 +353,6 @@ filename | sha256 hash
 - Analytics env fix in chart [\#1247](https://github.com/fission/fission/pull/1247) ([vishal-biyani](https://github.com/vishal-biyani))
 - Fix CI unable to start test due to the same travis build ID [\#1246](https://github.com/fission/fission/pull/1246) ([life1347](https://github.com/life1347))
 - V1.4.0 [\#1244](https://github.com/fission/fission/pull/1244) ([vishal-biyani](https://github.com/vishal-biyani))
-- Update go dependencies [\#1240](https://github.com/fission/fission/pull/1240) ([life1347](https://github.com/life1347))
 
 ## [1.4.0](https://github.com/fission/fission/tree/1.4.0) (2019-07-24)
 
@@ -707,7 +736,6 @@ filename | sha256 hash
 - Changes needed for release 0.7.1 [\#622](https://github.com/fission/fission/pull/622) ([smruthi2187](https://github.com/smruthi2187))
 - Add default value to cli flag [\#619](https://github.com/fission/fission/pull/619) ([life1347](https://github.com/life1347))
 - Remove port forward in tests for router, controller and nats pods  [\#611](https://github.com/fission/fission/pull/611) ([smruthi2187](https://github.com/smruthi2187))
-- Uses proper way to get server URL [\#587](https://github.com/fission/fission/pull/587) ([vishal-biyani](https://github.com/vishal-biyani))
 - meaningful error message when fetch request is received for a package when build is not successful. [\#661](https://github.com/fission/fission/pull/661) ([smruthi2187](https://github.com/smruthi2187))
 - Delete deployment with proper delete propagation policy [\#630](https://github.com/fission/fission/pull/630) ([life1347](https://github.com/life1347))
 - Fix buildmgr SEGFAULT when it failed to update package [\#626](https://github.com/fission/fission/pull/626) ([life1347](https://github.com/life1347))
@@ -742,6 +770,7 @@ filename | sha256 hash
 - bug fix: spec dir flag [\#595](https://github.com/fission/fission/pull/595) ([xiekeyang](https://github.com/xiekeyang))
 - Add steps to set FISSION\_ROUTER env variable & update docs [\#593](https://github.com/fission/fission/pull/593) ([life1347](https://github.com/life1347))
 - Adding routerUrl parameter for kubewatch, timer, message queue trigge… [\#591](https://github.com/fission/fission/pull/591) ([smruthi2187](https://github.com/smruthi2187))
+- Uses proper way to get server URL [\#587](https://github.com/fission/fission/pull/587) ([vishal-biyani](https://github.com/vishal-biyani))
 - Check if the requested file already exists in fetcher and skip fetch [\#584](https://github.com/fission/fission/pull/584) ([smruthi2187](https://github.com/smruthi2187))
 - Add golang example to installation guide [\#578](https://github.com/fission/fission/pull/578) ([clee](https://github.com/clee))
 - Fixes the issue \#559 with env versions [\#569](https://github.com/fission/fission/pull/569) ([vishal-biyani](https://github.com/vishal-biyani))
@@ -896,7 +925,6 @@ filename | sha256 hash
 - Test functions 236 [\#355](https://github.com/fission/fission/pull/355) ([vishal-biyani](https://github.com/vishal-biyani))
 - Make default node-env use alpine. List envs in documentation. [\#354](https://github.com/fission/fission/pull/354) ([rapitable](https://github.com/rapitable))
 - Update k8s client version to 4.0.0 [\#351](https://github.com/fission/fission/pull/351) ([life1347](https://github.com/life1347))
-- Add bodyparser for text/plain to node-env [\#349](https://github.com/fission/fission/pull/349) ([erwinvaneyk](https://github.com/erwinvaneyk))
 
 ## [0.3.0](https://github.com/fission/fission/tree/0.3.0) (2017-09-29)
 
@@ -918,6 +946,7 @@ filename | sha256 hash
 - Dump package resources at the end of tests [\#357](https://github.com/fission/fission/pull/357) ([soamvasani](https://github.com/soamvasani))
 - Use Containers to find matched storage containers \(\#350\) [\#353](https://github.com/fission/fission/pull/353) ([life1347](https://github.com/life1347))
 - Fix storage service failed to start after restarting it [\#352](https://github.com/fission/fission/pull/352) ([life1347](https://github.com/life1347))
+- Add bodyparser for text/plain to node-env [\#349](https://github.com/fission/fission/pull/349) ([erwinvaneyk](https://github.com/erwinvaneyk))
 - Fix unsupported checksum type \(issue 342\) [\#343](https://github.com/fission/fission/pull/343) ([life1347](https://github.com/life1347))
 - Multiple Trigger Definitions Fix [\#341](https://github.com/fission/fission/pull/341) ([jsturtevant](https://github.com/jsturtevant))
 - Fission workflow env integration [\#336](https://github.com/fission/fission/pull/336) ([erwinvaneyk](https://github.com/erwinvaneyk))
