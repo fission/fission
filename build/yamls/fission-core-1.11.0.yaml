@@ -1,0 +1,626 @@
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fission-function
+  labels:
+    name: fission-function
+    chart: "fission-core-1.11.0"
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fission-builder
+  labels:
+    name: fission-builder
+    chart: "fission-core-1.11.0"
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-svc
+  namespace: fission
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-fetcher
+  namespace: fission-function
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-builder
+  namespace: fission-builder
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feature-config
+  namespace: fission
+data:
+  "config.yaml": Y2FuYXJ5OgogIGVuYWJsZWQ6IGZhbHNlCiAgcHJvbWV0aGV1c1N2YzogIiIK
+---
+# Source: fission-core/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: fission-storage-pvc
+  labels:
+    app: fission-storage
+    chart: "fission-core-1.11.0"
+    release: "RELEASE-NAME"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: secret-configmap-getter
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - secrets
+  - configmaps
+  verbs:
+  - get
+  - watch
+  - list
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: package-getter
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - packages
+  verbs:
+  - get
+  - watch
+  - list
+---
+# Source: fission-core/templates/deployment.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: fission-crd
+subjects:
+- kind: ServiceAccount
+  name: fission-svc
+  namespace: fission
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: fission-core/templates/deployment.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: fission-admin
+  namespace: fission
+subjects:
+  - kind: ServiceAccount
+    name: fission-svc
+    namespace: fission
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: fission-core/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: router
+  labels:
+    svc: router
+    application: fission-router
+    chart: "fission-core-1.11.0"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8888
+  selector:
+    svc: router
+---
+# Source: fission-core/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller
+  labels:
+    svc: controller
+    application: fission-api
+    chart: "fission-core-1.11.0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8888
+  selector:
+    svc: controller
+---
+# Source: fission-core/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: storagesvc
+  labels:
+    svc: storagesvc
+    application: fission-storage
+    chart: "fission-core-1.11.0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+  selector:
+    svc: storagesvc
+---
+# Source: fission-core/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: executor
+  labels:
+    svc: executor
+    chart: "fission-core-1.11.0"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8888
+  selector:
+    svc: executor
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: controller
+    application: fission-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: controller
+      application: fission-api
+  template:
+    metadata:
+      labels:
+        svc: controller
+        application: fission-api
+    spec:
+      containers:
+      - name: controller
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--controllerPort", "8888"]
+        env:
+          - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+            value: ""
+          - name: TRACING_SAMPLING_RATE
+            value: "0.5"
+          - name: FISSION_FUNCTION_NAMESPACE
+            value: "fission-function"
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 1
+          periodSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 35
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config/config.yaml
+          subPath: config.yaml
+        ports:
+          - containerPort: 8888
+            name: http
+      serviceAccountName: fission-svc
+      volumes:
+      - name: config-volume
+        configMap:
+          name: feature-config
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executor
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: executor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: executor
+  template:
+    metadata:
+      labels:
+        svc: executor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: executor
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--executorPort", "8888", "--namespace", "fission-function"]
+        env:
+        - name: FETCHER_IMAGE
+          value: "fission/fetcher:1.11.0"
+        - name: RUNTIME_IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: FETCHER_IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: ""
+        - name: TRACING_SAMPLING_RATE
+          value: "0.5"
+        - name: ADOPT_EXISTING_RESOURCES
+          value: "false"
+        - name: ENABLE_ISTIO
+          value: "false"
+        - name: FETCHER_MINCPU
+          value: "10m"
+        - name: FETCHER_MINMEM
+          value: "16Mi"
+        - name: FETCHER_MAXCPU
+          value: ""
+        - name: FETCHER_MAXMEM
+          value: ""
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 1
+          periodSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 35
+          periodSeconds: 5
+        ports:
+          - containerPort: 8080
+            name: metrics
+          - containerPort: 8888
+            name: http
+      serviceAccountName: fission-svc
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildermgr
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: buildermgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: buildermgr
+  template:
+    metadata:
+      labels:
+        svc: buildermgr
+    spec:
+      containers:
+      - name: buildermgr
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.fission", "--envbuilder-namespace", "fission-builder"]
+        env:
+        - name: FETCHER_IMAGE
+          value: "fission/fetcher:1.11.0"
+        - name: FETCHER_IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: BUILDER_IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: ""
+        - name: TRACING_SAMPLING_RATE
+          value: "0.5"      
+        - name: ENABLE_ISTIO
+          value: "false"
+        - name: FETCHER_MINCPU
+          value: "10m"
+        - name: FETCHER_MINMEM
+          value: "16Mi"
+        - name: FETCHER_MAXCPU
+          value: ""
+        - name: FETCHER_MAXMEM
+          value: ""
+      serviceAccountName: fission-svc
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubewatcher
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: kubewatcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: kubewatcher
+  template:
+    metadata:
+      labels:
+        svc: kubewatcher
+    spec:
+      containers:
+      - name: kubewatcher
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--kubewatcher", "--routerUrl", "http://router.fission"]
+        env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: ""
+        - name: TRACING_SAMPLING_RATE
+          value: "0.5"
+      serviceAccountName: fission-svc
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timer
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: timer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: timer
+  template:
+    metadata:
+      labels:
+        svc: timer
+    spec:
+      containers:
+      - name: timer
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--timer", "--routerUrl", "http://router.fission"]
+        env:
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: ""
+        - name: TRACING_SAMPLING_RATE
+          value: "0.5"
+      serviceAccountName: fission-svc
+---
+# Source: fission-core/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storagesvc
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: storagesvc
+    application: fission-storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: storagesvc
+      application: fission-storage
+  template:
+    metadata:
+      labels:
+        svc: storagesvc
+        application: fission-storage
+    spec:
+      containers:
+      - name: storagesvc
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--storageServicePort", "8000", "--storageType", "local"]
+        env:
+        - name: PRUNE_INTERVAL
+          value: "60"
+        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+          value: ""
+        - name: TRACING_SAMPLING_RATE
+          value: "0.5"
+        volumeMounts:
+        - name: fission-storage
+          mountPath: /fission
+        ports:
+          - containerPort: 8000
+            name: http
+      serviceAccountName: fission-svc
+      volumes:
+      - name: fission-storage
+        persistentVolumeClaim:
+          claimName: fission-storage-pvc
+---
+# Source: fission-core/templates/router.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router
+  labels:
+    chart: "fission-core-1.11.0"
+    svc: router
+    application: fission-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      application: fission-router
+      svc: router
+  template:
+    metadata:
+      labels:
+        application: fission-router
+        svc: router
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: router
+        image: "index.docker.io/fission/fission-bundle:1.11.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/fission-bundle"]
+        args: ["--routerPort", "8888", "--executorUrl", "http://executor.fission"]
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: ROUTER_ROUND_TRIP_TIMEOUT
+            value: "50ms"
+          - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
+            value: "2"
+          - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
+            value: "30s"
+          - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
+            value: "true"
+          - name: ROUTER_ROUND_TRIP_MAX_RETRIES
+            value: "10"
+          - name: ROUTER_SVC_ADDRESS_MAX_RETRIES
+            value: "5"
+          - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
+            value: "30s"
+          - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
+            value: ""
+          - name: TRACING_SAMPLING_RATE
+            value: "0.5"
+          - name: USE_ENCODED_PATH
+            value: "false"
+          - name: DEBUG_ENV
+            value: "false"
+          - name: DISPLAY_ACCESS_LOG
+            value: "false"
+          - name: ANALYTICS_URL
+            value: "https://g.fission.io/metrics"
+        readinessProbe:
+          httpGet:
+            path: "/router-healthz"
+            port: 8888
+          initialDelaySeconds: 1
+          periodSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: "/router-healthz"
+            port: 8888
+          initialDelaySeconds: 35
+          periodSeconds: 5
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8888
+          name: http
+      serviceAccountName: fission-svc
+---
+# Source: fission-core/templates/nonhelm-install-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: RELEASE-NAME-fission-cor-1.11.0-547
+  labels:
+    # The "release" convention makes it easy to tie a release to all of the
+    # Kubernetes resources that were created as part of that release.
+    release: RELEASE-NAME
+    # This makes it easy to audit chart usage.
+    chart: fission-core-1.11.0
+    app: fission-core
+spec:
+  #ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      name: RELEASE-NAME-fission-cor
+      labels:
+        release: RELEASE-NAME
+        app: fission-core
+      annotations:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: post-install-job
+          image: "fission/alpinecurl"
+          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"yaml-post-install\", \"chartName\": \"fission-core\", \"chartVersion\": \"1.11.0\"}' https://g.fission.io/analytics || true"]
+---
+# Source: fission-core/templates/pre-upgrade-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: RELEASE-NAME-fission-cor-1.11.0-907
+  labels:
+    # The "release" convention makes it easy to tie a release to all of the
+    # Kubernetes resources that were created as part of that release.
+    release: "RELEASE-NAME"
+    # This makes it easy to audit chart usage.
+    chart: fission-core-1.11.0
+    app: fission-core
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: RELEASE-NAME-fission-cor
+      labels:
+        release: "RELEASE-NAME"
+        app: fission-core
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: pre-upgrade-job
+        image: fission/pre-upgrade-checks:1.11.0
+        imagePullPolicy: IfNotPresent
+        command: [ "/pre-upgrade-checks" ]
+        args: ["--fn-pod-namespace", "fission-function", "--envbuilder-namespace", "fission-builder"]
+      serviceAccountName: fission-svc
