@@ -303,5 +303,5 @@ gitcommit=$(git rev-parse HEAD)
 #build_all $version $date $gitcommit
 #build_all_envs $version
 #build_all_env_builders $version
-build_charts $version
-build_yamls $version
+#build_charts $version
+#build_yamls $version
