@@ -24,7 +24,7 @@ check_clean() {
     if ! git diff-index --quiet HEAD --
     then
         echo "Unclean tree"
-        #exit 1
+        exit 1
     fi
 }
 
