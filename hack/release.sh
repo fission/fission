@@ -370,13 +370,13 @@ push_all $version
 push_all_envs $version
 push_all_env_builders $version
 
-tag_and_release $version
-attach_github_release_cli $version
-attach_github_release_charts $version
-attach_github_release_yamls $version
-update_github_charts_repo $version $chartsrepo
+#tag_and_release $version
+#attach_github_release_cli $version
+#attach_github_release_charts $version
+#attach_github_release_yamls $version
+#update_github_charts_repo $version $chartsrepo
 
-generate_changelog $version
+#generate_changelog $version
 
 echo "############ DONE #############"
 echo "Congratulation, ${version} is ready to ship !!"
