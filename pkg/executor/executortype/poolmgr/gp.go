@@ -703,10 +703,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Atime:             time.Now(),
 	}
 
-	_, err = gp.fsCache.Add(*fsvc)
-	if err != nil {
-		return nil, err
-	}
+	gp.fsCache.AddFunc(*fsvc)
 
 	gp.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 

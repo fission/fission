@@ -58,6 +58,8 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 		errCode = ErrorNameExists
 	case http.StatusRequestTimeout:
 		errCode = ErrorRequestTimeout
+	case http.StatusTooManyRequests:
+		errCode = ErrorTooManyRequests
 	default:
 		errCode = ErrorInternal
 	}
@@ -83,6 +85,8 @@ func (err Error) HTTPStatus() int {
 		code = http.StatusNotFound
 	case ErrorNameExists:
 		code = http.StatusConflict
+	case ErrorTooManyRequests:
+		code = http.StatusTooManyRequests
 	default:
 		code = http.StatusInternalServerError
 	}
@@ -131,6 +135,7 @@ const (
 	ErrorChecksumFail
 	ErrorSizeLimitExceeded
 	ErrorRequestTimeout
+	ErrorTooManyRequests
 )
 
 // must match order and len of the above const

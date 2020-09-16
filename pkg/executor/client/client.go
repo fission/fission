@@ -91,6 +91,32 @@ func (c *Client) GetServiceForFunction(ctx context.Context, metadata *metav1.Obj
 	return string(svcName), nil
 }
 
+func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceUrl *url.URL) error {
+	url := c.executorUrl + "/v2/unTapService"
+	tapSvc := TapServiceRequest{
+		FnMetadata:     fnMeta,
+		FnExecutorType: executorType,
+		ServiceUrl:     strings.TrimPrefix(serviceUrl.String(), "http://"),
+	}
+
+	body, err := json.Marshal(tapSvc)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal request body for getting service for function")
+	}
+
+	resp, err := ctxhttp.Post(ctx, c.httpClient, url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "error posting to getting service for function")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return ferror.MakeErrorFromHTTP(resp)
+	}
+
+	return nil
+}
+
 func (c *Client) service() {
 	ticker := time.NewTicker(time.Second * 5)
 	for {

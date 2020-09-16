@@ -166,11 +166,19 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return gpm.fsCache.GetByFunction(&fn.ObjectMeta)
+	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
-	gpm.fsCache.DeleteEntry(fsvc)
+	gpm.fsCache.DeleteFunctionSvc(fsvc)
+}
+
+func (gpm *GenericPoolManager) UnTapService(fn *fv1.Function, svcHost string) {
+	gpm.fsCache.MarkAvailable(fn, svcHost)
+}
+
+func (gpm *GenericPoolManager) GetTotalAvailable(fn *fv1.Function) int {
+	return gpm.fsCache.GetTotalAvailable(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {
@@ -581,7 +589,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			fnList[fn.ObjectMeta.UID] = fns.Items[i]
 		}
 
-		funcSvcs, err := gpm.fsCache.ListOld(pollSleep)
+		funcSvcs, err := gpm.fsCache.ListOldForPool(pollSleep)
 		if err != nil {
 			gpm.logger.Error("error reaping idle pods", zap.Error(err))
 			continue
@@ -618,7 +626,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			}
 
 			go func() {
-				deleted, err := gpm.fsCache.DeleteOld(fsvc, idlePodReapTime)
+				deleted, err := gpm.fsCache.DeleteOldPoolCache(fsvc, idlePodReapTime)
 				if err != nil {
 					gpm.logger.Error("error deleting Kubernetes objects for function service",
 						zap.Error(err),

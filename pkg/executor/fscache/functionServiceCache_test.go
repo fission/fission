@@ -1,6 +1,7 @@
 package fscache
 
 import (
+	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -121,4 +122,90 @@ func TestFunctionServiceCache(t *testing.T) {
 		fsc.Log()
 		log.Panicf("found fsvc by function uid while expecting empty cache: %v", err)
 	}
+}
+
+func TestFunctionServiceNewCache(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	panicIf(err)
+
+	fsc := MakeFunctionServiceCache(logger)
+	if fsc == nil {
+		log.Panicf("error creating cache")
+	}
+
+	var fsvc *FuncSvc
+	now := time.Now()
+
+	objects := []apiv1.ObjectReference{
+		{
+			Kind:       "pod",
+			Name:       "xxx",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+		{
+			Kind:       "pod",
+			Name:       "xxx2",
+			APIVersion: "v1",
+			Namespace:  "fission-function",
+		},
+	}
+
+	fsvc = &FuncSvc{
+		Function: &metav1.ObjectMeta{
+			Name: "foo",
+			UID:  "1212",
+		},
+		Environment: &fv1.Environment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "foo-env",
+				UID:  "2323",
+			},
+			Spec: fv1.EnvironmentSpec{
+				Version: 1,
+				Runtime: fv1.Runtime{
+					Image: "fission/foo-env",
+				},
+				Builder: fv1.Builder{},
+			},
+		},
+		Address:           "xxx",
+		KubernetesObjects: objects,
+		Ctime:             now,
+		Atime:             now,
+	}
+
+	fn := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "foo",
+			UID:  "1212",
+		},
+	}
+
+	fsc.AddFunc(*fsvc)
+
+	active := fsc.GetTotalAvailable(fsvc.Function)
+	if active != 1 {
+		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
+	}
+
+	fsc.MarkAvailable(fn, fsvc.Address)
+
+	if fsc.GetTotalAvailable(fsvc.Function) != 0 {
+		log.Panicln("active instances not matched")
+	}
+
+	_, err = fsc.GetFuncSvc(fsvc.Function)
+	if err != nil {
+		logger.Panic("received error while retrieving value from cache")
+	}
+
+	vals, err := fsc.ListOldForPool(30 * time.Second)
+	if err != nil {
+		logger.Panic("received error while get list of old values")
+	}
+	if len(vals) != 0 {
+		logger.Panic(fmt.Sprintln("list of old values didn't matched the expected: 1", "received", len(vals)))
+	}
+	fsc.DeleteFunctionSvc(fsvc)
 }
