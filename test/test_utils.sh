@@ -250,6 +250,7 @@ helm_install_fission() {
     pushd $ROOT/charts/fission-all
     echo "Cleaning up stale resources"
     helm template . -ndefault| kubectl delete -f - || true
+    sleep 30
     echo "Installing fission"
     helm install $id		\
 	 --wait			\
