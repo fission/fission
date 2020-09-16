@@ -24,7 +24,7 @@ check_clean() {
     if ! git diff-index --quiet HEAD --
     then
         echo "Unclean tree"
-        exit 1
+        #exit 1
     fi
 }
 
@@ -366,9 +366,9 @@ docker build -t fission-release-builder -f $GOPATH/src/github.com/fission/fissio
 docker run --rm -it -v $GOPATH/src:/go/src -v /var/run/docker.sock:/var/run/docker.sock \
     -e VERSION=$version -w "/go/src/github.com/fission/fission/hack" fission-release-builder sh -c "./release-build.sh"
 
-#push_all $version
-#push_all_envs $version
-#push_all_env_builders $version
+push_all $version
+push_all_envs $version
+push_all_env_builders $version
 
 tag_and_release $version
 attach_github_release_cli $version
