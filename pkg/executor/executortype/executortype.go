@@ -18,6 +18,7 @@ package executortype
 
 import (
 	"context"
+
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -44,6 +45,9 @@ type ExecutorType interface {
 	// avoid idle pod reaper recycles pods.
 	TapService(serviceUrl string) error
 
+	// UnTapService updates the isActive to false
+	UnTapService(fn *fv1.Function, svcHost string)
+
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.
 	IsValid(*fscache.FuncSvc) bool
@@ -56,4 +60,7 @@ type ExecutorType interface {
 
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
 	CleanupOldExecutorObjects()
+
+	// getTotalAvailable returns total active instances of particular function
+	GetTotalAvailable(*fv1.Function) int
 }

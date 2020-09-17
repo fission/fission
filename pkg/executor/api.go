@@ -61,6 +61,28 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 		return
 	}
 
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	et, exists := executor.executorTypes[t]
+	if !exists {
+		http.Error(w, fmt.Sprintf("Unknown executor type '%v'", t), http.StatusNotFound)
+		return
+	}
+
+	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetTotalAvailable(fn)))
+	conncurrency := fn.Spec.Concurrency
+	if conncurrency == 0 {
+		// set to default conncurrency
+		conncurrency = 5
+		executor.logger.Debug(fmt.Sprintf("concurrency specified in function: %v", fn.Spec.Concurrency))
+		executor.logger.Debug("setting concurrency to 5")
+	}
+	if t == fv1.ExecutorTypePoolmgr && et.GetTotalAvailable(fn) >= conncurrency {
+		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
+		executor.logger.Error("error occured", zap.String("error", errMsg))
+		http.Error(w, errMsg, http.StatusTooManyRequests)
+		return
+	}
+
 	serviceName, err := executor.getServiceForFunction(fn)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
@@ -85,16 +107,12 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	et := executor.executorTypes[t]
 	// Check function -> svc cache
 	executor.logger.Debug("checking for cached function service",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et, exists := executor.executorTypes[t]
-	if !exists {
-		return "", errors.Errorf("Unknown executor type '%v'", t)
-	}
 
 	fsvc, err := et.GetFuncSvcFromCache(fn)
 	if err == nil {
@@ -181,12 +199,50 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
+		return
+	}
+	tapSvcReq := client.TapServiceRequest{}
+	err = json.Unmarshal(body, &tapSvcReq)
+	if err != nil {
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+
+	fn, err := executor.fissionClient.CoreV1().Functions(tapSvcReq.FnMetadata.Namespace).Get(tapSvcReq.FnMetadata.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			http.Error(w, "Failed to find function", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to get function", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	if t != fv1.ExecutorTypePoolmgr {
+		msg := fmt.Sprintf("Unknown executor type '%v'", t)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	et := executor.executorTypes[t]
+
+	et.UnTapService(fn, tapSvcReq.ServiceUrl)
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionApi).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
+	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
 	return r
 }
 

@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	poolcache "github.com/fission/fission/pkg/newcache"
 )
 
 type fscRequestType int
@@ -40,6 +41,7 @@ const (
 	TOUCH fscRequestType = iota
 	LISTOLD
 	LOG
+	LISTOLDPOOL
 )
 
 type (
@@ -56,10 +58,11 @@ type (
 	}
 
 	FunctionServiceCache struct {
-		logger        *zap.Logger
-		byFunction    *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress     *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID *cache.Cache // function uid -> function : map[string]metav1.ObjectMeta
+		logger            *zap.Logger
+		byFunction        *cache.Cache     // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
+		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
 
 		requestChannel chan *fscRequest
 	}
@@ -91,11 +94,12 @@ func IsNameExistError(err error) bool {
 
 func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
-		logger:         logger.Named("function_service_cache"),
-		byFunction:     cache.MakeCache(0, 0),
-		byAddress:      cache.MakeCache(0, 0),
-		byFunctionUID:  cache.MakeCache(0, 0),
-		requestChannel: make(chan *fscRequest),
+		logger:            logger.Named("function_service_cache"),
+		byFunction:        cache.MakeCache(0, 0),
+		byAddress:         cache.MakeCache(0, 0),
+		byFunctionUID:     cache.MakeCache(0, 0),
+		connFunctionCache: poolcache.NewPoolCache(),
+		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
 	return fsc
@@ -131,6 +135,17 @@ func (fsc *FunctionServiceCache) service() {
 				}
 			}
 			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
+		case LISTOLDPOOL:
+			fscs := fsc.connFunctionCache.ListValue()
+			funcObjects := make([]*FuncSvc, 0)
+			for _, funcSvc := range fscs {
+				fsvc := funcSvc.(*FuncSvc)
+				if time.Since(fsvc.Atime) > req.age {
+					funcObjects = append(funcObjects, fsvc)
+				}
+			}
+			resp.objects = funcObjects
+
 		}
 		req.responseChannel <- resp
 	}
@@ -141,6 +156,23 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 
 	fsvcI, err := fsc.byFunction.Get(key)
 	if err != nil {
+		return nil, err
+	}
+
+	// update atime
+	fsvc := fsvcI.(*FuncSvc)
+	fsvc.Atime = time.Now()
+
+	fsvcCopy := *fsvc
+	return &fsvcCopy, nil
+}
+
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, error) {
+	key := crd.CacheKey(m)
+
+	fsvcI, err := fsc.connFunctionCache.GetValue(key)
+	if err != nil {
+		fsc.logger.Info("Not found in Cache")
 		return nil, err
 	}
 
@@ -171,6 +203,23 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 	fsvcCopy := *fsvc
 	return &fsvcCopy, nil
+}
+
+func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
+	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	now := time.Now()
+	fsvc.Ctime = now
+	fsvc.Atime = now
+
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
+}
+
+func (fsc *FunctionServiceCache) GetTotalAvailable(m *metav1.ObjectMeta) int {
+	return fsc.connFunctionCache.GetTotalAvailable(crd.CacheKey(m))
+}
+
+func (fsc *FunctionServiceCache) MarkAvailable(fn *fv1.Function, svcHost string) {
+	fsc.connFunctionCache.MarkAvailable(crd.CacheKey(&fn.ObjectMeta), svcHost)
 }
 
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
@@ -255,6 +304,10 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
 }
 
+func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
+	fsc.connFunctionCache.DeleteValue(crd.CacheKey(fsvc.Function), fsvc.Address)
+}
+
 func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
 	if time.Since(fsvc.Atime) < minAge {
 		return false, nil
@@ -265,10 +318,31 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 	return true, nil
 }
 
+func (fsc *FunctionServiceCache) DeleteOldPoolCache(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
+	if time.Since(fsvc.Atime) < minAge {
+		return false, nil
+	}
+
+	fsc.DeleteFunctionSvc(fsvc)
+
+	return true, nil
+}
+
 func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
 		requestType:     LISTOLD,
+		age:             age,
+		responseChannel: responseChannel,
+	}
+	resp := <-responseChannel
+	return resp.objects, resp.error
+}
+
+func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, error) {
+	responseChannel := make(chan *fscResponse)
+	fsc.requestChannel <- &fscRequest{
+		requestType:     LISTOLDPOOL,
 		age:             age,
 		responseChannel: responseChannel,
 	}

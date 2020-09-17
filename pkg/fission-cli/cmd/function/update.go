@@ -155,6 +155,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
+	if input.IsSet(flagkey.FnConcurrency) {
+		function.Spec.Concurrency = input.Int(flagkey.FnConcurrency)
+	}
+
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}
