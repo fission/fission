@@ -154,6 +154,15 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
+func (deploy *NewDeploy) UnTapService(fn *fv1.Function, svcHost string) {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
+}
+
+func (deploy *NewDeploy) GetTotalAvailable(fn *fv1.Function) int {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
+	return 0
+}
+
 func (deploy *NewDeploy) TapService(svcHost string) error {
 	err := deploy.fsCache.TouchByAddress(svcHost)
 	if err != nil {

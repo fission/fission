@@ -41,6 +41,7 @@ import (
 const (
 	DEFAULT_MIN_SCALE             = 1
 	DEFAULT_TARGET_CPU_PERCENTAGE = 80
+	DEFAULT_CONCURRENCY           = 5
 )
 
 type CreateSubCommand struct {
@@ -95,6 +96,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
+
+	fnConcurrency := DEFAULT_CONCURRENCY
+	if input.IsSet(flagkey.FnConcurrency) {
+		fnConcurrency = input.Int(flagkey.FnConcurrency)
+	}
 
 	pkgName := input.String(flagkey.FnPackageName)
 
@@ -294,6 +300,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,
 			IdleTimeout:     &fnIdleTimeout,
+			Concurrency:     fnConcurrency,
 		},
 	}
 

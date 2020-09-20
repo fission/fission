@@ -19,10 +19,8 @@ package router
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -33,72 +31,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
-
-func createBackendService(testResponseString string) *url.URL {
-	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(testResponseString))
-	}))
-
-	backendURL, err := url.Parse(backendServer.URL)
-	if err != nil {
-		panic("error parsing url")
-	}
-	return backendURL
-}
-
-/*
-   1. Create a service at some URL
-   2. Add it to the function service map
-   3. Create a http server with some trigger url pointed at function handler
-   4. Send a request to that server, ensure it reaches the first service.
-*/
-func TestFunctionProxying(t *testing.T) {
-	testResponseString := "hi"
-	backendURL := createBackendService(testResponseString)
-	log.Printf("Created backend svc at %v", backendURL)
-
-	fnMeta := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
-
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-
-	panicIf(err)
-
-	fmap := makeFunctionServiceMap(logger, 0)
-	fmap.assign(&fnMeta, backendURL)
-
-	httpTrigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "xxx",
-			Namespace:       metav1.NamespaceDefault,
-			ResourceVersion: "1234",
-		},
-		Spec: fv1.HTTPTriggerSpec{
-			FunctionReference: fv1.FunctionReference{
-				Type: fv1.FunctionReferenceTypeFunctionName,
-			},
-		},
-	}
-
-	fh := &functionHandler{
-		logger: logger,
-		fmap:   fmap,
-		function: &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault},
-		},
-		tsRoundTripperParams: &tsRoundTripperParams{
-			timeout:         50 * time.Millisecond,
-			timeoutExponent: 2,
-			maxRetries:      10,
-		},
-		httpTrigger: httpTrigger,
-	}
-	functionHandlerServer := httptest.NewServer(http.HandlerFunc(fh.handler))
-	fhURL := functionHandlerServer.URL
-
-	testRequest(fhURL, testResponseString)
-}
 
 func TestProxyErrorHandler(t *testing.T) {
 	config := zap.NewDevelopmentConfig()

@@ -18,18 +18,6 @@ travis_fold_end() {
     echo -e "travis_fold:end:$1\r"
 }
 
-helm_setup() {
-    helm init
-    # wait for tiller ready
-    while true; do
-      kubectl --namespace kube-system get pod|grep tiller|grep Running
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-}
-export -f helm_setup
 
 gcloud_login() {
     KEY=${HOME}/gcloud-service-key.json
@@ -245,28 +233,32 @@ helm_install_fission() {
 
     helmVars=repository=$repo,image=$image,imageTag=$imageTag,fetcher.image=$fetcherImage,fetcher.imageTag=$fetcherImageTag,functionNamespace=$fns,controllerPort=$controllerNodeport,routerPort=$routerNodeport,pullPolicy=Always,analytics=false,debugEnv=true,pruneInterval=$pruneInterval,routerServiceType=$routerServiceType,serviceType=$serviceType,preUpgradeChecksImage=$preUpgradeCheckImage,prometheus.server.persistentVolume.enabled=false,prometheus.alertmanager.enabled=false,prometheus.kubeStateMetrics.enabled=false,prometheus.nodeExporter.enabled=false
 
-    timeout 30 bash -c "helm_setup"
 
     echo "Deleting old releases"
     helm list -q|xargs -I@ bash -c "helm_uninstall_fission @"
 
     # deleting ns does take a while after command is issued
-    while kubectl get ns| grep "fission-builder"
-    do
-        sleep 5
-    done
+    # while kubectl get ns| grep "fission-builder"
+    # do
+    #     sleep 5
+    # done
 
     helm dependency update $ROOT/charts/fission-all
 
+    echo "Creating namespace $ns"
+    kubectl create ns $ns
+    pushd $ROOT/charts/fission-all
+    echo "Cleaning up stale resources"
+    helm template . -ndefault| kubectl delete -f - || true
+    sleep 30
     echo "Installing fission"
-    helm install		\
+    helm install $id		\
 	 --wait			\
-	 --timeout 540	        \
-	 --name $id		\
+	 --timeout 540s	        \
 	 --set $helmVars	\
 	 --namespace $ns        \
-	 $ROOT/charts/fission-all
-
+	 .
+    popd
     helm list
     travis_fold_end helm_install_fission
 }
@@ -344,8 +336,9 @@ helm_uninstall_fission() {(set +e
 	    return
     fi
 
+    ns=f-$id
     echo "Uninstalling fission"
-    helm delete --purge $id
+    helm delete $id -n $ns || true
     kubectl delete ns f-$id || true
 )}
 export -f helm_uninstall_fission
@@ -535,7 +528,6 @@ run_all_tests() {
         $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
         $ROOT/test/tests/test_pass.sh \
-        $ROOT/test/tests/test_router_cache_invalidation.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
@@ -604,11 +596,9 @@ install_and_test() {
     setupIngressController
 
     helm_install_fission $id $repo $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $pruneInterval $routerServiceType $serviceType $preUpgradeCheckImage
-    helm status $id | grep STATUS | grep -i deployed
     if [ $? -ne 0 ]; then
         describe_all_pods $id
         dump_kubernetes_events $id
-        dump_tiller_logs
 	    exit 1
     fi
 

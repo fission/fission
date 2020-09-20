@@ -350,6 +350,10 @@ type (
 		// is detected within the idle timeout, the executor will then recycle the
 		// function pod(s) to release resources.
 		IdleTimeout *int `json:"idletimeout,omitempty"`
+
+		// Maximum number of pods to be specialized which will serve requests
+		// This is optional. If not specified default value will be taken as 5
+		Concurrency int `json:"concurrency,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.
