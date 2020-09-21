@@ -148,7 +148,8 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 	out, err := cmd.Output()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Function error: %s", err)))
+		w.Write([]byte(fmt.Sprintf("Function error log: %s", err)))
+		w.Write([]byte(fmt.Sprintf("\nFunction out log: %s \n", out)))
 		return
 	}
 
