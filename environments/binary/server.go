@@ -100,6 +100,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("Failed to write executable to target location."))
 		return
 	}
+	bs.internalCodePath = codePath
 
 	fmt.Println("Specializing ...")
 	specialized = true
@@ -118,13 +119,14 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 	execEnv.SetEnv(&EnvVar{"REQUEST_METHOD", r.Method})
 	execEnv.SetEnv(&EnvVar{"REQUEST_URI", r.RequestURI})
 	execEnv.SetEnv(&EnvVar{"CONTENT_LENGTH", fmt.Sprintf("%d", r.ContentLength)})
+	execEnv.SetEnv(&EnvVar{"PATH", "$PATH:/userfunc/deployarchive:/userfunc"})
 
 	for header, val := range r.Header {
 		execEnv.SetEnv(&EnvVar{fmt.Sprintf("HTTP_%s", strings.ToUpper(header)), val[0]})
 	}
 
 	// Future: could be improved by keeping subprocess open while environment is specialized
-	cmd := exec.Command(bs.internalCodePath)
+	cmd := exec.Command("/bin/sh", bs.internalCodePath)
 	cmd.Env = execEnv.ToStringEnv()
 
 	if r.ContentLength != 0 {
