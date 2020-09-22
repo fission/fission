@@ -111,11 +111,6 @@ NAME                                                    READY   STATUS          
 buildermgr-6f778d4ff9-dqnq5                             1/1     Running            0          6h9m
 controller-d44bd4f4d-5q4z5                              1/1     Running            0          6h9m
 executor-557c68c6fd-dg8ld                               1/1     Running            0          6h9m
-fission-prometheus-alertmanager-5844d99569-xq6cb        2/2     Running            0          6h9m
-fission-prometheus-kube-state-metrics-54f5c98c6-r7qv2   1/1     Running            0          6h9m
-fission-prometheus-node-exporter-fsq4g                  1/1     Running            0          6h9m
-fission-prometheus-pushgateway-66dcbbc99b-zj67m         1/1     Running            0          6h9m
-fission-prometheus-server-5f947998b9-djkjv              2/2     Running            0          6h9m
 influxdb-845548c959-2954p                               1/1     Running            0          6h9m
 kubewatcher-5784c454b8-5mqsk                            1/1     Running            0          6h9m
 logger-bncqn                                            2/2     Running            0          6h9m
