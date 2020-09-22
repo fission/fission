@@ -45,6 +45,7 @@ type (
 )
 
 func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Starting Specialize request")
 	if specialized {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Not a generic container"))
@@ -55,6 +56,10 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 
 	codePath := bs.fetchedCodePath
 	err := json.NewDecoder(r.Body).Decode(&request)
+	if err != nil {
+		fmt.Println("Decoded function load request: ", request)
+	}
+
 	switch {
 	case err == io.EOF:
 	case err != nil:
@@ -76,6 +81,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 
 	_, err = os.Stat(codePath)
 	if err != nil {
+		fmt.Println("Error in parsing codePath:", err)
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(codePath + ": not found"))
@@ -90,6 +96,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 	// Copy the executable to ensure that file is executable and immutable.
 	userFunc, err := ioutil.ReadFile(codePath)
 	if err != nil {
+		fmt.Println("Error reading code", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to read executable."))
 		return
@@ -101,7 +108,7 @@ func (bs *BinaryServer) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	bs.internalCodePath = codePath
-
+	fmt.Println("BinaryServer:", bs)
 	fmt.Println("Specializing ...")
 	specialized = true
 	fmt.Println("Done")
@@ -113,6 +120,7 @@ func (bs *BinaryServer) InvocationHandler(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("Generic container: no requests supported"))
 		return
 	}
+	fmt.Println("Starting binary function execution")
 
 	// CGI-like passing of environment variables
 	execEnv := NewEnv(nil)
