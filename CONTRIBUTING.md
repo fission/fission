@@ -9,7 +9,7 @@ Table of Contents
 =================
 
    * [Choose something to work on](#choose-something-to-work-on)
-         * [Get Help.](#get-help)
+      * [Get Help.](#get-help)
    * [Contributing - building &amp; deploying](#contributing---building--deploying)
       * [Prequisite](#prequisite)
       * [Getting Started](#getting-started)
@@ -132,7 +132,7 @@ timer-7d85d9c9fb-knctw                                  1/1     Running         
 
 ### cmd
 
-Cmd package is entrypoint for all runtime components and also has Dockerfile for each component. The actual logic here will be pretty light and most of logic of each component is in `pkg` (Discussecd later)
+Cmd package is entrypoint for all runtime components and also has Dockerfile for each component. The actual logic here will be pretty light and most of logic of each component is in `pkg` (Discussed later)
 
 | Component         	   | Runtime Component      |Used in|
 | :-------------    	   |:-------------          |:-|
