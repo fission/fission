@@ -42,7 +42,7 @@ Do reach out on Slack or Twitter and we are happy to help.
 
 # Contributing - building & deploying
 
-## Prequisite
+## Pre-requisite
 
 - You'll need the `go` compiler and tools installed. Currently version 1.12.x of Go is needed.
 
