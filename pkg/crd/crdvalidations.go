@@ -44,6 +44,10 @@ var (
 					Type:        "integer",
 					Description: "IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.",
 				},
+				"concurrency": {
+					Type:        "integer",
+					Description: "Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.\n This is optional. If not specified default value will be taken as 5",
+				},
 			},
 		},
 	}
