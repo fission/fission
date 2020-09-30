@@ -92,7 +92,7 @@ The meeting agenda for next meeting and notes from past meetings are maintained 
 ## Official Releases
 
 Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
-Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
+Please note that it is strongly recommended to use official releases of Fission, as unreleased versions from 
 the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 
 ## Sponsors
