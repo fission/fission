@@ -6,7 +6,7 @@ cd ${SRC_PKG}
 echo src : ${SRC_PKG} ,dest:  ${DEPLOY_PKG} >builderpaths.txt
 
 #now run actual dll for custom builder logic
-# please note as this need to be executed from app folder so that all dependent files are avilable
+# please note as this need to be executed from app folder so that all dependent files are available
 # else you will end up getting File not found error
 cd /app
 
