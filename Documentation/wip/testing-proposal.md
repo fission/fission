@@ -111,7 +111,7 @@ https://golang.org/pkg/os/exec
 
 ### Using CLI package
 
-Currently we build a CLI and then execute the tests. The tests basically call one of functions from CLI package. If we decide to use a go lang based framework, then we can import the CLI package and then call those functions  by providing them context. This is as good as calling the Fission from CLI, with added benefit of programmibility of Go langugage.
+Currently we build a CLI and then execute the tests. The tests basically call one of functions from CLI package. If we decide to use a go lang based framework, then we can import the CLI package and then call those functions  by providing them context. This is as good as calling the Fission from CLI, with added benefit of programmbility of Go langugage.
 
 ```
 func TestSomething(t *testing.T) {
@@ -180,7 +180,7 @@ Eventually(session.Out).Should(gbytes.Say("hello [A-Za-z], world"))
 ```
 There are many more matchers which cane be found here: http://onsi.github.io/gomega/#provided-matchers 
 
-- We can build custom mathers in Go language for reusable logic.
+- We can build custom matchers in Go language for reusable logic.
 
 #### Links
 Ginkgo: http://onsi.github.io/ginkgo/
@@ -191,7 +191,7 @@ Based on the discussion with team, here are current thoughts and next action ite
 
 ### Thoughts
 - As far as possible we should stick to Go's built in testing package
-- Ginkgo's cleaner logging feature (Onlu log if there are errors) - is very useful. We can decide to incorporate this in future.
+- Ginkgo's cleaner logging feature (Only log if there are errors) - is very useful. We can decide to incorporate this in future.
 - Gomega's (gexec)[http://onsi.github.io/gomega/#gexec-testing-external-processes] is really neat and some matchers can be used if necessary
 
 ### Action items
