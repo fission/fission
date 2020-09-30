@@ -17,8 +17,8 @@ extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
-_environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
-PHP, Bash, and any Linux executable, with more languages coming soon.
+_environments_ (more below).  Fission currently supports NodeJS, PYTHON, RUBY, GO, 
+PHP, BASH, and any Linux executable, with more languages coming soon.
 
 Table of Contents
 =================
@@ -42,7 +42,7 @@ i.e. "cold-started", a running container is chosen and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
-## Kubernetes is the right place for Serverless
+## Kubernetes is the right place for "Serverless"
 
 We're built on Kubernetes because we think any non-trivial app will
 use a combination of serverless functions and more conventional
@@ -85,7 +85,7 @@ Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3Njg
 
 A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=09:00&tz=PT%20%28Pacific%20Time%29).
 
-Meeting Link: https://zoom.us/j/413921817 
+##Meeting Link: https://zoom.us/j/413921817 
 
 The meeting agenda for next meeting and notes from past meetnigs are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
