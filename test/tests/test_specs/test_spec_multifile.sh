@@ -40,7 +40,7 @@ fission fn create --spec --name $fn --env $env --deploy "multifile/*" --entrypoi
 log "Applying specs"
 fission spec apply
 
-log "Checking function's existance"
+log "Checking function's existence"
 fission fn list | grep $fn
 
 log "Testing function"
