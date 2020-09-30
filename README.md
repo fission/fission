@@ -44,9 +44,9 @@ are typically about 100msec.
 
 ## Kubernetes is the right place for Serverless
 
-We're built on Kubernetes because we think any non-trivial app will
+We're built on Kubernetes because we think that any non-trivial app will
 use a combination of serverless functions and more conventional
-microservices, and Kubernetes is a great framework to bring these
+microservices, and Kubernetes is a great framework to bring these operations
 together seamlessly.
 
 Building on Kubernetes also means that anything you do for operations
