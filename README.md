@@ -8,7 +8,7 @@
 
 <img src="https://docs.fission.io/images/logo.png" width="300">
 
-Fission is a fast serverless framework for Kubernetes with a focus on
+Fission is a fast serverless framework for [Kubernetes](https://kubernetes.io/) with a focus on
 developer productivity and high performance.
 
 Fission operates on _just the code_: Docker and Kubernetes are
@@ -17,7 +17,7 @@ extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
-_environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
+_environments_ (more below).  Fission currently supports [NodeJS](https://nodejs.org/en/), [Python](https://www.python.org/), [Ruby](https://www.ruby-lang.org/en/), [Go](https://golang.org/), 
 PHP, Bash, and any Linux executable, with more languages coming soon.
 
 Table of Contents
@@ -27,6 +27,7 @@ Table of Contents
       * [Performance: 100msec cold start](#performance-100msec-cold-start)
       * [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
       * [Getting Started](#getting-started)
+      * [Environments](#environments)
       * [Learn More](#learn-more)
       * [Contributing](#contributing)
       * [Get Help &amp; Community Meeting](#get-help--community-meeting)
@@ -66,6 +67,45 @@ aggregation &mdash; also helps with ops on your Fission deployment.
   $ fission function test --name hello
   Hello, world!
 ```
+## Environments
+Currently, Fission support three environment interface version: v1, v2 and v3.
+Currently, Fission support three environment interface version: v1, v2 and v3.
+
+* v1
+  * Support loading function from a **single file**. (Mainly for interpreted languages like Python and JavaScript.)
+  * You are **NOT** allowed to specify which entrypoint to load in if there are multiple entrypoint in the file.
+
+* v2 (**Recommend**)
+  * The function code can be placed in a directory or having multiple entry points in a single file.  
+  * **Load function by specific entry point**. (For the v2 interface, the function may not work if no entry point is provided.)
+  * Support downloading necessary dependencies and source code compilation. (Optional)
+
+* v3 (**Recommend**)
+  * All features in v2 interface.
+  * Pre-warmed pool size adjustment.
+  
+  The following pre-built environments are currently available for use in Fission:
+
+| Environment                         | Image                     | Builder Image              | v1  | v2  | v3  |
+|-------------------------------------|---------------------------|----------------------------|-----|-----|-----|
+| NodeJS                              | `fission/node-env`        | `fission/node-builder`     | O   | O   | O   |
+| Python 3                            | `fission/python-env`      | `fission/python-builder`   | O   | O   | O   |
+| Go                                  | see [here]({{% ref "go.md" %}}#add-the-go-environment-to-your-cluster) for more info | | O   | O   | O   |
+| JVM (Java)                          | `fission/jvm-env`         | `fission/jvm-builder`      | O   | O   | O   |
+| Ruby                                | `fission/ruby-env`        | `fission/ruby-builder`     | O   | O   | O   |
+| Binary (for executables or scripts) | `fission/binary-env`      | `fission/binary-builder`   | O   | O   | O   |
+| PHP 7                               | `fission/php-env`         | `fission/php-builder`      | O   | O   | O   |
+| .NET 2.0                            | `fission/dotnet20-env`    | `fission/dotnet20-builder` | O   | O   | O   |
+| .NET                                | `fission/dotnet-env`      | -                          | O   | X   | X   |
+| Perl                                | `fission/perl-env`        | -                          | O   | X   | X   |
+
+You can find the latest image tags by searching image name at [Fission Dockerhub](https://hub.docker.com/u/fission/).
+
+### [GO](https://docs.fission.io/docs/languages/go/)
+### [Java](https://docs.fission.io/docs/languages/java/)
+### [NodeJS](https://docs.fission.io/docs/languages/nodejs/)
+### [Python3](https://docs.fission.io/docs/languages/python/)
+
 
 ## Learn More
 
@@ -108,5 +148,5 @@ The following companies, organizations, and individuals support Fission's ongoin
 </p>
 
 # Licensing
-
-Fission is under the Apache 2.0 license.
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)   
+Fission is under the [Apache 2.0 license](/LICENSE).
