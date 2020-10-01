@@ -25,7 +25,7 @@ This SA is created in every namespace that a user creates builder environments i
 
 ## Role-bindings
 
-1. Package-getter-binding
+1. package-getter-binding
 
 Every time a user creates a package explicity in a namespace, this rolebinding is created in package's namespace (which is also function's namespace). This grants package-getter role to fission-fetcher SA present in the referenced environment's namespace.
 If the package is a source package, then, fission-builder SA present in the environment namespace is also added to this rolebinding.
@@ -37,21 +37,21 @@ Note : For functions that have executor type poolmgr, the env pods are created i
 This is because, poolmgr allows env sharing and optimal resource utilization. so generic env pools are created in a different namespace and all functions that prefer sharing this env pool can reference these pools.
 If users require strict isolation, they can either create functions with new deploy backend, or, create env's in different namespaces and not share them across functions.
 
-2. Secret-Configmap-getter-binding
+2. secret-configmap-getter-binding
 
 Every time a user creates a function in a namespace, Secret-Configmap-getter-binding is created in the same namespace, granting secret-configmap-getter role to fission-fetcher SA present in the referenced environment's namespace in case the executor type is poolmgr.
 If the executor type is newdeploymgr, then the same rolebinding is created in the same namespace as the function, granting the same secret-configmap-getter role to fission-fetcher SA present in the function namespace.
 
 ## Examples
 
-1. create a generic python runtime env in ns 1 and function with poolmgr executor type in ns 2 that references it.
+1. Create a generic python runtime env in ns1 and function with poolmgr executor type in ns2 that references it.
 
 ```bash
 $ fission env create --name python --image fission/python-env --envns ns1
 $ fission function create --name func1 --env python --code hello.py --fns ns2
 ```
 
-2. create a builder and runtime environment in ns3, a source pkg in ns3 and a function referring to this src pkg also in ns3. (for complete isolation, all objs are in ns3)
+2. Create a builder and runtime environment in ns3, a source pkg in ns3 and a function referring to this src pkg also in ns3. (for complete isolation, all objs are in ns3)
 
 ```bash
 $ fission env create --name python-builder-env --builder fission/python-builder --image fission/python-env --ns3
