@@ -17,8 +17,8 @@ extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
-_environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
-PHP, Bash, and any Linux executable, with more languages coming soon.
+_environments_ (more below).  Fission currently supports NodeJS(a server-side scripting language), Python, Ruby, Go, 
+PHP(Hypertext Preprocessor), Bash, and any Linux executable, with more languages coming soon.
 
 Table of Contents
 =================
