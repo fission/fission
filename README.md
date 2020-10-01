@@ -20,7 +20,7 @@ language-specific parts are isolated in something called
 _environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
 PHP, Bash, and any Linux executable, with more languages coming soon.
 
-Table of Contents
+Table of Contents :bookmark_tabs:
 =================
 
    * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
@@ -34,7 +34,7 @@ Table of Contents
       * [Sponsors](#sponsors)
    * [Licensing](#licensing)
 
-## Performance: 100msec cold start
+## Performance: 100msec cold start :straight_ruler:
 
 Fission maintains a pool of "warm" containers that each contain a
 small dynamic loader.  When a function is first called,
@@ -42,7 +42,7 @@ i.e. "cold-started", a running container is chosen and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
-## Kubernetes is the right place for Serverless
+## Kubernetes is the right place for Serverless :tada:
 
 We're built on Kubernetes because we think any non-trivial app will
 use a combination of serverless functions and more conventional
@@ -53,7 +53,7 @@ Building on Kubernetes also means that anything you do for operations
 on your Kubernetes cluster &mdash; such as monitoring or log
 aggregation &mdash; also helps with ops on your Fission deployment.
 
-## Getting Started
+## Getting Started :bulb:
 
 ```bash
   # Add the stock NodeJS env to your Fission deployment
@@ -67,18 +67,18 @@ aggregation &mdash; also helps with ops on your Fission deployment.
   Hello, world!
 ```
 
-## Learn More
+## Learn More :green_book:
 
 * Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
 * See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
 * You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
 * See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing
+## Contributing :hearts:
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
-## Get Help & Community Meeting 
+## Get Help & Community Meeting :bookmark:
 
 Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
 Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
@@ -89,13 +89,13 @@ Meeting Link: https://zoom.us/j/413921817
 
 The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
-## Official Releases
+## Official Releases :bookmark:
 
 Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
 Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
 the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 
-## Sponsors
+## Sponsors :bookmark:
 
 The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
 
@@ -107,6 +107,6 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# Licensing
+# Licensing :bookmark:
 
 Fission is under the Apache 2.0 license.
