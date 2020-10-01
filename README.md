@@ -36,7 +36,7 @@ Table of Contents
 
 ## Performance: 100msec cold start
 
-Fission maintains a pool of "warm" containers that each contain a
+Fission maintains a pool of "warm" containers that each contains a
 small dynamic loader.  When a function is first called,
 i.e. "cold-started", a running container is chosen and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
@@ -87,7 +87,7 @@ A regular community meeting takes place every other Thursday at 09:00 AM PT (Pac
 
 Meeting Link: https://zoom.us/j/413921817 
 
-The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
+The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss the direction of project, design and implementation reviews and general questions about the project etc.
 
 ## Official Releases
 
@@ -109,4 +109,4 @@ The following companies, organizations, and individuals support Fission's ongoin
 
 # Licensing
 
-Fission is under the Apache 2.0 license.
+Fission is under the [Apache 2.0 license](https://github.com/fission/fission/blob/master/LICENSE).
