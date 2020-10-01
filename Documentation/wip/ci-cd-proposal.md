@@ -22,7 +22,7 @@ CD is also composed of a few broad areas focusing on different aspects:
 
 - Once the tests & teams have verified that a function works, the same function should be promoted from Dev/Stage to higher/production environment. The number of environment that a organization maintains varies but the idea of promotion from one environment to higher environment does exist. There are very few organizations who deploy the newer versions of functions directly in production with a A/B setup but that is as of this writing is an exception and not the norm.
 
-- Another aspect of promoting from one environment to higher environment is the configuration for both environments will be different. For ex. the DB connection string will be different for each environment. Or the "maxscale" property for production environment could be higher than that for Dev. The ability to store all these environment specific configurations in some sort of system (Github for normal values and some sort of KMS for sensitive data) and being able to combine the logic and configurations for each environment when deploying is important.
+- Another aspect of promoting from one environment to higher environment is the configuration for both environments will be different. For ex. the DB connection string will be different for each environment. Or the "maxscale" property for production environment could be higher than that for Dev. The ability to store all these environment specific configurations in some sort of system (GitHub for normal values and some sort of KMS for sensitive data) and being able to combine the logic and configurations for each environment when deploying is important.
 
 Beyond these points there are integration/automation points such as being able to call a test suite after deployment is done etc. but we will skip for now for brevity.
 
@@ -57,13 +57,13 @@ If we look at this from CI/CD perspective this process requires:
   3. Fission CLI
   4. Kubernetes Config so that the apply command can be run
 
-So if we build a container - which has the above requirements met as installed software (Ex. Fission & Kubectl CLI) or available as environment variable (Github pull token or Kubeconfig), the container can be used as part of CI workflow in any tool such as - Jenkins, Argo, Github Actions, Gitlab etc.
+So if we build a container - which has the above requirements met as installed software (Ex. Fission & Kubectl CLI) or available as environment variable (GitHub pull token or Kubeconfig), the container can be used as part of CI workflow in any tool such as - Jenkins, Argo, GitHub Actions, Gitlab etc.
 
-The idea is to build a generic container with Fission CLI, Kubernetes CLI and a way to read Github token and Kubeconfig from env variable/mounted files and being able to run `fission spec apply` command.
+The idea is to build a generic container with Fission CLI, Kubernetes CLI and a way to read GitHub token and Kubeconfig from env variable/mounted files and being able to run `fission spec apply` command.
 
 ### 1.1
 
-Instead of building a container in previous section - the same can be achieved by a function. The Github webhook can call a function endpoint which in turn can execute the process similar to inside the container.
+Instead of building a container in previous section - the same can be achieved by a function. The GitHub webhook can call a function endpoint which in turn can execute the process similar to inside the container.
 
 ## 2 Environment Configurations
 
