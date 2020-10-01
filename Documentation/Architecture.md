@@ -173,6 +173,10 @@ functions. Kubewatcher watches the API based on these requests; when
 a watch event occurs, it serializes the object and calls the function
 via the router.
 
+Monitor your Kubernetes Resources With kubewatch
+
+https://medium.com/better-programming/monitor-your-kubernetes-resources-with-kubewatch-d40ecf420f28
+
 While a few simple retries are done, there isn't yet a reliable
 message bus between Kubewatcher and the function. Work for this is
 tracked in issue #64.
