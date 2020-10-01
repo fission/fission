@@ -28,7 +28,7 @@ type requestType int
 
 const (
 	getValue requestType = iota
-	listValue
+	listAvailableValue
 	getTotalAvailable
 	setValue
 	markAvailable
@@ -99,11 +99,13 @@ func (c *Cache) service() {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("funtion '%v' No inactive function found", req.function))
 			}
 			req.responseChannel <- resp
-		case listValue:
+		case listAvailableValue:
 			vals := make([]interface{}, 0)
 			for _, values := range c.cache {
 				for _, value := range values {
-					vals = append(vals, value.val)
+					if !value.isActive {
+						vals = append(vals, value.val)
+					}
 				}
 			}
 			resp.allValues = vals
@@ -159,11 +161,11 @@ func (c *Cache) GetValue(function interface{}) (interface{}, error) {
 	return resp.value, resp.error
 }
 
-// ListValue returns a list of the function services stored in the Cache
-func (c *Cache) ListValue() []interface{} {
+// ListAvailableValue returns a list of the available function services stored in the Cache
+func (c *Cache) ListAvailableValue() []interface{} {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     listValue,
+		requestType:     listAvailableValue,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
