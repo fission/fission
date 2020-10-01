@@ -1,12 +1,23 @@
-# Fission: Serverless Functions for Kubernetes
+<p align="center">
+  <img src="https://docs.fission.io/images/logo.png" width="300" />
+  <br>
+  <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
+</p>
+<p align="center">
+  <a href="https://travis-ci.org/fission/fission">
+    <img src="https://travis-ci.org/fission/fission.svg?branch=master" alt="Build Status" />
+  </a>
+  <a href="https://goreportcard.com/report/github.com/fission/fission">
+    <img src="https://goreportcard.com/badge/github.com/fission/fission" alt="Go Report Card" />
+  </a>
+  <a href="https://codecov.io/gh/fission/fission">
+    <img src="https://codecov.io/gh/fission/fission/branch/master/graph/badge.svg" alt="codecov" />
+  </a>
+  <br>
+  <a href="http://fission.io">fission.io</a> | <a href="http://twitter.com/fissionio">@fissionio</a> | <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">Slack</a>
+</p>
 
-[![Build Status](https://travis-ci.org/fission/fission.svg?branch=master)](https://travis-ci.org/fission/fission)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
-[![codecov](https://codecov.io/gh/fission/fission/branch/master/graph/badge.svg)](https://codecov.io/gh/fission/fission)
-
-[fission.io](http://fission.io) | [@fissionio](http://twitter.com/fissionio) | [Slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE)
-
-<img src="https://docs.fission.io/images/logo.png" width="300">
+--------------
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
