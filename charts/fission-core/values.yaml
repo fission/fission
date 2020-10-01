@@ -58,6 +58,7 @@ fetcher:
 
 executor:
   adoptExistingResources: false
+  podReadyTimeout: 300s
 
 ## Router config
 router:

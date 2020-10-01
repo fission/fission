@@ -96,6 +96,16 @@ func MakeGenericPool(
 
 	gpLogger := logger.Named("generic_pool")
 
+	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
+	podReadyTimeout, err := time.ParseDuration(os.Getenv("podReadyTimeoutStr"))
+	if err != nil {
+		podReadyTimeout = 300 * time.Second
+		gpLogger.Error("failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
+			zap.Error(err),
+			zap.String("value", podReadyTimeoutStr),
+			zap.Duration("default", podReadyTimeout))
+	}
+
 	gpLogger.Info("creating pool", zap.Any("environment", env.ObjectMeta))
 
 	ctx, stopCh := context.WithCancel(context.Background())
@@ -111,7 +121,7 @@ func MakeGenericPool(
 		kubernetesClient:  kubernetesClient,
 		namespace:         namespace,
 		functionNamespace: functionNamespace,
-		podReadyTimeout:   5 * time.Minute, // TODO make this an env param?
+		podReadyTimeout:   podReadyTimeout,
 		fsCache:           fsCache,
 		poolInstanceId:    uniuri.NewLen(8),
 		fetcherConfig:     fetcherConfig,
@@ -124,7 +134,7 @@ func MakeGenericPool(
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
 
 	// create fetcher SA in this ns, if not already created
-	err := fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
+	err = fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
 	}
