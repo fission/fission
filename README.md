@@ -19,7 +19,7 @@
 
 --------------
 
-### What is Fission:
+### :mag_right: What is Fission:
     Fission is a fast serverless framework for Kubernetes with a focus on
     developer productivity and high performance.
     
