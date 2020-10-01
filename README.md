@@ -76,7 +76,8 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ## Contributing
 
-Check out the [contributing guide](CONTRIBUTING.md).
+Check out the [contributing guide](CONTRIBUTING.md).<br>
+Please read our [code of conduct](CODE_OF_CONDUCT.md). 
 
 ## Get Help & Community Meeting 
 
