@@ -15,9 +15,9 @@ Fission operates on _just the code_: Docker and Kubernetes are
 abstracted away under normal operation, though you can use both to
 extend Fission if you want to.
 
-Fission is extensible to any language; the core is written in Go, and
+Fission is extensible to any language; the core is written in Go and
 language-specific parts are isolated in something called
-_environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
+_environments_ (read below).  Fission currently support NodeJS, Python, Ruby, Go, 
 PHP, Bash, and any Linux executable, with more languages coming soon.
 
 Table of Contents
@@ -39,7 +39,7 @@ Table of Contents
 Fission maintains a pool of "warm" containers that each contain a
 small dynamic loader.  When a function is first called,
 i.e. "cold-started", a running container is chosen and the function is
-loaded.  This pool is what makes Fission fast: cold-start latencies
+loaded.  This pool is whatthat makes Fission fast: cold-start latencies
 are typically about 100msec.
 
 ## Kubernetes is the right place for Serverless
