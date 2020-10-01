@@ -82,11 +82,7 @@
   * You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
   * See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## :wrench: Contributing
-
-   Check out the [contributing guide](CONTRIBUTING.md).
-
-## Get Help & Community Meeting 
+## :open_hands: Get Help & Community Meeting 
 
 Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
 
@@ -96,15 +92,15 @@ Meeting Link: [Zoom](https://zoom.us/j/413921817)
 
 The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1Exw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
-## Official Releases
+## :speaker: Official Releases
 
 Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
 Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
 the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 
-## Sponsors
+## :tada: Sponsors
 
-The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
+    The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be     happy to list you here, please raise a Pull request.
 
 <p>
     <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
@@ -114,6 +110,9 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# Licensing
+## :wrench: Contributing
 
-Fission is under the Apache 2.0 license.
+   Check out the [contributing guide](CONTRIBUTING.md).
+
+## :ticket: Licensing
+   Fission is under the Apache 2.0 license.
