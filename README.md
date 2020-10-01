@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://docs.fission.io/images/logo.png" width="300" />
   <br>
-  <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
+  <h2 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
 <p align="center">
   <a href="https://travis-ci.org/fission/fission">
@@ -33,7 +33,7 @@
     PHP, Bash, and any Linux executable, with more languages coming soon.
 
 ## :clipboard: Table of Contents:
-    * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
+   * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
       * [Performance: 100msec cold start](#performance-100msec-cold-start)
       * [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
       * [Getting Started](#getting-started)
@@ -42,7 +42,7 @@
       * [Get Help &amp; Community Meeting](#get-help--community-meeting)
       * [Official Releases](#official-releases)
       * [Sponsors](#sponsors)
-    * [Licensing](#licensing)
+   * [Licensing](#licensing)
 
 ## Performance: 100msec cold start
 
