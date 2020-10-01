@@ -5,7 +5,7 @@
 Fission is a FaaS -- users create functions (source level), register
 them with Fission using a CLI, and associate functions with triggers.
 
-Fission wraps those functions into a service and runs them on
+Fission wraps those functions into service and runs them on
 Kubernetes on demand.
 
 Here's an overview of the services that make up Fission.
