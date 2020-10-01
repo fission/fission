@@ -115,7 +115,7 @@ the master branch are subject to changes and incompatibilities that will not be 
     </a>
 </p>
 
-## :wrench: Contributing
+## :hammer_and_wrench: Contributing
 
    Check out the [contributing guide](CONTRIBUTING.md).
 
