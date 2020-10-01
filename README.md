@@ -104,7 +104,8 @@ the master branch are subject to changes and incompatibilities that will not be 
 
 ## :tada: Sponsors
 
-    The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be     happy to list you here, please raise a Pull request.
+    The following companies, organizations, and individuals support Fission's ongoing maintenance and development. 
+    If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
 
 <p>
     <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
