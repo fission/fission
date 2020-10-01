@@ -13,8 +13,20 @@
   <a href="https://codecov.io/gh/fission/fission">
     <img src="https://codecov.io/gh/fission/fission/branch/master/graph/badge.svg" alt="codecov" />
   </a>
+  <a href="http://twitter.com/fissionio">
+    <img src="https://badgen.net/twitter/follow/fissionio?label=twitter" alt="twitter" />
+  </a>
+  <a href="https://github.com/fission/fission/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/fission/fission" alt="github" />
+  </a>
+  <a href="https://github.com/fission/fission/releases">
+    <img src="https://badgen.net/github/release/fission/fission/stable" alt="release version" />
+  </a>
+  <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">
+    <img src="https://badgen.net/badge/slack/fissionio/red?icon=slack" alt="slack" />
+  </a>
   <br>
-  <a href="http://fission.io">fission.io</a> | <a href="http://twitter.com/fissionio">@fissionio</a> | <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">Slack</a>
+  <a href="http://fission.io">fission.io</a>
 </p>
 
 --------------
