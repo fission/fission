@@ -4,6 +4,9 @@
   <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
 <p align="center">
+    <a href="CONTRIBUTING.md">
+    <img src="https://badgen.net/badge/hacktoberfest/friendly/pink" alt="Hacktoberfest" />
+  </a>
   <a href="https://travis-ci.org/fission/fission">
     <img src="https://travis-ci.org/fission/fission.svg?branch=master" alt="Build Status" />
   </a>
