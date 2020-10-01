@@ -19,7 +19,7 @@
 
 --------------
 
-## :mag_right: What is Fission:
+## :bulb: What is Fission:
     Fission is a fast serverless framework for Kubernetes with a focus on
     developer productivity and high performance.
     
@@ -90,7 +90,7 @@ A regular community meeting takes place every other Thursday at 09:00 AM PT (Pac
 
 Meeting Link: [Zoom](https://zoom.us/j/413921817) 
 
-The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1Exw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws).
+The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1Exw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws).<br>
 You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
 Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
@@ -98,7 +98,7 @@ Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3Njg
 
 ## :speaker: Official Releases
 
-Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
+Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). <br>
 Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
 the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 
