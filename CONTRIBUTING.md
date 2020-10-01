@@ -1,44 +1,41 @@
-
 Thanks for helping make Fission better😍!
 
-There are many areas we can use contributions - ranging from code, documentation, feature proposals, issue triage, samples, and content creation. 
+There are many areas we can use contributions - ranging from code, documentation, feature proposals, issue triage, samples, and content creation.
 
 First, please read the [code of conduct](CODE_OF_CONDUCT.md). By participating, you're expected to uphold this code.
 
-Table of Contents
-=================
+# Table of Contents
 
-   * [Choose something to work on](#choose-something-to-work-on)
-      * [Get Help.](#get-help)
-   * [Contributing - building &amp; deploying](#contributing---building--deploying)
-      * [Prequisite](#prequisite)
-      * [Getting Started](#getting-started)
-         * [Use Skaffold with Kind/K8S Cluster to build and deploy](#use-skaffold-with-kindk8s-cluster-to-build-and-deploy)
-      * [Validating Installation](#validating-installation)
-      * [Understanding code structure](#understanding-code-structure)
-         * [cmd](#cmd)
-         * [pkg](#pkg)
-         * [Charts](#charts)
-         * [Environments](#environments)
+- [Choose something to work on](#choose-something-to-work-on)
+  - [Get Help.](#get-help)
+- [Contributing - building &amp; deploying](#contributing---building--deploying)
+  - [Prequisite](#prequisite)
+  - [Getting Started](#getting-started)
+    - [Use Skaffold with Kind/K8S Cluster to build and deploy](#use-skaffold-with-kindk8s-cluster-to-build-and-deploy)
+  - [Validating Installation](#validating-installation)
+  - [Understanding code structure](#understanding-code-structure)
+    - [cmd](#cmd)
+    - [pkg](#pkg)
+    - [Charts](#charts)
+    - [Environments](#environments)
 
 # Choose something to work on
 
-* The easiest way to start is to look at existing [issues](https://github.com/fission/fission/issues) and see if there's something there that you'd like to work on. You can filter issues with label "[Good first issue](https://github.com/fission/fission/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)" which are relatively self sufficient issues and great for first time contributors.
-    - If you are going to pick up an issue, it would be good to add a comment stating the intention.
-    - If the contribution is a big change/new feature, please raise an issue and discuss the needs, design in the issue in detail.
+- The easiest way to start is to look at existing [issues](https://github.com/fission/fission/issues) and see if there's something there that you'd like to work on. You can filter issues with label "[Good first issue](https://github.com/fission/fission/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)" which are relatively self sufficient issues and great for first time contributors.
 
-* For contributing a new Fission environment, please check the [environments repo](https://github.com/fission/environments)
+  - If you are going to pick up an issue, it would be good to add a comment stating the intention.
+  - If the contribution is a big change/new feature, please raise an issue and discuss the needs, design in the issue in detail.
 
-* For contributing a new Keda Connector, please check the [Keda Connectors repo](https://github.com/fission/keda-connectors)
+- For contributing a new Fission environment, please check the [environments repo](https://github.com/fission/environments)
 
+- For contributing a new Keda Connector, please check the [Keda Connectors repo](https://github.com/fission/keda-connectors)
 
 ### Get Help.
 
 Do reach out on Slack or Twitter and we are happy to help.
 
- * Drop by the [slack channel](http://slack.fission.io).
- * Say hi on [twitter](https://twitter.com/fissionio).
-
+- Drop by the [slack channel](http://slack.fission.io).
+- Say hi on [twitter](https://twitter.com/fissionio).
 
 # Contributing - building & deploying
 
@@ -49,9 +46,10 @@ Do reach out on Slack or Twitter and we are happy to help.
 - You'll also need [docker](https://docs.docker.com/install) for building images locally.
 
 - You will need a Kubernetes cluster and you can use one of options from below.
-	- [Minikube](https://github.com/kubernetes/minikube)
-	- [Kind](https://kind.sigs.k8s.io/)
-	- Cluster in cloud such as GKE (Google Kubernetes Engine cluster)/ EKS (Elastic Kubernetes Service)/ AKS (Azure Kubernetes Service)
+
+  - [Minikube](https://github.com/kubernetes/minikube)
+  - [Kind](https://kind.sigs.k8s.io/)
+  - Cluster in cloud such as GKE (Google Kubernetes Engine cluster)/ EKS (Elastic Kubernetes Service)/ AKS (Azure Kubernetes Service)
 
 - Kubectl and Helm installed.
 
@@ -79,14 +77,15 @@ $ ./hack/verify-govet.sh
 
 You should bring up Kind/Minikube cluster or if using a cloud provider cluster then Kubecontext should be pointing to appropriate cluster.
 
-* For building & deploying to Cloud Provider K8S cluster such as GKE/EKS/AKS:
+- For building & deploying to Cloud Provider K8S cluster such as GKE/EKS/AKS:
 
 ```
 $ skaffold config set default-repo vishalbiyani  // (vishalbiyani - should be your registry/Dockerhub handle)
 $ skaffold run
 ```
 
-*  For building & deploying to Kind cluster use Kind profile
+- For building & deploying to Kind cluster use Kind profile
+
 ```
 $ kind create cluster
 $ kubectl create ns fission
@@ -122,19 +121,18 @@ storagesvc-799dcb5bdf-f69k9                             1/1     Running         
 timer-7d85d9c9fb-knctw                                  1/1     Running            0          6h9m
 ```
 
-
 ## Understanding code structure
 
 ### cmd
 
 Cmd package is entrypoint for all runtime components and also has Dockerfile for each component. The actual logic here will be pretty light and most of logic of each component is in `pkg` (Discussed later)
 
-| Component         	   | Runtime Component      |Used in|
-| :-------------    	   |:-------------          |:-|
-| fetcher         		   | Docker Image           |Environments|
-| fission-bundle           | Docker Image           |Binary for all components|
-| fission-cli              | CLI Binary             |CLI by user|
-| preupgradechecks         | Docker Image           |Pre-install upgrade|
+| Component        | Runtime Component | Used in                   |
+| :--------------- | :---------------- | :------------------------ |
+| fetcher          | Docker Image      | Environments              |
+| fission-bundle   | Docker Image      | Binary for all components |
+| fission-cli      | CLI Binary        | CLI by user               |
+| preupgradechecks | Docker Image      | Pre-install upgrade       |
 
 ```
 .
@@ -159,7 +157,7 @@ cmd
 
 **fetcher** : is a very lightweight component and all of related logic is in fetcher package itself. Fetcher helps in fetching and uploading code and in specializing environments.
 
-**fission-bundle** : is a component which is a single binary for all components. Based on arguments you pass to fission-bundle - it becomes that component. For ex. 
+**fission-bundle** : is a component which is a single binary for all components. Based on arguments you pass to fission-bundle - it becomes that component. For ex.
 
 ```
 /fission-bundle --controllerPort "8888"							             # Runs Controller
@@ -172,7 +170,6 @@ So most serverside components running on server side are fission-bundle binary w
 **fission-cli** : is the cli used by end user to interact Fission
 
 **preupgradechecks** : is again a small independent component to do pre-install upgrade tasks.
-
 
 ### pkg
 

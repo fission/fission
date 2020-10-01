@@ -1,4 +1,4 @@
-# Message Queue Trigger Demonstration - NATS Streaming 
+# Message Queue Trigger Demonstration - NATS Streaming
 
 ## Create spec
 

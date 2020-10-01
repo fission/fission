@@ -1,5 +1,5 @@
 include:
-- hello/*
+  - hello/*
 kind: ArchiveUploadSpec
 name: hello-dBc6
 

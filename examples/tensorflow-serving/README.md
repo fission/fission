@@ -1,6 +1,6 @@
 # Tensorflow Serving Environment Example
 
-## Create Environment 
+## Create Environment
 
 ```bash
 $ fission env create --name tensorflow --image fission/tensorflow-serving-env --version 2

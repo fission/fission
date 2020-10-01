@@ -4,7 +4,7 @@ The `io.fission.HelloWorld.java` class is a very simple fission function that im
 
 ## Building and deploying using Fission
 
-Fission's builder can be used to create the binary artifact from source code. Create an environment with builder image and then create a package. 
+Fission's builder can be used to create the binary artifact from source code. Create an environment with builder image and then create a package.
 
 ```
 $ zip -r java-src-pkg.zip *
@@ -17,7 +17,7 @@ Environment: java
 Status:      succeeded
 Build Logs:
 [INFO] Scanning for projects...
-[INFO] 
+[INFO]
 [INFO] -----------------------< io.fission:hello-world >-----------------------
 [INFO] Building hello-world 1.0-SNAPSHOT
 [INFO] --------------------------------[ jar ]---------------------------------
@@ -41,6 +41,7 @@ You can build the jar file in one of the two ways below based on your setup:
 $ bash -x ./build.sh
 
 ```
+
 - If you have JDK and Maven installed, you can directly build the JAR file using command:
 
 ```

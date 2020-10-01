@@ -25,30 +25,30 @@ spec:
       hostname: foo-bar
       # A container which will be merged with for pool manager
       Containers:
-      - name: nodep
-        image: fission/node-env
-        volumeMounts:
-          - name: funcvol
-            mountPath: /etc/funcdata
-            readOnly: true
-      # A additional container in the pods
-      - name: yanode
-        image: fission/node-env
-        command: ['sh', '-c', 'sleep 36000000000']
+        - name: nodep
+          image: fission/node-env
+          volumeMounts:
+            - name: funcvol
+              mountPath: /etc/funcdata
+              readOnly: true
+        # A additional container in the pods
+        - name: yanode
+          image: fission/node-env
+          command: ["sh", "-c", "sleep 36000000000"]
       # Init container before function
       initContainers:
-      - name: init-node
-        image: fission/node-env 
-        command: ['sh', '-c', 'cat /etc/infopod/labels']
-        volumeMounts:
-          - name: infopod
-            mountPath: /etc/infopod
-            readOnly: false
+        - name: init-node
+          image: fission/node-env
+          command: ["sh", "-c", "cat /etc/infopod/labels"]
+          volumeMounts:
+            - name: infopod
+              mountPath: /etc/infopod
+              readOnly: false
       tolerations:
-      - key: "reservation"
-        operator: "Equal"
-        value: "fission"
-        effect: "NoSchedule"      
+        - key: "reservation"
+          operator: "Equal"
+          value: "fission"
+          effect: "NoSchedule"
       # Additional volumes
       volumes:
         - name: infopod
@@ -68,5 +68,5 @@ spec:
             items:
               - path: "labels"
                 fieldRef:
-                  fieldPath: metadata.labels                  
+                  fieldPath: metadata.labels
   version: 1

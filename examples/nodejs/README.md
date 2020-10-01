@@ -20,21 +20,23 @@ $ fission pkg create --sourcearchive nodejs.zip --env nodeenv
 Every Node.js function has the same basic form:
 
 ```javascript
-module.exports = async function(context) {
-    return {
-        status: 200,
-        body: 'Your body here',
-        headers: {
-            'Foo': 'Bar'
-        }
-    }
-}
+module.exports = async function (context) {
+  return {
+    status: 200,
+    body: "Your body here",
+    headers: {
+      Foo: "Bar",
+    },
+  };
+};
 ```
+
 ## hello.js
 
 This is a basic "Hello, World!" example. It simply returns a status of `200` and text body.
 
 ### Usage
+
 Since it is an `async` function, you can `await` `Promise`s, as demonstrated in the `weather.js` function.
 
 ```bash
@@ -50,6 +52,7 @@ $ fission fn test --name hello
 This file does nothing but for demonstrating `require` feature.
 
 ### Usage
+
 ```bash
 # Create a function, you can skip `--entrypoint` as node will look for `index.js` by default
 $ fission fn create --name index --pkg [pkgname]
@@ -63,6 +66,7 @@ $ fission fn test --name index
 This is a multiple exports example. There are two exports: entry1 and entry2
 
 ### Usage
+
 ```bash
 # Create a function for entry1
 $ fission fn create --name entry1 --pkg [pkgname]  --entrypoint "multi-entry.entry1"

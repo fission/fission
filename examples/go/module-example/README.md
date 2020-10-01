@@ -14,7 +14,7 @@ $ go mod init "github.com/fission/fission/examples/go/go-module-example"
 
 2. Add dependencies
 
- * See [here](https://github.com/golang/go/wiki/Modules#daily-workflow)
+- See [here](https://github.com/golang/go/wiki/Modules#daily-workflow)
 
 3. Verify
 
@@ -30,6 +30,6 @@ $ zip -r go.zip .
     adding: go.sum (deflated 1%)
     adding: README.md (deflated 37%)
     adding: main.go (deflated 30%)
-    
+
 $ fission pkg create --env go --src go.zip
 ```

@@ -12,10 +12,10 @@ spec:
       nodeSelector:
         machinecap: high
       tolerations:
-      - key: "env"
-        value: "prod"
-        operator: "Equal"
-        effect: "NoSchedule"
+        - key: "env"
+          value: "prod"
+          operator: "Equal"
+          effect: "NoSchedule"
   keeparchive: false
   poolsize: 3
   resources: {}

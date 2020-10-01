@@ -1,1 +1,1 @@
-module.exports = require('./hello');
+module.exports = require("./hello");

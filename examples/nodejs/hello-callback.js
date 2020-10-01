@@ -1,4 +1,3 @@
-
-module.exports = function(context, callback) {
-    callback(200, "Hello, world callback!\n");
-}
+module.exports = function (context, callback) {
+  callback(200, "Hello, world callback!\n");
+};

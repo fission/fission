@@ -2,8 +2,8 @@
 
 This is a simple dotnet core 2.0 C# environment for Fission.
 
-It's a Docker image containing the dotnet 2.0.0 runtime. The image 
-uses Kestrel with Nancy to host the internal web server and uses 
+It's a Docker image containing the dotnet 2.0.0 runtime. The image
+uses Kestrel with Nancy to host the internal web server and uses
 Roslyn to compile the uploaded code.
 
 The image supports compiling and running code with types defined in
@@ -12,10 +12,10 @@ One workaround for this would be to add the references to this project's
 project.json file and rebuild the container.
 
 The environment works via convention where you create a C# class
-called FissionFunction which has a  method named Execute taking a single
+called FissionFunction which has a method named Execute taking a single
 parameter, a FissionContext object.
 
-The FissionContext object gives access to the arguments and other items 
+The FissionContext object gives access to the arguments and other items
 like logging. Please see FissionContext.cs for public API.
 
 Example of simplest possible class to be executed:
@@ -31,13 +31,13 @@ public class FissionFunction {
 }
 ```
 
-Please see examples below, or if you are looking for ready-to-run examples, see 
+Please see examples below, or if you are looking for ready-to-run examples, see
 the [DotNet20 examples directory](../../examples/dotnet20).
 
 ## Rebuilding and pushing the image
 
 To rebuild the image you will have to install Docker with version higher than 17.05+
-in order to support multi-stage builds feature.  
+in order to support multi-stage builds feature.
 
 ### Rebuild containers
 
@@ -47,15 +47,15 @@ Move to the directory containing the source and start the container build proces
 docker build -t USER/dotnet20-env .
 ```
 
-After the build finishes push the new image to a Docker registry using the 
+After the build finishes push the new image to a Docker registry using the
 standard procedure.
 
 ## Echo example
 
 ### Setup fission environment
-First you need to setup the fission according to your cluster setup as 
-specified here: https://github.com/fission/fission
 
+First you need to setup the fission according to your cluster setup as
+specified here: https://github.com/fission/fission
 
 ### Create the class to run
 
@@ -65,14 +65,15 @@ Secondly you need to create a file /tmp/func.cs containing the following code:
 using System;
 using Fission.DotNetCore.Api;
 
-public class FissionFunction 
+public class FissionFunction
 {
     public string Execute(FissionContext context){
         context.Logger.WriteInfo("executing.. {0}", context.Arguments["text"]);
         return (string)context.Arguments["text"];
     }
 }
-``` 
+```
+
 ### Run the example
 
 Lastly to run the example:
@@ -91,9 +92,9 @@ $ curl http://$FISSION_ROUTER/echo?text=hello%20world!
 ## Addition service example
 
 ### Setup fission environment
-First you need to setup the fission according to your cluster setup as 
-specified here: https://github.com/fission/fission
 
+First you need to setup the fission according to your cluster setup as
+specified here: https://github.com/fission/fission
 
 ### Create the class to run
 
@@ -103,7 +104,7 @@ Secondly you need to create a file /tmp/func.cs containing the following code:
 using System;
 using Fission.DotNetCore.Api;
 
-public class FissionFunction 
+public class FissionFunction
 {
     public string Execute(FissionContext context){
         var x = Convert.ToInt32(context.Arguments["x"]);
@@ -111,7 +112,8 @@ public class FissionFunction
         return (x+y).ToString();
     }
 }
-``` 
+```
+
 ### Run the example
 
 Lastly to run the example:
@@ -130,9 +132,9 @@ $ curl "http://$FISSION_ROUTER/add?x=30&y=12"
 ## Accessing http request information example
 
 ### Setup fission environment
-First you need to setup the fission according to your cluster setup as 
-specified here: https://github.com/fission/fission
 
+First you need to setup the fission according to your cluster setup as
+specified here: https://github.com/fission/fission
 
 ### Create the class to run
 
@@ -157,7 +159,8 @@ public class FissionFunction
     }
 }
 
-``` 
+```
+
 ### Run the example
 
 Lastly to run the example:
@@ -183,9 +186,9 @@ Url: http://fissionserver:8888, method: GET
 ## Accessing http request body example
 
 ### Setup fission environment
-First you need to setup the fission according to your cluster setup as 
-specified here: https://github.com/fission/fission
 
+First you need to setup the fission according to your cluster setup as
+specified here: https://github.com/fission/fission
 
 ### Create the class to run
 
@@ -217,7 +220,8 @@ public class Person
     }
 }
 
-``` 
+```
+
 ### Run the example
 
 Lastly to run the example:
@@ -234,17 +238,16 @@ Hello, my name is Arthur and I am 42 years old.
 
 ```
 
-
 ## Developing/debugging the enviroment locally
 
 The easiest way to debug the environment is to open the directory in
 Visual Studio Code (VSCode) as that will setup debugger for you the
 first time.
 
-Remember to install the excellent extension 
+Remember to install the excellent extension
 "C# for Visual Studio Code(powered by OmniSharp)" to get statement completion
 
-The class ExecutorModule contain preprocessor directive overriding where 
+The class ExecutorModule contain preprocessor directive overriding where
 the input code file should be found:
 
 ```
@@ -256,31 +259,35 @@ the input code file should be found:
 ```
 
 So what you need to do is:
-1. Open the directory in VSCode. 
-This will prompt restore of packages and query is debugger setup is needed. Accept both prompts.
+
+1. Open the directory in VSCode.
+   This will prompt restore of packages and query is debugger setup is needed. Accept both prompts.
 2. Press F5 to start the web server. Set breakpoints etc..
-3. Add a code file containing valid C# at /tmp/func.cs 
+3. Add a code file containing valid C# at /tmp/func.cs
 4. Specialize the service with curl via post
+
 ```
 $ curl -XPOST http://localhost:8888/specialize
 ```
+
 5. Call your function with curl
+
 ```
 $ curl -XGET http://localhost:8888
-``` 
+```
 
-## Few Aditional Features  
+## Few Aditional Features
 
 **1. NameSpace support :**
 
-Now , You can use namespace for Fission function class and have many other classes in same namespace , this is also backward compatible , however main execution class would always be *FissionFunction* and its method *Execute*
+Now , You can use namespace for Fission function class and have many other classes in same namespace , this is also backward compatible , however main execution class would always be _FissionFunction_ and its method _Execute_
 
 ```
 				using System;
 				using Fission.DotNetCore.Api;
 
 
-				public class FissionFunction 
+				public class FissionFunction
 				{
 					public string Execute(FissionContext context){
 						   //orignal logic
@@ -290,15 +297,15 @@ Now , You can use namespace for Fission function class and have many other class
 					}
 				}
 ```
-**2. Aditional **setting/configuration file** support :**  	
-			
+
+**2. Aditional **setting/configuration file** support :**
 Now , with Fission V2 end point with builder , in source package you can have aditional setting
 files which can be read by fission function .
 Lets say you are writing a function and you need some configurable option and setting to be available in function and thus you want to use some additional configuration file , then you can also achieve the same by having a JSON based configuration file and a corresponding POCO Class for the same.
 
 Please use https://csharp2json.io/ & http://json2csharp.com/ to create correct POCO class for you JSON configuration file.
 
-Here is an example of a such file  which we want to use in function , lets say your package.zip contains  :
+Here is an example of a such file which we want to use in function , lets say your package.zip contains :
 
 ```
  Source Package zip :
@@ -311,25 +318,25 @@ Here is an example of a such file  which we want to use in function , lets say y
 	|--....MiscFiles(optional)
 ```
 
-here is what ***mysetting.json*** looks like :
+here is what **_mysetting.json_** looks like :
 
 ```
-				{ 
+				{
 				"name": "Alpha",
-				"sendGridEndPoints": 
+				"sendGridEndPoints":
 					[
 						{ "port": 1002 },
-						{ "port": 3004 } 
+						{ "port": 3004 }
 					]
 				}
 ```
 
-here is what ***func.cs*** looks like :
+here is what **_func.cs_** looks like :
 
-``` 
+```
 using System;
 using Fission.DotNetCore.Api;
-			
+
 namespace FuncNameSpace
     {
         public class FissionFunction
@@ -339,7 +346,7 @@ namespace FuncNameSpace
                     context.Logger.WriteInfo("Staring..... ");
                     var settings =context.GetSettings<SendGridSettings>("mysetting.json");
                     context.Logger.WriteInfo($"SendGridEndPoint port : {settings.SendGridEndPoints[0].port} ..... ");
-                    respo=settings.SendGridEndPoints[0].port;           
+                    respo=settings.SendGridEndPoints[0].port;
                     context.Logger.WriteInfo("Done!!");
                     return respo;
                 }
@@ -356,9 +363,9 @@ namespace FuncNameSpace
                  public string port { get; set; }
             }
     }
-    			
+
 ```
+
 **3. Nuget support :**
 
-with use of fission builder we can now add various compatible nugets with our deployment package so that it can be leverage via our function  code. Please go through detailed documentation of [fission builder for dotnet 2.0 environment](https://github.com/fission/fission/tree/master/environments/dotnet20/builder).
- 
+with use of fission builder we can now add various compatible nugets with our deployment package so that it can be leverage via our function code. Please go through detailed documentation of [fission builder for dotnet 2.0 environment](https://github.com/fission/fission/tree/master/environments/dotnet20/builder).

@@ -15,6 +15,7 @@ fission env create --name binary-env --image fission/binary-env
 ## Example Usage
 
 ### hello.sh
+
 `hello.sh` is an very basic shell script that returns `"Hello, World!"`.
 
 ```bash
@@ -31,6 +32,7 @@ curl http://$FISSION_ROUTER/hello
 This should return a HTTP response with the body `Hello World!`
 
 ### echo.sh
+
 `echo.sh` shows the the use of STDIN to read the request body, echoing the input back in the response.
 
 ```bash
@@ -43,10 +45,11 @@ fission route create --method POST --url /echo --function echo
 # Run the function
 curl -XPOST -d 'Echoooooo!'  http://$FISSION_ROUTER/echo
 ```
+
 This should return a HTTP response with the body `... Echoooooo!`.
 
-
 ### headers.sh
+
 `headers.sh` shows the access to the environment variables that hold the HTTP headers, returning the set HTTP headers.
 
 ```bash
@@ -59,10 +62,12 @@ fission route create --url /headers --function headers
 # Run the function
 curl -H 'X-FOO: BAR'  http://$FISSION_ROUTER/headers
 ```
+
 This should return a HTTP response with the body `... Echoooooo!`.
 
 ### hello..go
-This example shows the differences between using shell scripts and binaries. `hello.go` returns `Hello World!` + the 
+
+This example shows the differences between using shell scripts and binaries. `hello.go` returns `Hello World!` + the
 environment variables it received from the server.
 
 ```bash

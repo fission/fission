@@ -16,7 +16,7 @@ zip -jr multifile.zip *.py *.txt
 ### Create a function
 
 Since there are multiple files, you have to specify an _entrypoint_ to
-for the function.  Its format is `<file name>.<function name>`. In our
+for the function. Its format is `<file name>.<function name>`. In our
 example, that's `main.main`, to run function `main` in `main.py`.
 
 ```
@@ -30,7 +30,6 @@ fission function test --name multifile
 ```
 
 You should see the "Hello, world" message.
-
 
 ## Updating the function
 
@@ -59,4 +58,3 @@ fission function test --name multifile
 ```
 
 You should now see your new, edited message.
-

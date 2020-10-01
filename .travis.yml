@@ -27,7 +27,7 @@ services:
 
 before_install:
   - sudo apt-get update
-#  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+  #  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
   - sudo apt-get -y install apache2-utils parallel realpath
   - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 

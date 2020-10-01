@@ -1,5 +1,5 @@
 include:
-- hello.go
+  - hello.go
 kind: ArchiveUploadSpec
 name: hello-go-zqZW
 

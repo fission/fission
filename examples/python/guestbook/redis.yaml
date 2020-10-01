@@ -24,8 +24,8 @@ spec:
         run: redis
     spec:
       containers:
-      - image: redis
-        name: redis
+        - image: redis
+          name: redis
 
 ---
 apiVersion: v1
@@ -40,6 +40,6 @@ spec:
     run: redis
   type: ClusterIP
   ports:
-  - port: 6379
-    protocol: TCP
-    targetPort: 6379
+    - port: 6379
+      protocol: TCP
+      targetPort: 6379

@@ -3,20 +3,21 @@
 This document documents the design and thoughts that lead to design of Java environment. Before we dive deeper, some important points:
 
 - When we say Java, we really mean JVM. That does not mean that all languages will work seamlessly, so support will be added gradually based on validation. Some of popular languages as of today are:
-    - Scala
-    - Groovy
-    - Kotlin (Server side with Spring)
+
+  - Scala
+  - Groovy
+  - Kotlin (Server side with Spring)
 
 - In Java there are a few prominent frameworks which have a ecosystem of their own (See list below). How these framework fit in the environment will be detailed later, but it is important to understand their place in ecosystem and design for it.
-    - A large percentage of entertprise developers use [Spring framework](https://spring.io/) as has been shown by multiple surveys
-    - Reactive has taken up recently with data intensive operations [Reactive extensions for JVM](https://github.com/ReactiveX/RxJava)
-    - [Spark](http://sparkjava.com/) is a micro web framework
+  - A large percentage of entertprise developers use [Spring framework](https://spring.io/) as has been shown by multiple surveys
+  - Reactive has taken up recently with data intensive operations [Reactive extensions for JVM](https://github.com/ReactiveX/RxJava)
+  - [Spark](http://sparkjava.com/) is a micro web framework
 
 A draft implementation of the Java environment design is in the branch [java_env_alpha](https://github.com/fission/fission/tree/java_env_alpha). Also a earlier implementation based on Vort.x framework [can be found here](https://github.com/tobias/fission-java-env/)
 
 ## Function interface
 
-The goal is here is to minimize the lock in for the user into any framework as much as possible. Java 8 introduced an interface called ```Function``` which could be a great fit here. The user has to implement the ```Function<T, R>``` class and to meet the contract implement the apply method:
+The goal is here is to minimize the lock in for the user into any framework as much as possible. Java 8 introduced an interface called `Function` which could be a great fit here. The user has to implement the `Function<T, R>` class and to meet the contract implement the apply method:
 
 ```
 public class HelloWorld implements Function<T, R> {
@@ -35,7 +36,7 @@ This works well, but has one major limitation: the function does not get access 
 
 ### HttpServletRequest and HttpServletResponse
 
-It is possible to send the [HttpServeletRequest](https://docs.oracle.com/javaee/6/api/javax/servlet/http/HttpServletRequest.html) request object as it is to the function class but then the interface becomes a bit too low level. For example the function user has to retrieve the body of request using ```getInputStream``` which gives raw input stream and needs additional work. 
+It is possible to send the [HttpServeletRequest](https://docs.oracle.com/javaee/6/api/javax/servlet/http/HttpServletRequest.html) request object as it is to the function class but then the interface becomes a bit too low level. For example the function user has to retrieve the body of request using `getInputStream` which gives raw input stream and needs additional work.
 
 Also most enterprise applications today use a framework of some sort for web applications instead of dealing with the raw HttpServlet
 
@@ -64,4 +65,4 @@ The Spring cloud function project also discusses the issue of not having access 
 JVM environment design is based on Spring boot and Spring MVC frameworks. The details can be found in branch, but here are some key points:
 
 - All classes in the function and dependent classes are loaded into JVM. Which means the user should supply the uber/fat jar for execution.
-- The entrypoint class is specified by the user as ```entrypoint``` flag on the class. The method is by convention (```apply``` as per the Function interface contract)
+- The entrypoint class is specified by the user as `entrypoint` flag on the class. The method is by convention (`apply` as per the Function interface contract)

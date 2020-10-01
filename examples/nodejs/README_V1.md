@@ -20,15 +20,15 @@ relating to this choice.
 Every Node.js function has the same basic form:
 
 ```javascript
-module.exports = async function(context) {
-    return {
-        status: 200,
-        body: 'Your body here',
-        headers: {
-            'Foo': 'Bar'
-        }
-    }    
-}
+module.exports = async function (context) {
+  return {
+    status: 200,
+    body: "Your body here",
+    headers: {
+      Foo: "Bar",
+    },
+  };
+};
 ```
 
 Since it is an `async` function, you can `await` `Promise`s, as demonstrated in the `weather.js` function.

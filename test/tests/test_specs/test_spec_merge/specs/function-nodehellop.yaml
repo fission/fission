@@ -1,5 +1,5 @@
 include:
-- hello.js
+  - hello.js
 kind: ArchiveUploadSpec
 name: hello-js-leSC
 

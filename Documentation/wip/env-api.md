@@ -14,14 +14,14 @@ This is version 2.0-alpha of the Fission-Environment API.
 
 Fission V2 Environments consist of:
 
- * Metadata
- * A runtime image
- * A builder image (optional)
- * Function Interface Specification
- * User Documentation
- * Examples
+- Metadata
+- A runtime image
+- A builder image (optional)
+- Function Interface Specification
+- User Documentation
+- Examples
 
-### Metadata 
+### Metadata
 
 See EnvironmentSpec, Runtime, and Builder in types.go.
 
@@ -71,9 +71,9 @@ of files.
 The builder container is invoked with the specified command, with the
 following params:
 
- 1. File path of the source
- 2. File path where the output should go
- 3. Other env or function-specific params passed by the user
+1.  File path of the source
+2.  File path where the output should go
+3.  Other env or function-specific params passed by the user
 
 The first two parameters are file paths, and all remaining params are
 environment-specific.
@@ -87,34 +87,33 @@ intervention.
 ## Function Interface Spec
 
 The function interface spec is a document that specifies the interface
-of functions and their semantics.  It must specify:
+of functions and their semantics. It must specify:
 
- * How functions are invoked (sync, async)
- * How the request context is provided to the function (URL, headers, request type, request body)
- * Function logging
- * Semantics of function errors and exceptions
-
+- How functions are invoked (sync, async)
+- How the request context is provided to the function (URL, headers, request type, request body)
+- Function logging
+- Semantics of function errors and exceptions
 
 ## Documentation
 
 The docs should contain everything necessary to use the environment:
 
- * How to add it to a fission cluster
- * How to write and build functions for this environment (link to the interface spec)
- * How to modify and rebuild the environment itself
+- How to add it to a fission cluster
+- How to write and build functions for this environment (link to the interface spec)
+- How to modify and rebuild the environment itself
 
 ## Examples
 
 Suggested examples to provide:
 
- * A simple "Hello world"
- * A function that demonstrates use of the request context: url params,
-   request headers, request body 
- * A function that does logging
- * A multi-file function package
- * A function with dependencies
- * Functions with shared code
+- A simple "Hello world"
+- A function that demonstrates use of the request context: url params,
+  request headers, request body
+- A function that does logging
+- A multi-file function package
+- A function with dependencies
+- Functions with shared code
 
 ## Compatibility with v1
 
-V1 environment images can be used as v2 environment runtime images. 
+V1 environment images can be used as v2 environment runtime images.

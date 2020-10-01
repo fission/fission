@@ -1,9 +1,9 @@
 # Fission CRD generation
 
-* Clone https://github.com/fission/code-generator to generate fission CRD object deepcopy and client methods.
-* MUST run code-generator in the fission root directory.
+- Clone https://github.com/fission/code-generator to generate fission CRD object deepcopy and client methods.
+- MUST run code-generator in the fission root directory.
 
-``` bash
+```bash
 $ cd $GOPATH/src/github.com/fission/fission/
 $ bash $GOPATH/src/k8s.io/code-generator/generate-groups.sh \
     all \
@@ -15,4 +15,4 @@ $ bash $GOPATH/src/k8s.io/code-generator/generate-groups.sh \
 
 # Reference
 
-* https://blog.openshift.com/kubernetes-deep-dive-code-generation-customresources/
+- https://blog.openshift.com/kubernetes-deep-dive-code-generation-customresources/

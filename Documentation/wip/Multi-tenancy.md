@@ -4,7 +4,7 @@ Multi-tenancy in Fission allows users to create Fission objects, i.e functions, 
 It mandates that a function reference secrets, configmaps and its package (if explicity referenced during function creation/updation) to be present in the same namespace as the function.
 This allows user separation and prevents in-advertent access to sensitive data of other users sharing the same cluster.
 However, users are allowed and encouraged to share environments to ensure optimal utilization of cluster resources. To achieve this, users can create all the necessary environments in a ns, say ns1 and then go on to create functions in different namespaces and refer to env in ns1.
-Users that prefer complete isolation can create their env, functions in the same ns.  
+Users that prefer complete isolation can create their env, functions in the same ns.
 
 ## Roles and privileges
 
@@ -12,7 +12,7 @@ Users that prefer complete isolation can create their env, functions in the same
 2. Package-getter Role : This role has privileges to do a get, watch and list on fission package objects.
 3. Secret-Configmap-getter Role : This role has privileges to do a get, watch and list on secrets and configmaps.
 
-## Service Accounts 
+## Service Accounts
 
 1. fission-fetcher
 

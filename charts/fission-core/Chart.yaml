@@ -3,8 +3,8 @@ name: fission-core
 version: 1.11.0
 description: Fission is a fast serverless framework for Kubernetes.
 keywords:
-- fission
-- serverless
+  - fission
+  - serverless
 home: http://fission.io/
 maintainers:
   - name: Soam Vasani

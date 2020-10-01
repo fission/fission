@@ -1,4 +1,3 @@
-Fission Document
-=================
+# Fission Document
 
-* Please visit [here](https://docs.fission.io/) for fission documentation. 
+- Please visit [here](https://docs.fission.io/) for fission documentation.

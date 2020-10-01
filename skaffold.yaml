@@ -3,10 +3,10 @@
 # build and deploy Fission to Kubernetes cluster.
 # Skaffold version v1.10.1 is used for this configuration.
 ############## Usage ##############
-# Skaffold CLI should be installed on your machine. 
+# Skaffold CLI should be installed on your machine.
 # For building & deploying to Cloud Provider
 # $ skaffold config set default-repo vishalbiyani (vishalbiyani - should be your registry/Dockerhub handle)
-# $ `skaffold run` 
+# $ `skaffold run`
 # For building & deploying to Kind cluster use Kind profile
 # $ `skaffold run -p kind`
 ####################################
@@ -28,10 +28,8 @@ build:
 deploy:
   helm:
     flags:
-      upgrade:
-        ["--timeout=3m", "--install", "--force", "--debug"]
-      install:
-        ["--timeout=3m","--debug"]
+      upgrade: ["--timeout=3m", "--install", "--force", "--debug"]
+      install: ["--timeout=3m", "--debug"]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
@@ -41,7 +39,7 @@ deploy:
         artifactOverrides:
           image: "fission"
           preUpgradeChecksImage: "preupgradechecks"
-          fetcher.image: "fetcher"        
+          fetcher.image: "fetcher"
         setValues:
           namespace: fission
           repository: "index.docker.io"

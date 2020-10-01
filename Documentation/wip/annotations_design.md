@@ -10,7 +10,7 @@ To enable the users to use annotations, here are some thoughts and ideas:
 
 Annotations can be defined fairly easily in the spec file for any object as part of metadata.
 
-``` yaml
+```yaml
 apiVersion: fission.io/v1
 kind: HTTPTrigger
 metadata:
@@ -35,20 +35,19 @@ These annotations can be merged to target object using a merging mechanism - so 
 
 For example. look at annotations:
 
-|Annotation name| Description|
-|:-------------|:-------------|
-|`prometheus.io/scrape`| Prometheus - applied to pod|
-|`sidecar.istio.io/inject`|Istio - applied to pod|
-|`helm.sh/hook`| Used by helm to apply to pods/jobs|
-|`traefik.ingress.kubernetes.io/app-root`|Used by Trafeik ingress controller, applied to ingress|
-|`nginx.ingress.kubernetes.io/add-base-url`|Used by Nginx ingress controller, applied to ingress|
+| Annotation name                            | Description                                            |
+| :----------------------------------------- | :----------------------------------------------------- |
+| `prometheus.io/scrape`                     | Prometheus - applied to pod                            |
+| `sidecar.istio.io/inject`                  | Istio - applied to pod                                 |
+| `helm.sh/hook`                             | Used by helm to apply to pods/jobs                     |
+| `traefik.ingress.kubernetes.io/app-root`   | Used by Trafeik ingress controller, applied to ingress |
+| `nginx.ingress.kubernetes.io/add-base-url` | Used by Nginx ingress controller, applied to ingress   |
 
 So we can write a simple logic - to check if a annotation is applicable for an ingress and based on that apply or not apply annotations to ingress.
 
-
 ### Implementation 2
 
-- One of side effects of this is that the annotations will still stay on the source CRD object - for example annotation will stay on the httptrigger as well as the ingress object. This can cause problems in certain cases where something like Prometheus uses annotations to scrape objects. So instead we wrap the annotations needed by an object into another annotation name. This also solves problem of having to guess which annotations to apply to which object. 
+- One of side effects of this is that the annotations will still stay on the source CRD object - for example annotation will stay on the httptrigger as well as the ingress object. This can cause problems in certain cases where something like Prometheus uses annotations to scrape objects. So instead we wrap the annotations needed by an object into another annotation name. This also solves problem of having to guess which annotations to apply to which object.
 
 ```yaml
 apiVersion: fission.io/v1
@@ -61,13 +60,12 @@ metadata:
     ingress-annotations: '{"nginx.ingress.kubernetes.io/add-base-url": "true", "nginx.ingress.kubernetes.io/app-root": "somevalue"}'
 ```
 
-
 This is specifically important because for example newdeploy function will create a deployment, service and HPA and all three might have different set of annotations.
 
 ```yaml
-  annotations:
-    service-annotations: '{"service.annotation1": "somevalue"}'
-    deployment-annotations: '{"deploy.annotation1": "somevalue"}'
+annotations:
+  service-annotations: '{"service.annotation1": "somevalue"}'
+  deployment-annotations: '{"deploy.annotation1": "somevalue"}'
 ```
 
 ### Implementation 3
@@ -83,7 +81,7 @@ HTTPTriggerSpec struct {
 		FunctionReference FunctionReference `json:"functionref"`
 		Annotations       map[string]string `json:annotations`
 	}
-  ```
+```
 
 ## Final thoughts
 

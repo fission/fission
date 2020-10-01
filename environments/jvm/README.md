@@ -3,7 +3,7 @@
 This is the JVM environment for Fission.
 
 It's a Docker image containing a OpenJDK8 runtime, along with a
-dynamic loader.  A few dependencies are included in the
+dynamic loader. A few dependencies are included in the
 pom.xml file.
 
 Looking for ready-to-run examples? See the [JVM examples directory](../../examples/jvm).
@@ -17,8 +17,8 @@ need, and rebuild this image (instructions below).
 
 You'll need access to a Docker registry to push the image: you can
 sign up for Docker hub at hub.docker.com, or use registries from
-gcr.io, quay.io, etc.  Let's assume you're using a docker hub account
-called USER.  Build and push the image to the the registry:
+gcr.io, quay.io, etc. Let's assume you're using a docker hub account
+called USER. Build and push the image to the the registry:
 
 ```
    docker build -t USER/jvm-env . && docker push USER/jvm-env
@@ -36,7 +36,7 @@ create":
 Or, if you already have an environment, you can update its image:
 
 ```
-   fission env update --name jvm --image USER/jvm-env   
+   fission env update --name jvm --image USER/jvm-env
 ```
 
 After this, fission functions that have the env parameter set to the
@@ -67,4 +67,4 @@ JVM environment uses Tomcat HTTP server by default as it is included in spring w
 
 ## Java and JVM builder
 
-JVM environment builder is based on OpenJDK8 and Maven 3.5.4 version. The default build command runs `mvn clean package` and uses the target/*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to ${DEPLOY_PKG}.
+JVM environment builder is based on OpenJDK8 and Maven 3.5.4 version. The default build command runs `mvn clean package` and uses the target/\*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to \${DEPLOY_PKG}.

@@ -14,16 +14,17 @@ zip -r multifile.zip . -i *.php *.txt composer.json
 ```
 
 ### Create a package
+
 ```
 fission package create --sourcearchive multifile.zip --env php
 ```
-This command will print the created package. We will use it in the next step.
 
+This command will print the created package. We will use it in the next step.
 
 ### Create a function
 
 Since there are multiple files, you have to specify an _entrypoint_ to
-for the function.  Its format is `<file path>::<function name>`. In our
+for the function. Its format is `<file path>::<function name>`. In our
 example, that's `handlers/FileReader.php::execute`, to run function `execute` in `handlers/FileReader.php`.
 
 ```
@@ -37,7 +38,6 @@ fission function test --name multifile
 ```
 
 You should see the "Hello, world" message.
-
 
 ## Updating the function
 
@@ -66,4 +66,3 @@ fission function test --name multifile
 ```
 
 You should now see your new, edited message.
-

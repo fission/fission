@@ -1,6 +1,6 @@
-module.exports = async function(context) {
-    return {
-        status: 400,
-        body: "Hello, World!"
-    };
-}
+module.exports = async function (context) {
+  return {
+    status: 400,
+    body: "Hello, World!",
+  };
+};

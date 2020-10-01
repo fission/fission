@@ -1,5 +1,5 @@
 include:
-- mqtrigger/*
+  - mqtrigger/*
 kind: ArchiveUploadSpec
 name: mqtrigger-Z3l6
 

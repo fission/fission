@@ -3,7 +3,7 @@
 This is the JVM (Jersey based) environment for Fission.
 
 It's a Docker image containing a OpenJDK8 runtime, along with a
-dynamic loader.  A few dependencies are included in the
+dynamic loader. A few dependencies are included in the
 pom.xml file.
 
 Unlike the other [JVM environment](../jvm) which is based on the Spring framework, this environment uses Jersey.
@@ -19,8 +19,8 @@ need, and rebuild this image (instructions below).
 
 You'll need access to a Docker registry to push the image: you can
 sign up for Docker hub at hub.docker.com, or use registries from
-gcr.io, quay.io, etc.  Let's assume you're using a docker hub account
-called USER.  Build and push the image to the the registry:
+gcr.io, quay.io, etc. Let's assume you're using a docker hub account
+called USER. Build and push the image to the the registry:
 
 ```
    docker build -t USER/jvm-jersey-env . && docker push USER/jvm-jersey-env
@@ -40,7 +40,7 @@ create":
 Or, if you already have an environment, you can update its image:
 
 ```
-   fission env update --name jvm --image USER/jvm-jersey-env 
+   fission env update --name jvm --image USER/jvm-jersey-env
 ```
 
 After this, fission functions that have the env parameter set to the
@@ -65,4 +65,4 @@ JVM Jersey environment uses an embedded Jetty HTTP server by default, as can be 
 
 ## Java and JVM builder
 
-There are two JVM environment builder based on OpenJDK8 and OpenJDK 11 and using Maven 3.5.4. The default build command runs `mvn clean package` and uses the target/*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to ${DEPLOY_PKG}.
+There are two JVM environment builder based on OpenJDK8 and OpenJDK 11 and using Maven 3.5.4. The default build command runs `mvn clean package` and uses the target/\*with-dependencies.jar file for function. The default build command can be overridden as long as the uber jar file is copied to \${DEPLOY_PKG}.

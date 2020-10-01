@@ -7,6 +7,7 @@ It's a Docker image containing a PHP 7.3 runtime. This image use php:7.3-cli bas
 This environment does not force you to use a specific class or create a main function.
 
 A few common extensions are included :
+
 - curl
 - gd
 - json
@@ -32,8 +33,8 @@ To add other extensions or packages(composer.json) you need to edit the Dockerfi
 
 You'll need access to a Docker registry to push the image: you can
 sign up for Docker hub at hub.docker.com, or use registries from
-gcr.io, quay.io, etc.  Let's assume you're using a docker hub account
-called USER.  Build and push the image to the the registry:
+gcr.io, quay.io, etc. Let's assume you're using a docker hub account
+called USER. Build and push the image to the the registry:
 
 ```
    docker build -t USER/php7-env . && docker push USER/php7-env

@@ -77,7 +77,7 @@
 
 - Fission CLI should include a tutorial
 - Fission CLI should have a way to drop you into the UI
-- Eliminate FISSION_URL, just use kube client to find fission url.  Also useful to grab credentials.
+- Eliminate FISSION_URL, just use kube client to find fission url. Also useful to grab credentials.
 
 ## Documentation ([area-doc](https://github.com/fission/fission/labels/area-doc))
 

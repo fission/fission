@@ -1,4 +1,3 @@
-
 # Fission Pool manager
 
 Fission's currently uses a pool of running "environments" and specialized them for execution of a function. This design served the cold start use cases well but this is not the only strategy for creation and execution of functions. For example requirements for a new execution backend have been discussed in https://github.com/fission/fission/issues/193. This document aims to discuss the currently under development "newdeploy" backend and related thoughts
@@ -17,18 +16,19 @@ Pool manager backend uses a pool of environment pods and specialized them when a
 
 ### New Deploy Backend
 
-New Deploy backend create a Kubernetes deployment, a Kubernetes Service for a given function. It additionally creates a HorizontalPodAutoscaler if scale parameters are provided. The creation of deployment and service can be eager or lazy based on input. 
+New Deploy backend create a Kubernetes deployment, a Kubernetes Service for a given function. It additionally creates a HorizontalPodAutoscaler if scale parameters are provided. The creation of deployment and service can be eager or lazy based on input.
 
 ### Execution Strategy
 
-While this is still a WIP, parameters that affect execution behaviour of function are based on `InvokeStrategy`. A invoke strategy defines the `strategyType` and actual strategy parameters encapsulated in the strategy object. 
+While this is still a WIP, parameters that affect execution behaviour of function are based on `InvokeStrategy`. A invoke strategy defines the `strategyType` and actual strategy parameters encapsulated in the strategy object.
 
 ```
 InvokeStrategy struct {
 		ExecutionStrategy ExecutionStrategy
 		StrategyType      StrategyType
 	}
-```  
+```
+
 For example in above case the strategy type is `ExecutionStrategy` and the corresponding parameters are listed below.
 
 ```
@@ -38,7 +38,7 @@ For example in above case the strategy type is `ExecutionStrategy` and the corre
 		MaxScale      int
 		EagerCreation bool
 	}
-  ```
+```
 
 In future there could be more strategies for different use cases.
 

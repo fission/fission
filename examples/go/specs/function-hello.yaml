@@ -1,7 +1,7 @@
 kind: ArchiveUploadSpec
 name: hello-go
 include:
-- hello.go
+  - hello.go
 
 ---
 apiVersion: fission.io/v1

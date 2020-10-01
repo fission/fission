@@ -9,9 +9,7 @@ With Homebrew, you can get them by:
 
        brew install coreutils findutils gnu-sed
 
-
 ## Run a single test
-
 
 ```bash
 cd $REPO/test
@@ -28,12 +26,12 @@ export GO_RUNTIME_IMAGE=my.docker.repo/go-env:test
 ./tests/test_environments/test_go_env.sh
 ```
 
-
 ## Run tests in parallel
 
 NOTE: Some tests will consume lots of resources and cause the test fail.
 
 Example: Run tests with 4 concurrent jobs.
+
 ```bash
 cd $REPO/test
 
@@ -50,4 +48,3 @@ cat logs/test_backend_poolmgr.sh.log
 # The summary report will be saved to logs/_recap
 cat logs/_recap
 ```
-

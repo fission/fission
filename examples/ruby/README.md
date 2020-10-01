@@ -109,7 +109,7 @@ $ curl http://$FISSION_ROUTER/request/123?key=abc
 ## V2 Specification Example (with builder support)
 
 ```
-$ fission function create --name parse --env ruby --src "parse/*" --entrypoint handler 
+$ fission function create --name parse --env ruby --src "parse/*" --entrypoint handler
 $ fission fn test --name parse --body '<message>This is my message</message>'
   This is my message
 ```

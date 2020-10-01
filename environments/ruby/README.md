@@ -28,8 +28,8 @@ need, and rebuild this image (instructions below).
 
 You'll need access to a Docker registry to push the image: you can
 sign up for Docker hub at hub.docker.com, or use registries from
-gcr.io, quay.io, etc.  Let's assume you're using a docker hub account
-called USER.  Build and push the image to the the registry:
+gcr.io, quay.io, etc. Let's assume you're using a docker hub account
+called USER. Build and push the image to the the registry:
 
 ```
    docker build -t USER/ruby-env . && docker push USER/ruby-env

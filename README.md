@@ -17,7 +17,7 @@
   <a href="http://fission.io">fission.io</a> | <a href="http://twitter.com/fissionio">@fissionio</a> | <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">Slack</a>
 </p>
 
---------------
+---
 
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
@@ -28,29 +28,28 @@ extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
-_environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
+_environments_ (more below). Fission currently supports NodeJS, Python, Ruby, Go,
 PHP, Bash, and any Linux executable, with more languages coming soon.
 
-Table of Contents
-=================
+# Table of Contents
 
-   * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
-      * [Performance: 100msec cold start](#performance-100msec-cold-start)
-      * [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
-      * [Getting Started](#getting-started)
-      * [Learn More](#learn-more)
-      * [Contributing](#contributing)
-      * [Get Help &amp; Community Meeting](#get-help--community-meeting)
-      * [Official Releases](#official-releases)
-      * [Sponsors](#sponsors)
-   * [Licensing](#licensing)
+- [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
+  - [Performance: 100msec cold start](#performance-100msec-cold-start)
+  - [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
+  - [Getting Started](#getting-started)
+  - [Learn More](#learn-more)
+  - [Contributing](#contributing)
+  - [Get Help &amp; Community Meeting](#get-help--community-meeting)
+  - [Official Releases](#official-releases)
+  - [Sponsors](#sponsors)
+- [Licensing](#licensing)
 
 ## Performance: 100msec cold start
 
 Fission maintains a pool of "warm" containers that each contain a
-small dynamic loader.  When a function is first called,
+small dynamic loader. When a function is first called,
 i.e. "cold-started", a running container is chosen and the function is
-loaded.  This pool is what makes Fission fast: cold-start latencies
+loaded. This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
 ## Kubernetes is the right place for Serverless
@@ -80,31 +79,31 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ## Learn More
 
-* Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
-* See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
-* You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
-* See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
+- Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
+- See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
+- You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
+- See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
 ## Contributing
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
-## Get Help & Community Meeting 
+## Get Help & Community Meeting
 
 Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
 Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
 
 A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=09:00&tz=PT%20%28Pacific%20Time%29).
 
-Meeting Link: https://zoom.us/j/413921817 
+Meeting Link: https://zoom.us/j/413921817
 
 The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
 ## Official Releases
 
-Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
-Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
-the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
+Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases).
+Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from
+the master branch are subject to changes and incompatibilities that will not be supported in the official releases.
 
 ## Sponsors
 
