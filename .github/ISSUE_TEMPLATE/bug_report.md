@@ -1,10 +1,9 @@
 ---
 name: Bug report
 about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: ''
-
+title: ""
+labels: ""
+assignees: ""
 ---
 
 <!-- Please answer these questions before submitting your issue. Thanks! -->
@@ -24,6 +23,7 @@ $ kubectl version
 **Kubernetes platform (e.g. Google Kubernetes Engine)**
 
 **Describe the bug**
+
 <!--A clear and concise description of what the bug is.-->
 
 **To Reproduce**
@@ -31,11 +31,13 @@ $ kubectl version
 <!-- Please provide steps for reproducing the error. -->
 
 **Expected result**
+
 <!--A clear and concise description of what you expected to happen.-->
 
 **Actual result**
 
 **Screenshots/Dump file**
+
 <!--If applicable, add screenshots/fission dump file to help explain your problem.-->
 
 <pre>
@@ -43,4 +45,5 @@ $ fission support dump
 </pre>
 
 **Additional context**
+
 <!--Add any other context about the problem here.-->

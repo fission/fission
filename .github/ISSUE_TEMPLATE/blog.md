@@ -1,10 +1,7 @@
 ---
 name: Blog
 about: Suggest a blog
-title: ''
-labels: ''
-assignees: ''
-
+title: ""
+labels: ""
+assignees: ""
 ---
-
-
