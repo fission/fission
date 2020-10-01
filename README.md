@@ -109,4 +109,4 @@ The following companies, organizations, and individuals support Fission's ongoin
 
 # Licensing
 
-Fission is under the Apache 2.0 license.
+Fission is under the [Apache 2.0 license](https://github.com/fission/fission/blob/master/LICENSE).
