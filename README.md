@@ -31,7 +31,7 @@ language-specific parts are isolated in something called
 _environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
 PHP, Bash, and any Linux executable, with more languages coming soon.
 
-Table of Contents
+Table of Contents -
 =================
 
    * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
