@@ -38,7 +38,7 @@ Table of Contents
 
 Fission maintains a pool of "warm" containers that each contain a
 small dynamic loader.  When a function is first called,
-i.e. "cold-started", a running container is chosen and the function is
+i.e. "cold-started", a running container is chosen, and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
@@ -87,7 +87,7 @@ A regular community meeting takes place every other Thursday at 09:00 AM PT (Pac
 
 Meeting Link: https://zoom.us/j/413921817 
 
-The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
+The meeting agenda for the next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss the direction of project, design and implementation reviews and general questions about the project etc.
 
 ## Official Releases
 
@@ -97,7 +97,7 @@ the master branch are subject to changes and incompatibilities that will not be 
 
 ## Sponsors
 
-The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
+The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here; please raise a Pull request.
 
 <p>
     <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
