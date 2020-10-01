@@ -36,7 +36,7 @@ Table of Contents
 
 Do reach out on Slack or Twitter and we are happy to help.
 
- * Drop by the [slack channel](http://slack.fission.io).
+ * Drop by the [slack channel](https://fissionio.slack.com/join/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE).
  * Say hi on [twitter](https://twitter.com/fissionio).
 
 
