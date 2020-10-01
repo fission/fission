@@ -53,7 +53,7 @@ i.e. "cold-started", a running container is chosen and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
-## Kubernetes is the right place for Serverless
+## Why Kubernetes is the right place for Serverless
 
 We're built on Kubernetes because we think any non-trivial app will
 use a combination of serverless functions and more conventional
