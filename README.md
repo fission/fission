@@ -19,7 +19,7 @@
 
 --------------
 
-### :mag_right: What is Fission:
+## :mag_right: What is Fission:
     Fission is a fast serverless framework for Kubernetes with a focus on
     developer productivity and high performance.
     
@@ -32,10 +32,8 @@
     _environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
     PHP, Bash, and any Linux executable, with more languages coming soon.
 
-Table of Contents
-=================
-
-   * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
+## :clipboard: Table of Contents:
+    * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
       * [Performance: 100msec cold start](#performance-100msec-cold-start)
       * [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
       * [Getting Started](#getting-started)
@@ -44,7 +42,7 @@ Table of Contents
       * [Get Help &amp; Community Meeting](#get-help--community-meeting)
       * [Official Releases](#official-releases)
       * [Sponsors](#sponsors)
-   * [Licensing](#licensing)
+    * [Licensing](#licensing)
 
 ## Performance: 100msec cold start
 
