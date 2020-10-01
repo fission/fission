@@ -1,6 +1,6 @@
 # Fission
 
-[Fission](http://fission.io/) is a framework for serverless functions on Kubernetes.
+[Fission](https://fission.io/) is a framework for serverless functions on Kubernetes.
 
 
 ## Prerequisites
