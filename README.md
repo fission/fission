@@ -107,6 +107,6 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# Licensing
+# Licensing the file
 
 Fission is under the Apache 2.0 license.
