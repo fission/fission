@@ -1,4 +1,4 @@
-# Fission: Serverless Functions for Kubernetes
+# Fission: Serverless Framework for Kubernetes
 
 [![Build Status](https://travis-ci.org/fission/fission.svg?branch=master)](https://travis-ci.org/fission/fission)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fission/fission)](https://goreportcard.com/report/github.com/fission/fission)
@@ -8,17 +8,17 @@
 
 <img src="https://docs.fission.io/images/logo.png" width="300">
 
-Fission is a fast serverless framework for Kubernetes with a focus on
+Fission is a fast and simple serverless framework for Kubernetes developed on Go majorly, with a focus to enhance
 developer productivity and high performance.
 
 Fission operates on _just the code_: Docker and Kubernetes are
-abstracted away under normal operation, though you can use both to
+abstracted away under normal operations, though you can use both to
 extend Fission if you want to.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
 _environments_ (more below).  Fission currently supports NodeJS, Python, Ruby, Go, 
-PHP, Bash, and any Linux executable, with more languages coming soon.
+PHP, Bash, and any Linux executable language, with more languages coming soon.
 
 Table of Contents
 =================
@@ -34,7 +34,7 @@ Table of Contents
       * [Sponsors](#sponsors)
    * [Licensing](#licensing)
 
-## Performance: 100msec cold start
+## Performance: 100msec Cold Start
 
 Fission maintains a pool of "warm" containers that each contain a
 small dynamic loader.  When a function is first called,
@@ -42,7 +42,7 @@ i.e. "cold-started", a running container is chosen and the function is
 loaded.  This pool is what makes Fission fast: cold-start latencies
 are typically about 100msec.
 
-## Kubernetes is the right place for Serverless
+## Kubernetes is the right place for Serverless Functions
 
 We're built on Kubernetes because we think any non-trivial app will
 use a combination of serverless functions and more conventional
@@ -76,7 +76,7 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ## Contributing
 
-Check out the [contributing guide](CONTRIBUTING.md).
+Check out the [contributing guide](CONTRIBUTING.md). We'd love any contributions that could improve and enhance the performance of Fission.
 
 ## Get Help & Community Meeting 
 
