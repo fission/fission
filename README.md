@@ -61,7 +61,7 @@
     on your Kubernetes cluster &mdash; such as monitoring or log
     aggregation &mdash; also helps with ops on your Fission deployment.
 
-## Getting Started
+## :rocket: Getting Started
 
 ```bash
   # Add the stock NodeJS env to your Fission deployment
@@ -75,25 +75,25 @@
   Hello, world!
 ```
 
-## Learn More
+## :computer: Learn More
 
-* Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
-* See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
-* You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
-* See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
+  * Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
+  * See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
+  * You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
+  * See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing
+## :wrench: Contributing
 
-Check out the [contributing guide](CONTRIBUTING.md).
+   Check out the [contributing guide](CONTRIBUTING.md).
 
 ## Get Help & Community Meeting 
 
-Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
-Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
+  Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
+  Reach us on [slack]     (https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or  [twitter](https://twitter.com/fissionio).
 
-A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=09:00&tz=PT%20%28Pacific%20Time%29).
+ A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?  t=09:00&tz=PT%20%28Pacific%20Time%29).
 
-Meeting Link: https://zoom.us/j/413921817 
+ Meeting Link: https://zoom.us/j/413921817 
 
 The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
 
