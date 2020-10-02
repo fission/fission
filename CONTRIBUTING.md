@@ -11,7 +11,7 @@ Table of Contents
    * [Choose something to work on](#choose-something-to-work-on)
       * [Get Help.](#get-help)
    * [Contributing - building &amp; deploying](#contributing---building--deploying)
-      * [Prequisite](#prequisite)
+      * [Pre-requisite](#pre-requisite)
       * [Getting Started](#getting-started)
          * [Use Skaffold with Kind/K8S Cluster to build and deploy](#use-skaffold-with-kindk8s-cluster-to-build-and-deploy)
       * [Validating Installation](#validating-installation)
