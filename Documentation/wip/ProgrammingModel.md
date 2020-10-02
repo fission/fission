@@ -1,10 +1,10 @@
-# Programming Model
+## Programming Model
 
 This document describes the programming model for fission functions.  
 
 ## Time Limits
 
-By default, there is no time limit on fission functions.  
+By default, there are no time limit on fission functions.  
 
 Idle running instances may be killed at any time (usually after the
 default idle timeout of 10 minutes, but this is configurable).
