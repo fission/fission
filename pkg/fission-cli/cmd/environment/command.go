@@ -55,7 +55,8 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
 		Optional: []flag.Flag{flag.EnvImage, flag.EnvPoolsize,
-			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret, flag.EnvTerminationGracePeriod,
+			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.EnvImagePullSecret, flag.EnvTerminationGracePeriod,
 			flag.EnvKeepArchive, flag.NamespaceEnvironment, flag.EnvExternalNetwork},
 	})
 

@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -83,6 +84,12 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	envBuilderImg := input.String(flagkey.EnvBuilderImage)
 	envBuildCmd := input.String(flagkey.EnvBuildcommand)
 	envExternalNetwork := input.Bool(flagkey.EnvExternalNetwork)
+	resourceReq, err := util.GetResourceReqs(input, nil)
+	env.Spec.Resources = *resourceReq
+
+	if err != nil {
+		e = multierror.Append(e, err)
+	}
 
 	if len(envImg) == 0 && len(envBuilderImg) == 0 && len(envBuildCmd) == 0 {
 		e = multierror.Append(e, errors.New("need --image to specify env image, or use --builder to specify env builder, or use --buildcmd to specify new build command"))
@@ -130,6 +137,11 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 
 	if e.ErrorOrNil() != nil {
 		return nil, e.ErrorOrNil()
+	}
+
+	err = env.Validate()
+	if err != nil {
+		return nil, fv1.AggregateValidationErrors("Environment", err)
 	}
 
 	return env, nil
