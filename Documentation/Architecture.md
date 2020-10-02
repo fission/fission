@@ -39,7 +39,7 @@ The controller contains CRUD APIs for functions, triggers, environments,
 Kubernetes event watches, etc. This is the component that the client talks to.
 
 All fission resources are stored in kubernetes CRDs. It needs to be able to
-talk to kubernetes API service.
+talk to the kubernetes API service.
 
 ### Executor
 
@@ -70,8 +70,8 @@ Fetcher is a straightforward utility that downloads a URL sent to it
 and saves it at a configured location (shared volume).
 
 The implementation chooses a generic pod from the pool, relabels it to
-"orphan". The pod from the deployment invokes fetcher to copy the function 
-into the pod and hits the specialize endpoint on the environment container. 
+"orphan". The pod from the deployment invokes a fetcher to copy the function 
+into the pod and hits the specialized endpoint on the environment container. 
 This causes the function to be loaded. The pod is now specific to that 
 function. This function pod is cached; it's cleaned up if it's unused for a few minutes.
 
@@ -82,14 +82,14 @@ and requires a short cold start time [1].
 
 However, PoolManager only selects one pod per function, which is not
 suitable for serving massive traffic. In such cases, you should consider
-using NewDeploy as executor type of function.
+using NewDeploy as an executor type of function.
 
 [1] The cold start time depends on the package size of the function. If it's
 a snippet of code, the cold start time usually is less then 100ms.
 
 #### NewDeploy 
 
-NewDeploy creates deployment, service, and HPA for functions in order to handle 
+NewDeploy creates deployment, service, and HPA for functions to handle 
 massive traffic.
 
 NewDeploy watches the function CRD changes and creates a Kubernetes deployment, 
@@ -111,20 +111,20 @@ suitable for functions designed to serve massive traffic.
 Environment containers run user-defined functions and are language-specific. 
 Each environment container must contain an HTTP server and a loader for functions.
 
-The pool manager deploys the environment container into a pod with fetcher 
+The pool manager deploys the environment container into a pod with a fetcher 
 (fetcher is a simple utility that can fetch an HTTP URL to a file at a 
 configured location). This pod forms a "generic pod" because it can
 be loaded with any function in that coding language.
 
 When the pool manager needs to create a service for a function, it calls
-fetcher to fetch the function. Fetcher downloads the function into a
-volume shared between fetcher and this environment container. Poolmgr
+a fetcher to fetch the function. Fetcher downloads the function into a
+volume shared between the fetcher and this environment container. Poolmgr
 then requests the container to load the function.
 
 ### Router
 
 The router forwards HTTP requests to function pods. If there's no
-running service for a function, it requests one from executor, while
+running service for a function, it requests one from the executor, while
 holding on to the request; the router will forward the request to 
 the pod once the function service is ready.
 
@@ -141,20 +141,20 @@ builder. And once a package that contains a source archive is created, the
 builder manager talks to the environment builder to build the function's source 
 archive into a deploy archive for function deployment.
 
-After the build, the builder manager asks Builder to upload the deploy archive to the 
+After the build, the builder manager asks the Builder to upload the deployed archive to the 
 Storage Service once the build succeeded, and updates the package status attached with build logs.
 
 ### Storage Service
 
 The storage service is the home for all archives of packages with sizes larger than 256KB.
-The Builder pulls the source archive from the storage service and uploads deploy archive to it.
-The fetcher inside the function pod also pulls the deploy archive for function specialization.
+The Builder pulls the source archive from the storage service and uploads the deploy archive to it.
+The fetcher inside the function pod also pulls the deployed archive for function specialization.
 
 ## Optional Components
 
 ### Logger
 
-Logger is deployed as DaemonSet to help to forward function logs to a centralized 
+The Logger is deployed as DaemonSet to help to forward function logs to a centralized 
 database service for log persistence. Currently, only InfluxDB is supported to store logs.
 
 Following is a diagram describe how log service works:
@@ -192,7 +192,7 @@ Here's a diagram of the components:
 ### Timer
 
 The timer works like kubernetes CronJob but instead of creating a pod to do the task, 
-it sends a request to router to invoke the function. It's suitable for the background tasks that
+it sends a request to the router to invoke the function. It's suitable for the background tasks that
 need to executor periodically.
 
 The timer works like a Kubernetes CronJob, but instead of creating a 
