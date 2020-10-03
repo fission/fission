@@ -1,4 +1,3 @@
-
 module.exports = async (context) => {
     return {
         status: 200,
