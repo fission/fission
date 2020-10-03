@@ -24,7 +24,7 @@ developer productivity and high performance.
 
 Fission operates on _just the code_: Docker and Kubernetes are
 abstracted away under normal operation, though you can use both to
-extend Fission if you want to.
+extend Fission if you want to. Very Helpful.
 
 Fission is extensible to any language; the core is written in Go, and
 language-specific parts are isolated in something called
