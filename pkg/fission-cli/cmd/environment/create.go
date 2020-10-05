@@ -119,7 +119,14 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	}
 
 	poolsize := input.Int(flagkey.EnvPoolsize)
+
 	if input.IsSet(flagkey.EnvPoolsize) {
+		if input.Int(flagkey.EnvPoolsize) > 0 {
+			poolsize = input.Int(flagkey.EnvPoolsize)
+		} else {
+			poolsize = 3 //Default value
+			fmt.Println("Poolsize can not be set to zero, taking default value 3")
+		}
 		// TODO: remove silently version 3 assignment, we need to warn user to set it explicitly.
 		envVersion = 3
 	}

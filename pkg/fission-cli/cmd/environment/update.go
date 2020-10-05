@@ -104,7 +104,11 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	}
 
 	if input.IsSet(flagkey.EnvPoolsize) {
-		env.Spec.Poolsize = input.Int(flagkey.EnvPoolsize)
+		if input.Int(flagkey.EnvPoolsize) > 0 {
+			env.Spec.Poolsize = input.Int(flagkey.EnvPoolsize)
+		} else {
+			fmt.Println("Poolsize cannot be set to zero")
+		}
 	}
 
 	if input.IsSet(flagkey.EnvGracePeriod) {
