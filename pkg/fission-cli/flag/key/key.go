@@ -97,6 +97,7 @@ const (
 	MqtMetadata        = "metadata"
 	MqtSecret          = "secret"
 	MqtKind            = "mqtkind"
+	MqtSequential      = "sequential"
 
 	EnvName            = resourceName
 	EnvPoolsize        = "poolsize"

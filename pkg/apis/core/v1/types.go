@@ -677,6 +677,11 @@ type (
 		// Kind of Message Queue Trigger to be created, by default its fission
 		// +optional
 		MqtKind string `json:"mqtkind,omitempty"`
+
+		// Whether to consume messages sequentially or concurrently, by default its 'false'.
+		// Not all MessageQueueTypes support this flag
+		// +optional
+		Sequential bool `json:"sequential,omitempty"`
 	}
 
 	// TimeTrigger invokes the specific function at a time or

@@ -261,6 +261,10 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		newMqt.Spec.FunctionReference.Name = mqt.Spec.FunctionReference.Name
 		updated = true
 	}
+	if newMqt.Spec.Sequential != mqt.Spec.Sequential {
+		mqt.Spec.Sequential = newMqt.Spec.Sequential
+		updated = true
+	}
 
 	for key, value := range newMqt.Spec.Metadata {
 		if val, ok := mqt.Spec.Metadata[key]; ok && val != value {
