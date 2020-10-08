@@ -96,7 +96,7 @@ func MakeGenericPool(
 	gpLogger := logger.Named("generic_pool")
 
 	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
-	podReadyTimeout, err := time.ParseDuration(os.Getenv("podReadyTimeoutStr"))
+	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
 	if err != nil {
 		podReadyTimeout = 300 * time.Second
 		gpLogger.Error("failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
