@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -212,6 +211,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		// Get pods; filter the ones that are ready
 		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(
 			metav1.ListOptions{
+				FieldSelector: "status.phase=Running",
 				LabelSelector: labels.Set(
 					gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
 			})
@@ -229,6 +229,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 
 			// add it to the list of ready pods
 			readyPods = append(readyPods, &pod)
+			break
 		}
 		gp.logger.Info("found ready pods",
 			zap.Any("labels", newLabels),
@@ -247,7 +248,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		// Pick a ready pod.  For now just choose randomly;
 		// ideally we'd care about which node it's running on,
 		// and make a good scheduling decision.
-		chosenPod := readyPods[rand.Intn(len(readyPods))]
+		chosenPod := readyPods[0]
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
