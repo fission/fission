@@ -318,5 +318,5 @@ mqt_keda:
       image: fission/keda-rabbitmq-http-connector
       tag: 1
     aws-sqs-queue:
-      image: rahulbhati/keda-aws-sqs-http-connector
+      image: fission/keda-aws-sqs-http-connector
       tag: 1
