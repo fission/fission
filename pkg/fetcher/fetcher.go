@@ -253,7 +253,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			}
 			archive = &pkg.Spec.Deployment
 		} else {
-			return http.StatusBadRequest, fmt.Errorf("unkonwn fetch type: %v", req.FetchType)
+			return http.StatusBadRequest, fmt.Errorf("unknown fetch type: %v", req.FetchType)
 		}
 
 		// get package data as literal or by url
