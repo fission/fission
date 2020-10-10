@@ -62,5 +62,5 @@ $ fission fn create --name func3 --fns ns3 --pkg $pkg --entrypoint "user.main"
 ## Note
 
 1. To maintain backward compatibility, fission objects that are created without the ns flags are created in default namespace. Also, the run time env pods in such a case will continue to live in fission-function ns and builder env pods in fission-builder ns
-2. Since all envs in a namespace have the same fission-fetcher SA mounted in them, even though multiple envs are created in a namespace and referenced by functions in different namespaces, the SA will have previleges to view those function's secrets if any.
-3. Similarly, if there are multiple functions in different namespaces but all sharing an env in one namespace, the fission-fetcher SA in that namespace will have previleges to see all of their secrets.
+2. Since all envs in a namespace have the same fission-fetcher SA mounted in them, even though multiple envs are created in a namespace and referenced by functions in different namespaces, the SA will have privileges to view those function's secrets if any.
+3. Similarly, if there are multiple functions in different namespaces but all sharing an env in one namespace, the fission-fetcher SA in that namespace will have privileges to see all of their secrets.

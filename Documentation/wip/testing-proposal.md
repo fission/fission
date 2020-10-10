@@ -9,7 +9,7 @@ Most of current integration tests are CLI driven. Fission CLI is used to test ex
 This section only explains the problems/best practices without going into tooling and language used for implementation.
 ### Separating the test & data
 
-Seperating the tests from test data has two aspects - one is separation of concerns and second is scaling the tests without touching the test logic. The test data is a simple data structure which holds all information and test can take data and execute the logic.
+Separating the tests from test data has two aspects - one is separation of concerns and second is scaling the tests without touching the test logic. The test data is a simple data structure which holds all information and test can take data and execute the logic.
 
 As an example today we test "Hello world" for nodejs environment with a simple hello.js like this:
 
@@ -63,7 +63,7 @@ The ability to have clean and separate before and after blocks, apart from separ
 - Running a suite of tests for same setup (See tagging for suite of tests)
 ### Tagging tests & running a selection
 
-Over a period of time as tests grow, there will be unit, smkoe, integration, performance, soak tests and so on. Ability to run a perticular test suite only or a combination of them makes it easy to run for specific purpose. 
+Over a period of time as tests grow, there will be unit, smkoe, integration, performance, soak tests and so on. Ability to run a particular test suite only or a combination of them makes it easy to run for specific purpose. 
 ### Measuring test times
 
 [Good to have, not a must] Measuring time for tests and reporting somewhere helps over time to monitor trends. Although this job is better done by performance/benchmark tests so it is not a strict requirement
@@ -111,7 +111,7 @@ https://golang.org/pkg/os/exec
 
 ### Using CLI package
 
-Currently we build a CLI and then execute the tests. The tests basically call one of functions from CLI package. If we decide to use a go lang based framework, then we can import the CLI package and then call those functions  by providing them context. This is as good as calling the Fission from CLI, with added benefit of programmibility of Go langugage.
+Currently we build a CLI and then execute the tests. The tests basically call one of functions from CLI package. If we decide to use a go lang based framework, then we can import the CLI package and then call those functions  by providing them context. This is as good as calling the Fission from CLI, with added benefit of programmability of Go language.
 
 ```
 func TestSomething(t *testing.T) {
