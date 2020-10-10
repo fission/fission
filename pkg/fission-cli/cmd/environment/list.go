@@ -37,19 +37,35 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	envs, err := opts.Client().V1().Environment().List(input.String(flagkey.NamespaceEnvironment))
+	ns := input.String(flagkey.NamespaceEnvironment)
+	envs, err := opts.Client().V1().Environment().List(ns)
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NUMBER_OF_FUNCTIONS")
+	fns, err := opts.Client().V1().Function().List(ns)
+	fnCounts := make(map[string]int)
+	for _, fn := range fns {
+		envName := fn.Spec.Environment.Name
+		_, ok := fnCounts[envName]
+		if ok {
+			fnCounts[envName] = fnCounts[envName] + 1
+		} else {
+			fnCounts[envName] = 1
+		}
+	}
+	if err != nil {
+		return errors.Wrap(err, "error listing functions")
+	}
+
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			env.ObjectMeta.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
+			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod, fnCounts[env.ObjectMeta.Name])
 	}
 	w.Flush()
 
