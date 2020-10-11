@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://docs.fission.io/images/logo.png" width="300" />
   <br>
-  <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
+  <h1 align="center">fission: Serverless Functions for Kubernetes</h1>
 </p>
 <p align="center">
   <a href="https://travis-ci.org/fission/fission">
@@ -22,7 +22,7 @@
 Fission is a fast serverless framework for Kubernetes with a focus on
 developer productivity and high performance.
 
-Fission operates on _just the code_: Docker and Kubernetes are
+Fission operates on _just the code_: <b>Docker</b> and <b>Kubernetes</b> are
 abstracted away under normal operation, though you can use both to
 extend Fission if you want to.
 
@@ -91,14 +91,14 @@ Check out the [contributing guide](CONTRIBUTING.md).
 
 ## Get Help & Community Meeting 
 
-Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
+Fission is a project of [many contributors](https://github.com/fission/fission/graphs/contributors).
 Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
 
 A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=09:00&tz=PT%20%28Pacific%20Time%29).
 
 Meeting Link: https://zoom.us/j/413921817 
 
-The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
+The meeting agenda for the next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of the project, design and implementation reviews and general questions about the project, etc.
 
 ## Official Releases
 
@@ -108,7 +108,7 @@ the master branch are subject to changes and incompatibilities that will not be 
 
 ## Sponsors
 
-The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
+The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here. Please raise a Pull request.
 
 <p>
     <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
