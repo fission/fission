@@ -316,7 +316,8 @@ func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
 	// but without Dialer since we will change it later.
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          100,
+		MaxIdleConns:          0,
+		MaxIdleConnsPerHost:   1000,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
