@@ -340,6 +340,10 @@ helm_uninstall_fission() {(set +e
     echo "Uninstalling fission"
     helm delete $id -n $ns || true
     kubectl delete ns f-$id || true
+    echo "Deleting CRDs"
+    kubectl get crd | grep "fission.io" | awk '{print $1}' | xargs -n1 kubectl delete crd
+    echo "Deleting Namespace"
+    kubectl delete ns $ns || true
 )}
 export -f helm_uninstall_fission
 
