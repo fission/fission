@@ -201,8 +201,9 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 
 	tlsConfig.Certificates = []tls.Certificate{cert}
 
-	if err != nil {
-		return nil, err
+	skipVerify, err := strconv.ParseBool(os.Getenv("INSECURE_SKIP_VERIFY"))
+	if err != nil && skipVerify {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	caCertPool := x509.NewCertPool()
