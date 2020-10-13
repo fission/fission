@@ -318,7 +318,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		return
 	}
 	if resp.StatusCode != 200 {
-		errorString := string("request returned failure: " + string(resp.StatusCode))
+		errorString := fmt.Sprintf("request returned failure: %v, request body error: %v", resp.StatusCode, body)
 		errorHeaders := generateErrorHeaders(errorString)
 		errorHandler(kafka.logger, trigger, producer, url,
 			fmt.Errorf("request returned failure: %v", resp.StatusCode), errorHeaders)
