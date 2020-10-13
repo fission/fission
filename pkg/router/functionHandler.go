@@ -214,7 +214,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(fn *fv1.Function, serviceURL *url.URL) {
-					go roundTripper.funcHandler.unTapService(fn, serviceURL)
+					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
 				}(roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
@@ -586,7 +586,15 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 
 		// TODO: return error message that contains traceable UUID back to user. Issue #693
 		rw.WriteHeader(status)
-		rw.Write([]byte(msg))
+		_, err = rw.Write([]byte(msg))
+		if err != nil {
+			fh.logger.Error(
+				"error writing HTTP response",
+				zap.Error(err),
+				zap.Any("function", fh.function),
+				zap.Any("request_header", req.Header),
+			)
+		}
 	}
 }
 
