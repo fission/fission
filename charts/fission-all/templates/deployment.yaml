@@ -103,6 +103,20 @@ metadata:
   namespace: {{ .Values.builderNamespace }}
 
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fission-configmap-secret-getter
+subjects:
+- kind: ServiceAccount
+  name: fission-fetcher
+  namespace: {{ .Values.functionNamespace }}
+roleRef:
+  kind: ClusterRole
+  name: secret-configmap-getter
+  apiGroup: rbac.authorization.k8s.io
+  
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
