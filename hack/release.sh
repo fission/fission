@@ -358,17 +358,15 @@ fi
 release_environment_check $version $chartsrepo
 
 # Build release-builder image
-docker build -t fission-release-builder -f $GOPATH/src/github.com/fission/fission/hack/Dockerfile .
+docker build -t fission-release-builder -f $FISSION_HOME/hack/Dockerfile .
 
 # Build all binaries & container images in docker
 # Here we mount docker.sock into container so that docker client can communicate with host docker daemon.
 # For more detail please visit https://docs.docker.com/machine/overview/
-docker run --rm -it -v $GOPATH/src:/go/src -v /var/run/docker.sock:/var/run/docker.sock \
-    -e VERSION=$version -w "/go/src/github.com/fission/fission/hack" fission-release-builder sh -c "./release-build.sh"
+docker run --rm -it -v $FISSION_HOME:/go/src/github.com/fission -v /var/run/docker.sock:/var/run/docker.sock \
+    -e VERSION=$version -w "$FISSION_HOME/fission/hack" fission-release-builder sh -c "./release-build.sh"
 
 push_all $version
-push_all_envs $version
-push_all_env_builders $version
 
 tag_and_release $version
 attach_github_release_cli $version
