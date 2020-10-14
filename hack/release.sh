@@ -277,7 +277,7 @@ fi
 release_environment_check $version $chartsrepo
 
 # Build release-builder image
-docker build -t fission-release-builder -f $FISSION_HOME/fission/hack/Dockerfile .
+#docker build -t fission-release-builder -f $FISSION_HOME/fission/hack/Dockerfile .
 
 # Build all binaries & container images in docker
 # Here we mount docker.sock into container so that docker client can communicate with host docker daemon.
