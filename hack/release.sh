@@ -48,93 +48,6 @@ push_builder_image() {
     docker push $tag
 }
 
-push_env_image() {
-    local version=$1
-    local envdir=$2
-    local imgnamebase=$3
-    local imgvariant=$4
-
-    if [ -z "$imgvariant" ]
-    then 
-        # no variant specified, just use the base name
-        imgname=$imgnamebase
-    else 
-        # variant specified - append variant to image name and assume dockerfile 
-        # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
-        imgname="$imgnamebase-$imgvariant"
-    fi
-    echo "Pushing $envdir -> $imgname:$version"
-
-    docker push fission/$imgname:$version
-    docker push fission/$imgname:latest
-}
-
-push_all_envs() {
-    local version=$1
-
-    # call with version, env dir, image name base, image name variant
-    push_env_image "$version" "nodejs"               "node-env"            ""
-    push_env_image "$version" "nodejs"               "node-env"            "debian"
-    push_env_image "$version" "binary"               "binary-env"          ""
-    push_env_image "$version" "dotnet"               "dotnet-env"          ""
-    push_env_image "$version" "dotnet20"             "dotnet20-env"        ""
-    push_env_image "$version" "go"                   "go-env"              ""
-    push_env_image "$version" "go"                   "go-env"              "1.11.4"
-    push_env_image "$version" "go"                   "go-env"              "1.12"
-    push_env_image "$version" "go"                   "go-env"              "1.13"
-    push_env_image "$version" "go"                   "go-env"              "1.14"
-    push_env_image "$version" "perl"                 "perl-env"            ""
-    push_env_image "$version" "php7"                 "php-env"             ""
-    push_env_image "$version" "python"               "python-env"          ""
-    push_env_image "$version" "python"               "python-env"          "2.7"
-    push_env_image "$version" "ruby"                 "ruby-env"            ""
-    push_env_image "$version" "jvm"                  "jvm-env"             ""
-    push_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      ""
-    push_env_image "$version" "jvm-jersey"           "jvm-jersey-env"      "11"
-    push_env_image "$version" "tensorflow-serving"   "tensorflow-serving-env"  ""
-}
-
-push_env_builder_image() {
-    local version=$1
-    local envdir=$2
-    local imgnamebase=$3
-    local imgvariant=$4
-
-    if [ -z "$imgvariant" ]
-    then
-        # no variant specified, just use the base name
-        imgname=$imgnamebase
-    else
-        # variant specified - append variant to image name and assume dockerfile
-        # exists with same suffix (e.g. image node-env-debian built from Dockerfile-debian)
-        imgname="$imgnamebase-$imgvariant"
-    fi
-    echo "Pushing $envdir -> $imgname:$version"
-
-    docker push fission/$imgname:$version
-    docker push fission/$imgname:latest
-}
-
-push_all_env_builders() {
-    local version=$1
-
-    # call with version, env dir, image name base, image name variant
-    push_env_builder_image "$version" "python"     "python-builder"     ""
-    push_env_builder_image "$version" "binary"     "binary-builder"     ""
-    push_env_builder_image "$version" "go"         "go-builder"         ""
-    push_env_builder_image "$version" "go"         "go-builder"         "1.11.4"
-    push_env_builder_image "$version" "go"         "go-builder"         "1.12"
-    push_env_builder_image "$version" "go"         "go-builder"         "1.13"
-    push_env_builder_image "$version" "go"         "go-builder"         "1.14"
-    push_env_builder_image "$version" "jvm"        "jvm-builder"        ""
-    push_env_builder_image "$version" "jvm-jersey" "jvm-jersey-builder" ""
-    push_env_builder_image "$version" "jvm-jersey" "jvm-jersey-builder" "11"
-    push_env_builder_image "$version" "nodejs"     "node-builder"       ""
-    push_env_builder_image "$version" "ruby"       "ruby-builder"       ""
-    push_env_builder_image "$version" "dotnet20"   "dotnet20-builder"   ""
-    push_env_builder_image "$version" "php7"       "php-builder"        ""
-}
-
 # Push pre-upgrade-checks image
 push_pre_upgrade_checks_image() {
     local version=$1
@@ -358,7 +271,7 @@ fi
 release_environment_check $version $chartsrepo
 
 # Build release-builder image
-docker build -t fission-release-builder -f $FISSION_HOME/hack/Dockerfile .
+docker build -t fission-release-builder -f $FISSION_HOME/fission/hack/Dockerfile .
 
 # Build all binaries & container images in docker
 # Here we mount docker.sock into container so that docker client can communicate with host docker daemon.
