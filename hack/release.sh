@@ -277,7 +277,7 @@ docker build -t fission-release-builder -f $FISSION_HOME/fission/hack/Dockerfile
 # Here we mount docker.sock into container so that docker client can communicate with host docker daemon.
 # For more detail please visit https://docs.docker.com/machine/overview/
 docker run --rm -it -v $FISSION_HOME:/go/src/github.com/fission -v /var/run/docker.sock:/var/run/docker.sock \
-    -e VERSION=$version -w "$FISSION_HOME/fission/hack" fission-release-builder sh -c "./release-build.sh"
+    -e VERSION=$version -w "/go/src/github.com/fission/fission/hack" fission-release-builder sh -c "./release-build.sh"
 
 push_all $version
 
