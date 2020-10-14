@@ -256,6 +256,12 @@ release_environment_check() {
      echo "Error finding chart repo at $GOPATH/src/github.com/fission/fission-charts"
      exit 1
   fi
+
+  if [ ! -d $FISSION_HOME ]
+  then
+    echo "The FISSION_HOME variable should be set to directory where Fission and fission-charts are checked out"
+    exit 1
+  fi
 }
 
 export GITHUB_TOKEN=$(cat ~/.gh-access-token)
