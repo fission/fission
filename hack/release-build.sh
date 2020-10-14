@@ -200,7 +200,6 @@ version=${VERSION}
 date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 gitcommit=$(git rev-parse HEAD)
 
-#build_all $version $date $gitcommit
-build_all_cli $version $date $gitcommit
+build_all $version $date $gitcommit
 build_charts $version
 build_yamls $version
