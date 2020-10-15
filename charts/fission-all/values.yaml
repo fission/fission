@@ -323,6 +323,9 @@ mqt_keda:
     awskinesis:
       image: fission/keda-awskinesis-http-connector
       tag: 1
-    aws-sqs-queue:
+    aws_sqs:
       image: fission/keda-aws-sqs-http-connector
+      tag: 1
+    nats_steaming:
+      image: fission/keda-nats-streaming-http-connector
       tag: 1
