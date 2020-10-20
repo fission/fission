@@ -160,12 +160,12 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 				return
 			}
 
-			for k, v := range headers {
-				req.Header.Set(k, v)
-			}
-
 			var resp *http.Response
 			for attempt := 0; attempt <= trigger.Spec.MaxRetries; attempt++ {
+				for k, v := range headers {
+					req.Header.Set(k, v)
+				}
+
 				// Make the request
 				resp, err = http.DefaultClient.Do(req)
 				if err != nil {
