@@ -26,7 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	fv1 "https://github.com/fission/fission/tree/master/pkg/apis/core/v1"
+	fv1 "github.com/fission/fission/tree/master/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
