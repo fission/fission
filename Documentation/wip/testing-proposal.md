@@ -178,7 +178,7 @@ Eventually(session.Out).Should(gbytes.Say("hello [A-Za-z], world"))
 Ω(ACTUAL).Should(BeAnExistingFile()) //  The file should already exist
 
 ```
-There are many more matchers which cane be found here: http://onsi.github.io/gomega/#provided-matchers 
+There are many more matchers which can be found here: http://onsi.github.io/gomega/#provided-matchers 
 
 - We can build custom matchers in Go language for reusable logic.
 
