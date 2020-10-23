@@ -43,7 +43,7 @@ For example. look at annotations:
 |`traefik.ingress.kubernetes.io/app-root`|Used by Trafeik ingress controller, applied to ingress|
 |`nginx.ingress.kubernetes.io/add-base-url`|Used by Nginx ingress controller, applied to ingress|
 
-So we can write a simple logic - to check if a annotation is applicable for an ingress and based on that apply or not apply annotations to ingress.
+So we can write a simple logic - to check if an annotation is applicable for an ingress and based on that apply or not apply annotations to ingress.
 
 
 ### Implementation 2
@@ -72,7 +72,7 @@ This is specifically important because for example newdeploy function will creat
 
 ### Implementation 3
 
-Based on discussion in the team there is a additional option of adding a explicit field in the spec to hold the annotations. For now this assumes that we are only considering HTTPTriggers for annotations and not other objects such as Functions.
+Based on discussion in the team there is an additional option of adding an explicit field in the spec to hold the annotations. For now this assumes that we are only considering HTTPTriggers for annotations and not other objects such as Functions.
 
 ```
 HTTPTriggerSpec struct {
