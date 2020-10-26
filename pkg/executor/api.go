@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-multierror"
@@ -78,7 +79,7 @@ func (executor *Executor) getServiceForFunctionApi(w http.ResponseWriter, r *htt
 	}
 	if t == fv1.ExecutorTypePoolmgr && et.GetTotalAvailable(fn) >= conncurrency {
 		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
-		executor.logger.Error("error occurred", zap.String("error", errMsg))
+		executor.logger.Error("error occured", zap.String("error", errMsg))
 		http.Error(w, errMsg, http.StatusTooManyRequests)
 		return
 	}
@@ -239,8 +240,17 @@ func (executor *Executor) GetHandler() http.Handler {
 func (executor *Executor) Serve(port int) {
 	executor.logger.Info("starting executor API", zap.Int("port", port))
 	address := fmt.Sprintf(":%v", port)
-	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: executor.GetHandler(),
-	})
+	srv := &http.Server{
+		ReadTimeout:  3600 * time.Second,
+		WriteTimeout: 3600 * time.Second,
+		IdleTimeout:  3600 * time.Second,
+		Handler: &ochttp.Handler{
+			Handler: executor.GetHandler()},
+		Addr: address,
+	}
+	err := srv.ListenAndServe()
+	// err := http.ListenAndServe(address, &ochttp.Handler{
+	// 	Handler: executor.GetHandler(),
+	// })
 	executor.logger.Fatal("done listening", zap.Error(err))
 }

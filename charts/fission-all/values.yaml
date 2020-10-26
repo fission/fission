@@ -90,14 +90,14 @@ logger:
 
 executor:
   adoptExistingResources: false
-  podReadyTimeout: 300s
+  podReadyTimeout: 2400s
 
 ## Router config
 router:
   deployAsDaemonSet: false
   svcAddressMaxRetries: 5
   svcAddressUpdateTimeout: 30s
-  unTapServiceTimeout: 3600s
+  unTapServiceTimeout: 4800s
   ## Display endpoint access logs
   ## To be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.
@@ -145,7 +145,7 @@ router:
 ### NATS Streaming, enabled by default
 nats:
   # whether or not to use NATS
-  enabled: true
+  enabled: false
 
   # if true, don't install NATS, but
   external: false
@@ -291,12 +291,12 @@ preUpgradeChecksImage: fission/pre-upgrade-checks
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response
-debugEnv: false
+debugEnv: true
 
 ## Prometheus for scrapping service metrics
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
-  enabled: true
+  enabled: false
 
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
