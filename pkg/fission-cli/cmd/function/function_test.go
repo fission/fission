@@ -19,46 +19,18 @@ package function
 import (
 	"fmt"
 	"testing"
-	"io/ioutil"
-        "log"
-        "net/http"
-        "net/http/httputil"
-	"net/url"
-
+	
 	"github.com/stretchr/testify/assert"
 
 	
 
 	 fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	
+	
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
-func printHTTPRequest() {
-    	var body []byte
-    	var response *http.Response
-    	var request *http.Request
-
-    		url := "http://localhost"
-    		request, err := http.NewRequest("GET", url, nil)
-   		 if err == nil {
-        		request.Header.Add("Content-Type", "application/json")
-        		debug(httputil.DumpRequestOut(request, true))
-        		response, err = (&http.Client{}).Do(request)
-    }
-
-    	if err == nil {
-        	defer response.Body.Close()
-        	debug(httputil.DumpResponse(response, true))
-        	body, err = ioutil.ReadAll(response.Body)
-    }
-
-    	if err == nil {
-        	fmt.Printf("%s", body)
-    	} else {
-        	log.Fatalf("ERROR: %s", err)
-    }
-}
 
 func debug(data []byte, err error) {
     	if err == nil {
