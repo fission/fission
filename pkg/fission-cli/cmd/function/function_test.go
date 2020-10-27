@@ -23,9 +23,10 @@ import (
         "log"
         "net/http"
         "net/http/httputil"
+	"net/url"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/pkg/errors"
+
 	
 
 	 fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -38,7 +39,7 @@ func printHTTPRequest() {
     	var response *http.Response
     	var request *http.Request
 
-    		url := "github.com/fission/fission/blob/master/pkg/fission-cli/cmd/function/function_test.go"
+    		url := "http://localhost"
     		request, err := http.NewRequest("GET", url, nil)
    		 if err == nil {
         		request.Header.Add("Content-Type", "application/json")
