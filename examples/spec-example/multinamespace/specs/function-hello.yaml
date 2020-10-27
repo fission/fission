@@ -1,0 +1,56 @@
+include:
+- hello.go
+kind: ArchiveUploadSpec
+name: hello-go-W4nx
+
+---
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  creationTimestamp: null
+  name: hello-80eacd54-eccf-4549-aa2f-4eb51175e978
+  namespace: test
+spec:
+  deployment:
+    checksum: {}
+  environment:
+    name: go
+    namespace: default
+  source:
+    checksum: {}
+    type: url
+    url: archive://hello-go-W4nx
+status:
+  buildstatus: pending
+  lastUpdateTimestamp: "2020-10-26T08:35:46Z"
+
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  creationTimestamp: null
+  name: hello
+  namespace: test
+spec:
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: newdeploy
+      MaxScale: 5
+      MinScale: 1
+      SpecializationTimeout: 120
+      TargetCPUPercent: 80
+    StrategyType: execution
+  concurrency: 5
+  configmaps: null
+  environment:
+    name: go
+    namespace: default
+  functionTimeout: 60
+  idletimeout: 120
+  package:
+    functionName: Handler
+    packageref:
+      name: hello-80eacd54-eccf-4549-aa2f-4eb51175e978
+      namespace: test
+  resources: {}
+  secrets: null
