@@ -84,13 +84,13 @@ type (
 
 	// A layer on top of http.DefaultTransport, with retries.
 	RetryingRoundTripper struct {
-		logger           *zap.Logger
-		funcHandler      *functionHandler
-		funcTimeout      time.Duration
-		closeContextFunc *context.CancelFunc
-		serviceUrl       *url.URL
-		urlFromCache     bool
-		totalRetry       int
+		logger      *zap.Logger
+		funcHandler *functionHandler
+		funcTimeout time.Duration
+		// closeContextFunc *context.CancelFunc
+		// serviceUrl       *url.URL
+		// urlFromCache     bool
+		// totalRetry int
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -144,6 +144,7 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // if it returned an error.
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// set the timeout for transport context
+	totalRetry := 0
 	roundTripper.addForwardedHostHeader(req)
 
 	transport := roundTripper.getDefaultTransport()
@@ -177,6 +178,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// cache, then retry to get new svc record from executor again.
 	var retryCounter int
 	var err error
+	var serviceUrl *url.URL
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
@@ -184,16 +186,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
 			// get function service url from cache or executor
-			roundTripper.serviceUrl, err = roundTripper.funcHandler.getServiceEntryFromExecutor()
+			serviceUrl, err = roundTripper.funcHandler.getServiceEntryFromExecutor()
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
 				statusCode, errMsg := ferror.GetHTTPError(err)
-				// if statusCode == http.StatusTooManyRequests {
-				// 	time.Sleep(executingTimeout)
-				// 	executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
-				// 	continue
-				// } else {
 				if roundTripper.funcHandler.isDebugEnv {
 					return &http.Response{
 						StatusCode:    statusCode,
@@ -207,18 +204,17 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 					}, nil
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
-				// }
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(fn *fv1.Function, serviceUrl *url.URL) {
 					go roundTripper.funcHandler.unTapService(fn, serviceUrl)
-				}(roundTripper.funcHandler.function, roundTripper.serviceUrl)
+				}(roundTripper.funcHandler.function, serviceUrl)
 			}
 
 			// modify the request to reflect the service url
 			// this service url comes from executor response
-			req.URL.Scheme = roundTripper.serviceUrl.Scheme
-			req.URL.Host = roundTripper.serviceUrl.Host
+			req.URL.Scheme = serviceUrl.Scheme
+			req.URL.Host = serviceUrl.Host
 
 			// To keep the function run container simple, it
 			// doesn't do any routing.  In the future if we have
@@ -230,7 +226,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)
-			req.Host = roundTripper.serviceUrl.Host
+			req.Host = serviceUrl.Host
 		}
 
 		// over-riding default settings.
@@ -242,16 +238,16 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// Do NOT assign returned request to "req"
 		// because the request used in the last round
 		// will be canceled when calling setContext.
-		newReq := roundTripper.setContext(req)
+		// newReq := roundTripper.setContext(req)
 
 		// forward the request to the function service
-		resp, err := ocRoundTripper.RoundTrip(newReq)
+		resp, err := ocRoundTripper.RoundTrip(req)
 		if err == nil {
 			// return response back to user
 			return resp, nil
 		}
 
-		roundTripper.totalRetry++
+		totalRetry++
 
 		if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			// return here if we are in the last round
@@ -273,7 +269,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// if transport.RoundTrip returns a non-network dial error (e.g. "context canceled"), then relay it back to user
 		if !isNetDialErr {
-			roundTripper.logger.Error("encountered non-network dial error", zap.Error(err))
+			roundTripper.logger.Error("encountered non-network dial error", zap.Error(err), zap.Any("Request Object:", req), zap.Any("Response Object:", resp), zap.Any("executingTimeout=", executingTimeout))
 			return resp, err
 		}
 
@@ -329,26 +325,26 @@ func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
 }
 
 // setContext returns a shallow copy of request with a new timeout context.
-func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Request {
-	if roundTripper.closeContextFunc != nil {
-		(*roundTripper.closeContextFunc)()
-	}
-	// pass request context as parent context for the case
-	// that user aborts connection before timeout. Otherwise,
-	// the request won't be canceled until the deadline exceeded
-	// which may be a potential security issue.
-	ctx, closeCtx := context.WithTimeout(req.Context(), roundTripper.funcTimeout)
-	roundTripper.closeContextFunc = &closeCtx
+// func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Request {
+// 	if roundTripper.closeContextFunc != nil {
+// 		(*roundTripper.closeContextFunc)()
+// 	}
+// 	// pass request context as parent context for the case
+// 	// that user aborts connection before timeout. Otherwise,
+// 	// the request won't be canceled until the deadline exceeded
+// 	// which may be a potential security issue.
+// 	ctx, closeCtx := context.WithTimeout(req.Context(), roundTripper.funcTimeout)
+// 	roundTripper.closeContextFunc = &closeCtx
 
-	return req.WithContext(ctx)
-}
+// 	return req.WithContext(ctx)
+// }
 
 // closeContext closes the context to release resources.
-func (roundTripper *RetryingRoundTripper) closeContext() {
-	if roundTripper.closeContextFunc != nil {
-		(*roundTripper.closeContextFunc)()
-	}
-}
+// func (roundTripper *RetryingRoundTripper) closeContext() {
+// 	if roundTripper.closeContextFunc != nil {
+// 		(*roundTripper.closeContextFunc)()
+// 	}
+// }
 
 func (fh *functionHandler) tapService(fn *fv1.Function, serviceUrl *url.URL) {
 	if fh.executor == nil {
@@ -408,18 +404,18 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		},
 	}
 
-	defer func() {
-		// If the context is closed when RoundTrip returns, client may receive
-		// truncated response body due to "context canceled" error. To avoid
-		// this, we need to close request context after proxy.ServeHTTP finished.
-		//
-		// NOTE: rrt.closeContext() must be put in the defer function; otherwise,
-		// reverseProxy may panic when failed to write response and the context
-		// will not be closed.
-		//
-		// ref: https://github.com/golang/go/issues/28239
-		rrt.closeContext()
-	}()
+	// defer func() {
+	// 	// If the context is closed when RoundTrip returns, client may receive
+	// 	// truncated response body due to "context canceled" error. To avoid
+	// 	// this, we need to close request context after proxy.ServeHTTP finished.
+	// 	//
+	// 	// NOTE: rrt.closeContext() must be put in the defer function; otherwise,
+	// 	// reverseProxy may panic when failed to write response and the context
+	// 	// will not be closed.
+	// 	//
+	// 	// ref: https://github.com/golang/go/issues/28239
+	// 	rrt.closeContext()
+	// }()
 
 	proxy.ServeHTTP(responseWriter, request)
 }
@@ -606,17 +602,17 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 
 	// Track metrics
 	httpMetricLabels.code = resp.StatusCode
-	funcMetricLabels.cached = rrt.urlFromCache
+	// funcMetricLabels.cached = rrt.urlFromCache
 
 	functionCallCompleted(funcMetricLabels, httpMetricLabels,
 		duration, duration, resp.ContentLength)
 
 	// tapService before invoking roundTrip for the serviceUrl
-	if rrt.urlFromCache {
-		fh.tapService(fh.function, rrt.serviceUrl)
-	}
+	// if rrt.urlFromCache {
+	// 	fh.tapService(fh.function, rrt.serviceUrl)
+	// }
 
 	fh.logger.Debug("Request complete", zap.String("function", fh.function.ObjectMeta.Name),
-		zap.Int("retry", rrt.totalRetry), zap.Duration("total-time", duration),
+		zap.Duration("total-time", duration),
 		zap.Int64("content-length", resp.ContentLength))
 }
