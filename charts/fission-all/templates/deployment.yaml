@@ -422,7 +422,7 @@ metadata:
     kubernetes.io/cluster-service: 'true'
     kubernetes.io/name: heapster
 spec:
-  type: ClusterIP
+  type: ClusterIP 
   ports:
   - port: 80
     targetPort: 8082
@@ -451,7 +451,7 @@ spec:
       - name: heapster
         image: gcr.io/google_containers/heapster-amd64:v1.5.0
         imagePullPolicy: {{ .Values.pullPolicy }}
-        command:
+        command: 
         - /heapster
         - --source=kubernetes:https://kubernetes.default
       serviceAccountName: {{ .Release.Namespace }}/fission-svc
@@ -685,7 +685,7 @@ spec:
         volumeMounts:
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
-        {{- end }}
+        {{- end }}        
       serviceAccountName: fission-svc
       {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:
@@ -698,7 +698,7 @@ spec:
 {{- if .Values.kafka.authentication.tls.enabled }}
 apiVersion: v1
 kind: Secret
-metadata:
+metadata: 
   name: mqtrigger-kafka-secrets
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -760,7 +760,7 @@ spec:
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
           value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}        
         - name: MESSAGE_QUEUE_TYPE
           value: azure-storage-queue
         - name: AZURE_STORAGE_ACCOUNT_NAME
@@ -907,7 +907,7 @@ spec:
         - name: RABBITMQ_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.rabbitmq.image }}:{{ .Values.mqt_keda.connector_images.rabbitmq.tag }}"
         - name: AWS_KINESIS_STREAM_IMAGE
-          value: "{{ .Values.mqt_keda.connector_images.awskinesis.image }}:{{ .Values.mqt_keda.connector_images.awskinesis.tag }}"
+          value: "{{ .Values.mqt_keda.connector_images.awskinesis.image }}:{{ .Values.mqt_keda.connector_images.awskinesis.tag }}"           
         - name: AWS_SQS_QUEUE_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.aws_sqs.image }}:{{ .Values.mqt_keda.connector_images.aws_sqs.tag }}"
       serviceAccountName: fission-svc
