@@ -417,6 +417,10 @@ var (
 	}
 )
 
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 var (
 	httpTriggerSchemaProps = map[string]apiextensionsv1.JSONSchemaProps{}
 	// httpTrigger validation schema
