@@ -25,7 +25,7 @@ import (
 
 )
 
-func printHTTPRequest() {
+func main() {
 var body []byte
 var response *http.Response
 var request *http.Request
