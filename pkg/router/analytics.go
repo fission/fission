@@ -12,16 +12,19 @@ import (
 )
 
 type (
+	// Analytics struct
 	Analytics struct {
 		id  string
 		url string
 	}
+	// AnalyticsData struct
 	AnalyticsData struct {
 		ID                string `json:"ID"`
 		FunctionCallCount uint64 `json:"FunctionCallCount"`
 	}
 )
 
+// MakeAnalytics returns Analytics if url is not empty
 func MakeAnalytics(url string) *Analytics {
 
 	if len(url) == 0 {
