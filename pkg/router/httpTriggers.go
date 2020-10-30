@@ -19,6 +19,7 @@ package router
 import (
 	"context"
 	"net/http"
+	"net/http/pprof"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -206,6 +207,19 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 
 	// Healthz endpoint for the router.
 	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
+
+	// Register pprof handlers
+	muxRouter.HandleFunc("/debug/pprof/", pprof.Index)
+	muxRouter.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	muxRouter.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	muxRouter.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	muxRouter.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	muxRouter.HandleFunc("/debug/pprof/goroutine", pprof.Handler("goroutine").ServeHTTP)
+	muxRouter.HandleFunc("/debug/pprof/heap", pprof.Handler("heap").ServeHTTP)
+	muxRouter.HandleFunc("/debug/pprof/mutex", pprof.Handler("mutex").ServeHTTP)
+	muxRouter.HandleFunc("/debug/pprof/threadcreate", pprof.Handler("threadcreate").ServeHTTP)
+	muxRouter.HandleFunc("/debug/pprof/block", pprof.Handler("block").ServeHTTP)
+	muxRouter.HandleFunc("/debug/pprof/allocs", pprof.Handler("allocs").ServeHTTP)
 
 	return muxRouter
 }
