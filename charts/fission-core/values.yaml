@@ -109,6 +109,16 @@ router:
   ## Sample with a rate per time window (traces/second)
   traceSamplingRate: 0.5
 
+  # Pod resources as:
+  #  resources:
+  #    limits:
+  #      cpu: <tbd>
+  #      memory: <tbd>
+  #    requests:
+  #      cpu: <tbd>
+  #      memory: <tbd>
+  resources: {}
+
 ## Persist data to a persistent volume.
 persistence:
   ## If true, fission will create/use a Persistent Volume Claim unless storageType is set to s3

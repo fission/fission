@@ -141,6 +141,16 @@ router:
   ## Sample with a rate per time window (traces/second)
   traceSamplingRate: 0.5
 
+  # Pod resources as:
+  #  resources:
+  #    limits:
+  #      cpu: <tbd>
+  #      memory: <tbd>
+  #    requests:
+  #      cpu: <tbd>
+  #      memory: <tbd>
+  resources: {}
+
 ## Message queue trigger config
 ### NATS Streaming, enabled by default
 nats:
