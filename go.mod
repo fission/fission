@@ -33,6 +33,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.2.0 // indirect
+	github.com/gorilla/context v1.1.1
 	github.com/gorilla/mux v1.7.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb

@@ -48,6 +48,7 @@ import (
 	"strings"
 	"time"
 
+	gorillaContext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
@@ -84,7 +85,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	url := fmt.Sprintf(":%v", port)
 
 	http.ListenAndServe(url, &ochttp.Handler{
-		Handler: mr,
+		Handler: gorillaContext.ClearHandler(mr),
 		GetStartOptions: func(r *http.Request) trace.StartOptions {
 			// do not trace router healthz endpoint
 			if strings.Compare(r.URL.Path, "/router-healthz") == 0 {
