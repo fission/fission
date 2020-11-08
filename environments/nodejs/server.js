@@ -7,6 +7,8 @@ const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
+const WSServer = require('ws').Server;
+
 const argv = require('minimist')(process.argv.slice(1));// Command line opts
 
 if (!argv.port) {
@@ -165,4 +167,45 @@ app.all('/', function (req, res) {
 
 });
 
-app.listen(argv.port);
+
+let server = require('http').createServer({
+    perMessageDeflate: {
+        zlibDeflateOptions: {
+            // See zlib defaults.
+            chunkSize: 1024,
+            memLevel: 7,
+            level: 3
+        },
+        zlibInflateOptions: {
+            chunkSize: 10 * 1024
+        },
+        // Other options settable:
+        clientNoContextTakeover: true, // Defaults to negotiated value.
+        serverNoContextTakeover: true, // Defaults to negotiated value.
+        serverMaxWindowBits: 10, // Defaults to negotiated value.
+        // Below options specified as default values.
+        concurrencyLimit: 10, // Limits zlib concurrency for perf.
+        threshold: 1024 // Size (in bytes) below which messages
+        // should not be compressed.
+    }
+});
+
+// Also mount the app here
+server.on('request', app);
+
+// Create web socket server on top of a regular http server
+let wss = new WSServer({
+    server: server
+});
+
+wss.on('connection', function connection(ws, req) {
+    try {
+        userFunction(ws, req);
+    } catch (err) {
+        console.log(`Function error: ${err}`);
+        ws.close();
+    }
+});
+
+server.listen(argv.port, () => {
+});
