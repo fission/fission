@@ -91,6 +91,7 @@ type (
 		serviceUrl       *url.URL
 		urlFromCache     bool
 		totalRetry       int
+		transport        *http.Transport
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -311,15 +312,14 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 // getDefaultTransport returns a pointer to new copy of http.Transport object to prevent
 // the value of http.DefaultTransport from being changed by goroutines.
-func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
+func getDefaultTransport() *http.Transport {
 	// The transport setup here follows the configurations of http.DefaultTransport
 	// but without Dialer since we will change it later.
 	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		Proxy:               http.ProxyFromEnvironment,
+		MaxIdleConns:        10000,
+		IdleConnTimeout:     300 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 		// Default disables caching, Please refer to issue and specifically comment:
 		// https://github.com/fission/fission/issues/723#issuecomment-398781995
 		// You can change it by setting environment variable "ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE"
@@ -394,7 +394,14 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		logger:      fh.logger.Named("roundtripper"),
 		funcHandler: &fh,
 		funcTimeout: time.Duration(fnTimeout) * time.Second,
+		transport:   getDefaultTransport(),
 	}
+
+	// over-riding default settings.
+	rrt.transport.DialContext = (&net.Dialer{
+		Timeout:   executingTimeout,
+		KeepAlive: roundTripper.funcHandler.tsRoundTripperParams.keepAliveTime,
+	}).DialContext
 
 	start := time.Now()
 

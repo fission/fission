@@ -127,10 +127,10 @@ router:
     disableKeepAlive: false
 
     ## The keep-alive period for an active network connection to function pod.
-    keepAliveTime: 30s
+    keepAliveTime: 180s
 
     ## HTTP transport request timeout
-    timeout: 50ms
+    timeout: 180ms
 
     ## The length of request timeout will multiply with timeoutExponent after each retry
     timeoutExponent: 2
