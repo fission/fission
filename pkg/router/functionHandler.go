@@ -148,7 +148,6 @@ func (w *fakeCloseReadCloser) RealClose() error {
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// set the timeout for transport context
 	roundTripper.addForwardedHostHeader(req)
-
 	transport := roundTripper.getDefaultTransport()
 	ocRoundTripper := &ochttp.Transport{Base: transport}
 
