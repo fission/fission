@@ -27,7 +27,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -197,6 +196,10 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 				continue
 			}
 			chosenPod = obj.(*apiv1.Pod).DeepCopy()
+		} else {
+			// Wait for pods to get ready and retry
+			time.Sleep(1000 * time.Millisecond)
+			continue
 		}
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
@@ -469,50 +472,6 @@ func (gp *GenericPool) createPool() error {
 
 	gp.deployment = depl
 	return nil
-}
-
-func (gp *GenericPool) waitForReadyPod() error {
-	startTime := time.Now()
-	for {
-		// TODO: for now we just poll; use a watch instead
-		depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(
-			gp.deployment.ObjectMeta.Name, metav1.GetOptions{})
-		if err != nil {
-			e := "error waiting for ready pod for deployment"
-			gp.logger.Error(e, zap.String("deployment", gp.deployment.ObjectMeta.Name), zap.String("namespace", gp.namespace))
-			return fmt.Errorf("%s %q in namespace %q", e, gp.deployment.ObjectMeta.Name, gp.namespace)
-		}
-
-		gp.deployment = depl
-		if gp.deployment.Status.AvailableReplicas > 0 {
-			return nil
-		}
-
-		if time.Since(startTime) > gp.podReadyTimeout {
-			podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(metav1.ListOptions{
-				LabelSelector: labels.Set(
-					gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
-			})
-			if err != nil {
-				gp.logger.Error("error getting pod list after timeout waiting for ready pod", zap.Error(err))
-			}
-
-			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
-			pod := podList.Items[0]
-			errs := &multierror.Error{}
-			for _, cStatus := range pod.Status.ContainerStatuses {
-				if !cStatus.Ready {
-					errs = multierror.Append(errs, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
-				}
-			}
-			if errs.ErrorOrNil() != nil {
-				return errors.Wrapf(errs, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
-					gp.deployment.ObjectMeta.Name, gp.namespace)
-			}
-			return nil
-		}
-		time.Sleep(1000 * time.Millisecond)
-	}
 }
 
 func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.Service, error) {
