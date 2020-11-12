@@ -66,7 +66,6 @@ require (
 	github.com/ulikunitz/xz v0.0.0-20180703112113-636d36a76670 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.22.0
-	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.9.1
 	golang.org/x/image v0.0.0-20190618124811-92942e4437e2 // indirect
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
