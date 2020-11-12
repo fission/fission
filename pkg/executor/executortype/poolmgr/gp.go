@@ -198,6 +198,7 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 			chosenPod = obj.(*apiv1.Pod).DeepCopy()
 		} else {
 			// Wait for pods to get ready and retry
+			gp.logger.Info("waiting for ready pods")
 			time.Sleep(1000 * time.Millisecond)
 			continue
 		}
