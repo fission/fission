@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.9.2
+ARG GO_VERSION=1.13
 
 FROM tensorflow/serving as serving
 RUN apt update && apt install -y ca-certificates && rm -rf /var/lib/apt/lists/*
