@@ -54,6 +54,34 @@ rules:
   - list
 
 ---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: fission-crd
+rules:
+- apiGroups: ["*"]
+  resources: ["nodes", "pods", "services", "deployment", "endpoints", "events", "jobs", "namespaces"]
+  verbs:
+  - '*'
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs:
+  - '*'
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - '*'
+
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -86,7 +114,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: cluster-admin
+  name: fission-crd
   apiGroup: rbac.authorization.k8s.io
 
 ---
