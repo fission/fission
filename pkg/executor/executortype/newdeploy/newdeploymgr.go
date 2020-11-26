@@ -390,7 +390,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 }
 
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
-	funcList, err := deploy.fissionClient.CoreV1().Functions(m.Namespace).List(metav1.ListOptions{})
+	funcList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
 	}
