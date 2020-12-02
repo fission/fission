@@ -1,0 +1,51 @@
+
+name: Environments build and test 
+
+on: 
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  # Job to run change detection
+  buildenv:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v2    
+
+    - name: setup go
+      uses: actions/setup-go@v2
+
+
+    - name: Helm installation
+      uses: Azure/setup-helm@v1
+      with:
+        version: v3.3.4
+      
+    - name: Kind Clutser
+      uses: engineerd/setup-kind@v0.4.0
+      
+    - name: Configuring and testing the Installation      
+      run: |
+        kubectl cluster-info --context kind-kind
+        kind get kubeconfig --internal >$HOME/.kube/config
+        kubectl get nodes
+    
+    - name: Static code analysis
+      run: |
+       ./hack/verify-gofmt.sh
+       ./hack/verify-govet.sh
+       helm lint charts/fission-all/ charts/fission-core/
+     
+
+    - name: Go test cases 
+      run: ./hack/kind_test.sh
+    
+    - name: Helm update
+      run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
+      
+    - name: Install Fission
+      uses: hiberbee/github-action-skaffold@1.4.0
+      with:
+        command: run
+        profile: kind

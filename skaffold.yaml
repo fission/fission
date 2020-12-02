@@ -29,9 +29,9 @@ deploy:
   helm:
     flags:
       upgrade:
-        ["--timeout=3m", "--install", "--force", "--debug"]
+        ["--timeout=3m", "--install","--dependency-update", "--force", "--debug"]
       install:
-        ["--timeout=3m","--debug"]
+        ["--timeout=3m","--debug","--dependency-update"]
     releases:
       - name: fission
         chartPath: ./charts/fission-all
@@ -65,3 +65,6 @@ profiles:
       - op: replace
         path: /deploy/helm/releases/0/setValues/routerServiceType
         value: "NodePort"
+      - op: add
+        path: /deploy/helm/flags/install
+        value: ["--create-namespace",]
