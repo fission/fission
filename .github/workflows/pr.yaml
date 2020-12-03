@@ -39,7 +39,7 @@ jobs:
         helm lint charts/fission-all/ charts/fission-core/
 
     - name: Go test cases 
-      run: ./hack/kind_test.sh
+      run: ./test/kind_test.sh
     
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
