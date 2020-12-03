@@ -18,14 +18,13 @@ jobs:
     - name: setup go
       uses: actions/setup-go@v2
 
-
     - name: Helm installation
       uses: Azure/setup-helm@v1
       with:
         version: v3.3.4
       
     - name: Kind Clutser
-      uses: engineerd/setup-kind@v0.4.0
+      uses: engineerd/setup-kind@v0.5.0
       
     - name: Configuring and testing the Installation      
       run: |
