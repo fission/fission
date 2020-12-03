@@ -41,11 +41,11 @@ jobs:
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
       
-    - name: Install Fission 
-      uses: hiberbee/github-action-skaffold@latest
-      with:
-        command: run
-        profile: kind
-    
-    - name: Integration tests
-      run: ./test/kind_test.sh
+    - name: Install Skaffold 
+      run: |
+        curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+        sudo install skaffold /usr/local/bin/
+        skaffold version
+  
+#     - name: Integration tests
+#       run: ./test/kind_test.sh
