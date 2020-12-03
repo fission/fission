@@ -55,5 +55,5 @@ jobs:
 #       run: |
         
   
-#     - name: Integration tests
-#       run: ./test/kind_test.sh
+    - name: Integration tests
+      run: ./test/kind_test.sh
