@@ -41,8 +41,8 @@ jobs:
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
       
-    - name: Install Fission
-      uses: hiberbee/github-action-skaffold@1.4.0
+    - name: Install Fission 
+      uses: hiberbee/github-action-skaffold@latest
       with:
         command: run
         profile: kind
