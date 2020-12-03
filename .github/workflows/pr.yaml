@@ -2,6 +2,8 @@
 name: Environments build and test 
 
 on: 
+  push:
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -33,10 +35,9 @@ jobs:
     
     - name: Static code analysis
       run: |
-       ./hack/verify-gofmt.sh
-       ./hack/verify-govet.sh
-       helm lint charts/fission-all/ charts/fission-core/
-     
+        ./hack/verify-gofmt.sh
+        ./hack/verify-govet.sh
+        helm lint charts/fission-all/ charts/fission-core/
 
     - name: Go test cases 
       run: ./hack/kind_test.sh
