@@ -46,6 +46,14 @@ jobs:
         curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
         sudo install skaffold /usr/local/bin/
         skaffold version
+    
+    - name: Build & Install Fission
+      run: |
+        skaffold run -p kind
+  
+#     - name: Build & Install Fission CLI
+#       run: |
+        
   
 #     - name: Integration tests
 #       run: ./test/kind_test.sh
