@@ -56,9 +56,8 @@ jobs:
     
     - name: Build & Install Fission CLI
       run: |
-        pushd cmd/fission-cli
-        go build -o fission && chmod +x fission
-        sudo fission /usr/local/bin
+        go build -o fission cmd/fission-cli/main.go
+        sudo mv fission /usr/local/bin
         fission version
   
 #     - name: Integration tests
