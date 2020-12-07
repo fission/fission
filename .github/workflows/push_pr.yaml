@@ -47,13 +47,16 @@ jobs:
         sudo install skaffold /usr/local/bin/
         skaffold version
     
-    - name: Build & Install Fission
-      run: |
-        skaffold run -p kind
-  
-#     - name: Build & Install Fission CLI
+    - name: Run unit tests
+      run: ./hack/run_test.sh
+    
+#     - name: Build & Install Fission
 #       run: |
+#         skaffold run -p kind
+    
+# #     - name: Build & Install Fission CLI
+# #       run: |
         
   
-    - name: Integration tests
-      run: ./test/kind_test.sh
+#     - name: Integration tests
+#       run: ./test/kind_test.sh
