@@ -48,7 +48,7 @@ jobs:
         skaffold version
     
     - name: Run unit tests
-      run: ./hack/run_test.sh
+      run: ./hack/runtests.sh
     
 #     - name: Build & Install Fission
 #       run: |
