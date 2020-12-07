@@ -38,6 +38,9 @@ jobs:
         ./hack/verify-govet.sh
         helm lint charts/fission-all/ charts/fission-core/
     
+    - name: Run unit tests
+      run: ./hack/runtests.sh
+    
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
       
@@ -47,16 +50,16 @@ jobs:
         sudo install skaffold /usr/local/bin/
         skaffold version
     
-    - name: Run unit tests
-      run: ./hack/runtests.sh
-    
 #     - name: Build & Install Fission
 #       run: |
 #         skaffold run -p kind
     
-# #     - name: Build & Install Fission CLI
-# #       run: |
-        
+    - name: Build & Install Fission CLI
+      run: |
+        pushd cmd/fission-cli
+        go build -o fission && chmod +x fission
+        sudo fission /usr/local/bin
+        fission version
   
 #     - name: Integration tests
 #       run: ./test/kind_test.sh
