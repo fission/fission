@@ -86,5 +86,5 @@ jobs:
     - name: Pull and load tensorflow environment image
       run:  docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
 
-#     - name: Integration tests
-#       run: ./test/kind_test.sh
+    - name: Integration tests
+      run: ./test/kind_test.sh
