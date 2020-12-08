@@ -68,15 +68,15 @@ jobs:
     
     - name: Pull and load Nodejs environment and builder image
       run: |
-        docker pull fission/node-env-12.16 && kind load docker-image fission/node-env-12.16 --name kind
-        docker pull fission/node-builder-12.16 && kind load docker-image fission/node-builder-12.16 --name kind
+        docker pull fission/node-env-12.16:1.11.0 && kind load docker-image fission/node-env-12.16:1.11.0 --name kind
+        docker pull fission/node-builder-12.16:1.11.0 && kind load docker-image fission/node-builder-12.16:1.11.0 --name kind
     
     - name: Pull and load JVM environment and builder image
       run: |
         docker pull fission/jvm-env && kind load docker-image fission/jvm-env --name kind
-        docker pull fission/jvm-env-builder && kind load docker-image fission/jvm-env-builder --name kind
+        docker pull fission/jvm-builder && kind load docker-image fission/jvm-builder --name kind
         docker pull fission/jvm-jersey-env && kind load docker-image fission/jvm-jersey-env --name kind
-        docker pull fission/jvm-jersey-env-builder && kind load docker-image fission/jvm-jersey-env-builder --name kind
+        docker pull fission/jvm-jersey-builder && kind load docker-image fission/jvm-jersey-builder --name kind
     
     - name: Pull and load golang environment and builder image 
       run: |
