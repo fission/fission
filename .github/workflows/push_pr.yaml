@@ -81,7 +81,7 @@ jobs:
     - name: Pull and load golang environment and builder image 
       run: |
         docker pull fission/go-env-1.12 && kind load docker-image fission/go-env-1.12 --name kind
-        docker pull fission/go-env-1.12 && kind load docker-image fission/go-env-builder-1.12 --name kind
+        docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
 
     - name: Pull and load tensorflow environment image
       run:  docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
