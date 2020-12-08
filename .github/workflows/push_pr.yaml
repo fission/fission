@@ -32,14 +32,14 @@ jobs:
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
     
-#     - name: Static code analysis
-#       run: |
-#         ./hack/verify-gofmt.sh
-#         ./hack/verify-govet.sh
-#         helm lint charts/fission-all/ charts/fission-core/
+    - name: Static code analysis
+      run: |
+        ./hack/verify-gofmt.sh
+        ./hack/verify-govet.sh
+        helm lint charts/fission-all/ charts/fission-core/
     
-#     - name: Run unit tests
-#       run: ./hack/runtests.sh
+    - name: Run unit tests
+      run: ./hack/runtests.sh
     
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
@@ -50,16 +50,16 @@ jobs:
         sudo install skaffold /usr/local/bin/
         skaffold version
     
-#     - name: Build and Install Fission
-#       run: |
-#         kubectl create ns fission
-#         skaffold run -p kind
+    - name: Build and Install Fission
+      run: |
+        kubectl create ns fission
+        skaffold run -p kind
     
-#     - name: Build and Install Fission CLI
-#       run: |
-#         go build -o fission cmd/fission-cli/main.go
-#         sudo mv fission /usr/local/bin
-#         fission version
+    - name: Build and Install Fission CLI
+      run: |
+        go build -o fission cmd/fission-cli/main.go
+        sudo mv fission /usr/local/bin
+        fission version
 
     - name: Pull and load Python environment and builder image
       run: |
