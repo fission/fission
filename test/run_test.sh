@@ -12,6 +12,7 @@
 #
 set -euo pipefail
 source $(dirname $BASH_SOURCE)/init_tools.sh
+echo "Init success"
 
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
@@ -19,6 +20,7 @@ JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
 
 main() {
+    echo "main started"
     if [ $# -eq 0 ]; then
         args=$(find_executable $ROOT/test/tests -iname 'test_*')
     else
