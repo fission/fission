@@ -29,7 +29,7 @@ main() {
     else
         args="$@"
     fi
-
+    echo $args
     num_skip=0
     mkdir -p $LOG_DIR
     test_files=""
