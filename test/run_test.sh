@@ -65,10 +65,11 @@ main() {
     start_time=$(date +%s)
     echo $start_time
     echo $TIMEOUT
+    
     parallel \
         --joblog - \
         --jobs $JOBS \
-        --timeout $TIMEOUT \
+        --timeout 30 \
         bash -c '{1} > {2} 2>&1' \
         ::: $test_files :::+ $log_files \
         | tee $LOG_DIR/_recap \
