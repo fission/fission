@@ -44,6 +44,10 @@ main() {
         relative_path=${absolute_path#$ROOT/test/tests/}
         log_path=$LOG_DIR/${relative_path}.log
 
+        echo $absolute_path
+        echo $relative_path
+        echo $log_path
+
         if grep -q "^#test:disabled" $arg; then
             echo "INFO: the test is marked disabled: $relative_path"
             num_skip=$((num_skip+1))
