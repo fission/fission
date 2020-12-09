@@ -74,7 +74,7 @@ main() {
         | tee $LOG_DIR/_recap \
         || true
     end_time=$(date +%s)
-
+    echo $end_time
     # Get the Exitval in _recap to find if any test failed.
     num_total=$(cat $LOG_DIR/_recap | wc -l)
     num_total=$((num_total - 1))    # don't count header
