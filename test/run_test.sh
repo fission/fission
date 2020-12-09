@@ -69,7 +69,7 @@ main() {
     parallel \
         --joblog - \
         --jobs $JOBS \
-        --timeout 30 \
+        --timeout 300 \
         bash -c '{1} > {2} 2>&1' \
         ::: $test_files :::+ $log_files \
         | tee $LOG_DIR/_recap \
