@@ -13,10 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
-      uses: actions/checkout@v2    
-
-    - name: parallel check
-      run: parallel version
+      uses: actions/checkout@v2
 
     - name: setup go
       uses: actions/setup-go@v2
