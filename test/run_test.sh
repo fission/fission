@@ -64,7 +64,7 @@ main() {
 
     start_time=$(date +%s)
     echo $start_time
-    parallel -v
+    echo $TIMEOUT
     parallel \
         --joblog - \
         --jobs $JOBS \
