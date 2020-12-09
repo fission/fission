@@ -63,12 +63,12 @@ jobs:
         sudo mv fission /usr/local/bin
         fission version
 
-    # - name: Pull and load environment and builder image
-    #   run: |
-    #     docker pull fission/python-env && kind load docker-image fission/python-env --name kind
-    #     docker pull fission/python-builder && kind load docker-image fission/python-builder --name kind
+    - name: Pull and load environment and builder image
+      run: |
         docker pull fission/node-env-12.16:1.11.0 && kind load docker-image fission/node-env-12.16:1.11.0 --name kind
         docker pull fission/node-builder-12.16:1.11.0 && kind load docker-image fission/node-builder-12.16:1.11.0 --name kind
+    #     docker pull fission/python-env && kind load docker-image fission/python-env --name kind
+    #     docker pull fission/python-builder && kind load docker-image fission/python-builder --name kind
     #     docker pull fission/jvm-env && kind load docker-image fission/jvm-env --name kind
     #     docker pull fission/jvm-builder && kind load docker-image fission/jvm-builder --name kind
     #     docker pull fission/jvm-jersey-env && kind load docker-image fission/jvm-jersey-env --name kind
