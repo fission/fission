@@ -35,6 +35,7 @@ else
 fi
 
 success_scenario() {
+    echo "Creating nodejs env"
     log "Creating nodejs env"
     fission env create --name $env --image $NODE_RUNTIME_IMAGE --graceperiod 1
 
@@ -100,6 +101,7 @@ failure_scenario() {
 }
 
 main() {
+    echo "Inside main test"
     # v2 of a function starts with receiving 0% of the traffic with a gradual increase all the way up to 100% of the traffic
     success_scenario
 
