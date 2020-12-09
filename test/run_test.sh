@@ -18,6 +18,7 @@ ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
+echo $PWD
 echo "ROOT" $ROOT
 echo "LOG DIR" $LOG_DIR
 
