@@ -16,7 +16,7 @@ jobs:
       uses: actions/checkout@v2    
 
     - name: parallel check
-      run: parallel
+      run: parallel version
 
     - name: setup go
       uses: actions/setup-go@v2
