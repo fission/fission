@@ -15,6 +15,9 @@ jobs:
     - name: Checkout sources
       uses: actions/checkout@v2    
 
+    - name: parallel check
+      run: parallel
+
     - name: setup go
       uses: actions/setup-go@v2
       with:
