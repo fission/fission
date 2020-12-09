@@ -63,6 +63,8 @@ main() {
     done
 
     start_time=$(date +%s)
+    echo $start_time
+    parallel -v
     parallel \
         --joblog - \
         --jobs $JOBS \
