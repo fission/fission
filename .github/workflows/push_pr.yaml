@@ -88,5 +88,8 @@ jobs:
     #     docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
     #     docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
 
-    - name: Integration tests
-      run: ./test/kind_test.sh
+    - name: Run canary test
+      run: ./test/tests/test_canary.sh
+        
+    # - name: Integration tests
+    #   run: ./test/kind_test.sh
