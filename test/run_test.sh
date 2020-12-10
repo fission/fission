@@ -12,24 +12,19 @@
 #
 set -euo pipefail
 source $(dirname $BASH_SOURCE)/init_tools.sh
-echo "Init success"
 
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
-echo $PWD
-echo "ROOT" $ROOT
-echo "LOG DIR" $LOG_DIR
 
 main() {
-    echo "main started"
     if [ $# -eq 0 ]; then
         args=$(find_executable $ROOT/test/tests -iname 'test_*')
     else
         args="$@"
     fi
-    echo $args
+    echo "args=" $args
     num_skip=0
     mkdir -p $LOG_DIR
     test_files=""
@@ -43,10 +38,6 @@ main() {
         absolute_path=$(readlink -f $arg)
         relative_path=${absolute_path#$ROOT/test/tests/}
         log_path=$LOG_DIR/${relative_path}.log
-
-        echo $absolute_path
-        echo $relative_path
-        echo $log_path
 
         if grep -q "^#test:disabled" $arg; then
             echo "INFO: the test is marked disabled: $relative_path"
@@ -65,7 +56,8 @@ main() {
     start_time=$(date +%s)
     echo $start_time
     echo $TIMEOUT
-    
+    echo "test file " $test_files
+    echo "log file " $log_files
     parallel \
         --joblog - \
         --jobs $JOBS \
