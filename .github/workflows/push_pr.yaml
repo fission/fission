@@ -16,7 +16,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Run parallel command
-      run: parallel echo ::: A B C
+      run: echo $(parallel echo :::A B C)
       
     - name: setup go
       uses: actions/setup-go@v2
