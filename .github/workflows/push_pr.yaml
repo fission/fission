@@ -25,6 +25,11 @@ jobs:
       with:
         go-version: '1.12.17' 
 
+    - name: Bananas
+      run: |
+        echo "Breaking github actions"
+        echo $(cat /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
+      
     - name: Helm installation
       uses: Azure/setup-helm@v1
       with:
