@@ -17,6 +17,7 @@ jobs:
 
     - name: Run parallel command
       run: parallel echo ::: A B C
+      
     - name: setup go
       uses: actions/setup-go@v2
       with:
