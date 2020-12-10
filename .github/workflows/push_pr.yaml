@@ -87,8 +87,10 @@ jobs:
     #     docker pull fission/go-env-1.12 && kind load docker-image fission/go-env-1.12 --name kind
     #     docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
     #     docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
-
-    - name: Run canary test
+    - name: fission router
+      run: kubectl -n fission get svc router -o jsonpath='{...ip}'
+    
+      - name: Run canary test
       run: ./test/tests/test_canary.sh
         
     # - name: Integration tests
