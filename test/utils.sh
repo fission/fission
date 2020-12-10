@@ -10,6 +10,7 @@ log() {
 export -f log
 
 generate_test_id() {
+    echo "Here at Random"
     echo $(cat /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
 }
 
