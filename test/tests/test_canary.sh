@@ -6,7 +6,7 @@ set -euo pipefail
 source $(dirname $0)/../utils.sh
 
 TEST_ID=$(generate_test_id)
-echo "TEST_ID = $TEST_ID"
+echo "::debug:: TEST_ID = $TEST_ID"
 
 tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
