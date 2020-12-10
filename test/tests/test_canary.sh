@@ -3,6 +3,7 @@
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 
 set -euo pipefail
+echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
 
 TEST_ID=$(generate_test_id)
