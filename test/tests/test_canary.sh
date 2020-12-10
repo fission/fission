@@ -9,7 +9,7 @@ echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
 echo "afters utils.sh"
 TEST_ID=$(generate_test_id)
-echo "::debug:: TEST_ID = $TEST_ID"
+echo "TEST_ID = $TEST_ID"
 
 tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
@@ -26,7 +26,7 @@ route_succ=route-succ-$TEST_ID
 route_fail=route-fail-$TEST_ID
 canary_1=canary-1-$TEST_ID
 canary_2=canary-2-$TEST_ID
-
+echo "Exported all the things"
 cleanup() {
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
@@ -34,8 +34,10 @@ cleanup() {
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
+    echo "no cleanup"
     trap cleanup EXIT
 else
+    echo "else cleanup"
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
