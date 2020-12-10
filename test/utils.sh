@@ -138,7 +138,7 @@ export -f wait_for_builder
 
 waitBuild() {
     log "Waiting for builder manager to finish the build"
-
+    echo "Waiting for builder manager"
     set +e
     while true; do
       kubectl --namespace default get packages $1 -o jsonpath='{.status.buildstatus}'|grep succeeded
@@ -152,6 +152,7 @@ waitBuild() {
 export -f waitBuild
 
 waitBuildExpectedStatus() {
+    echo "In wait expected status"
     pkg=$1
     status=$2
 

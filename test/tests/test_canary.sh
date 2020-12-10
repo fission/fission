@@ -3,6 +3,8 @@
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 
 set -euo pipefail
+echo "In the script"
+echo "In the script2"
 echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
 
