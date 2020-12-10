@@ -8,7 +8,7 @@ echo "In the script2"
 echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
 echo "afters utils.sh"
-TEST_ID=1
+TEST_ID=$(cat /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
 echo "TEST_ID = $TEST_ID"
 
 tmp_dir="/tmp/test-$TEST_ID"
@@ -16,6 +16,7 @@ mkdir -p $tmp_dir
 
 ROOT=$(dirname $0)/../..
 
+export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 echo "Router " $FISSION_ROUTER
 env=nodejs-$TEST_ID
