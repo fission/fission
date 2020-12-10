@@ -17,8 +17,8 @@ jobs:
 
     - name: Run parallel command
       run: |
-        p=$(parallel echo :::A B C)
-        echo $p
+        echo "::debug::$(parallel echo ::: A B C)"
+        
       
     - name: setup go
       uses: actions/setup-go@v2
