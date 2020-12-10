@@ -7,7 +7,7 @@ echo "In the script"
 echo "In the script2"
 echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
-
+echo "afters utils.sh"
 TEST_ID=$(generate_test_id)
 echo "::debug:: TEST_ID = $TEST_ID"
 
