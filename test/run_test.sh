@@ -64,7 +64,7 @@ main() {
     #     --timeout 300 \
     #     bash -c '{1} > {2} 2>&1' \
     #     ::: $test_files :::+ $log_files
-    ./$test_files > $log_files
+    bash $test_files > $log_files
     #     | tee $LOG_DIR/_recap \
     #     || true
     end_time=$(date +%s)
