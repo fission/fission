@@ -58,12 +58,13 @@ main() {
     echo $TIMEOUT
     echo "test file " $test_files
     echo "log file " $log_files
-    parallel \
-        --joblog - \
-        --jobs $JOBS \
-        --timeout 300 \
-        bash -c '{1} > {2} 2>&1' \
-        ::: $test_files :::+ $log_files
+    # parallel \
+    #     --joblog - \
+    #     --jobs $JOBS \
+    #     --timeout 300 \
+    #     bash -c '{1} > {2} 2>&1' \
+    #     ::: $test_files :::+ $log_files
+    source ./$test_files > $log_files
     #     | tee $LOG_DIR/_recap \
     #     || true
     end_time=$(date +%s)
