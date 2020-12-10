@@ -73,6 +73,9 @@ jobs:
     - name: Skip & install cli
       run: curl -Lo fission https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 
+    - name: Port-forward fission router
+      run: kubectl port-forward svc/router 8888:80 -nfission &
+
     - name: Pull and load environment and builder image
       run: |
         docker pull fission/node-env-12.16:1.11.0 && kind load docker-image fission/node-env-12.16:1.11.0 --name kind
@@ -86,6 +89,6 @@ jobs:
         docker pull fission/go-env-1.12 && kind load docker-image fission/go-env-1.12 --name kind
         docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
         docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
-    
+
     - name: Integration tests
       run: ./test/kind_test.sh

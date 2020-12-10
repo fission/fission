@@ -15,12 +15,11 @@ echo "source test_utils done"
 dump_system_info
 
 
-export FISSION_URL=http://$(kubectl -n fission get svc controller -o jsonpath='{...ip}')
-export FISSION_ROUTER=$(kubectl -n fission get svc router -o jsonpath='{...ip}')
-export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n fission get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
+# export FISSION_URL=http://$(kubectl -n fission get svc controller -o jsonpath='{...ip}')
+# export FISSION_ROUTER=$(kubectl -n fission get svc router -o jsonpath='{...ip}')
+# export FISSION_NATS_STREAMING_URL="http://defaultFissionAuthToken@$(kubectl -n fission get svc nats-streaming -o jsonpath='{...ip}:{.spec.ports[0].port}')"
 
-export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
-echo "Export complete"
+# export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 # run tests without newdeploy in parallel.
 
 

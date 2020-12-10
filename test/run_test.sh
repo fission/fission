@@ -18,7 +18,6 @@ LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
 
-kubectl port-forward svc/router 8888:80 -nfission &
 export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 

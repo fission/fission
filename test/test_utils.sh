@@ -618,7 +618,7 @@ install_and_test() {
         # Commented out due to Travis-CI log length limit
         # describe each pod in fission ns and function namespace
         # describe_all_pods $id
-	      exit 1
+	    exit 1
     fi
 }
 
