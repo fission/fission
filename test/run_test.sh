@@ -18,6 +18,12 @@ LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
 
+kubectl port-forward svc/router 8888:80 -nfission &
+export FISSION_ROUTER=127.0.0.1:8888
+export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
+
+echo "Router " $FISSION_ROUTER
+
 main() {
     if [ $# -eq 0 ]; then
         args=$(find_executable $ROOT/test/tests -iname 'test_*')
@@ -54,19 +60,15 @@ main() {
     done
 
     start_time=$(date +%s)
-    echo $start_time
-    echo $TIMEOUT
-    echo "test file " $test_files
-    echo "log file " $log_files
-    # parallel \
-    #     --joblog - \
-    #     --jobs $JOBS \
-    #     --timeout 300 \
-    #     bash -c '{1} > {2} 2>&1' \
-    #     ::: $test_files :::+ $log_files
-    bash $test_files > $log_files
-    #     | tee $LOG_DIR/_recap \
-    #     || true
+    
+    parallel \
+        --joblog - \
+        --jobs $JOBS \
+        --timeout 300 \
+        bash -c '{1} > {2} 2>&1' \
+        ::: $test_files :::+ $log_files
+        | tee $LOG_DIR/_recap \
+        || true
     end_time=$(date +%s)
     echo $end_time
     # Get the Exitval in _recap to find if any test failed.

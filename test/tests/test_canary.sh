@@ -3,12 +3,9 @@
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 
 set -euo pipefail
-echo "In the script"
-echo "In the script2"
-echo "::debug:: Hello Hi"
 source $(dirname $0)/../utils.sh
-echo "afters utils.sh"
-TEST_ID=$(cat /dev/urandom | tr -dc 'a-z' | fold -w 8 | head -n 1)
+
+TEST_ID=$(generate_test_id)
 echo "TEST_ID = $TEST_ID"
 
 tmp_dir="/tmp/test-$TEST_ID"
@@ -16,9 +13,6 @@ mkdir -p $tmp_dir
 
 ROOT=$(dirname $0)/../..
 
-export FISSION_ROUTER=127.0.0.1:8888
-export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
-echo "Router " $FISSION_ROUTER
 env=nodejs-$TEST_ID
 fn_v1=fn-v1-$TEST_ID
 fn_v2=fn-v2-$TEST_ID
@@ -109,7 +103,6 @@ failure_scenario() {
 }
 
 main() {
-    echo "Inside main test"
     # v2 of a function starts with receiving 0% of the traffic with a gradual increase all the way up to 100% of the traffic
     success_scenario
 
