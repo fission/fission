@@ -63,9 +63,9 @@ main() {
         --jobs $JOBS \
         --timeout 300 \
         bash -c '{1} > {2} 2>&1' \
-        ::: $test_files :::+ $log_files \
-        | tee $LOG_DIR/_recap \
-        || true
+        ::: $test_files :::+ $log_files
+    #     | tee $LOG_DIR/_recap \
+    #     || true
     end_time=$(date +%s)
     echo $end_time
     # Get the Exitval in _recap to find if any test failed.
