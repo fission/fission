@@ -17,7 +17,7 @@ mkdir -p $tmp_dir
 ROOT=$(dirname $0)/../..
 
 export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
-export FISSION_ROUTER=$(kubectl -n fission get svc router -o jsonpath='{...ip}')
+echo "Router " $FISSION_ROUTER
 env=nodejs-$TEST_ID
 fn_v1=fn-v1-$TEST_ID
 fn_v2=fn-v2-$TEST_ID
