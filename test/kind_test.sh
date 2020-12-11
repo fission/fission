@@ -77,6 +77,8 @@ test/run_test.sh \
 # TODO: the idx does not match seq number in recap.
 idx=1
 log_files=$(find test/logs/ -name '*.log')
+echo "Log files" $log_files
+
 for log_file in $log_files; do
     test_name=${log_file#test/logs/}
     travis_fold_start run_test.$idx $test_name
