@@ -5,7 +5,7 @@
 source $(dirname $BASH_SOURCE)/init_tools.sh
 
 log() {
-    echo `date +%Y/%m/%d:%H:%M:%S`" $@"
+    echo "::debug::$(date +%Y/%m/%d:%H:%M:%S)"" $@"
 }
 export -f log
 
