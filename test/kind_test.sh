@@ -78,6 +78,9 @@ test/run_test.sh \
 idx=1
 log_files=$(find test/logs/ -name '*.log')
 echo "Log files" $log_files
+echo "Log files" $log_files
+echo "Log files" $log_files
+echo "Log files" $log_files
 
 for log_file in $log_files; do
     test_name=${log_file#test/logs/}
