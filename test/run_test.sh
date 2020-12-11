@@ -85,10 +85,10 @@ main "$@"
 
 for log_file in $log_files; do
     test_name=${log_file#test/logs/}
-    travis_fold_start run_test.$idx $test_name
+    # travis_fold_start run_test.$idx $test_name
     echo "========== start $test_name =========="
     cat $log_file
     echo "========== end $test_name =========="
-    travis_fold_end run_test.$idx
+    # travis_fold_end run_test.$idx
     idx=$((idx+1))
 done
