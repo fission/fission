@@ -18,11 +18,13 @@ LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
 TIMEOUT=${TIMEOUT:-0}
 
+
+export FUNCTION_NAMESPACE=fission-function
+export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 export PYTHON_RUNTIME_IMAGE=fission/python-env
 export PYTHON_BUILDER_IMAGE=fission/python-builder
-export FUNCTION_NAMESPACE=fission-function
 export GO_RUNTIME_IMAGE=fission/go-env-1.12
 export GO_BUILDER_IMAGE=fission/go-builder-1.12 
 export JVM_RUNTIME_IMAGE=fission/jvm-env
