@@ -29,15 +29,12 @@ cleanup() {
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
-    echo "no cleanup"
     trap cleanup EXIT
 else
-    echo "else cleanup"
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
 success_scenario() {
-    echo "Creating nodejs env"
     log "Creating nodejs env"
     fission env create --name $env --image $NODE_RUNTIME_IMAGE --graceperiod 1
 
