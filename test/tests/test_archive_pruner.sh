@@ -109,7 +109,7 @@ main() {
 
     # archivePruner is set to run every minute for test. In production, its set to run every hour.
     log "waiting for packages to get recycled"
-    sleep 120
+    sleep 300
 
     # curl on the archive url
     get_archive_from_storage $url_1

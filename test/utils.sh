@@ -73,7 +73,9 @@ test_response() {
     while true; do
         log "test_fn: call curl"
         resp=$(curl --silent --show-error "$url")
+        log "response:" $resp
         status_code=$?
+        log "status_code:" $status_code
         if [ $status_code -ne 0 ]; then
             log "test_fn: curl failed ($status_code). Retrying ..."
             sleep 1

@@ -103,7 +103,7 @@ log "Modifying the route by adding host, path, annotations, tls"
 fission route update --name $routeName --function $functionName --ingressannotation "foo=bar" --ingressrule "$hostName=/foo/bar" --ingresstls "dummy"
 
 sleep 3
-checkIngress $routeName $hostName "/foo/bar" "map[foo:bar]" "dummy"
+checkIngress $routeName $hostName "/foo/bar" '{"foo":"bar"}' "dummy"
 
 log "Remove ingress annotations, host, rule and tls"
 fission route update --name $routeName --function $functionName --ingressannotation "-" --ingressrule "-" --ingresstls "-"

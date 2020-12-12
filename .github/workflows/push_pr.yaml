@@ -86,11 +86,11 @@ jobs:
         docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
         docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
 
-    - name: Port-forward fission router
-      run: kubectl port-forward svc/router 8888:80 -nfission &
-    
-    - name: Port-forward fission controller
-      run: kubectl port-forward svc/controller 8889:80 -nfission &
-      
+    - name: Port-forward fission components
+      run: |
+        kubectl port-forward svc/router 8888:80 -nfission &
+        kubectl port-forward svc/controller 8889:80 -nfission &
+        kubectl port-forward svc/nats-streaming 8890:80 -nfission &
+
     - name: Integration tests
       run: ./test/kind_test.sh

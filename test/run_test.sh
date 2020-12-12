@@ -23,6 +23,7 @@ export FUNCTION_NAMESPACE=fission-function
 export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
+export NODE_BUILDER_IMAGE=fission/node-builder-12.16:1.11.0
 export PYTHON_RUNTIME_IMAGE=fission/python-env
 export PYTHON_BUILDER_IMAGE=fission/python-builder
 export GO_RUNTIME_IMAGE=fission/go-env-1.12
@@ -32,6 +33,7 @@ export JVM_BUILDER_IMAGE=fission/jvm-builder
 export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
+export FISSION_NATS_STREAMING_URL=127.0.0.1:8890
 
 echo "Router " $FISSION_ROUTER
 
