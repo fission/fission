@@ -31,6 +31,7 @@ export JVM_RUNTIME_IMAGE=fission/jvm-env
 export JVM_BUILDER_IMAGE=fission/jvm-builder
 export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
+export CONTROLLER_IP=127.0.0.1:8889
 
 echo "Router " $FISSION_ROUTER
 

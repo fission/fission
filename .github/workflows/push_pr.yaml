@@ -27,6 +27,8 @@ jobs:
       
     - name: Kind Clutser
       uses: engineerd/setup-kind@v0.5.0
+      with:
+        config: kind.yaml
       
     - name: Configuring and testing the Installation      
       run: |
@@ -72,6 +74,9 @@ jobs:
 
     - name: Port-forward fission router
       run: kubectl port-forward svc/router 8888:80 -nfission &
+    
+    - name: Port-forward fission controller
+      run: kubectl port-forward svc/controller 8889:80 -nfission &
 
     - name: Pull and load environment and builder image
       run: |
