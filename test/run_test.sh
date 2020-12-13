@@ -33,7 +33,7 @@ export JVM_BUILDER_IMAGE=fission/jvm-builder
 export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
-export FISSION_NATS_STREAMING_URL=127.0.0.1:8890
+export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
 
 echo "Router " $FISSION_ROUTER
 
