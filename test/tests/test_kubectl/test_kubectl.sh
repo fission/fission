@@ -11,6 +11,7 @@ mkdir -p $tmp_dir
 
 ROOT=$(dirname $0)/../../..
 
+log $PWD
 # cd test/tests/test_kubectl
 specs=test/tests/test_kubectl/spec-yaml
 
