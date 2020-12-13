@@ -21,6 +21,7 @@ dump_system_info
 
 # export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 # run tests without newdeploy in parallel.
+export FAILURES=0
 
 main() {
     export JOBS=6
@@ -53,7 +54,6 @@ main() {
         test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         test/tests/test_huge_response/test_huge_response.sh \
         test/tests/test_kubectl/test_kubectl.sh
-    FAILURES=$?
 
     export JOBS=3
     test/run_test.sh \
@@ -70,7 +70,6 @@ main() {
         test/tests/test_fn_update/test_secret_update.sh \
         test/tests/test_obj_create_in_diff_ns.sh \
         test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
-    FAILURES=$((FAILURES+$?))
     set -e
 
     # dump test logs
