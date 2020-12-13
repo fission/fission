@@ -11,12 +11,10 @@ mkdir -p $tmp_dir
 
 ROOT=$(dirname $0)/../../..
 
-log $PWD
-# cd test/tests/test_kubectl
-specs=test/tests/test_kubectl/spec-yaml
+cd $ROOT/test/tests/test_kubectl
 
 cleanup() {
-    kubectl delete -f specs -R || true
+    kubectl delete -f spec-yaml -R || true
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -32,19 +30,19 @@ pkgName="go-b4bbb0e0-2d93-47f0-8c4e-eea644eec2a9"
 cleanup
 
 # apply environment & function
-kubectl apply -f specs -R
+kubectl apply -f spec-yaml -R
 
 # wait for build to finish
 timeout 90 bash -c "wait_for_builder $name"
 timeout 90 bash -c "waitBuildExpectedStatus $pkgName failed"
 
-sed -i 's/gogo/go/g' specs/function-go.yaml
+sed -i 's/gogo/go/g' spec-yaml/function-go.yaml
 
 # before we enable "/status" this should be failed.
-kubectl apply -f specs/function-go.yaml
+kubectl apply -f spec-yaml/function-go.yaml
 timeout 90 bash -c "waitBuildExpectedStatus $pkgName failed"
 
-kubectl replace -f specs/function-go.yaml
+kubectl replace -f spec-yaml/function-go.yaml
 timeout 90 bash -c "waitBuild $pkgName"
 
 fission fn test --name $name
