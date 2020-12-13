@@ -53,7 +53,7 @@ success_scenario() {
     sleep 60
 
     log "Fire requests to the route"
-    ab -n 300 -c 1 http://$FISSION_ROUTER/$route_succ
+    p=$(ab -n 300 -c 1 http://$FISSION_ROUTER/$route_succ)
 
     sleep 60
 

@@ -127,7 +127,7 @@ fission route create --name $routeName --url $relativeUrl --function $functionNa
     --ingressrule "*=$wildcardPath"
 
 sleep 3
-checkIngress $routeName "" $wildcardPath "map[nginx.ingress.kubernetes.io/ssl-redirect:false nginx.ingress.kubernetes.io/use-regex:true]" ""
+checkIngress $routeName "" $wildcardPath '{"nginx.ingress.kubernetes.io/ssl-redirect":"false","nginx.ingress.kubernetes.io/use-regex":"true"}' ""
 timeout 10 bash -c "test_ingress $realPath 'hello, world!'"
 
 log "Test PASSED"
