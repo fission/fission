@@ -72,6 +72,7 @@ test_response() {
     set +e
     while true; do
         log "test_fn: call curl"
+        echo $(curl "$url")
         resp=$(curl --silent --show-error "$url")
         # log "response:" $resp
         status_code=$?
