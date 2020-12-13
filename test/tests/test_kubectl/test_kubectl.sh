@@ -44,7 +44,6 @@ timeout 90 bash -c "waitBuild $pkgName"
 
 fission fn test --name $name
 
-# cleanup first
 cleanup
 
 log "Test PASSED"
