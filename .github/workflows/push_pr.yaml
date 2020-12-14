@@ -8,54 +8,52 @@ on:
     branches: [ master ]
 
 jobs:
-  # Job to run change detection
+  inputs:
+    pythonEnv:
+      description: 'Python Environment'
+      required: true
+      default: 'fission/python-env'
+    pythonBuilder:
+      description: 'Python Builder'
+      required: true
+      default: 'fission/python-builder'
+    nodeEnv:
+      description: 'Node Environment'
+      required: true
+      default: fission/node-env-12.16:1.11.0
+    nodeBuilder:
+      description: 'Node Builder'
+      required: true
+      default: fission/node-builder-12.16:1.11.0
+    jvmEnv:
+      description: 'Java Environment'
+      required: true
+      default: fission/jvm-env
+    jvmBuilder:
+      description: 'Java Builder'
+      required: true
+      default: fission/jvm-builder
+    jvmJerseyEnv:
+      description: 'Java Jersey Environment'
+      required: true
+      default: fission/jvm-jersey-env
+    jvmJerseyBuilder:
+      description: 'Java Jersey Builder'
+      required: true
+      default: fission/jvm-jersey-builder
+    goEnv:
+      description: 'Go Environment'
+      required: true
+      default: fission/go-env-1.12
+    goBuilder:
+      description: 'Go Builder'
+      required: true
+      default: fission/go-builder-1.12
+    tensorflowEnv:
+      description: 'Tensorflow Environment'
+      required: true
+      default: fission/tensorflow-serving-env
   buildenv:
-    inputs:
-      pythonEnv:
-        description: 'Python Environment'
-        required: true
-        default: 'fission/python-env'
-      pythonBuilder:
-        description: 'Python Builder'
-        required: true
-        default: 'fission/python-builder'
-      nodeEnv:
-        description: 'Node Environment'
-        required: true
-        default: fission/node-env-12.16:1.11.0
-      nodeBuilder:
-        description: 'Node Builder'
-        required: true
-        default: fission/node-builder-12.16:1.11.0
-      jvmEnv:
-        description: 'Java Environment'
-        required: true
-        default: fission/jvm-env
-      jvmBuilder:
-        description: 'Java Builder'
-        required: true
-        default: fission/jvm-builder
-      jvmJerseyEnv:
-        description: 'Java Jersey Environment'
-        required: true
-        default: fission/jvm-jersey-env
-      jvmJerseyBuilder:
-        description: 'Java Jersey Builder'
-        required: true
-        default: fission/jvm-jersey-builder
-      goEnv:
-        description: 'Go Environment'
-        required: true
-        default: fission/go-env-1.12
-      goBuilder:
-        description: 'Go Builder'
-        required: true
-        default: fission/go-builder-1.12
-      tensorflowEnv:
-        description: 'Tensorflow Environment'
-        required: true
-        default: fission/tensorflow-serving-env
-      
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
