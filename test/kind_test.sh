@@ -28,7 +28,7 @@ main() {
     export TIMEOUT=1000  # 15 minutes per test
 
     # run tests without newdeploy in parallel.
-    export JOBS=6
+    export JOBS=2
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
@@ -59,7 +59,7 @@ main() {
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
 
-    export JOBS=3
+    export JOBS=2
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
