@@ -63,7 +63,7 @@ main() {
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
-        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
+        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
         $ROOT/test/tests/test_environments/test_nodejs_env.sh \
