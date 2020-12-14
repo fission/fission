@@ -50,12 +50,10 @@ main() {
         test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
         test/tests/test_environments/test_tensorflow_serving_env.sh \
         test/tests/test_environments/test_go_env.sh \
-        test/tests/mqtrigger/nats/test_mqtrigger.sh \
-        test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         test/tests/test_huge_response/test_huge_response.sh \
         test/tests/test_kubectl/test_kubectl.sh
 
-    export JOBS=5
+    export JOBS=3
     test/run_test.sh \
         test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         test/tests/test_backend_newdeploy.sh \
@@ -64,12 +62,17 @@ main() {
         test/tests/test_environments/test_nodejs_env.sh \
         test/tests/test_fn_update/test_configmap_update.sh \
         test/tests/test_fn_update/test_env_update.sh \
+    
+    export JOBS=3
+    test/run_test.sh \
         test/tests/test_fn_update/test_nd_pkg_update.sh \
         test/tests/test_fn_update/test_poolmgr_nd.sh \
         test/tests/test_fn_update/test_resource_change.sh \
         test/tests/test_fn_update/test_scale_change.sh \
         test/tests/test_fn_update/test_secret_update.sh \
         test/tests/test_obj_create_in_diff_ns.sh \
+        test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
     set -e
 
     # dump test logs
