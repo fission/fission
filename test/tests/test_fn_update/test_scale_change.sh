@@ -69,5 +69,5 @@ then
   exit 1
 fi
 fission fn list
-timeout 120 bash -c "test_fn $fn 'world'"
+timeout 60 bash -c "test_fn $fn 'world'"
 log "Test PASSED"

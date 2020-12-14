@@ -65,6 +65,17 @@ profiles:
       - op: replace
         path: /deploy/helm/releases/0/setValues/routerServiceType
         value: "NodePort"
+  - name: kind-CI
+    patchs:
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/repository
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/routerServiceType
+        value: "NodePort"
       - op: add
         path: /deploy/helm/flags/install
         value: ["--create-namespace",]
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/pruneInterval
+        value: "1"
