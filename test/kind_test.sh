@@ -57,6 +57,7 @@ main() {
 
     export JOBS=3
     test/run_test.sh \
+        test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         test/tests/test_backend_newdeploy.sh \
         test/tests/test_environments/test_java_builder.sh \
         test/tests/test_environments/test_java_env.sh \
@@ -69,7 +70,6 @@ main() {
         test/tests/test_fn_update/test_scale_change.sh \
         test/tests/test_fn_update/test_secret_update.sh \
         test/tests/test_obj_create_in_diff_ns.sh \
-        test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
     set -e
 
     # dump test logs
@@ -86,8 +86,9 @@ main() {
         # travis_fold_end run_test.$idx
         idx=$((idx+1))
     done
-
-    return $FAILURES
+    if [[ $FAILURES != 0 ]]; then
+        exit 1
+    fi
 }
 
 main
