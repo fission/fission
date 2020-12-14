@@ -29,10 +29,45 @@ export GO_BUILDER_IMAGE=fission/go-builder-1.12
 export JVM_RUNTIME_IMAGE=fission/jvm-env
 export JVM_BUILDER_IMAGE=fission/jvm-builder
 export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
+export JVM_JERSEY_BUILDER_IMAGE=fission/jvm-jersey-builder
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
 export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
 
+pids=""
+docker pull $NODE_RUNTIME_IMAGE && kind load docker-image $NODE_RUNTIME_IMAGE --name kind &
+pids="$pids $!"
+docker pull $NODE_BUILDER_IMAGE && kind load docker-image $NODE_BUILDER_IMAGE --name kind &
+pids="$pids $!"
+docker pull $PYTHON_RUNTIME_IMAGE && kind load docker-image $PYTHON_RUNTIME_IMAGE --name kind &
+pids="$pids $!"
+docker pull $PYTHON_BUILDER_IMAGE && kind load docker-image $PYTHON_BUILDER_IMAGE --name kind &
+pids="$pids $!"
+docker pull $JVM_RUNTIME_IMAG && kind load docker-image $JVM_RUNTIME_IMAG --name kind &
+pids="$pids $!"
+docker pull $JVM_BUILDER_IMAGE && kind load docker-image $JVM_BUILDER_IMAGE --name kind &
+pids="$pids $!"
+docker pull $JVM_JERSEY_RUNTIME_IMAGE && kind load docker-image $JVM_JERSEY_RUNTIME_IMAGE --name kind &
+pids="$pids $!"
+docker pull $JVM_JERSEY_BUILDER_IMAGE && kind load docker-image $JVM_JERSEY_BUILDER_IMAGE --name kind &
+pids="$pids $!"
+docker pull $GO_RUNTIME_IMAGE && kind load docker-image $GO_RUNTIME_IMAGE --name kind &
+pids="$pids $!"
+docker pull $GO_BUILDER_IMAGE && kind load docker-image $GO_BUILDER_IMAGE --name kind &
+pids="$pids $!"
+docker pull $TS_RUNTIME_IMAGE && kind load docker-image $TS_RUNTIME_IMAGE --name kind &
+pids="$pids $!"
+
+for pid in $pids; do
+    wait $pid || let "RESULT=1"
+done
+
+if [ "$RESULT" == "1" ];
+    then
+        echo "Failed to pull env and builder images"
+        exit 1
+fi
+echo "Successfully pull env and builder images"
 main() {
     if [ $# -eq 0 ]; then
         args=$(find_executable $ROOT/test/tests -iname 'test_*')
