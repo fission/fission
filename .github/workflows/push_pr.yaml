@@ -6,9 +6,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-
-jobs:
-  inputs:
+inputs:
   pythonEnv:
     description: 'Python Environment'
     required: true
@@ -53,6 +51,8 @@ jobs:
     description: 'Tensorflow Environment'
     required: true
     default: fission/tensorflow-serving-env
+    
+jobs:
   # Job to run change detection
   buildenv:
     runs-on: ubuntu-latest
