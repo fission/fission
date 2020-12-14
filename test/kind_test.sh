@@ -86,9 +86,9 @@ main() {
         # travis_fold_end run_test.$idx
         idx=$((idx+1))
     done
-    if [[ $FAILURES != 0 ]]; then
-        exit 1
-    fi
 }
 
 main
+if [[ $FAILURES != 0 ]]; then
+    exit 1
+fi
