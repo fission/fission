@@ -24,8 +24,58 @@ dump_system_info
 export FAILURES=0
 
 main() {
-    export JOBS=2
-    test/run_test.sh
+    set +e
+    export TIMEOUT=900  # 15 minutes per test
+
+    # run tests without newdeploy in parallel.
+    export JOBS=6
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_canary.sh \
+        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
+        $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
+        $ROOT/test/tests/test_annotations.sh \
+        $ROOT/test/tests/test_archive_pruner.sh \
+        $ROOT/test/tests/test_backend_poolmgr.sh \
+        $ROOT/test/tests/test_buildermgr.sh \
+        $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_environments/test_python_env.sh \
+        $ROOT/test/tests/test_function_test/test_fn_test.sh \
+        $ROOT/test/tests/test_function_update.sh \
+        $ROOT/test/tests/test_ingress.sh \
+        $ROOT/test/tests/test_internal_routes.sh \
+        $ROOT/test/tests/test_logging/test_function_logs.sh \
+        $ROOT/test/tests/test_node_hello_http.sh \
+        $ROOT/test/tests/test_package_command.sh \
+        $ROOT/test/tests/test_package_checksum.sh \
+        $ROOT/test/tests/test_pass.sh \
+        $ROOT/test/tests/test_specs/test_spec.sh \
+        $ROOT/test/tests/test_specs/test_spec_multifile.sh \
+        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
+        $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
+        $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
+        $ROOT/test/tests/test_environments/test_go_env.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
+        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
+        $ROOT/test/tests/test_huge_response/test_huge_response.sh \
+        $ROOT/test/tests/test_kubectl/test_kubectl.sh
+
+    export JOBS=3
+    $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_backend_newdeploy.sh \
+        $ROOT/test/tests/test_environments/test_java_builder.sh \
+        $ROOT/test/tests/test_environments/test_java_env.sh \
+        $ROOT/test/tests/test_environments/test_nodejs_env.sh \
+        $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
+        $ROOT/test/tests/test_fn_update/test_env_update.sh \
+        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
+        $ROOT/test/tests/test_fn_update/test_resource_change.sh \
+        $ROOT/test/tests/test_fn_update/test_scale_change.sh \
+        $ROOT/test/tests/test_fn_update/test_secret_update.sh \
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh
+
+    set -e
 
     # dump test logs
     # TODO: the idx does not match seq number in recap.
@@ -42,6 +92,7 @@ main() {
         idx=$((idx+1))
     done
 }
+echo "Failures" $FAILURES
 
 main
 if [[ $FAILURES != 0 ]]; then
