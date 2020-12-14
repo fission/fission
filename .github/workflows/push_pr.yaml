@@ -8,6 +8,51 @@ on:
     branches: [ master ]
 
 jobs:
+  inputs:
+  pythonEnv:
+    description: 'Python Environment'
+    required: true
+    default: 'fission/python-env'
+  pythonBuilder:
+    description: 'Python Builder'
+    required: true
+    default: 'fission/python-builder'
+  nodeEnv:
+    description: 'Node Environment'
+    required: true
+    default: fission/node-env-12.16:1.11.0
+  nodeBuilder:
+    description: 'Node Builder'
+    required: true
+    default: fission/node-builder-12.16:1.11.0
+  jvmEnv:
+    description: 'Java Environment'
+    required: true
+    default: fission/jvm-env
+  jvmBuilder:
+    description: 'Java Builder'
+    required: true
+    default: fission/jvm-builder
+  jvmJerseyEnv:
+    description: 'Java Jersey Environment'
+    required: true
+    default: fission/jvm-jersey-env
+  jvmJerseyBuilder:
+    description: 'Java Jersey Builder'
+    required: true
+    default: fission/jvm-jersey-builder
+  goEnv:
+    description: 'Go Environment'
+    required: true
+    default: fission/go-env-1.12
+  goBuilder:
+    description: 'Go Builder'
+    required: true
+    default: fission/go-builder-1.12
+  tensorflowEnv:
+    description: 'Tensorflow Environment'
+    required: true
+    default: fission/tensorflow-serving-env
   # Job to run change detection
   buildenv:
     runs-on: ubuntu-latest
@@ -66,25 +111,25 @@ jobs:
     #     sudo mv fission /usr/local/bin
     #     fission version
     
-    - name: Skip & install fission
-      run: kubectl create ns fission && helm install --namespace fission --name-template fission https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz --set pruneInterval=1
+    # - name: Skip & install fission
+    #   run: kubectl create ns fission && helm install --namespace fission --name-template fission https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz --set pruneInterval=1
 
-    - name: Skip & install cli
-      run: curl -Lo fission https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+    # - name: Skip & install cli
+    #   run: curl -Lo fission https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
 
     - name: Pull and load environment and builder image
       run: |
-        docker pull fission/node-env-12.16:1.11.0 && kind load docker-image fission/node-env-12.16:1.11.0 --name kind
-        docker pull fission/node-builder-12.16:1.11.0 && kind load docker-image fission/node-builder-12.16:1.11.0 --name kind
-        docker pull fission/python-env && kind load docker-image fission/python-env --name kind
-        docker pull fission/python-builder && kind load docker-image fission/python-builder --name kind
-        docker pull fission/jvm-env && kind load docker-image fission/jvm-env --name kind
-        docker pull fission/jvm-builder && kind load docker-image fission/jvm-builder --name kind
-        docker pull fission/jvm-jersey-env && kind load docker-image fission/jvm-jersey-env --name kind
-        docker pull fission/jvm-jersey-builder && kind load docker-image fission/jvm-jersey-builder --name kind
-        docker pull fission/go-env-1.12 && kind load docker-image fission/go-env-1.12 --name kind
-        docker pull fission/go-builder-1.12 && kind load docker-image fission/go-builder-1.12 --name kind
-        docker pull fission/tensorflow-serving-env && kind load docker-image fission/tensorflow-serving-env --name kind
+        docker pull $INPUT_NODE_ENV && kind load docker-image $INPUT_NODE_ENV --name kind
+        docker pull $INPUT_NODE_BUILDER && kind load docker-image $INPUT_NODE_BUILDER --name kind
+        docker pull $INPUT_PYTHON_ENV && kind load docker-image $INPUT_PYTHON_ENV --name kind
+        docker pull $INPUT_PYTHON_BUILDER && kind load docker-image $INPUT_PYTHON_BUILDER --name kind
+        docker pull $INPUT_JVM_ENV && kind load docker-image $INPUT_JVM_ENV --name kind
+        docker pull $INPUT_JVM_BUILDER && kind load docker-image $INPUT_JVM_BUILDER --name kind
+        docker pull $INPUT_JVM_JERSEY_ENV && kind load docker-image $INPUT_JVM_JERSEY_ENV --name kind
+        docker pull $INPUT_JVM_JERSEY_BUILDER && kind load docker-image $INPUT_JVM_JERSEY_BUILDER --name kind
+        docker pull $INPUT_GO_ENV && kind load docker-image $INPUT_GO_ENV --name kind
+        docker pull $INPUT_GO_BUILDER && kind load docker-image $INPUT_GO_BUILDER --name kind
+        docker pull $INPUT_TENSORFLOW_ENV && kind load docker-image $INPUT_TENSORFLOW_ENV --name kind
 
     - name: Port-forward fission components
       run: |
