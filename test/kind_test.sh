@@ -89,9 +89,9 @@ main() {
         idx=$((idx+1))
     done
 }
-echo "Failures" $FAILURES
 
 main
+echo "Failures" $FAILURES
 if [[ $FAILURES != 0 ]]; then
     exit 1
 fi
