@@ -14,12 +14,6 @@ echo "source test_utils done"
 
 dump_system_info
 
-
-# export FISSION_URL=http://$(kubectl -n fission get svc controller -o jsonpath='{...ip}')
-# export FISSION_ROUTER=$(kubectl -n fission get svc router -o jsonpath='{...ip}')
-
-
-# export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
 # run tests without newdeploy in parallel.
 export FAILURES=0
 
@@ -69,11 +63,14 @@ main() {
         $ROOT/test/tests/test_environments/test_nodejs_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
-        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
-        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+    
+    export JOBS=2
+    $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh \
         $ROOT/test/tests/test_fn_update/test_secret_update.sh \
-        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
 
     set -e
 
