@@ -55,7 +55,7 @@ main() {
         test/tests/test_huge_response/test_huge_response.sh \
         test/tests/test_kubectl/test_kubectl.sh
 
-    export JOBS=3
+    export JOBS=5
     test/run_test.sh \
         test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         test/tests/test_backend_newdeploy.sh \

@@ -16,7 +16,7 @@ source $(dirname $BASH_SOURCE)/init_tools.sh
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
-TIMEOUT=1200
+TIMEOUT=1800
 
 
 export FUNCTION_NAMESPACE=fission-function
@@ -34,8 +34,6 @@ export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
 export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
-
-echo "Router " $FISSION_ROUTER
 
 main() {
     if [ $# -eq 0 ]; then
