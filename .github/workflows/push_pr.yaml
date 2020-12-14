@@ -67,7 +67,7 @@ jobs:
     #     fission version
     
     - name: Skip & install fission
-      run: kubectl create ns fission && helm install --namespace fission --name-template fission https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz
+      run: kubectl create ns fission && helm install --namespace fission --name-template fission https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz --set pruneInterval=1
 
     - name: Skip & install cli
       run: curl -Lo fission https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
