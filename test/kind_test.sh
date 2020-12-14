@@ -24,7 +24,7 @@ dump_system_info
 export FAILURES=0
 
 main() {
-    export JOBS=4
+    export JOBS=6
     test/run_test.sh
 
     # dump test logs
