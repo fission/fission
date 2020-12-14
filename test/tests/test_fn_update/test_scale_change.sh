@@ -68,6 +68,6 @@ then
   log "Failed to update target CPU for the function"
   exit 1
 fi
-
-timeout 60 bash -c "test_fn $fn 'world'"
+fission fn list
+timeout 120 bash -c "test_fn $fn 'world'"
 log "Test PASSED"
