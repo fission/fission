@@ -6,6 +6,12 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      retries:
+        description: 'Number of retries for failing Integration tests'
+        required: true
+        default: 2
 
 jobs:
   # Job to run change detection
@@ -14,6 +20,11 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
+
+    - name: retries
+      run: |
+        echo "Retries"
+        echo $INPUT_RETRIES
 
     - name: setup go
       uses: actions/setup-go@v2
