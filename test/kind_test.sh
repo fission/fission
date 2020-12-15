@@ -16,11 +16,10 @@ dump_system_info
 
 # run tests without newdeploy in parallel.
 
-
+export FAILURES=0
 main() {
     set +e
-    export TIMEOUT=1000  # 15 minutes per test
-    export FAILURES=0
+    export TIMEOUT=1000  # 15 minutes per test 
     # run tests without newdeploy in parallel.
     export JOBS=6
     $ROOT/test/run_test.sh \
@@ -88,7 +87,8 @@ main() {
 }
 
 main
+
 echo "Failures" $FAILURES
-if [[ $FAILURES != 0 ]]; then
+if [[ $FAILURES != '0' ]]; then
     exit 1
 fi
