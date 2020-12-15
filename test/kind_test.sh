@@ -22,7 +22,7 @@ main() {
     export TIMEOUT=1000  # 15 minutes per test 
     # run tests without newdeploy in parallel.
     export JOBS=6
-    $ROOT/test/run_test.sh \
+    source $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
@@ -53,7 +53,7 @@ main() {
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
 
     export JOBS=3
-    $ROOT/test/run_test.sh \
+    source $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
         $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
@@ -88,7 +88,7 @@ main() {
 
 main
 
-echo "Failures" $FAILURES
+echo "Total Failures" $FAILURES
 if [[ $FAILURES != '0' ]]; then
     exit 1
 fi
