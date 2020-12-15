@@ -37,14 +37,14 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
     
-    - name: Static code analysis
-      run: |
-        ./hack/verify-gofmt.sh
-        ./hack/verify-govet.sh
-        helm lint charts/fission-all/ charts/fission-core/
+    # - name: Static code analysis
+    #   run: |
+    #     ./hack/verify-gofmt.sh
+    #     ./hack/verify-govet.sh
+    #     helm lint charts/fission-all/ charts/fission-core/
     
-    - name: Run unit tests
-      run: ./hack/runtests.sh
+    # - name: Run unit tests
+    #   run: ./hack/runtests.sh
     
     - name: Helm update
       run: helm repo add stable https://kubernetes-charts.storage.googleapis.com
@@ -55,17 +55,23 @@ jobs:
         sudo install skaffold /usr/local/bin/
         skaffold version
     
-    - name: Build and Install Fission
-      run: |
-        kubectl create ns fission
-        skaffold run -p kind-CI
+    # - name: Build and Install Fission
+    #   run: |
+    #     kubectl create ns fission
+    #     skaffold run -p kind-CI
     
-    - name: Build and Install Fission CLI
-      run: |
-        go build -o fission cmd/fission-cli/main.go
-        sudo mv fission /usr/local/bin
-        fission version
+    # - name: Build and Install Fission CLI
+    #   run: |
+    #     go build -o fission cmd/fission-cli/main.go
+    #     sudo mv fission /usr/local/bin
+    #     fission version
     
+    - name: Skip & install fission
+      run: kubectl create ns fission && helm install --namespace fission --name-template fission https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz --set pruneInterval=1
+
+    - name: Skip & install cli
+      run: curl -Lo fission https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+
     - name: Port-forward fission components
       run: |
         kubectl port-forward svc/router 8888:80 -nfission &
