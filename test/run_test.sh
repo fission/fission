@@ -85,7 +85,7 @@ main() {
     start_time=$(date +%s)
     
     parallel \
-        --retries 8 \
+        --retries 5 \
         --joblog - \
         --jobs $JOBS \
         --timeout $TIMEOUT \
