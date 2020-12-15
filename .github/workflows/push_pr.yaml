@@ -21,11 +21,6 @@ jobs:
     - name: Checkout sources
       uses: actions/checkout@v2
 
-    - name: retries
-      run: |
-        echo "Retries"
-        echo $INPUT_RETRIES
-
     - name: setup go
       uses: actions/setup-go@v2
       with:
