@@ -15,14 +15,14 @@ echo "source test_utils done"
 dump_system_info
 
 # run tests without newdeploy in parallel.
-export FAILURES=0
+
 
 main() {
     set +e
     export TIMEOUT=1000  # 15 minutes per test
-
+    export FAILURES=0
     # run tests without newdeploy in parallel.
-    export JOBS=2
+    export JOBS=6
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
@@ -53,7 +53,7 @@ main() {
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
 
-    export JOBS=2
+    export JOBS=3
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
@@ -64,13 +64,10 @@ main() {
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
-    
-    export JOBS=2
-    $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh \
         $ROOT/test/tests/test_fn_update/test_secret_update.sh \
         $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
-        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh  
 
     set -e
 
