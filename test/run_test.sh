@@ -12,11 +12,11 @@
 #
 set -euo pipefail
 source $(dirname $BASH_SOURCE)/init_tools.sh
-echo "Retries" $INPUT_RETRIES
+
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
-RETRIES=${INPUT_RETRIES:2}
+
 export FUNCTION_NAMESPACE=fission-function
 export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
