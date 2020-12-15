@@ -46,6 +46,7 @@ deploy:
           namespace: fission
           repository: "index.docker.io"
           routerServiceType: LoadBalancer
+          pruneInterval: 60
           fetcher.imageTag: ""
           imageTag: ""
           prometheus.enabled: false
@@ -67,15 +68,12 @@ profiles:
         value: "NodePort"
   - name: kind-CI
     patches:
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/repository
-        value: ""
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/routerServiceType
-        value: "NodePort"
-      - op: add
-        path: /deploy/helm/flags/install
-        value: ["--create-namespace",]
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/pruneInterval
-        value: "1"
+    - op: replace
+      path: /deploy/helm/releases/0/setValues/repository
+      value: ""
+    - op: replace
+      path: /deploy/helm/releases/0/setValues/pruneInterval
+      value: 1
+    - op: replace
+      path: /deploy/helm/releases/0/setValues/routerServiceType
+      value: "NodePort"
