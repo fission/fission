@@ -21,7 +21,7 @@ main() {
     set +e
     export TIMEOUT=1000  # 15 minutes per test 
     # run tests without newdeploy in parallel.
-    export JOBS=6
+    export JOBS=4
     source $ROOT/test/run_test.sh
 
     set -e
