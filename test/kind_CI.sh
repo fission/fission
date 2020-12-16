@@ -85,7 +85,7 @@ main() {
         idx=$((idx+1))
     done
 }
-
+docker system prune -a -f
 main
 
 echo "Total Failures" $FAILURES
