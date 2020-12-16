@@ -79,4 +79,4 @@ jobs:
         kubectl port-forward svc/nats-streaming 8890:4222 -nfission &
 
     - name: Integration tests
-      run: ./test/kind_test.sh
+      run: ./test/kind_CI.sh
