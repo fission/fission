@@ -106,4 +106,5 @@ main() {
     FAILURES=$((FAILURES+$num_fail))
 }
 
+docker system prune -a -f
 main "$@"
