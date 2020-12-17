@@ -9,7 +9,7 @@ on:
 
 jobs:
   # Job to run change detection
-  buildenv:
+  integration-test:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
