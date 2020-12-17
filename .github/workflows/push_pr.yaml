@@ -58,7 +58,7 @@ jobs:
     - name: Build and Install Fission
       run: |
         kubectl create ns fission
-        skaffold run -p kind-CI
+        skaffold run -p kind-ci
     
     - name: Build and Install Fission CLI
       run: |

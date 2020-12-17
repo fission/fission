@@ -70,7 +70,7 @@ fission fn update --name $fn_poolmgr --pkg $pkgName
 fission fn update --name $fn_nd --pkg $pkgName
 
 log "Waiting for router & pools to catch up"
-sleep 300
+sleep 5
 
 log "Testing pool manager function with new package"
 timeout 60 bash -c "test_fn $fn_poolmgr 'Vendor'"

@@ -1,5 +1,6 @@
 #!/bin/bash
-#test:disabled
+#test:disabled 
+# this test is disabled only for Kind tests and for GKE/EKS tests should be enabled
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh
