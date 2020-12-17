@@ -5,7 +5,7 @@
 </p>
 <p align="center">
   <a href="https://github.com/fission/fission/actions?query=workflow%3A%22Fission+CI%22">
-    <img src="https://github.com/fission/fission/workflows/Fission%20CI/badge.svg?branch=master&event=status" alt="Build Status" />
+    <img src="https://github.com/fission/fission/workflows/Fission%20CI/badge.svg?branch=master" alt="Build Status" />
   </a>
   
   <a href="https://goreportcard.com/report/github.com/fission/fission">
