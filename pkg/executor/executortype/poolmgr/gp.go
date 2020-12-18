@@ -175,35 +175,37 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		var chosenPod *apiv1.Pod
 		var key string
 
-		if gp.readyPodQueue.Len() > 0 {
-			item, quit := gp.readyPodQueue.Get()
-			if quit {
-				gp.logger.Error("readypod controller is not running")
-				return "", nil, errors.New("readypod controller is not running")
-			}
+		// if gp.readyPodQueue.Len() > 0 {
+		gp.logger.Info("getting from the queue")
+		item, quit := gp.readyPodQueue.Get()
+		gp.logger.Info("got from the queue")
+		if quit {
+			gp.logger.Error("readypod controller is not running")
+			return "", nil, errors.New("readypod controller is not running")
+		}
 
-			key := item.(string)
-			obj, exists, err := gp.readyPodIndexer.GetByKey(key)
-			if err != nil {
-				gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
-				return "", nil, err
-			}
+		key = item.(string)
+		obj, exists, err := gp.readyPodIndexer.GetByKey(key)
+		if err != nil {
+			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+			return "", nil, err
+		}
 
-			if !exists {
-				gp.logger.Warn("pod deleted from store", zap.String("pod", key))
-				continue
-			}
-
-			if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
-				continue
-			}
-			chosenPod = obj.(*apiv1.Pod).DeepCopy()
-		} else {
-			// Wait for pods to get ready and retry
-			gp.logger.Info("waiting for ready pods")
-			time.Sleep(1000 * time.Millisecond)
+		if !exists {
+			gp.logger.Warn("pod deleted from store", zap.String("pod", key))
 			continue
 		}
+
+		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+			continue
+		}
+		chosenPod = obj.(*apiv1.Pod).DeepCopy()
+		// } else {
+		// 	// Wait for pods to get ready and retry
+		// 	gp.logger.Info("waiting for ready pods")
+		// 	time.Sleep(1000 * time.Millisecond)
+		// 	continue
+		// }
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
