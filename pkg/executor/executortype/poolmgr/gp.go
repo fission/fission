@@ -165,6 +165,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
+	expoRetry := 250 * time.Millisecond
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
@@ -175,7 +176,6 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		var chosenPod *apiv1.Pod
 		var key string
 
-		// if gp.readyPodQueue.Len() > 0 {
 		gp.logger.Info("getting from the queue")
 		item, quit := gp.readyPodQueue.Get()
 		gp.logger.Info("got from the queue")
@@ -196,16 +196,20 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 			continue
 		}
 
-		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
-			continue
-		}
-		chosenPod = obj.(*apiv1.Pod).DeepCopy()
-		// } else {
-		// 	// Wait for pods to get ready and retry
-		// 	gp.logger.Info("waiting for ready pods")
-		// 	time.Sleep(1000 * time.Millisecond)
+		// if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+		// 	if gp.readyPodQueue.NumRequeues(key) < 10 {
+		// 		gp.logger.Info("pod not ready ratelimited ", zap.Int("ratelimit", gp.readyPodQueue.NumRequeues(key)))
+		// 		gp.readyPodQueue.AddRateLimited(key)
+		// 		expoRetry *= 2
+		// 		time.Sleep(expoRetry)
+		// 	} else {
+		// 		gp.readyPodQueue.Forget(key)
+		// 		gp.readyPodQueue.Done(key)
+		// 	}
+		// 	gp.logger.Warn("waiting for ready pod")
 		// 	continue
 		// }
+		chosenPod = obj.(*apiv1.Pod).DeepCopy()
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
@@ -222,7 +226,15 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 			gp.logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
+				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Int("ratelimit", gp.readyPodQueue.NumRequeues(key)))
+				if gp.readyPodQueue.NumRequeues(key) < 10 {
+					gp.readyPodQueue.AddRateLimited(key)
+					expoRetry *= 2
+					time.Sleep(expoRetry)
+				} else {
+					gp.readyPodQueue.Forget(key)
+					gp.readyPodQueue.Done(key)
+				}
 				continue
 			}
 
@@ -558,19 +570,17 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		return nil, err
 	}
-
-	defer gp.readyPodQueue.Done(key)
+	gp.readyPodQueue.Forget(key)
+	gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		if gp.readyPodQueue.NumRequeues(key) < 5 {
+		if gp.readyPodQueue.NumRequeues(key) < 10 {
 			gp.readyPodQueue.AddRateLimited(key)
-		} else {
-			gp.readyPodQueue.Forget(key)
 		}
-
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
+
 	gp.logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.Any("function", fn.ObjectMeta))
 
 	var svcHost string
