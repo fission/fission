@@ -176,15 +176,14 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		var chosenPod *apiv1.Pod
 		var key string
 
-		gp.logger.Info("getting from the queue")
 		item, quit := gp.readyPodQueue.Get()
-		gp.logger.Info("got from the queue")
 		if quit {
 			gp.logger.Error("readypod controller is not running")
 			return "", nil, errors.New("readypod controller is not running")
 		}
-
 		key = item.(string)
+		gp.logger.Debug("got key from the queue", zap.String("key", key))
+
 		obj, exists, err := gp.readyPodIndexer.GetByKey(key)
 		if err != nil {
 			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
