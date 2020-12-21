@@ -189,7 +189,7 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 		Ports: []apiv1.ContainerPort{
 			{
 				Name:          "http-env",
-				ContainerPort: int32(8888),
+				ContainerPort: int32(fn.Spec.Port),
 			},
 		},
 	}
@@ -311,7 +311,7 @@ func (cn *Container) deleteHpa(ns string, name string) error {
 	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
 }
 
-func (cn *Container) createOrGetSvc(deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
@@ -323,7 +323,7 @@ func (cn *Container) createOrGetSvc(deployLabels map[string]string, deployAnnota
 				{
 					Name:       "http-env",
 					Port:       int32(80),
-					TargetPort: intstr.FromInt(8888),
+					TargetPort: intstr.FromInt(fn.Spec.Port),
 				},
 			},
 			Selector: deployLabels,

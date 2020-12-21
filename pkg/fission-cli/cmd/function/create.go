@@ -122,12 +122,14 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
 	var imageName string
+	var port int
 
 	if invokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 		imageName = input.String(flagkey.FnImageName)
 		if imageName == "" {
 			return errors.New("need --image argument")
 		}
+		port = input.Int(flagkey.FnPort)
 	} else {
 		if len(pkgName) > 0 {
 			var pkg *fv1.Package
@@ -311,6 +313,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	if invokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 		opts.function.Spec.Image = imageName
+		opts.function.Spec.Port = port
 	} else {
 		opts.function.Spec.Environment = fv1.EnvironmentReference{
 			Name:      envName,

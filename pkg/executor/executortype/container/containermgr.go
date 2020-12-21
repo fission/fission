@@ -290,6 +290,7 @@ func (cn *Container) initFuncController() (k8sCache.Store, k8sCache.Controller) 
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
 			fmt.Println("Image is", fn.Spec.Image)
+			fmt.Println("Port is ", fn.Spec.Port)
 			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypeContainer {
 				return
@@ -408,7 +409,7 @@ func (cn *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	// Since Container waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	svc, err := cn.createOrGetSvc(deployLabels, deployAnnotations, objName, ns)
+	svc, err := cn.createOrGetSvc(fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		cn.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
 		go cn.cleanupContainer(ns, objName)

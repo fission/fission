@@ -412,6 +412,8 @@ type (
 
 		// Image for containing the language runtime.
 		Image string `json:"image"`
+		// Port where the application is running
+		Port int `json:"port"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

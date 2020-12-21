@@ -47,6 +47,20 @@ func UrlForFunction(name, namespace string) string {
 	return fmt.Sprintf("%v/%v", prefix, name)
 }
 
+// RemoveFuncName removes the name of the function
+func RemoveFuncName(path, name string) string {
+	name = "/" + name
+	path = strings.TrimPrefix(path, name)
+	return path
+}
+
+// AddFuncName removes the name of the function
+func AddFuncName(path, name string) string {
+	name = "/" + name
+	path = name + path
+	return path
+}
+
 // IsNetworkError returns true if an error is a network error, and false otherwise.
 func IsNetworkError(err error) bool {
 	_, ok := err.(net.Error)
