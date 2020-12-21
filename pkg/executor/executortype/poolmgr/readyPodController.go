@@ -14,7 +14,7 @@ import (
 func (gp *GenericPool) startReadyPodController() {
 	// create the pod watcher to filter by labels
 	// Filtering pod by phase=Running. In some cases the pod can be in
-	// different sate than Running, for example Kubernetes sets a
+	// different state than Running, for example Kubernetes sets a
 	// pod to Termination while k8s waits for the grace period of
 	// the pod, even if all the containers are in Ready state.
 	optionsModifier := func(options *metav1.ListOptions) {
