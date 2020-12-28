@@ -17,10 +17,14 @@ limitations under the License.
 package util
 
 import (
+	"errors"
 	"sync"
 	"time"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
@@ -48,4 +52,62 @@ func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
 	case <-waitCh:
 	case <-time.After(timeout):
 	}
+}
+
+// ConvertConfigSecrets returns envFromSource which can be passed directly into the pod spec
+func ConvertConfigSecrets(fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.EnvFromSource, error) {
+
+	cmList := fn.Spec.ConfigMaps
+	secList := fn.Spec.Secrets
+	cmEnvSources := make([]*apiv1.ConfigMapEnvSource, 0)
+	secEnvSources := make([]*apiv1.SecretEnvSource, 0)
+	for _, cm := range cmList {
+		if cm.Namespace != fn.Namespace {
+			return nil, errors.New("Function should not reference config map of different namespace")
+		}
+		_, err := kc.CoreV1().ConfigMaps(cm.Namespace).Get(cm.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+
+		cmEnvSource := &apiv1.ConfigMapEnvSource{
+			LocalObjectReference: apiv1.LocalObjectReference{Name: cm.Name},
+		}
+
+		cmEnvSources = append(cmEnvSources, cmEnvSource)
+	}
+
+	for _, sec := range secList {
+		if sec.Namespace != fn.Namespace {
+			return nil, errors.New("Function should not reference secret of different namespace")
+		}
+		_, err := kc.CoreV1().Secrets(sec.Namespace).Get(sec.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+
+		secEnvSource := &apiv1.SecretEnvSource{
+			LocalObjectReference: apiv1.LocalObjectReference{Name: sec.Name},
+		}
+
+		secEnvSources = append(secEnvSources, secEnvSource)
+	}
+
+	envFromSources := make([]apiv1.EnvFromSource, 0)
+	for _, cmEnvSource := range cmEnvSources {
+		envFromSource := apiv1.EnvFromSource{
+
+			ConfigMapRef: cmEnvSource,
+		}
+		envFromSources = append(envFromSources, envFromSource)
+	}
+
+	for _, secEnvSource := range secEnvSources {
+		envFromSource := apiv1.EnvFromSource{
+
+			SecretRef: secEnvSource,
+		}
+		envFromSources = append(envFromSources, envFromSource)
+	}
+	return envFromSources, nil
 }

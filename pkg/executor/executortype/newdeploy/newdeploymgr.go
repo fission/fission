@@ -261,7 +261,7 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 	return false
 }
 
-// RefreshFuncPods deleted pods related to the function so that new pods are replenished
+// RefreshFuncPods deletes pods related to the function so that new pods are replenished
 func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
 	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})

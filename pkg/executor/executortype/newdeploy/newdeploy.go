@@ -262,7 +262,8 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Ports: []apiv1.ContainerPort{
 			{
-				Name:          "http-env",
+				Name: "http-env",
+				// Now that we have added Port field in spec, should we make this configurable too?
 				ContainerPort: int32(8888),
 			},
 		},
@@ -453,8 +454,9 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       "http-env",
-					Port:       int32(80),
+					Name: "http-env",
+					Port: int32(80),
+					// Since Function spec now supports Port , should we make this configurable too?
 					TargetPort: intstr.FromInt(8888),
 				},
 			},

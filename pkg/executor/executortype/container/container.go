@@ -28,6 +28,7 @@ import (
 	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -170,6 +171,19 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
+	resources := cn.getResources(fn)
+
+	// Other executor types rely on Environments to add configmaps and secrets
+	envFromSources, err := util.ConvertConfigSecrets(fn, cn.kubernetesClient)
+	if err != nil {
+		return nil, err
+	}
+
+	rvCount, err := referencedResourcesRVSum(cn.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	if err != nil {
+		return nil, err
+	}
+
 	container := &apiv1.Container{
 		Name:                   fn.ObjectMeta.Name,
 		Image:                  fn.Spec.Image,
@@ -185,6 +199,13 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 				},
 			},
 		},
+		Env: []apiv1.EnvVar{
+			{
+				Name:  fv1.ResourceVersionCount,
+				Value: fmt.Sprintf("%v", rvCount),
+			},
+		},
+		EnvFrom: envFromSources,
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Ports: []apiv1.ContainerPort{
 			{
@@ -192,6 +213,7 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 				ContainerPort: int32(fn.Spec.Port),
 			},
 		},
+		Resources: resources,
 	}
 
 	pod := apiv1.PodTemplateSpec{
@@ -231,6 +253,39 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 	}
 
 	return deployment, nil
+}
+
+// getResources gets the resources(CPU, memory) set for the function
+func (cn *Container) getResources(fn *fv1.Function) apiv1.ResourceRequirements {
+	resources := fn.Spec.Resources
+	if resources.Requests == nil {
+		resources.Requests = make(map[apiv1.ResourceName]resource.Quantity)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(map[apiv1.ResourceName]resource.Quantity)
+	}
+
+	val, ok := fn.Spec.Resources.Requests[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
+		resources.Requests[apiv1.ResourceCPU] = fn.Spec.Resources.Requests[apiv1.ResourceCPU]
+	}
+
+	val, ok = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
+		resources.Requests[apiv1.ResourceMemory] = fn.Spec.Resources.Requests[apiv1.ResourceMemory]
+	}
+
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
+	if ok && !val.IsZero() {
+		resources.Limits[apiv1.ResourceCPU] = fn.Spec.Resources.Limits[apiv1.ResourceCPU]
+	}
+
+	val, ok = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
+	if ok && !val.IsZero() {
+		resources.Limits[apiv1.ResourceMemory] = fn.Spec.Resources.Limits[apiv1.ResourceMemory]
+	}
+
+	return resources
 }
 
 func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy,
