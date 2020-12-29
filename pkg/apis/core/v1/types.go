@@ -414,6 +414,10 @@ type (
 		Image string `json:"image"`
 		// Port where the application is running
 		Port int `json:"port"`
+		// Command to be run on the container
+		Command string `json:"command"`
+		// Args to be passed to the container
+		Args string `json:"args"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

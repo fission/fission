@@ -263,20 +263,8 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			roundTripper.logger.Info(req.URL.Host)
 			roundTripper.logger.Info(req.RemoteAddr)
 			req.URL.Path = utils.RemoveFuncName(req.URL.Path, fnMeta.Name)
-
-			// req.URL.Path = strings.Trim(req.URL.Path, "/fission-function/")
 			roundTripper.logger.Info(req.URL.Path)
 			roundTripper.logger.Info(req.Host)
-			// headers := req.Header
-			// for k, v := range headers {
-			// 	roundTripper.logger.Info("Key is")
-			// 	roundTripper.logger.Info(k)
-			// 	for _, vv := range v {
-			// 		roundTripper.logger.Info("Value is")
-			// 		roundTripper.logger.Info(vv)
-			// 	}
-			// }
-
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)

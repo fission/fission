@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Fission Authors.
+Copyright 2020 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package container
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -135,6 +136,7 @@ func (cn *Container) deleteDeployment(ns string, name string) error {
 func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
+	var command, args []string
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
 		replicas = *targetReplicas
@@ -184,9 +186,17 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 		return nil, err
 	}
 
+	if fn.Spec.Command != "" {
+		command = strings.Split(fn.Spec.Command, " ")
+	}
+	if fn.Spec.Args != "" {
+		args = strings.Split(fn.Spec.Args, " ")
+	}
 	container := &apiv1.Container{
 		Name:                   fn.ObjectMeta.Name,
 		Image:                  fn.Spec.Image,
+		Command:                command,
+		Args:                   args,
 		ImagePullPolicy:        cn.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Lifecycle: &apiv1.Lifecycle{

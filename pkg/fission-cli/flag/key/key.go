@@ -50,6 +50,8 @@ const (
 	FnPackageName           = "pkgname"
 	FnImageName             = "image"
 	FnPort                  = "port"
+	FnCommand               = "command"
+	FnArgs                  = "args"
 	FnEntrypoint            = "entrypoint"
 	FnBuildCmd              = "buildcmd"
 	FnSecret                = "secret"

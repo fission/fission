@@ -78,6 +78,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	entrypoint := input.String(flagkey.FnEntrypoint)
 	imageName := input.String(flagkey.FnImageName)
 	port := input.Int(flagkey.FnPort)
+	command := input.String(flagkey.FnCommand)
+	args := input.String(flagkey.FnArgs)
 
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
@@ -248,6 +250,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	} else {
 		function.Spec.Image = imageName
 		function.Spec.Port = port
+		function.Spec.Command = command
+		function.Spec.Args = args
 		function.Spec.Environment = fv1.EnvironmentReference{}
 		function.Spec.Package = fv1.FunctionPackageRef{}
 	}
