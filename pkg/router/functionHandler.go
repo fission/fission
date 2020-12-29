@@ -158,8 +158,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	roundTripper.addForwardedHostHeader(req)
 	transport := roundTripper.getDefaultTransport()
 	ocRoundTripper := &ochttp.Transport{Base: transport}
-	roundTripper.logger.Info(req.URL.Path)
-	roundTripper.logger.Info(req.URL.String())
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
@@ -263,8 +261,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			roundTripper.logger.Info(req.URL.Host)
 			roundTripper.logger.Info(req.RemoteAddr)
 			req.URL.Path = utils.RemoveFuncName(req.URL.Path, fnMeta.Name)
-			roundTripper.logger.Info(req.URL.Path)
-			roundTripper.logger.Info(req.Host)
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)

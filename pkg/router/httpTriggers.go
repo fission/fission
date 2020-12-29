@@ -18,7 +18,6 @@ package router
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
 
@@ -105,7 +104,6 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.Host)
 	w.WriteHeader(http.StatusOK)
 }
 

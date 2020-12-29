@@ -269,7 +269,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().V1().Function().Update(opts.function)
 	if err != nil {
-		return errors.Wrap(err, "error updating function>>")
+		return errors.Wrap(err, "error updating function")
 	}
 
 	return nil

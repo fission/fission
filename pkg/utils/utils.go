@@ -54,7 +54,7 @@ func RemoveFuncName(path, name string) string {
 	return path
 }
 
-// AddFuncName removes the name of the function
+// AddFuncName adds the name of the function
 func AddFuncName(path, name string) string {
 	name = "/" + name
 	path = name + path
