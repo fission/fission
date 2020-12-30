@@ -49,24 +49,54 @@ rules:
   resources:
   - packages
   verbs:
-  - get
-  - watch
-  - list
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - '*'
 
 ---
-kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
 metadata:
-  name: fission-crd
+  name: fission-cr-admin
 rules:
-- apiGroups: ["*"]
-  resources: ["nodes", "pods", "services", "deployment", "endpoints", "events", "jobs", "namespaces"]
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - services
+  - serviceaccounts
+  - namespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - deployments/scale
   verbs:
   - '*'
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
   verbs:
-  - '*'
+  - create
+  - delete
+  - get
+  - list
+  - watch
+  - patch
 - apiGroups:
   - fission.io
   resources:
@@ -80,6 +110,43 @@ rules:
   - timetriggers
   verbs:
   - '*'
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - '*'
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  verbs: ["bind"]
+- apiGroups:
+  - keda.sh
+  resources:
+  - scaledjobs
+  - scaledjobs/finalizers
+  - scaledjobs/status
+  - triggerauthentications
+  - triggerauthentications/status
+  verbs:
+  - '*'
+- apiGroups:
+  - keda.k8s.io
+  resources:
+  - scaledjobs
+  - scaledobjects
+  - scaledjobs/finalizers
+  - scaledjobs/status
+  - triggerauthentications
+  - triggerauthentications/status
+  verbs:
+  - '*'
+
 
 ---
 apiVersion: v1
@@ -114,7 +181,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: fission-crd
+  name: fission-cr-admin
   apiGroup: rbac.authorization.k8s.io
 
 ---
@@ -123,10 +190,90 @@ kind: ServiceAccount
 metadata:
   name: fission-fetcher
   namespace: {{ .Values.functionNamespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fission-fetcher
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - '*'
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-fetcher
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fission-fetcher
+subjects:
+- kind: ServiceAccount
+  name: fission-fetcher
+  namespace: {{ .Values.functionNamespace }}
+
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: fission-builder
+  namespace: {{ .Values.builderNamespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fission-builder
+  namespace: default
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - '*'
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-builder
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fission-builder
+subjects:
+- kind: ServiceAccount
   name: fission-builder
   namespace: {{ .Values.builderNamespace }}
 
