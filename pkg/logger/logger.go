@@ -170,7 +170,7 @@ func Start() {
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
-	defer zapLogger.Sync()
+	defer log.Fatal(zapLogger.Sync())
 
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		zapLogger.Info("symlink path not exist, create it",
