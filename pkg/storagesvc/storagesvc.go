@@ -65,7 +65,10 @@ func getStorageLocation(config *storageConfig) (stow.Location, error) {
 // Handle multipart file uploads.
 func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// handle upload
-	r.ParseMultipartForm(0)
+	err := r.ParseMultipartForm(0)
+	if err != nil {
+		http.Error(w, "failed to parse request", http.StatusBadRequest)
+	}
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
 		http.Error(w, "missing upload file", http.StatusBadRequest)
@@ -121,7 +124,15 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Error marshaling response", http.StatusInternalServerError)
 		return
 	}
-	w.Write(resp)
+	_, err = w.Write(resp)
+	if err != nil {
+		ss.logger.Error(
+			"error writing HTTP response",
+			zap.Error(err),
+			zap.String("filename", handler.Filename),
+		)
+	}
+
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
