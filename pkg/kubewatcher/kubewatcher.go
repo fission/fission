@@ -111,13 +111,13 @@ func (kw *KubeWatcher) svc() {
 			// Remove old watches
 			for uid, ws := range kw.watches {
 				if _, ok := newWatchUids[uid]; !ok {
-					kw.removeWatch(&ws.watch)
+					kw.removeWatch(&ws.watch) //nolint: errCheck
 				}
 			}
 			// Add new watches
 			for _, w := range req.watches {
 				if _, ok := kw.watches[w.ObjectMeta.UID]; !ok {
-					kw.addWatch(&w)
+					kw.addWatch(&w) //nolint: errCheck
 				}
 			}
 			req.responseChannel <- &kubeWatcherResponse{error: nil}
