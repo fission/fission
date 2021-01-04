@@ -12,6 +12,12 @@
 #
 set -euo pipefail
 
+source $(dirname $BASH_SOURCE)/init_tools.sh
+
+ROOT=$(readlink -f $(dirname $0)/..)
+LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
+JOBS=${JOBS:-1}
+
 main() {
     if [ $# -eq 0 ]; then
         args=$(find_executable $ROOT/test/tests -iname 'test_*')

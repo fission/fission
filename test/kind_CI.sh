@@ -14,12 +14,6 @@ echo "source test_utils done"
 
 dump_system_info
 
-source $(dirname $BASH_SOURCE)/init_tools.sh
-
-ROOT=$(readlink -f $(dirname $0)/..)
-LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
-JOBS=${JOBS:-1}
-
 export FUNCTION_NAMESPACE=fission-function
 export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
