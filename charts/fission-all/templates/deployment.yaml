@@ -129,6 +129,7 @@ rules:
   - keda.sh
   resources:
   - scaledjobs
+  - scaledobjects
   - scaledjobs/finalizers
   - scaledjobs/status
   - triggerauthentications
