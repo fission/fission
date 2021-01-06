@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/utils"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,6 +37,8 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -49,38 +49,32 @@ import (
 )
 
 type (
+	// GenericPool represents a generic environment pool
 	GenericPool struct {
-		logger                 *zap.Logger
-		env                    *fv1.Environment
-		replicas               int32                         // num idle pods
-		deployment             *appsv1.Deployment            // kubernetes deployment
-		namespace              string                        // namespace to keep our resources
-		functionNamespace      string                        // fallback namespace for fission functions
-		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
-		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
-		useSvc                 bool                          // create k8s service for specialized pods
-		useIstio               bool
-		poolInstanceId         string           // small random string to uniquify pod names
-		runtimeImagePullPolicy apiv1.PullPolicy // pull policy for generic pool to created env deployment
-		kubernetesClient       *kubernetes.Clientset
-		fissionClient          *crd.FissionClient
-		instanceId             string // poolmgr instance id
-		requestChannel         chan *choosePodRequest
-		fetcherConfig          *fetcherConfig.Config
-		stopCh                 context.CancelFunc
-	}
-
-	// serialize the choosing of pods so that choices don't conflict
-	choosePodRequest struct {
-		newLabels       map[string]string
-		responseChannel chan *choosePodResponse
-	}
-	choosePodResponse struct {
-		pod *apiv1.Pod
-		error
+		logger                   *zap.Logger
+		env                      *fv1.Environment
+		replicas                 int32                         // num idle pods
+		deployment               *appsv1.Deployment            // kubernetes deployment
+		namespace                string                        // namespace to keep our resources
+		functionNamespace        string                        // fallback namespace for fission functions
+		podReadyTimeout          time.Duration                 // timeout for generic pods to become ready
+		fsCache                  *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
+		useSvc                   bool                          // create k8s service for specialized pods
+		useIstio                 bool
+		runtimeImagePullPolicy   apiv1.PullPolicy // pull policy for generic pool to created env deployment
+		kubernetesClient         *kubernetes.Clientset
+		fissionClient            *crd.FissionClient
+		fetcherConfig            *fetcherConfig.Config
+		stopReadyPodControllerCh chan struct{}
+		readyPodController       cache.Controller
+		readyPodIndexer          cache.Indexer
+		readyPodQueue            workqueue.RateLimitingInterface
+		poolInstanceID           string // small random string to uniquify pod names
+		instanceID               string // poolmgr instance id
 	}
 )
 
+// MakeGenericPool returns an instance of GenericPool
 func MakeGenericPool(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
@@ -91,40 +85,47 @@ func MakeGenericPool(
 	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	fetcherConfig *fetcherConfig.Config,
-	instanceId string,
+	instanceID string,
 	enableIstio bool) (*GenericPool, error) {
 
 	gpLogger := logger.Named("generic_pool")
 
-	gpLogger.Info("creating pool", zap.Any("environment", env.ObjectMeta))
+	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
+	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
+	if err != nil {
+		podReadyTimeout = 300 * time.Second
+		gpLogger.Error("failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
+			zap.Error(err),
+			zap.String("value", podReadyTimeoutStr),
+			zap.Duration("default", podReadyTimeout))
+	}
 
-	ctx, stopCh := context.WithCancel(context.Background())
+	gpLogger.Info("creating pool", zap.Any("environment", env.ObjectMeta))
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
-		logger:            gpLogger,
-		env:               env,
-		replicas:          initialReplicas, // TODO make this an env param instead?
-		requestChannel:    make(chan *choosePodRequest),
-		fissionClient:     fissionClient,
-		kubernetesClient:  kubernetesClient,
-		namespace:         namespace,
-		functionNamespace: functionNamespace,
-		podReadyTimeout:   5 * time.Minute, // TODO make this an env param?
-		fsCache:           fsCache,
-		poolInstanceId:    uniuri.NewLen(8),
-		fetcherConfig:     fetcherConfig,
-		instanceId:        instanceId,
-		useSvc:            false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
-		useIstio:          enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
-		stopCh:            stopCh,
+		logger:                   gpLogger,
+		env:                      env,
+		replicas:                 initialReplicas, // TODO make this an env param instead?
+		fissionClient:            fissionClient,
+		kubernetesClient:         kubernetesClient,
+		namespace:                namespace,
+		functionNamespace:        functionNamespace,
+		podReadyTimeout:          podReadyTimeout,
+		fsCache:                  fsCache,
+		fetcherConfig:            fetcherConfig,
+		useSvc:                   false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		useIstio:                 enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
+		stopReadyPodControllerCh: make(chan struct{}),
+		poolInstanceID:           uniuri.NewLen(8),
+		instanceID:               instanceID,
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
 
 	// create fetcher SA in this ns, if not already created
-	err := fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
+	err = fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
 	}
@@ -139,7 +140,7 @@ func MakeGenericPool(
 	}
 	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
-	go gp.choosePodService(ctx)
+	go gp.startReadyPodController()
 
 	return gp, nil
 }
@@ -156,88 +157,53 @@ func (gp *GenericPool) getEnvironmentPoolLabels() map[string]string {
 
 func (gp *GenericPool) getDeployAnnotations() map[string]string {
 	return map[string]string{
-		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceId,
-	}
-}
-
-// choosePodService serializes the choosing of pods
-func (gp *GenericPool) choosePodService(ctx context.Context) {
-	for {
-		select {
-		case req := <-gp.requestChannel:
-			pod, err := gp._choosePod(req.newLabels)
-			if err != nil {
-				req.responseChannel <- &choosePodResponse{error: err}
-				continue
-			}
-			req.responseChannel <- &choosePodResponse{pod: pod}
-		case <-ctx.Done():
-			return
-		}
+		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceID,
 	}
 }
 
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
-// returns the pod API object.
-func (gp *GenericPool) choosePod(newLabels map[string]string) (*apiv1.Pod, error) {
-	req := &choosePodRequest{
-		newLabels:       newLabels,
-		responseChannel: make(chan *choosePodResponse),
-	}
-	gp.requestChannel <- req
-	resp := <-req.responseChannel
-	return resp.pod, resp.error
-}
-
-// _choosePod is called serially by choosePodService
-func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, error) {
+// returns the key and pod API object.
+func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
 			gp.logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", gp.podReadyTimeout))
-			return nil, errors.New("timeout: waited too long to get a ready pod")
+			return "", nil, errors.New("timeout: waited too long to get a ready pod")
 		}
 
-		// Get pods; filter the ones that are ready
-		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(
-			metav1.ListOptions{
-				LabelSelector: labels.Set(
-					gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
-			})
-		if err != nil {
-			return nil, err
-		}
-		readyPods := make([]*apiv1.Pod, 0, len(podList.Items))
-		for i := range podList.Items {
-			pod := podList.Items[i]
+		var chosenPod *apiv1.Pod
+		var key string
 
-			// Ignore not ready pod here
-			if !utils.IsReadyPod(&pod) {
+		if gp.readyPodQueue.Len() > 0 {
+			item, quit := gp.readyPodQueue.Get()
+			if quit {
+				gp.logger.Error("readypod controller is not running")
+				return "", nil, errors.New("readypod controller is not running")
+			}
+
+			key := item.(string)
+			obj, exists, err := gp.readyPodIndexer.GetByKey(key)
+			if err != nil {
+				gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+				return "", nil, err
+			}
+
+			if !exists {
+				gp.logger.Warn("pod deleted from store", zap.String("pod", key))
 				continue
 			}
 
-			// add it to the list of ready pods
-			readyPods = append(readyPods, &pod)
-		}
-		gp.logger.Info("found ready pods",
-			zap.Any("labels", newLabels),
-			zap.Int("ready_count", len(readyPods)),
-			zap.Int("total", len(podList.Items)))
-
-		// If there are no ready pods, wait and retry.
-		if len(readyPods) == 0 {
-			err = gp.waitForReadyPod()
-			if err != nil {
-				return nil, err
+			if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+				continue
 			}
+			chosenPod = obj.(*apiv1.Pod).DeepCopy()
+		} else {
+			// Wait for pods to get ready and retry
+			gp.logger.Info("waiting for ready pods")
+			time.Sleep(1000 * time.Millisecond)
 			continue
 		}
-
-		// Pick a ready pod.  For now just choose randomly;
-		// ideally we'd care about which node it's running on,
-		// and make a good scheduling decision.
-		chosenPod := readyPods[rand.Intn(len(readyPods))]
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
@@ -263,13 +229,13 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 			// So we have to check both of them to ensure the patch success.
 			for k, v := range newLabels {
 				if newPod.Labels[k] != v {
-					return nil, errors.Errorf("value of necessary labels '%v' mismatch: want '%v', get '%v'",
+					return "", nil, errors.Errorf("value of necessary labels '%v' mismatch: want '%v', get '%v'",
 						k, v, newPod.Labels[k])
 				}
 			}
 			for k, v := range annotations {
 				if newPod.Annotations[k] != v {
-					return nil, errors.Errorf("value of necessary annotations '%v' mismatch: want '%v', get '%v'",
+					return "", nil, errors.Errorf("value of necessary annotations '%v' mismatch: want '%v', get '%v'",
 						k, v, newPod.Annotations[k])
 				}
 			}
@@ -278,7 +244,7 @@ func (gp *GenericPool) _choosePod(newLabels map[string]string) (*apiv1.Pod, erro
 		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
 			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
 
-		return chosenPod, nil
+		return key, chosenPod, nil
 	}
 }
 
@@ -297,35 +263,43 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 		// cleaned up.  (We need a better solutions for both those things; log
 		// aggregation and storage will help.)
 		gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
-		gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(name, nil)
+		err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(name, nil)
+		if err != nil {
+			gp.logger.Error(
+				"error deleting pod",
+				zap.String("name", name),
+				zap.String("namespace", gp.namespace),
+				zap.Error(err),
+			)
+		}
 	}()
 }
 
+// IsIPv6 validates if the podIP follows to IPv6 protocol
 func IsIPv6(podIP string) bool {
 	ip := net.ParseIP(podIP)
 	return ip != nil && strings.Contains(podIP, ":")
 }
 
-func (gp *GenericPool) getFetcherUrl(podIP string) string {
-	testUrl := os.Getenv("TEST_FETCHER_URL")
-	if len(testUrl) != 0 {
+func (gp *GenericPool) getFetcherURL(podIP string) string {
+	testURL := os.Getenv("TEST_FETCHER_URL")
+	if len(testURL) != 0 {
 		// it takes a second or so for the test service to
 		// become routable once a pod is relabeled. This is
 		// super hacky, but only runs in unit tests.
 		time.Sleep(5 * time.Second)
-		return testUrl
+		return testURL
 	}
+
 	isv6 := IsIPv6(podIP)
-	var baseUrl string
+	var baseURL string
 
 	if isv6 { // We use bracket if the IP is in IPv6.
-		baseUrl = fmt.Sprintf("http://[%v]:8000/", podIP)
+		baseURL = fmt.Sprintf("http://[%v]:8000/", podIP)
 	} else {
-		baseUrl = fmt.Sprintf("http://%v:8000/", podIP)
+		baseURL = fmt.Sprintf("http://%v:8000/", podIP)
 	}
-
-	return baseUrl
-
+	return baseURL
 }
 
 // specializePod chooses a pod, copies the required user-defined function to that pod
@@ -344,8 +318,8 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	}
 
 	// tell fetcher to get the function.
-	fetcherUrl := gp.getFetcherUrl(podIP)
-	gp.logger.Info("calling fetcher to copy function", zap.String("function", fn.ObjectMeta.Name), zap.String("url", fetcherUrl))
+	fetcherURL := gp.getFetcherURL(podIP)
+	gp.logger.Info("calling fetcher to copy function", zap.String("function", fn.ObjectMeta.Name), zap.String("url", fetcherURL))
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
 
@@ -353,7 +327,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 
 	// Fetcher will download user function to share volume of pod, and
 	// invoke environment specialize api for pod specialization.
-	err := fetcherClient.MakeClient(gp.logger, fetcherUrl).Specialize(ctx, &specializeReq)
+	err := fetcherClient.MakeClient(gp.logger, fetcherURL).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
 	}
@@ -488,8 +462,8 @@ func (gp *GenericPool) createPool() error {
 
 	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
 	if err == nil {
-		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceId {
-			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceId
+		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceID {
+			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
 			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(deployment)
@@ -509,50 +483,6 @@ func (gp *GenericPool) createPool() error {
 
 	gp.deployment = depl
 	return nil
-}
-
-func (gp *GenericPool) waitForReadyPod() error {
-	startTime := time.Now()
-	for {
-		// TODO: for now we just poll; use a watch instead
-		depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(
-			gp.deployment.ObjectMeta.Name, metav1.GetOptions{})
-		if err != nil {
-			e := "error waiting for ready pod for deployment"
-			gp.logger.Error(e, zap.String("deployment", gp.deployment.ObjectMeta.Name), zap.String("namespace", gp.namespace))
-			return fmt.Errorf("%s %q in namespace %q", e, gp.deployment.ObjectMeta.Name, gp.namespace)
-		}
-
-		gp.deployment = depl
-		if gp.deployment.Status.AvailableReplicas > 0 {
-			return nil
-		}
-
-		if time.Since(startTime) > gp.podReadyTimeout {
-			podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(metav1.ListOptions{
-				LabelSelector: labels.Set(
-					gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
-			})
-			if err != nil {
-				gp.logger.Error("error getting pod list after timeout waiting for ready pod", zap.Error(err))
-			}
-
-			// Since even single pod is not ready, choosing the first pod to inspect is a good approximation. In future this can be done better
-			pod := podList.Items[0]
-			errs := &multierror.Error{}
-			for _, cStatus := range pod.Status.ContainerStatuses {
-				if !cStatus.Ready {
-					errs = multierror.Append(errs, errors.New(fmt.Sprintf("%v: %v", cStatus.State.Waiting.Reason, cStatus.State.Waiting.Message)))
-				}
-			}
-			if errs.ErrorOrNil() != nil {
-				return errors.Wrapf(errs, "Timeout: waited too long for pod of deployment %v in namespace %v to be ready",
-					gp.deployment.ObjectMeta.Name, gp.namespace)
-			}
-			return nil
-		}
-		time.Sleep(1000 * time.Millisecond)
-	}
 }
 
 func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.Service, error) {
@@ -618,17 +548,24 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		// Remove old versions function pods
 		for _, pod := range podList.Items {
 			// Delete pod no matter what status it is
-			gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil)
+			gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil) //nolint errcheck
 		}
 	}
 
-	pod, err := gp.choosePod(funcLabels)
+	key, pod, err := gp.choosePod(funcLabels)
 	if err != nil {
 		return nil, err
 	}
 
+	defer gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
+		if gp.readyPodQueue.NumRequeues(key) < 5 {
+			gp.readyPodQueue.AddRateLimited(key)
+		} else {
+			gp.readyPodQueue.Forget(key)
+		}
+
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
@@ -712,7 +649,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 // destroys the pool -- the deployment, replicaset and pods
 func (gp *GenericPool) destroy() error {
-	gp.stopCh()
+	close(gp.stopReadyPodControllerCh)
 
 	deletePropagation := metav1.DeletePropagationBackground
 	delOpt := metav1.DeleteOptions{

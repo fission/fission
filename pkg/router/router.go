@@ -69,9 +69,9 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
 	if useEncodedPath {
-		mr = NewMutableRouter(logger, mux.NewRouter().UseEncodedPath())
+		mr = newMutableRouter(logger, mux.NewRouter().UseEncodedPath())
 	} else {
-		mr = NewMutableRouter(logger, mux.NewRouter())
+		mr = newMutableRouter(logger, mux.NewRouter())
 	}
 
 	httpTriggerSet.subscribeRouter(ctx, mr, resolver)
@@ -83,7 +83,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	mr := router(ctx, logger, httpTriggerSet, resolver)
 	url := fmt.Sprintf(":%v", port)
 
-	http.ListenAndServe(url, &ochttp.Handler{
+	err := http.ListenAndServe(url, &ochttp.Handler{
 		Handler: mr,
 		GetStartOptions: func(r *http.Request) trace.StartOptions {
 			// do not trace router healthz endpoint
@@ -101,6 +101,12 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 			}
 		},
 	})
+	if err != nil {
+		logger.Error(
+			"HTTP server error",
+			zap.Error(err),
+		)
+	}
 }
 
 func serveMetric(logger *zap.Logger) {
@@ -111,7 +117,8 @@ func serveMetric(logger *zap.Logger) {
 	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
-func Start(logger *zap.Logger, port int, executorUrl string) {
+// Start starts a router
+func Start(logger *zap.Logger, port int, executorURL string) {
 	_ = MakeAnalytics("")
 
 	fmap := makeFunctionServiceMap(logger, time.Minute)
@@ -126,7 +133,7 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 		logger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
 
-	executor := executorClient.MakeClient(logger, executorUrl)
+	executor := executorClient.MakeClient(logger, executorURL)
 
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
 	timeout, err := time.ParseDuration(timeoutStr)
@@ -200,6 +207,17 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 			zap.Duration("default", svcAddrUpdateTimeout))
 	}
 
+	// unTapServiceTimeout is the timeout used as timeout in the request context of unTapService
+	unTapServiceTimeoutstr := os.Getenv("ROUTER_UNTAP_SERVICE_TIMEOUT")
+	unTapServiceTimeout, err := time.ParseDuration(unTapServiceTimeoutstr)
+	if err != nil {
+		unTapServiceTimeout = 3600 * time.Second
+		logger.Error("failed to parse unTap service timeout duration from 'ROUTER_UNTAP_SERVICE_TIMEOUT' - set to the default value",
+			zap.Error(err),
+			zap.String("value", unTapServiceTimeoutstr),
+			zap.Duration("default", unTapServiceTimeout))
+	}
+
 	tracingSamplingRateStr := os.Getenv("TRACING_SAMPLING_RATE")
 	tracingSamplingRate, err := strconv.ParseFloat(tracingSamplingRateStr, 64)
 	if err != nil {
@@ -227,7 +245,7 @@ func Start(logger *zap.Logger, port int, executorUrl string) {
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
 	resolver := makeFunctionReferenceResolver(fnStore)
 

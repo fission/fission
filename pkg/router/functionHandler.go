@@ -42,7 +42,10 @@ import (
 )
 
 const (
-	FORWARDED        = "Forwarded"
+	// FORWARDED represents the 'Forwarded' request header
+	FORWARDED = "Forwarded"
+
+	// X_FORWARDED_HOST represents the 'X_FORWARDED_HOST' request header
 	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
@@ -54,11 +57,12 @@ type (
 		function                 *fv1.Function
 		httpTrigger              *fv1.HTTPTrigger
 		functionMap              map[string]*fv1.Function
-		fnWeightDistributionList []FunctionWeightDistribution
+		fnWeightDistributionList []functionWeightDistribution
 		tsRoundTripperParams     *tsRoundTripperParams
 		isDebugEnv               bool
 		svcAddrUpdateThrottler   *throttler.Throttler
 		functionTimeoutMap       map[k8stypes.UID]int
+		unTapServiceTimeout      time.Duration
 	}
 
 	tsRoundTripperParams struct {
@@ -81,13 +85,13 @@ type (
 		svcAddrRetryCount int
 	}
 
-	// A layer on top of http.DefaultTransport, with retries.
+	// RetryingRoundTripper is a layer on top of http.DefaultTransport, with retries.
 	RetryingRoundTripper struct {
 		logger           *zap.Logger
 		funcHandler      *functionHandler
 		funcTimeout      time.Duration
 		closeContextFunc *context.CancelFunc
-		serviceUrl       *url.URL
+		serviceURL       *url.URL
 		urlFromCache     bool
 		totalRetry       int
 	}
@@ -144,7 +148,6 @@ func (w *fakeCloseReadCloser) RealClose() error {
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// set the timeout for transport context
 	roundTripper.addForwardedHostHeader(req)
-
 	transport := roundTripper.getDefaultTransport()
 	ocRoundTripper := &ochttp.Transport{Base: transport}
 
@@ -183,7 +186,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
 			// get function service url from cache or executor
-			roundTripper.serviceUrl, err = roundTripper.funcHandler.getServiceEntryFromExecutor()
+			roundTripper.serviceURL, err = roundTripper.funcHandler.getServiceEntryFromExecutor()
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -209,13 +212,15 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				// }
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-				defer roundTripper.funcHandler.unTapService(roundTripper.funcHandler.function, roundTripper.serviceUrl)
+				defer func(fn *fv1.Function, serviceURL *url.URL) {
+					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
+				}(roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
 			// modify the request to reflect the service url
 			// this service url comes from executor response
-			req.URL.Scheme = roundTripper.serviceUrl.Scheme
-			req.URL.Host = roundTripper.serviceUrl.Host
+			req.URL.Scheme = roundTripper.serviceURL.Scheme
+			req.URL.Host = roundTripper.serviceURL.Host
 
 			// To keep the function run container simple, it
 			// doesn't do any routing.  In the future if we have
@@ -227,7 +232,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)
-			req.Host = roundTripper.serviceUrl.Host
+			req.Host = roundTripper.serviceURL.Host
 		}
 
 		// over-riding default settings.
@@ -347,11 +352,11 @@ func (roundTripper *RetryingRoundTripper) closeContext() {
 	}
 }
 
-func (fh *functionHandler) tapService(fn *fv1.Function, serviceUrl *url.URL) {
+func (fh *functionHandler) tapService(fn *fv1.Function, serviceURL *url.URL) {
 	if fh.executor == nil {
 		return
 	}
-	fh.executor.TapService(fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
+	fh.executor.TapService(fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceURL)
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -423,7 +428,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 
 // findCeil picks a function from the functionWeightDistribution list based on the
 // random number generated. It uses the prefix calculated for the function weights.
-func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string {
+func findCeil(randomNumber int, wtDistrList []functionWeightDistribution) string {
 	low := 0
 	high := len(wtDistrList) - 1
 
@@ -442,13 +447,12 @@ func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string
 
 	if wtDistrList[low].sumPrefix >= randomNumber {
 		return wtDistrList[low].name
-	} else {
-		return ""
 	}
+	return ""
 }
 
 // picks a function to route to based on a random number generated
-func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []FunctionWeightDistribution) *fv1.Function {
+func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []functionWeightDistribution) *fv1.Function {
 	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)-1].sumPrefix + 1)
 	fnName := findCeil(randomNumber, fnWtDistributionList)
 	return fnMap[fnName]
@@ -500,7 +504,7 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
 func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.Info("UnTapService Called")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fh.unTapServiceTimeout)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 	if err != nil {
@@ -538,15 +542,15 @@ func (fh functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
 	}
 
 	// parse the address into url
-	serviceUrl, err := url.Parse(fmt.Sprintf("http://%v", service))
+	serviceURL, err := url.Parse(fmt.Sprintf("http://%v", service))
 	if err != nil {
 		fh.logger.Error("error parsing service url",
 			zap.Error(err),
-			zap.String("service_url", serviceUrl.String()))
+			zap.String("service_url", serviceURL.String()))
 		return nil, err
 	}
 
-	return serviceUrl, nil
+	return serviceURL, nil
 }
 
 // getProxyErrorHandler returns a reverse proxy error handler
@@ -581,7 +585,15 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 
 		// TODO: return error message that contains traceable UUID back to user. Issue #693
 		rw.WriteHeader(status)
-		rw.Write([]byte(msg))
+		_, err = rw.Write([]byte(msg))
+		if err != nil {
+			fh.logger.Error(
+				"error writing HTTP response",
+				zap.Error(err),
+				zap.Any("function", fh.function),
+				zap.Any("request_header", req.Header),
+			)
+		}
 	}
 }
 
@@ -610,7 +622,7 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 
 	// tapService before invoking roundTrip for the serviceUrl
 	if rrt.urlFromCache {
-		fh.tapService(fh.function, rrt.serviceUrl)
+		fh.tapService(fh.function, rrt.serviceURL)
 	}
 
 	fh.logger.Debug("Request complete", zap.String("function", fh.function.ObjectMeta.Name),
