@@ -47,8 +47,9 @@ func Test(input cli.Input) error {
 }
 
 func (opts *TestSubCommand) do(input cli.Input) error {
+	fnName := input.Args(0)
 	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: input.String(flagkey.NamespaceFunction),
 	}
 	kubeContext := input.String(flagkey.KubeContext)

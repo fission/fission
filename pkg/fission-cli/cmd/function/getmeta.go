@@ -38,8 +38,9 @@ func GetMeta(input cli.Input) error {
 }
 
 func (opts *GetMetaSubCommand) do(input cli.Input) error {
+	fnName := input.Args(0)
 	fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: input.String(flagkey.NamespaceFunction),
 	})
 	if err != nil {

@@ -33,6 +33,10 @@ func TestFlagSet() Cli {
 	return Cli{c: make(map[string]interface{})}
 }
 
+func (u Cli) Args(_ int) string {
+	return ""
+}
+
 // Set allows to set any kinds of value with given key.
 // The type of set value should be matched with the returned
 // type of GetXXX function.

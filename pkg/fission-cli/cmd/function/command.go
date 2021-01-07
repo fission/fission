@@ -25,12 +25,13 @@ import (
 
 func Commands() *cobra.Command {
 	createCmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a function (and optionally, an HTTP route to it)",
-		RunE:  wrapper.Wrapper(Create),
+		Use:     "create [function name]",
+		Short:   "Create a function (and optionally, an HTTP route to it)",
+		RunE:    wrapper.Wrapper(Create),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function create func-name --env nodejs --code hello.js",
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
@@ -44,7 +45,7 @@ func Commands() *cobra.Command {
 
 			flag.HtUrl, flag.HtMethod,
 
-			// flag for newdeploy to use.
+			// flag for new deploy to use.
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
@@ -53,21 +54,24 @@ func Commands() *cobra.Command {
 	})
 
 	getCmd := &cobra.Command{
-		Use:     "get",
+		Use:     "get [function name]",
 		Aliases: []string{},
 		Short:   "Get function source code",
 		RunE:    wrapper.Wrapper(Get),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function get func-name",
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	getmetaCmd := &cobra.Command{
-		Use:     "getmeta",
+		Use:     "getmeta [function name]",
 		Aliases: []string{},
 		Short:   "Get function metadata",
 		RunE:    wrapper.Wrapper(GetMeta),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function getmeta func-name",
 	}
 	wrapper.SetFlags(getmetaCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
@@ -75,10 +79,12 @@ func Commands() *cobra.Command {
 	})
 
 	updateCmd := &cobra.Command{
-		Use:     "update",
+		Use:     "update [function name]",
 		Aliases: []string{},
 		Short:   "Update a function",
 		RunE:    wrapper.Wrapper(Update),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function update func-name --env nodejs --code hello.js",
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
@@ -101,13 +107,14 @@ func Commands() *cobra.Command {
 	})
 
 	deleteCmd := &cobra.Command{
-		Use:     "delete",
+		Use:     "delete [function name]",
 		Aliases: []string{},
 		Short:   "Delete a function",
 		RunE:    wrapper.Wrapper(Delete),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function delete func-name",
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
@@ -117,32 +124,35 @@ func Commands() *cobra.Command {
 		Short:   "List functions",
 		Long:    "List all functions in a namespace if specified, else, list functions across all namespaces",
 		RunE:    wrapper.Wrapper(List),
+		Example: "fission function list",
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
 	logsCmd := &cobra.Command{
-		Use:     "log",
+		Use:     "log [function name]",
 		Aliases: []string{"logs"},
 		Short:   "Display function logs",
 		RunE:    wrapper.Wrapper(Log),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function log func-name",
 	}
 	wrapper.SetFlags(logsCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
 			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType},
 	})
 
 	testCmd := &cobra.Command{
-		Use:     "test",
+		Use:     "test [function name]",
 		Aliases: []string{},
 		Short:   "Test a function",
 		RunE:    wrapper.Wrapper(Test),
+		Args:    cobra.MinimumNArgs(1),
+		Example: "fission function test func-name",
 	}
 	wrapper.SetFlags(testCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
 			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction,
 			// for getting log from log database if

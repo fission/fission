@@ -217,6 +217,13 @@ func WrapperChain(actions ...cmd.CommandAction) func(*cobra.Command, []string) e
 	}
 }
 
+func (u Cli) Args(index int) string {
+	if len(u.args) < index+1 {
+		return ""
+	}
+	return u.args[index]
+}
+
 func (u Cli) IsSet(key string) bool {
 	return u.c.Flags().Changed(key)
 }

@@ -50,11 +50,11 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
-	fnName := input.String(flagkey.FnName)
+	fnName := input.Args(0)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: input.String(flagkey.NamespaceFunction),
 	})
 	if err != nil {

@@ -63,7 +63,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) complete(input cli.Input) error {
-	fnName := input.String(flagkey.FnName)
+	fnName := input.Args(0)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
 	envNamespace := input.String(flagkey.NamespaceEnvironment)
 
@@ -78,7 +78,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if !toSpec {
 		// check for unique function names within a namespace
 		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-			Name:      input.String(flagkey.FnName),
+			Name:      fnName,
 			Namespace: input.String(flagkey.NamespaceFunction),
 		})
 		if err != nil && !ferror.IsNotFound(err) {

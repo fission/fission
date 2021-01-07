@@ -24,6 +24,9 @@ type (
 	Input interface {
 		//Parse(input interface{}) error
 
+		// Args get all of args from command line
+		Args(int) string
+
 		// IsSet checks whether a flag has been set by the user
 		IsSet(key string) bool
 

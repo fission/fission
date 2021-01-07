@@ -40,6 +40,7 @@ func Log(input cli.Input) error {
 }
 
 func (opts *LogSubCommand) do(input cli.Input) error {
+	fnName := input.Args(0)
 	dbType := input.String(flagkey.FnLogDBType)
 	fnPod := input.String(flagkey.FnLogPod)
 	kubeContext := input.String(flagkey.KubeContext)
@@ -52,7 +53,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	}
 
 	f, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: input.String(flagkey.NamespaceFunction),
 	})
 	if err != nil {
