@@ -37,6 +37,7 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+// HTTPTriggerSet represents an HTTP trigger set
 type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
@@ -57,10 +58,11 @@ type HTTPTriggerSet struct {
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	svcAddrUpdateThrottler     *throttler.Throttler
+	unTapServiceTimeout        time.Duration
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient rest.Interface, params *tsRoundTripperParams, isDebugEnv bool, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
+	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient rest.Interface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, k8sCache.Store, k8sCache.Store) {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -74,6 +76,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		svcAddrUpdateThrottler:     actionThrottler,
+		unTapServiceTimeout:        unTapServiceTimeout,
 	}
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -148,6 +151,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			isDebugEnv:               ts.isDebugEnv,
 			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
 			functionTimeoutMap:       fnTimeoutMap,
+			unTapServiceTimeout:      ts.unTapServiceTimeout,
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -196,6 +200,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			isDebugEnv:             ts.isDebugEnv,
 			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
 			functionTimeoutMap:     fnTimeoutMap,
+			unTapServiceTimeout:    ts.unTapServiceTimeout,
 		}
 		muxRouter.HandleFunc(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace), fh.handler)
 	}

@@ -210,7 +210,7 @@ set_environment() {
 }
 
 generate_test_id() {
-    echo $(cat /dev/urandom | tr -dc 'a-z' | fold -w 6 | head -n 1)
+    echo $(((10000 + $RANDOM) % 99999))
 }
 
 helm_install_fission() {
@@ -340,6 +340,8 @@ helm_uninstall_fission() {(set +e
     echo "Uninstalling fission"
     helm delete $id -n $ns || true
     kubectl delete ns f-$id || true
+    echo "Deleting CRDs"
+    kubectl get crd | grep "fission.io" | awk '{print $1}' | xargs -n1 kubectl delete crd
 )}
 export -f helm_uninstall_fission
 
@@ -616,7 +618,7 @@ install_and_test() {
         # Commented out due to Travis-CI log length limit
         # describe each pod in fission ns and function namespace
         # describe_all_pods $id
-	      exit 1
+	    exit 1
     fi
 }
 
