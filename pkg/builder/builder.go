@@ -183,7 +183,7 @@ func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath s
 
 	var buildLogs string
 
-	fmt.Printf("\n=== Build Logs ===")
+	fmt.Printf("\n=== Build Logs ===\n")
 	// Init logs
 	fmt.Printf("command=%v\n", command)
 	fmt.Printf("env=%v\n", cmd.Env)
