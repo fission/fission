@@ -9,4 +9,3 @@ public class HelloWorld implements Function {
 		return ResponseEntity.ok("Hello World!");
 	}
 }
-

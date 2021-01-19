@@ -4,9 +4,9 @@ The `io.fission.HelloWorld.java` class is a very simple fission function that im
 
 ## Building and deploying using Fission
 
-Fission's builder can be used to create the binary artifact from source code. Create an environment with builder image and then create a package. 
+Fission's builder can be used to create the binary artifact from source code. Create an environment with builder image and then create a package.
 
-```
+``` txt
 $ zip -r java-src-pkg.zip *
 $ fission env create --name java --image fission/jvm-env --version 2 --keeparchive --builder fission/jvm-builder
 $ fission package create --sourcearchive java-src-pkg.zip --env java
@@ -25,7 +25,7 @@ Build Logs:
 
 Once package's status is `succeeded` then that package can be used to create and execute a function.
 
-```
+``` txt
 $ fission fn create --name hello --pkg java-src-pkg-zip-tvd0 --env java --entrypoint io.fission.HelloWorld
 $ fission fn test --name hello
 Hello World!
@@ -37,24 +37,23 @@ You can build the jar file in one of the two ways below based on your setup:
 
 - You can use docker without the need to install JDK and Maven to build the jar file from source code:
 
-```bash
-$ bash -x ./build.sh
-
+``` bash
+bash -x ./build.sh
 ```
+
 - If you have JDK and Maven installed, you can directly build the JAR file using command:
 
-```
-$ mvn clean package
+``` bash
+gradle build
 ```
 
 Both of above steps will generate a target subdirectory which has the archive `target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar` which will be used for creating function.
 
 - The archive created above will be used as a deploy package when creating the function.
 
-```
-$ fission env create --name jvm --image fission/jvm-env --version 2 --keeparchive=true
-$ fission fn create --name hello --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env jvm --entrypoint io.fission.HelloWorld
-$ fission route create --function hello --url /hellop --method GET
-$ fission fn test --name hello
-Hello World!
+``` bash
+fission env create --name jvm --image fission/jvm-env --version 2 --keeparchive=true
+fission fn create --name hello --deploy target/hello-world-1.0-SNAPSHOT-jar-with-dependencies.jar --env jvm --entrypoint io.fission.HelloWorld
+fission route create --function hello --url /hellop --method GET
+fission fn test --name hello
 ```

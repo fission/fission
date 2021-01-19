@@ -1,11 +1,8 @@
 plugins {
-    id 'org.springframework.boot' version '2.0.1.RELEASE'
-    id 'io.spring.dependency-management' version '1.0.10.RELEASE'
-    id 'java'
+    id 'java-library'
 }
 
 group = 'io.fission'
-version = '0.0.1-SNAPSHOT'
 
 repositories {
     mavenCentral()
@@ -14,13 +11,7 @@ repositories {
     }
 }
 
-bootJar {
-    manifest {
-        attributes 'Start-Class': 'io.fission.HelloWorld.call'
-    }
-}
-
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-web:2.0.1.RELEASE'
     implementation 'io.fission:fission-java-core:0.0.2-SNAPSHOT'
 }
