@@ -166,7 +166,10 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 
 func (api *API) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write([]byte(info.ApiInfo().String()))
+	_, err := w.Write([]byte(info.ApiInfo().String()))
+	if err != nil {
+		api.respondWithError(w, err)
+	}
 }
 
 func (api *API) ApiVersionMismatchHandler(w http.ResponseWriter, r *http.Request) {
