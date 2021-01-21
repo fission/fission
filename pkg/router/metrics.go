@@ -43,7 +43,9 @@ var (
 	metricAddr = ":8080"
 
 	// function + http labels as strings
-	labelsStrings = []string{"cached", "namespace", "name", "host", "path", "method", "code"}
+	labelsStrings = []string{"cached", "namespace", "name", "host", "path", "method", "code", "funcuid"}
+
+	labelsStringsForIncomingRequests = []string{"namespace", "name", "host", "path", "method", "funcuid"}
 
 	// Function http calls count
 	// cached: true | false, is this function service address cached locally
@@ -66,19 +68,17 @@ var (
 		},
 		labelsStrings,
 	)
-	functionCallDuration = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_duration_seconds",
-			Help:       "Runtime duration of the Fission function.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	functionCallDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_function_duration_seconds",
+			Help: "Runtime duration of the Fission function.",
 		},
 		labelsStrings,
 	)
-	functionCallOverhead = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_overhead_seconds",
-			Help:       "The function call delay caused by fission.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	functionCallOverhead = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_function_overhead_seconds",
+			Help: "The function call delay caused by fission.",
 		},
 		labelsStrings,
 	)
@@ -90,6 +90,14 @@ var (
 		},
 		labelsStrings,
 	)
+
+	requestsReceived = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_requests_received",
+			Help: "Incoming number of requests at Router before being processed",
+		},
+		labelsStringsForIncomingRequests,
+	)
 )
 
 func init() {
@@ -98,9 +106,10 @@ func init() {
 	prometheus.MustRegister(functionCallDuration)
 	prometheus.MustRegister(functionCallOverhead)
 	prometheus.MustRegister(functionCallResponseSize)
+	prometheus.MustRegister(requestsReceived)
 }
 
-func labelsToStrings(f *functionLabels, h *httpLabels) []string {
+func labelsToStrings(f *functionLabels, h *httpLabels, funcuid string) []string {
 	var cached string
 	if f.cached {
 		cached = "true"
@@ -115,13 +124,35 @@ func labelsToStrings(f *functionLabels, h *httpLabels) []string {
 		h.path,
 		h.method,
 		fmt.Sprint(h.code),
+		funcuid,
 	}
 }
 
-func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration time.Duration, respSize int64) {
+func labelsToStringsBeforeProcessing(f *functionLabels, h *httpLabels, funcuid string) []string {
+
+	return []string{
+		f.namespace,
+		f.name,
+		h.host,
+		h.path,
+		h.method,
+		funcuid,
+	}
+}
+
+func incrementRequest(f *functionLabels, h *httpLabels, funcuid string) {
+
+	l := labelsToStringsBeforeProcessing(f, h, funcuid)
+
+	// requestsReceived is the number of requests incoming before they're processed
+	requestsReceived.WithLabelValues(l...).Inc()
+
+}
+
+func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration time.Duration, respSize int64, funcuid string) {
 	atomic.AddUint64(&globalFunctionCallCount, 1)
 
-	l := labelsToStrings(f, h)
+	l := labelsToStrings(f, h, funcuid)
 
 	// overhead: time from request ingress into router up to proxing into function pod
 	functionCallOverhead.WithLabelValues(l...).Observe(float64(overhead.Nanoseconds()) / 1e9)
