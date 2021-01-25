@@ -43,7 +43,7 @@ var (
 	metricAddr = ":8080"
 
 	// function + http labels as strings
-	labelsStrings = []string{"cached", "namespace", "name", "host", "path", "method", "code", "funcuid"}
+	labelsStrings = []string{"namespace", "name", "host", "path", "method", "code", "funcuid"}
 
 	labelsStringsForIncomingRequests = []string{"namespace", "name", "host", "path", "method", "funcuid"}
 
@@ -110,14 +110,7 @@ func init() {
 }
 
 func labelsToStrings(f *functionLabels, h *httpLabels, funcuid string) []string {
-	var cached string
-	if f.cached {
-		cached = "true"
-	} else {
-		cached = "false"
-	}
 	return []string{
-		cached,
 		f.namespace,
 		f.name,
 		h.host,
@@ -129,7 +122,6 @@ func labelsToStrings(f *functionLabels, h *httpLabels, funcuid string) []string 
 }
 
 func labelsToStringsBeforeProcessing(f *functionLabels, h *httpLabels, funcuid string) []string {
-
 	return []string{
 		f.namespace,
 		f.name,
