@@ -29,7 +29,6 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -44,14 +43,12 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	}
 
 	// get function metadata
-	m := metav1.ObjectMeta{}
-	err = json.Unmarshal(body, &m)
+	fn := &fv1.Function{}
+	err = json.Unmarshal(body, &fn)
 	if err != nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
-
-	fn, err := executor.fissionClient.CoreV1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			http.Error(w, "Failed to find function", http.StatusNotFound)
@@ -88,7 +85,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
 			zap.Error(err),
-			zap.String("function", m.Name),
+			zap.String("function", fn.ObjectMeta.Name),
 			zap.String("fission_http_error", msg))
 		http.Error(w, msg, code)
 		return
@@ -98,7 +95,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	if err != nil {
 		executor.logger.Error(
 			"error writing HTTP response",
-			zap.String("function", m.Name),
+			zap.String("function", fn.ObjectMeta.Name),
 			zap.Error(err),
 		)
 	}
