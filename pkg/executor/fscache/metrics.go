@@ -49,11 +49,10 @@ var (
 		labelsStrings,
 	)
 
-	funcSpecialisePod = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_func_specialise_pod",
-			Help:       "Time taken to specialise a pod",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	funcSpecialisePod = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_func_specialise_pod",
+			Help: "Time taken to specialise a pod",
 		},
 		labelsStrings,
 	)
@@ -81,35 +80,43 @@ func init() {
 	prometheus.MustRegister(funcRunningSummary)
 	prometheus.MustRegister(funcAliveSummary)
 	prometheus.MustRegister(funcIsAlive)
+<<<<<<< HEAD
 	prometheus.MustRegister(funcReapTime)
 	prometheus.MustRegister(idleTime)
+=======
+	prometheus.MustRegister(funcSpecialisePod)
+	prometheus.MustRegister(funcChoosePod)
+>>>>>>> 99ac163... Remove call to ready pod metric
 }
 
 // IncreaseColdStarts increments the counter by 1.
 func (fsc *FunctionServiceCache) IncreaseColdStarts(funcname, funcuid string, cached bool) {
 	var c string
-	if cached == false {
+	if cached {
+		c = "true"
+	} else {
 		c = "false"
 	}
-	c = "true"
 	coldStarts.WithLabelValues(funcname, funcuid, c).Inc()
 }
 
 func (fsc *FunctionServiceCache) observeFuncRunningTime(funcname, funcuid string, running float64, cached bool) {
 	var c string
-	if cached == false {
+	if cached {
+		c = "true"
+	} else {
 		c = "false"
 	}
-	c = "true"
 	funcRunningSummary.WithLabelValues(funcname, funcuid, c).Observe(running)
 }
 
 func (fsc *FunctionServiceCache) observeFuncAliveTime(funcname, funcuid string, alive float64, cached bool) {
 	var c string
-	if cached == false {
+	if cached {
+		c = "true"
+	} else {
 		c = "false"
 	}
-	c = "true"
 	funcAliveSummary.WithLabelValues(funcname, funcuid, c).Observe(alive)
 }
 
@@ -123,18 +130,20 @@ func (fsc *FunctionServiceCache) ObserveChoosePodTime(envName, envuid string, du
 func (fsc *FunctionServiceCache) ObserveSpecialisePodTime(envName, envuid string, err bool, duration time.Duration) {
 
 	var e string
-	if err == false {
+	if err {
+		e = "true"
+	} else {
 		e = "false"
 	}
-	e = "true"
 	funcSpecialisePod.WithLabelValues(envName, envuid, e).Observe(float64(duration.Nanoseconds()) / 1e9)
 }
 func (fsc *FunctionServiceCache) setFuncAlive(funcname, funcuid string, isAlive bool, cached bool) {
 	var c string
-	if cached == false {
+	if cached {
+		c = "true"
+	} else {
 		c = "false"
 	}
-	c = "true"
 	count := 0
 	if isAlive {
 		count = 1

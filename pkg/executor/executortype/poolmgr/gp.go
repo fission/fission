@@ -285,7 +285,6 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
 			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
 
-		gp.fsCache.ObserveChoosePodTime(gp.env.Name, string(gp.env.ObjectMeta.UID), time.Since(startTime))
 		return key, chosenPod, nil
 	}
 }
