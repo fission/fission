@@ -1,4 +1,4 @@
-apiVersion: v1
+apiVersion: v2
 name: fission-all
 version: 1.11.2
 description: Fission is a fast serverless framework for Kubernetes.
@@ -13,3 +13,9 @@ maintainers:
     email: hello@tachingchen.com
 engine: gotpl
 appVersion: 1.11.2
+type: application
+dependencies:
+  - name: prometheus
+    version: 13.2.1
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
