@@ -9,7 +9,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -91,7 +90,7 @@ func Test_getEnvVarlist(t *testing.T) {
 
 	routerURL := "http://router.fission/fission-function"
 
-	secret := &v1.Secret{
+	secret := &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-kafka-secrets",
 			Namespace: namespace,
@@ -471,7 +470,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	}
 
 	namespace := apiv1.NamespaceDefault
-	secret := &v1.Secret{
+	secret := &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-kafka-secrets",
 			Namespace: namespace,
