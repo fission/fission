@@ -353,7 +353,10 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
 			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
-		w.Write([]byte(msg))
+		_, err = w.Write([]byte(msg))
+		if err != nil {
+			return errors.Wrap(err, "error writing response")
+		}
 
 		_, err = io.Copy(w, podLogs)
 		if err != nil {

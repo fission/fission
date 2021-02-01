@@ -127,7 +127,7 @@ func (timer *Timer) syncCron(triggers []fv1.TimeTrigger) error {
 
 func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
 	c := cron.New()
-	c.AddFunc(t.Spec.Cron, func() {
+	c.AddFunc(t.Spec.Cron, func() { //nolint: errCheck
 		headers := map[string]string{
 			"X-Fission-Timer-Name": t.ObjectMeta.Name,
 		}

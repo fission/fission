@@ -126,7 +126,12 @@ func TestS3StorageService(t *testing.T) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	defer pool.Purge(resource)
+	defer func() {
+		err := pool.Purge(resource)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// Start storagesvc
 	bucketName := "test-s3-service"
