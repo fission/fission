@@ -51,7 +51,10 @@ func (ws *WatchSync) syncSvc() {
 			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err))
 		}
 
-		ws.kubeWatcher.Sync(watches.Items)
+		err = ws.kubeWatcher.Sync(watches.Items)
+		if err != nil {
+			ws.logger.Fatal("failed to sync watches", zap.Error(err))
+		}
 		time.Sleep(3 * time.Second)
 	}
 }

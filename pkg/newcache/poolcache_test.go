@@ -30,7 +30,7 @@ func TestPoolCache(t *testing.T) {
 		log.Panicf("expected 2 items")
 	}
 
-	c.DeleteValue("func2", "ip2")
+	checkErr(c.DeleteValue("func2", "ip2"))
 
 	c.MarkAvailable("func", "ip")
 	cc = c.ListAvailableValue()
@@ -41,7 +41,7 @@ func TestPoolCache(t *testing.T) {
 	_, err := c.GetValue("func")
 	checkErr(err)
 
-	c.DeleteValue("func", "ip")
+	checkErr(c.DeleteValue("func", "ip"))
 
 	_, err = c.GetValue("func")
 	if err == nil {
