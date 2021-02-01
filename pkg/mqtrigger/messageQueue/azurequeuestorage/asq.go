@@ -319,7 +319,7 @@ func pollAzureQueueSubscription(conn AzureStorageConnection, sub *AzureQueueSubs
 }
 
 func invokeTriggeredFunction(conn AzureStorageConnection, sub *AzureQueueSubscription, message AzureMessage) {
-	defer message.Delete(nil)
+	defer message.Delete(nil) //nolint: errCheck
 
 	conn.logger.Info("making HTTP request to invoke function", zap.String("function_url", sub.functionURL))
 
