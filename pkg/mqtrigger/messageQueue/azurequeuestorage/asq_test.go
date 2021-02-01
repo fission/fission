@@ -329,7 +329,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, subscription)
 
-	connection.Unsubscribe(subscription)
+	panicIf(connection.Unsubscribe(subscription))
 
 	mock.AssertExpectationsForObjects(t, httpClient, message, poisonMessage, queue, poisonQueue, service)
 }
@@ -480,7 +480,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 	require.NoError(t, err)
 	require.NotNil(t, subscription)
 
-	connection.Unsubscribe(subscription)
+	panicIf(connection.Unsubscribe(subscription))
 
 	mock.AssertExpectationsForObjects(t, httpClient, message, outputMessage, queue, outputQueue, service)
 }
