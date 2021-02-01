@@ -98,6 +98,14 @@ var (
 		},
 		labelsStringsForIncomingRequests,
 	)
+
+	serviceURLFetch = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_service_fetch_time",
+			Help: "Time taken for Router to get the service URL",
+		},
+		[]string{"error"},
+	)
 )
 
 func init() {
@@ -107,6 +115,7 @@ func init() {
 	prometheus.MustRegister(functionCallOverhead)
 	prometheus.MustRegister(functionCallResponseSize)
 	prometheus.MustRegister(requestsReceived)
+	prometheus.MustRegister(serviceURLFetch)
 }
 
 func labelsToStrings(f *functionLabels, h *httpLabels, funcuid string) []string {
@@ -164,4 +173,14 @@ func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration 
 	if respSize != -1 {
 		functionCallResponseSize.WithLabelValues(l...).Observe(float64(respSize))
 	}
+}
+
+func observeServiceURLFetchTime(duration time.Duration, err bool) {
+	var e string
+	if err {
+		e = "true"
+	} else {
+		e = "false"
+	}
+	serviceURLFetch.WithLabelValues(e).Observe(float64(duration.Nanoseconds()) / 1e9)
 }

@@ -584,7 +584,9 @@ func (fn functionHandler) removeServiceEntryFromCache() {
 	fn.fmap.remove(&fn.function.ObjectMeta)
 }
 
-func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, err error) {
+// getServiceEntryFromExecutor returns service url entry returns from executor
+func (fh functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
+	startTime := time.Now()
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
 	timeout := 30 * time.Second
@@ -601,8 +603,13 @@ func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, er
 			zap.String("error_message", errMsg),
 			zap.Any("function", fh.function),
 			zap.Int("status_code", statusCode))
+		duration := time.Since(startTime)
+		observeServiceURLFetchTime(duration, true)
 		return nil, err
 	}
+	duration := time.Since(startTime)
+	observeServiceURLFetchTime(duration, false)
+
 	// parse the address into url
 	svcURL, err := url.Parse(fmt.Sprintf("http://%v", service))
 	if err != nil {
