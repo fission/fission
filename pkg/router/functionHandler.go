@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -191,11 +192,17 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
 				statusCode, errMsg := ferror.GetHTTPError(err)
-				// if statusCode == http.StatusTooManyRequests {
-				// 	time.Sleep(executingTimeout)
-				// 	executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
-				// 	continue
-				// } else {
+				if statusCode == http.StatusTooManyRequests {
+					return &http.Response{StatusCode: http.StatusTooManyRequests,
+						Proto:         req.Proto,
+						ProtoMajor:    req.ProtoMajor,
+						ProtoMinor:    req.ProtoMinor,
+						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
+						ContentLength: int64(len(errMsg)),
+						Request:       req,
+						Header:        make(http.Header),
+					}, ferror.MakeError(http.StatusTooManyRequests, err.Error())
+				}
 				if roundTripper.funcHandler.isDebugEnv {
 					return &http.Response{
 						StatusCode:    statusCode,
@@ -209,7 +216,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 					}, nil
 				}
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
-				// }
+
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(fn *fv1.Function, serviceURL *url.URL) {
@@ -558,7 +565,6 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 	return func(rw http.ResponseWriter, req *http.Request, err error) {
 		var status int
 		var msg string
-
 		switch err {
 		case context.Canceled:
 			// 499 CLIENT CLOSED REQUEST
@@ -573,14 +579,20 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			msg = "function not responses before the timeout"
 			fh.logger.Error(msg, zap.Any("function", fh.function), zap.Any("request_header", req.Header))
 		default:
-			status = http.StatusBadGateway
-			msg = "error sending request to function"
-			fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header))
+			code, msg := ferror.GetHTTPError(err)
+			if strings.Contains(msg, "max concurrency") {
+				status = http.StatusTooManyRequests
+				fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))
+			} else {
+				status = http.StatusBadGateway
+				msg = "error sending request to function"
+				fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))
+			}
 		}
 
 		go fh.collectFunctionMetric(start, rrt, req, &http.Response{
 			StatusCode:    status,
-			ContentLength: 0,
+			ContentLength: req.ContentLength,
 		})
 
 		// TODO: return error message that contains traceable UUID back to user. Issue #693
