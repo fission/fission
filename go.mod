@@ -1,5 +1,7 @@
 module github.com/fission/fission
 
+go 1.14
+
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
