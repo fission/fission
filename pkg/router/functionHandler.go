@@ -530,7 +530,7 @@ func (fh functionHandler) getServiceEntryFromExecutor() (*url.URL, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	service, err := fh.executor.GetServiceForFunction(ctx, &fh.function)
+	service, err := fh.executor.GetServiceForFunction(ctx, fh.function)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		fh.logger.Error("error from GetServiceForFunction",
