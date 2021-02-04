@@ -105,6 +105,9 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 				util.PrintPackageSummary(os.Stdout, &pkg)
 				fmt.Printf("------\n")
 			}
+			if pkg.Status.BuildStatus == fv1.BuildStatusFailed {
+				os.Exit(1)
+			}
 		}
 
 		// if there are no builds running, we can stop polling
