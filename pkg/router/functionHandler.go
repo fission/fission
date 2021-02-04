@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -193,15 +192,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				// user function bugs.
 				statusCode, errMsg := ferror.GetHTTPError(err)
 				if statusCode == http.StatusTooManyRequests {
-					return &http.Response{StatusCode: http.StatusTooManyRequests,
-						Proto:         req.Proto,
-						ProtoMajor:    req.ProtoMajor,
-						ProtoMinor:    req.ProtoMinor,
-						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
-						ContentLength: int64(len(errMsg)),
-						Request:       req,
-						Header:        make(http.Header),
-					}, ferror.MakeError(http.StatusTooManyRequests, err.Error())
+					return nil, err
 				}
 				if roundTripper.funcHandler.isDebugEnv {
 					return &http.Response{
@@ -580,14 +571,9 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			fh.logger.Error(msg, zap.Any("function", fh.function), zap.Any("request_header", req.Header))
 		default:
 			code, msg := ferror.GetHTTPError(err)
-			if strings.Contains(msg, "max concurrency") {
-				status = http.StatusTooManyRequests
-				fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))
-			} else {
-				status = http.StatusBadGateway
-				msg = "error sending request to function"
-				fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))
-			}
+			status = code
+			msg = "error sending request to function"
+			fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))
 		}
 
 		go fh.collectFunctionMetric(start, rrt, req, &http.Response{
