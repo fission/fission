@@ -31,7 +31,7 @@ ARG BUILDVERSION=unknown
 ARG BUILDDATE=unknown
 # E.g. BUILDDATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 go build \
     -o /go/bin/fission-bundle \
     -gcflags=-trimpath=$GOPATH \
     -asmflags=-trimpath=$GOPATH \
