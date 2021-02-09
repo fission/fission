@@ -68,7 +68,7 @@ type (
 		stopReadyPodControllerCh chan struct{}
 		readyPodController       cache.Controller
 		readyPodIndexer          cache.Indexer
-		readyPodQueue            workqueue.RateLimitingInterface
+		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
 	}
@@ -165,6 +165,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
+	expoDelay := 100 * time.Millisecond
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
@@ -175,35 +176,33 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		var chosenPod *apiv1.Pod
 		var key string
 
-		if gp.readyPodQueue.Len() > 0 {
-			item, quit := gp.readyPodQueue.Get()
-			if quit {
-				gp.logger.Error("readypod controller is not running")
-				return "", nil, errors.New("readypod controller is not running")
-			}
+		item, quit := gp.readyPodQueue.Get()
+		if quit {
+			gp.logger.Error("readypod controller is not running")
+			return "", nil, errors.New("readypod controller is not running")
+		}
+		key = item.(string)
+		gp.logger.Debug("got key from the queue", zap.String("key", key))
 
-			key := item.(string)
-			obj, exists, err := gp.readyPodIndexer.GetByKey(key)
-			if err != nil {
-				gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
-				return "", nil, err
-			}
+		obj, exists, err := gp.readyPodIndexer.GetByKey(key)
+		if err != nil {
+			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+			return "", nil, err
+		}
 
-			if !exists {
-				gp.logger.Warn("pod deleted from store", zap.String("pod", key))
-				continue
-			}
-
-			if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
-				continue
-			}
-			chosenPod = obj.(*apiv1.Pod).DeepCopy()
-		} else {
-			// Wait for pods to get ready and retry
-			gp.logger.Info("waiting for ready pods")
-			time.Sleep(1000 * time.Millisecond)
+		if !exists {
+			gp.logger.Warn("pod deleted from store", zap.String("pod", key))
 			continue
 		}
+
+		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+			gp.logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
+			gp.readyPodQueue.Done(key)
+			gp.readyPodQueue.AddAfter(key, expoDelay)
+			expoDelay *= 2
+			continue
+		}
+		chosenPod = obj.(*apiv1.Pod).DeepCopy()
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
@@ -220,7 +219,10 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 			gp.logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
+				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
+				gp.readyPodQueue.Done(key)
+				gp.readyPodQueue.AddAfter(key, expoDelay)
+				expoDelay *= 2
 				continue
 			}
 
@@ -556,19 +558,13 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		return nil, err
 	}
-
-	defer gp.readyPodQueue.Done(key)
+	gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		if gp.readyPodQueue.NumRequeues(key) < 5 {
-			gp.readyPodQueue.AddRateLimited(key)
-		} else {
-			gp.readyPodQueue.Forget(key)
-		}
-
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
+
 	gp.logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.Any("function", fn.ObjectMeta))
 
 	var svcHost string

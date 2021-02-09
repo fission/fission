@@ -388,10 +388,10 @@ func newUnstructured(apiVersion, kind, namespace, name, resourceVersion string) 
 
 func Test_getResourceVersion(t *testing.T) {
 	scheme := runtime.NewScheme()
-	client := dynfake.NewSimpleDynamicClient(scheme, newUnstructured("keda.k8s.io/v1alpha1", "ScaledObject", "default", "test-1", "12345"))
+	client := dynfake.NewSimpleDynamicClient(scheme, newUnstructured(apiVersion, "ScaledObject", "default", "test-1", "12345"))
 	dynamicResourceClient := client.Resource(schema.GroupVersionResource{
-		Group:    "keda.k8s.io",
-		Version:  "v1alpha1",
+		Group:    Group,
+		Version:  Version,
 		Resource: "scaledobjects",
 	})
 	type args struct {
@@ -489,7 +489,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	expectedAuthTriggerObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "TriggerAuthentication",
-			"apiVersion": "keda.k8s.io/v1alpha1",
+			"apiVersion": apiVersion,
 			"metadata": map[string]interface{}{
 				"name":      authenticationRef,
 				"namespace": mqt1.ObjectMeta.Namespace,
