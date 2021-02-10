@@ -316,16 +316,16 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: 1
+      tag: v0.5
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: 1
+      tag: v0.5
     awskinesis:
       image: fission/keda-awskinesis-http-connector
-      tag: 1
+      tag: v0.5
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: 1
+      tag: v0.5
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: 1
+      tag: v0.5
