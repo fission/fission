@@ -116,7 +116,10 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 
 func (fetcher *Fetcher) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write([]byte(info.BuildInfo().String()))
+	_, err := w.Write([]byte(info.BuildInfo().String()))
+	if err != nil {
+		fetcher.logger.Error("error writing response", zap.Error(err))
+	}
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
@@ -506,7 +509,12 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	fetcher.logger.Info("completed upload request")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(rBody)
+	_, err = w.Write(rBody)
+	if err != nil {
+		e := "error writing response"
+		fetcher.logger.Error(e, zap.Error(err))
+		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
+	}
 }
 
 func (fetcher *Fetcher) rename(src string, dst string) error {

@@ -11,12 +11,12 @@
 #       TIMEOUT     Timeout for each job. (default: 0 (no timeout))
 #
 set -euo pipefail
+
 source $(dirname $BASH_SOURCE)/init_tools.sh
 
 ROOT=$(readlink -f $(dirname $0)/..)
 LOG_DIR=${LOG_DIR:-$ROOT/test/logs}
 JOBS=${JOBS:-1}
-TIMEOUT=${TIMEOUT:-0}
 
 main() {
     if [ $# -eq 0 ]; then
@@ -24,7 +24,6 @@ main() {
     else
         args="$@"
     fi
-
     num_skip=0
     mkdir -p $LOG_DIR
     test_files=""
@@ -54,7 +53,9 @@ main() {
     done
 
     start_time=$(date +%s)
+    
     parallel \
+        --retries 8 \
         --joblog - \
         --jobs $JOBS \
         --timeout $TIMEOUT \
@@ -72,7 +73,8 @@ main() {
     time=$((end_time - start_time))
     echo ============================================================
     echo "PASS: $num_pass    FAIL: $num_fail    SKIP: $num_skip    TIME: ${time}s"
-    return $num_fail
+    FAILURES=$((FAILURES+$num_fail))
 }
 
+docker system prune -a -f
 main "$@"

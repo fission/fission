@@ -14,6 +14,13 @@
 
 .DEFAULT_GOAL := check
 
+# Platforms to build in multi-architecture images.
+PLATFORMS ?= linux/amd64,linux/arm64,linux/arm
+
+# Repository prefix and tag to push multi-architecture images to.
+REPO ?= fission
+TAG ?= dev
+
 check: test-run build clean
 
 # run basic check scripts
@@ -40,6 +47,13 @@ image:
 	docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
 	docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
 	docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
+
+# build multi-architecture images for release.
+image-multiarch:
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) --push -f cmd/fission-bundle/Dockerfile.fission-bundle .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/preupgradechecks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
 
 clean:
 	@rm -f cmd/fission-bundle/fission-bundle
