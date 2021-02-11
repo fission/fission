@@ -12,4 +12,4 @@ maintainers:
   - name: Ta Ching Chen
     email: hello@tachingchen.com
 engine: gotpl
-appVersion: 1.11.3
+appVersion: 1.11.2
