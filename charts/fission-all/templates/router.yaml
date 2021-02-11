@@ -91,6 +91,10 @@ spec:
         - containerPort: 8888
           name: http
       serviceAccountName: fission-svc
+{{- if .Values.router.extraCoreComponentPodConfig }}
+{{ toYaml .Values.router.extraCoreComponentPodConfig | indent 6 -}}
+{{- else }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}
