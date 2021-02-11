@@ -108,6 +108,24 @@ router:
 
   ## Sample with a rate per time window (traces/second)
   traceSamplingRate: 0.5
+  
+  ## Extend the container specs for the router fission pods.
+  ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
+  ## For example:
+  ## extraCoreComponentPodConfig:
+  ##   affinity:
+  ##     nodeAffinity:
+  ##       requiredDuringSchedulingIgnoredDuringExecution:
+  ##         nodeSelectorTerms:
+  ##           - matchExpressions:
+  ##             - key: capability
+  ##               operator: In
+  ##               values:
+  ##                 - app
+  #extraCoreComponentPodConfig:
+  #  affinity:
+  #  tolerations:
+  #  nodeSelector:
 
 ## Persist data to a persistent volume.
 persistence:
