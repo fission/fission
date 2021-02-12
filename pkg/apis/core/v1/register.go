@@ -26,7 +26,7 @@ import (
 // at "fission.io" group instead of moving them to "core.fission.io".
 // If the value of group is different from the one we register, the
 // CRD client will not be able to get anything from the API server.
-var SchemeGroupVersion = schema.GroupVersion{Group: "fission.io", Version: "v1"}
+var SchemeGroupVersion = schema.GroupVersion{Group: "fission.io", Version: "v2"}
 
 var (
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
