@@ -66,7 +66,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 
 	version1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
 		Name:    crdVersion,
-		Served:  false,
+		Served:  true,
 		Storage: false,
 	}
 
