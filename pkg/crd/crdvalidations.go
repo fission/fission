@@ -57,6 +57,39 @@ var (
 		},
 	}
 
+	// Function validation schema properties
+	functionSchemaPropsV2 = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"spec": {
+			Type:        "object",
+			Description: "Specification of the desired behaviour of the Function",
+			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				"environment": environmentReferenceSchema,
+				"package":     functionPackageRefSchema,
+				"secrets":     secretReferenceSchema,
+				"configmaps":  configMapReferenceSchema,
+				"resources": {
+					Type:                   "object",
+					Description:            "ResourceRequirements describes the compute resource requirements. This is only for newdeploy to set up resource limitation when creating deployment for a function.",
+					XPreserveUnknownFields: boolPtr(true),
+				},
+				"InvokeStrategy": invokeStrategySchema,
+				"functionTimeout": {
+					Type:        "integer",
+					Description: " FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete.\nThis is optional. If not specified default value will be taken as 60s",
+				},
+				"idletimeout": {
+					Type:        "integer",
+					Description: "IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.",
+				},
+				"concurrency": {
+					Type:        "integer",
+					Description: "Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.\n This is optional. If not specified default value will be taken as 5",
+				},
+			},
+			XPreserveUnknownFields: boolPtr(true),
+		},
+	}
+
 	// Function validation schema
 	functionSchema = apiextensionsv1beta1.JSONSchemaProps{
 		Type:        "object",
@@ -64,9 +97,20 @@ var (
 		Properties:  functionSchemaProps,
 	}
 
+	// Function validation schema
+	functionSchemaV2 = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "A Function is a code and a runtime environment which can be used to execute code",
+		Properties:  functionSchemaPropsV2,
+	}
+
 	// Function validation object
 	functionValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &functionSchema,
+	}
+	// Function validation object
+	functionValidationV2 = &apiextensionsv1beta1.CustomResourceValidation{
+		OpenAPIV3Schema: &functionSchemaV2,
 	}
 )
 
