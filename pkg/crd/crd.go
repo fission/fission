@@ -63,8 +63,16 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
 
 	versions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
-
 	functionVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
+	environmentVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
+	packageVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
+
+	//NOTE:
+	// 1. Different versions cannot have same Schema. Version one of schemas of Functions, Environments and Packages don't have XPreserveUnknownFields flag set in their spec whereas version 2 does.
+	// This allows us to be flexible with fields for the near future as lot of features are being developed.
+	// 2. If conversion is set to Webhook Strategy , we cannot set XPreserveUnknownFields flag to true. We can use "None" conversion stratergy if the only Schema changes involve adding fields like `XPreserveUnkownFields`, `Nullable`, etc.
+	// If we have to change the name/types of fields, then a webhook is required
+	// 3. Schema is a required parameter for CRD API v1 . v1beta1 is going to deprecate in K8s version 1.21, hence having a schema set now makes sense
 	functionVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
 		Name:    crdVersion,
 		Served:  true,
@@ -79,6 +87,34 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 		Schema:  functionValidationV2,
 	}
 
+	environmentVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
+		Name:    crdVersion,
+		Served:  true,
+		Storage: false,
+		Schema:  environmentValidation,
+	}
+
+	environmentVersion2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
+		Name:    crdVersion2,
+		Served:  true,
+		Storage: true,
+		Schema:  environmentValidationV2,
+	}
+
+	packageVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
+		Name:    crdVersion,
+		Served:  true,
+		Storage: false,
+		Schema:  packageValidation,
+	}
+
+	packageVersion2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
+		Name:    crdVersion2,
+		Served:  true,
+		Storage: true,
+		Schema:  packageValidationV2,
+	}
+
 	version1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
 		Name:    crdVersion,
 		Served:  true,
@@ -91,29 +127,10 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 		Storage: true,
 	}
 
-	// path := "/crdconvert"
-	versions = append(versions, version1)
-	versions = append(versions, version2)
-
-	functionVersions = append(functionVersions, functionVersion1)
-	functionVersions = append(functionVersions, functionVersion2)
-
-	// serviceref := apiextensionsv1beta1.ServiceReference{
-	// 	Namespace: "default",
-	// 	Name:      "webhook",
-	// 	Path:      &path,
-	// }
-
-	// cabundle := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURLekNDQWhPZ0F3SUJBZ0lSQU9zcEtDOXByRGJpOXNuY0M4d1hWTHN3RFFZSktvWklodmNOQVFFTEJRQXcKTHpFdE1Dc0dBMVVFQXhNa1ltTTRPREExTW1ZdE1EUm1NQzAwTm1NNUxUa3pNVGd0TkRSaFlqYzNNMlF6TTJKagpNQjRYRFRJeE1ESXhPREEzTURneE1Wb1hEVEkyTURJeE56QTRNRGd4TVZvd0x6RXRNQ3NHQTFVRUF4TWtZbU00Ck9EQTFNbVl0TURSbU1DMDBObU01TFRrek1UZ3RORFJoWWpjM00yUXpNMkpqTUlJQklqQU5CZ2txaGtpRzl3MEIKQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBNW9oUFV3ZGljYVFMWlhGN1BLOG96SHhXTWl1Ty93WWhHVVFreU9xcgpBenN6R0RBTVlNN2hFWEJiS3NHVUVBa3JLc3FHb2c4QUxLZDJLYUN4OEQ4bks4YzBrUFNQQWJCMmk1SXNlN3NzCmJyTU5aMEJHenREVjM5SHd2V3J4OEZLWHNUY1JhbG9hbmZVMnV1YTdnWFRXb2t0TjU1cXhNMHZOamcwMmIxQW8KWWtCNzBHa2FYaVd5UlRieXdtZUdyVzZHSmkyN0ZGTkJicHFuMUc5VmxscS93U0plMmtDMGp0ZGRwL3JEaEVxQgppRXNTVFQvMTBnMWk2ZFphaUxhb2pYZ0EvdkFHTlZQY3BkWW9acjJQdkFtUWg2cEFqWWp1NHFBN2JmRHdxVE5aCm1aZ05lWXdVOFVkMGtleHo0cVNuS2c1TzZvZWsyejFRcmg4MG10dHdzVXhhcHdJREFRQUJvMEl3UURBT0JnTlYKSFE4QkFmOEVCQU1DQWdRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVpKTm42T1lDYUdiNApVSkFlS2FrVEZORW9YTjh3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQU1ROW42VjF2aEw4NGdvYkR5R3laSFBQCmVybGZ3S214TU1iQTJIamZzamh4UTRqdXhONmFJaFFTeUZPUmFvdFp5RGsxRFZmQlRXcUJtcWR3WnFyUFkyVisKYUh2YkNUVHpqQk5GY2dEWVNJcFlxUzEwZFpTSEJlVXEwNFNQSi9haWhPdmdleWpaaEprMmFPT3BVcFNJeUlOYQo5SFhFMlVVQmVJZU9nc2tOQ1FsN3htaWxhdkRycTVSWmtRWTVIb1hVYTc3ZmViOWhHOTNGdVpjZ2xxZXYwZUtTCngxTm1VRjJ3WDNZcTBFTHRIcEJCeUh6UG4wQWRzWXFSZzFQOVcvTnZIM21QckxLVlUrMkNkMW43bUt3SXY1dXgKZ0dBNG1zdGd3QnBrczlLOUlWTkh2OWZ3aXNOZDdHU2U0R0xmc29YME83eVQzclVRV3IxREk4ckNGY3hNMnlnPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
-	// webhookconfig := apiextensionsv1beta1.WebhookClientConfig{
-	// 	Service:  &serviceref,
-	// 	CABundle: []byte(cabundle),
-	// // }
-	// webhookConversion := apiextensionsv1beta1.CustomResourceConversion{
-	// 	Strategy:                 apiextensionsv1beta1.ConversionStrategyType("Webhook"),
-	// 	WebhookClientConfig:      &webhookconfig,
-	// 	ConversionReviewVersions: []string{"v1"},
-	// }
+	versions = append(versions, version1, version2)
+	functionVersions = append(functionVersions, functionVersion1, functionVersion2)
+	environmentVersions = append(environmentVersions, environmentVersion1, environmentVersion2)
+	packageVersions = append(packageVersions, packageVersion1, packageVersion2)
 
 	conversion := apiextensionsv1beta1.CustomResourceConversion{
 		Strategy: apiextensionsv1beta1.ConversionStrategyType("None"),
@@ -152,8 +169,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Singular: "environment",
 				},
 				PreserveUnknownFields: boolPtr(false),
-				Validation:            environmentValidation,
-				Versions:              versions,
+				Versions:              environmentVersions,
 				Conversion:            &conversion,
 			},
 		},
@@ -239,8 +255,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Singular: "package",
 				},
 				PreserveUnknownFields: boolPtr(false),
-				Validation:            packageValidation,
-				Versions:              versions,
+				Versions:              packageVersions,
 				Conversion:            &conversion,
 			},
 		},
