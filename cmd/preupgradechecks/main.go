@@ -71,6 +71,6 @@ Options:
 	}
 
 	crdBackedClient.VerifyFunctionSpecReferences()
-	crdBackedClient.RemoveClusterAdminRolesForFissionSAs()
-	crdBackedClient.SetupRoleBindings()
+	// crdBackedClient.RemoveClusterAdminRolesForFissionSAs()
+	// crdBackedClient.SetupRoleBindings()
 }

@@ -265,14 +265,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "canaryconfigs.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
+				Group: crdGroupName,
+				Scope: apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "CanaryConfig",
 					Plural:   "canaryconfigs",
 					Singular: "canaryconfig",
 				},
+				Versions:   versions,
 				Conversion: &conversion,
 			},
 		},

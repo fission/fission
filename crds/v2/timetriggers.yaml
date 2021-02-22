@@ -1,0 +1,32 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  generation: 1
+  name: timetriggers.fission.io
+  selfLink: /apis/apiextensions.k8s.io/v1/customresourcedefinitions/timetriggers.fission.io
+spec:
+  conversion:
+    strategy: None
+  group: fission.io
+  names:
+    kind: TimeTrigger
+    listKind: TimeTriggerList
+    plural: timetriggers
+    singular: timetrigger
+  preserveUnknownFields: true
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: false
+  - name: v2
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: TimeTrigger
+    listKind: TimeTriggerList
+    plural: timetriggers
+    singular: timetrigger
+  storedVersions:
+  - v2

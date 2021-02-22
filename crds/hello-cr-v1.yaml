@@ -1,0 +1,34 @@
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  annotations:
+    fission-name: spec-example
+    fission-uid: 27438a48-4191-4b5e-95b2-7793624317b9
+  generation: 2
+  name: hello-py-spec
+  namespace: default
+  selfLink: /apis/fission.io/v1/namespaces/default/functions/hello-py-spec
+spec:
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 0
+      MinScale: 0
+      SpecializationTimeout: 600
+      TargetCPUPercent: 0
+    StrategyType: execution
+  concurrency: 1
+  configmaps: null
+  environment:
+    name: python-spec-example
+    namespace: default
+  functionTimeout: 6000
+  idletimeout: 120
+  package:
+    functionName: hello.main
+    packageref:
+      name: hello-py-spec-acc5a7b9-c961-46f9-a7f4-7c6f1ab15b0e
+      namespace: default
+      resourceversion: '21452'
+  resources: {}
+  secrets: null
