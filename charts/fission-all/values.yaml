@@ -20,7 +20,7 @@ image: fission/fission-bundle
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: 1.11.2
+imageTag: 1.12.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -50,7 +50,7 @@ fetcher:
   ## Fetcher repository
   image: fission/fetcher
   ## Fetcher image version
-  imageTag: 1.11.2
+  imageTag: 1.12.0
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -316,16 +316,16 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: 1
+      tag: v0.5
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: 1
+      tag: v0.5
     awskinesis:
       image: fission/keda-awskinesis-http-connector
-      tag: 1
+      tag: v0.5
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: 1
+      tag: v0.5
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: 1
+      tag: v0.5
