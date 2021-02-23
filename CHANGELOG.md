@@ -1,23 +1,54 @@
-# 1.11.2
+# 1.12.0
 [Documentation](https://docs.fission.io/)
-## Downloads for 1.11.2
+## Downloads for 1.12.0
 
 
 filename | sha256 hash
 -------- | -----------
-[fission-core-1.11.2.tgz](https://github.com/fission/fission/releases/download/1.11.2/fission-core-1.11.2.tgz) | `0a9ca8a968847fd85960fef003b3cb3521f205b5de3ad3e8db24be1f2225ecdc`
-[fission-all-1.11.2.tgz](https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.tgz) | `66b1951b45db973877e2701ed02694376b342f1ee8b31068b891390aaf016ac6`
-[fission-cli-linux](https://github.com/fission/fission/releases/download/1.11.2/fission-cli-linux) | `ced71903e70078d159c28379ab92b9bc21aceb598ae98bf646323c9395921361`
-[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.11.2/fission-cli-windows.exe) | `d03a2b54d4f35b3c242663a7adb199b23f8d3ad2182a384654a67d941e473d41`
-[fission-cli-osx](https://github.com/fission/fission/releases/download/1.11.2/fission-cli-osx) | `3591a4f6ecc713223597064d56dcce9b4c5c00017aaf094b07fb6ef02f8f4c0a`
-[fission-all-1.11.2-minikube.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2-minikube.yaml) | `085c70d48ac9347affea6e6cae9eb7e41f73ef6f4b85cf5f03a30aef4ddfad6a`
-[fission-core-1.11.2.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-core-1.11.2.yaml) | `be75632b869f2de8f7b584327e7df41d65ec9270d834670119750664aced202b`
-[fission-all-1.11.2.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2.yaml) | `5d2328037e4f734ff9a30e5d723ad104ab54b59e0ed4244186b03e5f181a3898`
-[fission-core-1.11.2-minikube.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-core-1.11.2-minikube.yaml) | `b13bfe8f979fc5b5fc3e761fe69e225cfbda3d1d70337f70b769598182538298`
-[fission-all-1.11.2-openshift.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-all-1.11.2-openshift.yaml) | `d40513512a26f28811ea30c17b51fadb4b39ba867c5cf99b0c008fb27b5e14eb`
-[fission-core-1.11.2-openshift.yaml](https://github.com/fission/fission/releases/download/1.11.2/fission-core-1.11.2-openshift.yaml) | `5de16081e1e5e9e83eb4c8adef6d86510888ed5dc618e6d31f9e5ec757ab8c8b`
+[fission-all-1.12.0.tgz](https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz) | `10dfa6df66cfcc7f4887086357857ff25cb7e7e2f906b9c11e2d70e1a7bc8113`
+[fission-core-1.12.0.tgz](https://github.com/fission/fission/releases/download/1.12.0/fission-core-1.12.0.tgz) | `89d745e2130cf7ff281b35100482d6560a2880f0a4e34ffda6428070eccd1945`
+[fission-cli-linux](https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux) | `bcb3d84a424af45fb8ba5e846238475e481c01907eb10d38a3a614b288da785c`
+[fission-cli-windows.exe](https://github.com/fission/fission/releases/download/1.12.0/fission-cli-windows.exe) | `005f5404545d49546259ee801b52987cb375816ba1c341f8e8fc6f316b16c0b2`
+[fission-cli-osx](https://github.com/fission/fission/releases/download/1.12.0/fission-cli-osx) | `d6c192b96cca741e264c6bacb900ebe40419c4a68e2cec93a889c5c2874ecd5b`
+[fission-core-1.12.0.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-core-1.12.0.yaml) | `2908fc54ed514b0c600664c5b7cacc35dd9fdb242269c1be3e589d53fbc4f8e5`
+[fission-all-1.12.0.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.yaml) | `2a95051c91a507944805eed26103d1ccfa1e222951645a314814cac912e41391`
+[fission-all-1.12.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0-minikube.yaml) | `91bf41f63ac449861ddf3fc5a0b0ecd061a20f7e17331b8d913f17ac76e65649`
+[fission-core-1.12.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-core-1.12.0-minikube.yaml) | `b71a5f0314e32d0fe3a98c5cbe22308c265203daeea342855a847c1185ce368a`
+[fission-all-1.12.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0-openshift.yaml) | `906fb10ea9d052e455c9f50613ee6b54ab8bd93d7d7350740ceaf8fdf8618ac4`
+[fission-core-1.12.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.12.0/fission-core-1.12.0-openshift.yaml) | `b46908adf6dda8601ac975b6fa0b32e7564b08d54347e106ce04b5e2d01e47b1`
 
 # Changelog
+
+## [1.12.0](https://github.com/fission/fission/tree/1.12.0) (2021-02-11)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.12.0...1.12.0)
+
+**Merged pull requests:**
+
+- Exit with status code 1 on failed package builds [\#1926](https://github.com/fission/fission/pull/1926) ([RealHarshThakur](https://github.com/RealHarshThakur))
+- Fix status code for rate limit [\#1924](https://github.com/fission/fission/pull/1924) ([RealHarshThakur](https://github.com/RealHarshThakur))
+- Fixing issue of pulling docker image twice in CI [\#1903](https://github.com/fission/fission/pull/1903) ([therahulbhati](https://github.com/therahulbhati))
+- Updates required for multi-architecture builds. [\#1891](https://github.com/fission/fission/pull/1891) ([cerebrate](https://github.com/cerebrate))
+- Improved readyPod queue implementation and bugfix [\#1890](https://github.com/fission/fission/pull/1890) ([therahulbhati](https://github.com/therahulbhati))
+- Put message to error topic when exceed max retries in kafka mqt [\#1885](https://github.com/fission/fission/pull/1885) ([chenjr0719](https://github.com/chenjr0719))
+- Migrating to keda2.0 [\#1868](https://github.com/fission/fission/pull/1868) ([RealHarshThakur](https://github.com/RealHarshThakur))
+- Updated role and permission for fission-crd cluster role [\#1867](https://github.com/fission/fission/pull/1867) ([therahulbhati](https://github.com/therahulbhati))
+- Envupdate crossupdate fix [\#1866](https://github.com/fission/fission/pull/1866) ([RealHarshThakur](https://github.com/RealHarshThakur))
+- Spec validation option [\#1865](https://github.com/fission/fission/pull/1865) ([RealHarshThakur](https://github.com/RealHarshThakur))
+- Added concurrency field to schema validation [\#1727](https://github.com/fission/fission/pull/1727) ([therahulbhati](https://github.com/therahulbhati))
+- Updated tags of connector images [\#1934](https://github.com/fission/fission/pull/1934) ([therahulbhati](https://github.com/therahulbhati))
+- Updated go plugin version for Github Action CI/CD [\#1922](https://github.com/fission/fission/pull/1922) ([therahulbhati](https://github.com/therahulbhati))
+- Fixed golangci-lint issues: /fission/pkg [\#1902](https://github.com/fission/fission/pull/1902) ([gauravgahlot](https://github.com/gauravgahlot))
+- Remove unnecessary import package. [\#1897](https://github.com/fission/fission/pull/1897) ([tosone](https://github.com/tosone))
+- Replace build status badge to use GH Actions status [\#1887](https://github.com/fission/fission/pull/1887) ([therahulbhati](https://github.com/therahulbhati))
+- Github Actions Workflows [\#1876](https://github.com/fission/fission/pull/1876) ([therahulbhati](https://github.com/therahulbhati))
+- Readypod optimization in executor [\#1860](https://github.com/fission/fission/pull/1860) ([therahulbhati](https://github.com/therahulbhati))
+- Release 1.11.2 [\#1843](https://github.com/fission/fission/pull/1843) ([therahulbhati](https://github.com/therahulbhati))
+- Fixed golangci-lint issues: /fission/pkg/executor [\#1842](https://github.com/fission/fission/pull/1842) ([gauravgahlot](https://github.com/gauravgahlot))
+-  Update nats streaming image name in values.yaml and deployments yaml  [\#1839](https://github.com/fission/fission/pull/1839) ([girishg4t](https://github.com/girishg4t))
+- Fixed golangci-lint issues: /fission/pkg/router [\#1831](https://github.com/fission/fission/pull/1831) ([gauravgahlot](https://github.com/gauravgahlot))
+- Fix golint warnings for publisher package [\#1822](https://github.com/fission/fission/pull/1822) ([ShajithaMohammed](https://github.com/ShajithaMohammed))
+- in-progress golint warning fixes [\#1799](https://github.com/fission/fission/pull/1799) ([ari-hacks](https://github.com/ari-hacks))
 
 ## [v1.11.2](https://github.com/fission/fission/tree/v1.11.2) (2020-10-20)
 
