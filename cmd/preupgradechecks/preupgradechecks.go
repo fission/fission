@@ -29,7 +29,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -66,18 +65,30 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 
 // IsFissionReInstall checks if there is at least one fission CRD, i.e. function in this case, on this cluster.
 // We need this to find out if fission had been previously installed on this cluster
-func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
+func (client *PreUpgradeTaskClient) IsFissionReInstall() (bool, error) {
 	for i := 0; i < maxRetries; i++ {
-		_, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
-			return false
+			return false, nil
+		}
+
+		versions := crd.Spec.Versions
+		var foundV2 bool
+		for _, v := range versions {
+			if v.Name == "v2" {
+				foundV2 = true
+			}
+		}
+		client.logger.Sugar().Infof("Crd %v", crd.Spec.Versions)
+		if !foundV2 {
+			return true, errors.New("Version 1 of CRD is deprecated. Please apply Version 2 of CRD")
 		}
 		if err == nil {
-			return true
+			return true, nil
 		}
 	}
 
-	return false
+	return false, nil
 }
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and
@@ -131,91 +142,4 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	}
 
 	client.logger.Info("function spec references verified")
-}
-
-// deleteClusterRoleBinding deletes the clusterRoleBinding passed as an argument to it.
-// If its not present, it just ignores and returns no errors
-func (client *PreUpgradeTaskClient) deleteClusterRoleBinding(clusterRoleBinding string) (err error) {
-	for i := 0; i < maxRetries; i++ {
-		err = client.k8sClient.RbacV1beta1().ClusterRoleBindings().Delete(clusterRoleBinding, &metav1.DeleteOptions{})
-		if err != nil && k8serrors.IsNotFound(err) || err == nil {
-			return nil
-		}
-	}
-
-	return err
-}
-
-// RemoveClusterAdminRolesForFissionSAs deletes the clusterRoleBindings previously created on this cluster
-func (client *PreUpgradeTaskClient) RemoveClusterAdminRolesForFissionSAs() {
-	clusterRoleBindings := []string{"fission-builder-crd", "fission-fetcher-crd"}
-	for _, clusterRoleBinding := range clusterRoleBindings {
-		err := client.deleteClusterRoleBinding(clusterRoleBinding)
-		if err != nil {
-			client.logger.Fatal("error deleting rolebinding",
-				zap.Error(err),
-				zap.String("role_binding", clusterRoleBinding))
-		}
-	}
-
-	client.logger.Info("removed cluster admin privileges for fission-builder and fission-fetcher service accounts")
-}
-
-// NeedRoleBindings checks if there is at least one package or function in default namespace.
-// It is needed to find out if package-getter-rb and secret-configmap-getter-rb needs to be created for fission-fetcher
-// and fission-builder service accounts.
-// This is because, we just deleted the ClusterRoleBindings for these service accounts in the previous function and
-// for the existing functions to work, we need to give these SAs the right privileges
-func (client *PreUpgradeTaskClient) NeedRoleBindings() bool {
-	pkgList, err := client.fissionClient.CoreV1().Packages(metav1.NamespaceDefault).List(metav1.ListOptions{})
-	if err == nil && len(pkgList.Items) > 0 {
-		return true
-	}
-
-	fnList, err := client.fissionClient.CoreV1().Functions(metav1.NamespaceDefault).List(metav1.ListOptions{})
-	if err == nil && len(fnList.Items) > 0 {
-		return true
-	}
-
-	return false
-}
-
-// SetupRoleBindings sets appropriate role bindings for fission-fetcher and fission-builder SAs
-func (client *PreUpgradeTaskClient) SetupRoleBindings() {
-	if !client.NeedRoleBindings() {
-		client.logger.Info("no fission objects found, so no role-bindings to create")
-		return
-	}
-
-	// the fact that we're here implies that there had been a prior installation of fission and objects are present still
-	// so, we go ahead and create the role-bindings necessary for the fission-fetcher and fission-builder Service Accounts.
-	err := utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.PackageGetterRB, metav1.NamespaceDefault, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, client.fnPodNs)
-	if err != nil {
-		client.logger.Fatal("error setting up rolebinding for service account",
-			zap.Error(err),
-			zap.String("role_binding", fv1.PackageGetterRB),
-			zap.String("service_account", fv1.FissionFetcherSA),
-			zap.String("service_account_namespace", client.fnPodNs))
-	}
-
-	err = utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.PackageGetterRB, metav1.NamespaceDefault, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionBuilderSA, client.envBuilderNs)
-	if err != nil {
-		client.logger.Fatal("error setting up rolebinding for service account",
-			zap.Error(err),
-			zap.String("role_binding", fv1.PackageGetterRB),
-			zap.String("service_account", fv1.FissionBuilderSA),
-			zap.String("service_account_namespace", client.envBuilderNs))
-	}
-
-	err = utils.SetupRoleBinding(client.logger, client.k8sClient, fv1.SecretConfigMapGetterRB, metav1.NamespaceDefault, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, client.fnPodNs)
-	if err != nil {
-		client.logger.Fatal("error setting up rolebinding for service account",
-			zap.Error(err),
-			zap.String("role_binding", fv1.SecretConfigMapGetterRB),
-			zap.String("service_account", fv1.FissionFetcherSA),
-			zap.String("service_account_namespace", client.fnPodNs))
-	}
-
-	client.logger.Info("created rolebindings in default namespace",
-		zap.Strings("role_bindings", []string{fv1.PackageGetterRB, fv1.SecretConfigMapGetterRB}))
 }
