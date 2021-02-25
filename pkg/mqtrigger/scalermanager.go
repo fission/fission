@@ -393,6 +393,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	}
 	imageName := fmt.Sprintf("%s_image", string(mqt.Spec.MessageQueueType))
 	image := os.Getenv(strings.ToUpper(imageName))
+	imagePullPolicy := utils.GetImagePullPolicy(os.Getenv("CONNECTOR_IMAGE_PULL_POLICY"))
 
 	blockOwnerDeletion := true
 	return &appsv1.Deployment{
@@ -428,7 +429,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 						{
 							Name:            mqt.ObjectMeta.Name,
 							Image:           image,
-							ImagePullPolicy: "Always",
+							ImagePullPolicy: imagePullPolicy,
 							Env:             envVars,
 						},
 					},
