@@ -353,6 +353,14 @@ type (
 		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 5
 		Concurrency int `json:"concurrency,omitempty"`
+
+		// OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request
+		// This is optional. If not specified default value will be taken as false
+		OnceOnly bool `json:"onceonly,omitempty"`
+
+		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
+		// This is optional. If not specified default value will be taken as 5
+		RequestsPerPod int `json:"requestsperpod,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.
