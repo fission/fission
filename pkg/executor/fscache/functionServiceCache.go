@@ -30,7 +30,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
-	poolcache "github.com/fission/fission/pkg/newcache"
+	"github.com/fission/fission/pkg/poolcache"
 )
 
 type fscRequestType int
@@ -177,13 +177,13 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key.
-func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int, cpuLimit float64) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, err := fsc.connFunctionCache.GetValue(key)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod, cpuLimit)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
-		return nil, err
+		return nil, active, err
 	}
 
 	// update atime
@@ -191,7 +191,7 @@ func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, err
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
-	return &fsvcCopy, nil
+	return &fsvcCopy, active, nil
 }
 
 // GetByFunctionUID gets a function service from cache using function UUID.
@@ -224,11 +224,6 @@ func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
 	fsvc.Atime = now
 
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
-}
-
-// GetTotalAvailable returns the total number active function services.
-func (fsc *FunctionServiceCache) GetTotalAvailable(m *metav1.ObjectMeta) int {
-	return fsc.connFunctionCache.GetTotalAvailable(crd.CacheKey(m))
 }
 
 // MarkAvailable marks the value at key [function][address] as available.

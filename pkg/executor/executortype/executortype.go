@@ -38,6 +38,9 @@ type ExecutorType interface {
 	// GetFuncSvcFromCache retrieves function service from cache.
 	GetFuncSvcFromCache(*fv1.Function) (*fscache.FuncSvc, error)
 
+	// GetFuncSvcFromPoolCache retrieves function service after filtering on requestsPerPod and CPULimit
+	GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error)
+
 	// DeleteFuncSvcFromCache deletes function service entry in cache.
 	DeleteFuncSvcFromCache(*fscache.FuncSvc)
 
@@ -60,7 +63,4 @@ type ExecutorType interface {
 
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
 	CleanupOldExecutorObjects()
-
-	// getTotalAvailable returns total active instances of particular function
-	GetTotalAvailable(*fv1.Function) int
 }

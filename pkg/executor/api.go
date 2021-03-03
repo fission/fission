@@ -60,27 +60,49 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 		return
 	}
-
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et, exists := executor.executorTypes[t]
-	if !exists {
-		http.Error(w, fmt.Sprintf("Unknown executor type '%v'", t), http.StatusNotFound)
-		return
-	}
+	et := executor.executorTypes[t]
 
-	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetTotalAvailable(fn)))
-	conncurrency := fn.Spec.Concurrency
-	if conncurrency == 0 {
-		// set to default conncurrency
-		conncurrency = 5
-		executor.logger.Debug(fmt.Sprintf("concurrency specified in function: %v", fn.Spec.Concurrency))
-		executor.logger.Debug("setting concurrency to 5")
-	}
-	if t == fv1.ExecutorTypePoolmgr && et.GetTotalAvailable(fn) >= conncurrency {
-		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, conncurrency)
-		executor.logger.Error("error occurred", zap.String("error", errMsg))
-		http.Error(w, errMsg, http.StatusTooManyRequests)
-		return
+	// Check function -> svc cache
+	executor.logger.Debug("checking for cached function service",
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
+	if t == fv1.ExecutorTypePoolmgr {
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, fn.Spec.RequestsPerPod, 85)
+		if err == nil {
+			if et.IsValid(fsvc) {
+				// Cached, return svc address
+				executor.writeResponse(w, fsvc.Address)
+				return
+			}
+			executor.logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(fsvc)
+			active--
+		}
+
+		if active >= fn.Spec.Concurrency {
+			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, conncurrency)
+			executor.logger.Error("error occurred", zap.String("error", errMsg))
+			http.Error(w, errMsg, http.StatusTooManyRequests)
+			return
+		}
+	} else {
+		fsvc, err := t.GetFuncSvcFromCache(fn)
+		if err == nil {
+			if et.IsValid(fsvc) {
+				// Cached, return svc address
+				executor.writeResponse(w, fsvc.Address)
+				return
+			}
+			executor.logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(fsvc)
+		}
 	}
 
 	serviceName, err := executor.getServiceForFunction(fn)
@@ -93,7 +115,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		http.Error(w, msg, code)
 		return
 	}
+	executor.writeResponse(w, serviceName)
+}
 
+func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string) {
 	_, err = w.Write([]byte(serviceName))
 	if err != nil {
 		executor.logger.Error(
@@ -114,26 +139,6 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et := executor.executorTypes[t]
-	// Check function -> svc cache
-	executor.logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-
-	fsvc, err := et.GetFuncSvcFromCache(fn)
-	if err == nil {
-		if et.IsValid(fsvc) {
-			// Cached, return svc address
-			return fsvc.Address, nil
-		}
-		executor.logger.Debug("deleting cache entry for invalid address",
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace),
-			zap.String("address", fsvc.Address))
-		et.DeleteFuncSvcFromCache(fsvc)
-	}
-
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
 		function: fn,

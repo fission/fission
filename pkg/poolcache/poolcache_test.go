@@ -22,6 +22,11 @@ func TestPoolCache(t *testing.T) {
 
 	checkErr(c.DeleteValue("func2", "ip2"))
 
+	cc := c.ListAvailableValue()
+	if len(cc) != 0 {
+		log.Panicf("expected 0 available items")
+	}
+
 	c.MarkAvailable("func", "ip")
 	_, active, err := c.GetValue("func", 5, 85)
 	if active != 1 {

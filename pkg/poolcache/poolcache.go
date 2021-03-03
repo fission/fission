@@ -41,7 +41,6 @@ type (
 	value struct {
 		val            interface{}
 		activeRequests int
-		isActive       bool
 		cpuPercentage  float64
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
@@ -112,6 +111,18 @@ func (c *Cache) service() {
 				c.cache[req.function][req.address] = &value{}
 			}
 			c.cache[req.function][req.address].val = req.value
+			c.cache[req.function][req.address].activeRequests++
+		case listAvailableValue:
+			vals := make([]interface{}, 0)
+			for _, values := range c.cache {
+				for _, value := range values {
+					if value.activeRequests == 0 {
+						vals = append(vals, value.val)
+					}
+				}
+			}
+			resp.allValues = vals
+			req.responseChannel <- resp
 		case setCPUPercentage:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
@@ -149,6 +160,17 @@ func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit floa
 	}
 	resp := <-respChannel
 	return resp.value, resp.totalActive, resp.error
+}
+
+// ListAvailableValue returns a list of the available function services stored in the Cache
+func (c *Cache) ListAvailableValue() []interface{} {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     listAvailableValue,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.allValues
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)

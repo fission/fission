@@ -165,8 +165,8 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	return pool.getFuncSvc(ctx, fn)
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta)
+func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error) {
+	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod, cpuLimit)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
@@ -175,10 +175,6 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 
 func (gpm *GenericPoolManager) UnTapService(key string, svcHost string) {
 	gpm.fsCache.MarkAvailable(key, svcHost)
-}
-
-func (gpm *GenericPoolManager) GetTotalAvailable(fn *fv1.Function) int {
-	return gpm.fsCache.GetTotalAvailable(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {
