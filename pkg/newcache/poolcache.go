@@ -20,6 +20,7 @@ package poolcache
 
 import (
 	"fmt"
+	"math"
 
 	ferror "github.com/fission/fission/pkg/error"
 )
@@ -33,13 +34,16 @@ const (
 	setValue
 	markAvailable
 	deleteValue
+	setCPUPercentage
 )
 
 type (
 	// value used as "value" in cache
 	value struct {
-		val      interface{}
-		isActive bool
+		val            interface{}
+		activeRequests int
+		isActive       bool
+		cpuPercentage  float64
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
@@ -52,6 +56,8 @@ type (
 		function        interface{}
 		address         interface{}
 		value           interface{}
+		requestsPerPod  int
+		cpuLimit        float64
 		responseChannel chan *response
 	}
 	response struct {
@@ -85,10 +91,11 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if !values[addr].isActive {
+					if !values[addr].isActive && values[addr].activeRequests < req.requestsPerPod && math.Abs(req.cpuLimit-values[addr].cpuPercentage) < 1e-9 {
 						// update atime
 						// mark active
 						values[addr].isActive = true
+						values[addr].activeRequests++
 						resp.value = values[addr].val
 						found = true
 						break
@@ -120,22 +127,22 @@ func (c *Cache) service() {
 			}
 			req.responseChannel <- resp
 		case setValue:
-			if _, ok := c.cache[req.function]; ok {
-				c.cache[req.function][req.address] = &value{
-					val:      req.value,
-					isActive: true,
-				}
-			} else {
+			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
-				c.cache[req.function][req.address] = &value{
-					val:      req.value,
-					isActive: true,
-				}
 			}
+			c.cache[req.function][req.address].val = req.value
+			c.cache[req.function][req.address].isActive = true
+
+		case setCPUPercentage:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = make(map[interface{}]*value)
+			}
+			c.cache[req.function][req.address].cpuPercentage = req.cpuLimit
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
 					c.cache[req.function][req.address].isActive = false
+					c.cache[req.function][req.address].activeRequests--
 				}
 			}
 		case deleteValue:
@@ -150,11 +157,13 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}) (interface{}, error) {
+func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit float64) (interface{}, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     getValue,
 		function:        function,
+		requestsPerPod:  requestsPerPod,
+		cpuLimit:        cpuLimit,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
