@@ -20,7 +20,6 @@ package poolcache
 
 import (
 	"fmt"
-	"math"
 
 	ferror "github.com/fission/fission/pkg/error"
 )
@@ -91,7 +90,7 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if !values[addr].isActive && values[addr].activeRequests < req.requestsPerPod && math.Abs(req.cpuLimit-values[addr].cpuPercentage) < 1e-9 {
+					if !values[addr].isActive && values[addr].activeRequests < req.requestsPerPod && values[addr].cpuPercentage < req.cpuLimit {
 						// update atime
 						// mark active
 						values[addr].isActive = true
@@ -132,7 +131,6 @@ func (c *Cache) service() {
 			}
 			c.cache[req.function][req.address].val = req.value
 			c.cache[req.function][req.address].isActive = true
-
 		case setCPUPercentage:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
@@ -202,6 +200,15 @@ func (c *Cache) SetValue(function, address, value interface{}) {
 		address:         address,
 		value:           value,
 		responseChannel: respChannel,
+	}
+}
+
+func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit float64) {
+	c.requestChannel <- &request{
+		requestType: setCPUPercentage,
+		function:    function,
+		address:     address,
+		cpuLimit:    cpuLimit,
 	}
 }
 
