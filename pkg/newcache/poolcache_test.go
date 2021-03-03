@@ -38,12 +38,12 @@ func TestPoolCache(t *testing.T) {
 	if len(cc) != 1 {
 		log.Panic("expected 1 available items, received", len(cc))
 	}
-	_, err := c.GetValue("func")
+	_, err := c.GetValue("func", 5, 85)
 	checkErr(err)
 
 	checkErr(c.DeleteValue("func", "ip"))
 
-	_, err = c.GetValue("func")
+	_, err = c.GetValue("func", 5, 85)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
@@ -51,8 +51,18 @@ func TestPoolCache(t *testing.T) {
 	c.SetValue("expires", "42", "all answers")
 
 	time.Sleep(150 * time.Millisecond)
-	_, err = c.GetValue("expires")
+	_, err = c.GetValue("expires", 5, 85)
 	if err == nil {
 		log.Panicf("found expired element")
 	}
+
+	c.SetValue("cpulimit", "100", "value")
+	c.SetCPUPercentage("cpulimit", "100", 95)
+	c.MarkAvailable("cpulimit", "100")
+	_, err = c.GetValue("cpulimit", 5, 85)
+	if err == nil {
+		log.Panicf("received pod address with higher CPU usage than limit")
+	}
+	_, err = c.GetValue("cpulimit", 5, 99)
+	checkErr(err)
 }

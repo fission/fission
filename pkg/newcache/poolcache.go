@@ -91,7 +91,6 @@ func (c *Cache) service() {
 			} else {
 				for addr := range values {
 					if !values[addr].isActive && values[addr].activeRequests < req.requestsPerPod && values[addr].cpuPercentage < req.cpuLimit {
-						// update atime
 						// mark active
 						values[addr].isActive = true
 						values[addr].activeRequests++
@@ -129,11 +128,17 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
 			}
+			if _, ok := c.cache[req.function][req.address]; !ok {
+				c.cache[req.function][req.address] = &value{}
+			}
 			c.cache[req.function][req.address].val = req.value
 			c.cache[req.function][req.address].isActive = true
 		case setCPUPercentage:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
+			}
+			if _, ok := c.cache[req.function][req.address]; !ok {
+				c.cache[req.function][req.address] = &value{}
 			}
 			c.cache[req.function][req.address].cpuPercentage = req.cpuLimit
 		case markAvailable:
@@ -205,10 +210,11 @@ func (c *Cache) SetValue(function, address, value interface{}) {
 
 func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit float64) {
 	c.requestChannel <- &request{
-		requestType: setCPUPercentage,
-		function:    function,
-		address:     address,
-		cpuLimit:    cpuLimit,
+		requestType:     setCPUPercentage,
+		function:        function,
+		address:         address,
+		cpuLimit:        cpuLimit,
+		responseChannel: make(chan *response),
 	}
 }
 
