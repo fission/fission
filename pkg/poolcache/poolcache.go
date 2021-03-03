@@ -61,9 +61,9 @@ type (
 	}
 	response struct {
 		error
-		allValues      []interface{}
-		value          interface{}
-		totalAvailable int
+		allValues   []interface{}
+		value       interface{}
+		totalActive int
 	}
 )
 
@@ -90,38 +90,18 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if !values[addr].isActive && values[addr].activeRequests < req.requestsPerPod && values[addr].cpuPercentage < req.cpuLimit {
+					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuPercentage < req.cpuLimit {
 						// mark active
-						values[addr].isActive = true
 						values[addr].activeRequests++
 						resp.value = values[addr].val
 						found = true
 						break
 					}
 				}
-			}
-			if !found {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' No inactive function found", req.function))
-			}
-			req.responseChannel <- resp
-		case listAvailableValue:
-			vals := make([]interface{}, 0)
-			for _, values := range c.cache {
-				for _, value := range values {
-					if !value.isActive {
-						vals = append(vals, value.val)
-					}
+				if !found {
+					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
 				}
-			}
-			resp.allValues = vals
-			req.responseChannel <- resp
-		case getTotalAvailable:
-			if values, ok := c.cache[req.function]; ok {
-				for addr := range values {
-					if values[addr].isActive {
-						resp.totalAvailable++
-					}
-				}
+				resp.totalActive = len(values)
 			}
 			req.responseChannel <- resp
 		case setValue:
@@ -132,7 +112,6 @@ func (c *Cache) service() {
 				c.cache[req.function][req.address] = &value{}
 			}
 			c.cache[req.function][req.address].val = req.value
-			c.cache[req.function][req.address].isActive = true
 		case setCPUPercentage:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
@@ -144,7 +123,6 @@ func (c *Cache) service() {
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
-					c.cache[req.function][req.address].isActive = false
 					c.cache[req.function][req.address].activeRequests--
 				}
 			}
@@ -160,7 +138,7 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit float64) (interface{}, error) {
+func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit float64) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     getValue,
@@ -170,30 +148,7 @@ func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit floa
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.value, resp.error
-}
-
-// ListAvailableValue returns a list of the available function services stored in the Cache
-func (c *Cache) ListAvailableValue() []interface{} {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     listAvailableValue,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-	return resp.allValues
-}
-
-// GetTotalAvailable returns a total number active function services
-func (c *Cache) GetTotalAvailable(function interface{}) int {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     getTotalAvailable,
-		function:        function,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-	return resp.totalAvailable
+	return resp.value, resp.totalActive, resp.error
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
@@ -208,6 +163,7 @@ func (c *Cache) SetValue(function, address, value interface{}) {
 	}
 }
 
+// SetCPUPercentage updates/sets the CPU utilization limit for the pod
 func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit float64) {
 	c.requestChannel <- &request{
 		requestType:     setCPUPercentage,
