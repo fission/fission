@@ -184,7 +184,10 @@ func TestFunctionServiceNewCache(t *testing.T) {
 
 	fsc.AddFunc(*fsvc)
 
-	active := fsc.GetTotalAvailable(fsvc.Function)
+	_, active, err := fsc.GetFuncSvc(fsvc.Function, 5, 85)
+	if err != nil {
+		logger.Panic("received error while retrieving value from cache")
+	}
 	if active != 1 {
 		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
 	}
@@ -192,11 +195,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
 	fsc.MarkAvailable(key, fsvc.Address)
 
-	if fsc.GetTotalAvailable(fsvc.Function) != 0 {
-		log.Panicln("active instances not matched")
-	}
-
-	_, err = fsc.GetFuncSvc(fsvc.Function)
+	_, _, err = fsc.GetFuncSvc(fsvc.Function, 5, 85)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}
