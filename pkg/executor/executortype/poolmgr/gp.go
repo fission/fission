@@ -33,14 +33,13 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -66,6 +65,7 @@ type (
 		useIstio                 bool
 		runtimeImagePullPolicy   apiv1.PullPolicy // pull policy for generic pool to created env deployment
 		kubernetesClient         *kubernetes.Clientset
+		metricsClient            *metricsclient.Clientset
 		fissionClient            *crd.FissionClient
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
@@ -82,6 +82,7 @@ func MakeGenericPool(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
+	metricsClient *metricsclient.Clientset,
 	env *fv1.Environment,
 	initialReplicas int32,
 	namespace string,
@@ -113,6 +114,7 @@ func MakeGenericPool(
 		replicas:                 initialReplicas, // TODO make this an env param instead?
 		fissionClient:            fissionClient,
 		kubernetesClient:         kubernetesClient,
+		metricsClient:            metricsClient,
 		namespace:                namespace,
 		functionNamespace:        functionNamespace,
 		podReadyTimeout:          podReadyTimeout,
@@ -165,41 +167,18 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 }
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
-	optionsModifier := func(options *metav1.ListOptions) {
-		options.LabelSelector = labels.Set(
-			gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()
-		options.FieldSelector = "status.phase=Running"
-	}
-	var config *rest.Config
-	var err error
-
-	// get the config, either from kubeconfig or using our
-	// in-cluster service account
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) != 0 {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
-		if err != nil {
-			gp.logger.Error("error occured while building config from kubeConfig", zap.Error(err))
-			return
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			gp.logger.Error("error occured while building config from InClusterConfig", zap.Error(err))
-			return
-		}
-	}
-
-	clientset, err := metricsclient.NewForConfig(config)
+	podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.env.ObjectMeta.Namespace).List(context.Background(), v1.ListOptions{
+		LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
+		FieldSelector: "status.phase=Running",
+	})
 	if err != nil {
-		gp.logger.Error("unable to generate a clientset", zap.Error(err))
-		return 
-	}
-	pod, err := client.MetricsV1beta1().PodMetricses(namespace).List(v1.ListOptions{})
-		if err != nil {
-			log.Errorf("Error scraping '%s' for pod metrics: %s", namespace, err)
-			return err
+		gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
+	} else {
+		for item := range podMetricsList.Items {
+			gp.logger.Info(fmt.Sprintf("%+v", item))
 		}
+	}
+	time.Sleep(30 * time.Second)
 }
 
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
