@@ -146,7 +146,7 @@ func MakeGenericPool(
 	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
 	go gp.startReadyPodController()
-
+	go gp.updateCPUUtilizationSvc()
 	return gp, nil
 }
 
@@ -179,6 +179,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 		}
 	}
 	time.Sleep(30 * time.Second)
+	return
 }
 
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.

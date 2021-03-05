@@ -72,4 +72,5 @@ require (
 	k8s.io/klog v0.3.3
 	k8s.io/metrics v0.20.4
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
+	github.com/googleapis/gnostic v0.5.1 // indirect
 )
