@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -47,14 +46,6 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	err = json.Unmarshal(body, &fn)
 	if err != nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			http.Error(w, "Failed to find function", http.StatusNotFound)
-		} else {
-			http.Error(w, "Failed to get function", http.StatusInternalServerError)
-		}
 		return
 	}
 
