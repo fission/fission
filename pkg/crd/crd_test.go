@@ -439,7 +439,7 @@ func TestCrd(t *testing.T) {
 
 	panicIf(err)
 
-	fc, kubeClient, apiExtClient, err := MakeFissionClient()
+	fc, kubeClient, apiExtClient, _, err := MakeFissionClient()
 	if err != nil {
 		panicIf(err)
 	}
