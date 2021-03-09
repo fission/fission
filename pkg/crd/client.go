@@ -18,7 +18,6 @@ package crd
 
 import (
 	"errors"
-	"log"
 	"os"
 	"time"
 
@@ -73,10 +72,7 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 		return nil, nil, nil, nil, err
 	}
 
-	metricsClient, err := metricsclient.NewForConfig(config)
-	if err != nil {
-		log.Errorf("failed to generate metrics client %v", err)
-	}
+	metricsClient, _ := metricsclient.NewForConfig(config)
 
 	return config, clientset, apiExtClientset, metricsClient, nil
 }
@@ -84,13 +80,13 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
 	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// make a CRD REST client with the config
 	crdClient, err := genClientset.NewForConfig(config)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	fc := &FissionClient{
