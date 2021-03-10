@@ -28,8 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -44,22 +42,13 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	}
 
 	// get function metadata
-	m := metav1.ObjectMeta{}
-	err = json.Unmarshal(body, &m)
+	fn := &fv1.Function{}
+	err = json.Unmarshal(body, &fn)
 	if err != nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
 
-	fn, err := executor.fissionClient.CoreV1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			http.Error(w, "Failed to find function", http.StatusNotFound)
-		} else {
-			http.Error(w, "Failed to get function", http.StatusInternalServerError)
-		}
-		return
-	}
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	et := executor.executorTypes[t]
 
@@ -72,7 +61,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if err == nil {
 			if et.IsValid(fsvc) {
 				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address)
+				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
 				return
 			}
 			executor.logger.Debug("deleting cache entry for invalid address",
@@ -94,7 +83,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if err == nil {
 			if et.IsValid(fsvc) {
 				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address)
+				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
 				return
 			}
 			executor.logger.Debug("deleting cache entry for invalid address",
@@ -110,12 +99,12 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
 			zap.Error(err),
-			zap.String("function", m.Name),
+			zap.String("function", fn.ObjectMeta.Name),
 			zap.String("fission_http_error", msg))
 		http.Error(w, msg, code)
 		return
 	}
-	executor.writeResponse(w, serviceName, fn.Name)
+	executor.writeResponse(w, serviceName, fn.ObjectMeta.Name)
 }
 
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
@@ -123,7 +112,7 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 	if err != nil {
 		executor.logger.Error(
 			"error writing HTTP response",
-			zap.String("function", fnName),
+			zap.String("function", fn.ObjectMeta.Name),
 			zap.Error(err),
 		)
 	}

@@ -256,7 +256,7 @@ func TestExecutor(t *testing.T) {
 
 	// the main test: get a service for a given function
 	t1 := time.Now()
-	svc, err := poolmgrClient.GetServiceForFunction(context.Background(), &f.ObjectMeta)
+	svc, err := poolmgrClient.GetServiceForFunction(context.Background(), f)
 	if err != nil {
 		log.Panicf("failed to get func svc: %v", err)
 	}
