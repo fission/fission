@@ -112,7 +112,7 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 	if err != nil {
 		executor.logger.Error(
 			"error writing HTTP response",
-			zap.String("function", fn.ObjectMeta.Name),
+			zap.String("function", fnName),
 			zap.Error(err),
 		)
 	}
