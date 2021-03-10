@@ -84,13 +84,13 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 
 		if active >= fn.Spec.Concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, conncurrency)
+			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
 			executor.logger.Error("error occurred", zap.String("error", errMsg))
 			http.Error(w, errMsg, http.StatusTooManyRequests)
 			return
 		}
 	} else {
-		fsvc, err := t.GetFuncSvcFromCache(fn)
+		fsvc, err := et.GetFuncSvcFromCache(fn)
 		if err == nil {
 			if et.IsValid(fsvc) {
 				// Cached, return svc address
@@ -115,15 +115,15 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		http.Error(w, msg, code)
 		return
 	}
-	executor.writeResponse(w, serviceName)
+	executor.writeResponse(w, serviceName, fn.Name)
 }
 
-func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string) {
-	_, err = w.Write([]byte(serviceName))
+func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
+	_, err := w.Write([]byte(serviceName))
 	if err != nil {
 		executor.logger.Error(
 			"error writing HTTP response",
-			zap.String("function", m.Name),
+			zap.String("function", fnName),
 			zap.Error(err),
 		)
 	}

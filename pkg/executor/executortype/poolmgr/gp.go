@@ -167,7 +167,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 }
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
-	podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.env.ObjectMeta.Namespace).List(context.Background(), v1.ListOptions{
+	podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.env.ObjectMeta.Namespace).List(v1.ListOptions{
 		LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
 		FieldSelector: "status.phase=Running",
 	})

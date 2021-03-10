@@ -169,7 +169,11 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	return pool.getFuncSvc(ctx, fn)
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error) {
+func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+	return nil, nil
+}
+
+func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error) {
 	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod, cpuLimit)
 }
 
