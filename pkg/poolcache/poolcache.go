@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type requestType int
@@ -41,7 +42,7 @@ type (
 	value struct {
 		val            interface{}
 		activeRequests int
-		cpuPercentage  float64
+		cpuUsage       resource.Quantity
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
@@ -55,7 +56,7 @@ type (
 		address         interface{}
 		value           interface{}
 		requestsPerPod  int
-		cpuLimit        float64
+		cpuLimit        resource.Quantity
 		responseChannel chan *response
 	}
 	response struct {
@@ -89,7 +90,7 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuPercentage < req.cpuLimit {
+					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuUsage.Cmp(req.cpuLimit) < 1 {
 						// mark active
 						values[addr].activeRequests++
 						resp.value = values[addr].val
@@ -130,7 +131,7 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function][req.address]; !ok {
 				c.cache[req.function][req.address] = &value{}
 			}
-			c.cache[req.function][req.address].cpuPercentage = req.cpuLimit
+			c.cache[req.function][req.address].cpuUsage = req.cpuLimit
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
@@ -149,7 +150,7 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit float64) (interface{}, int, error) {
+func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit resource.Quantity) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     getValue,
@@ -186,7 +187,7 @@ func (c *Cache) SetValue(function, address, value interface{}) {
 }
 
 // SetCPUPercentage updates/sets the CPU utilization limit for the pod
-func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit float64) {
+func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit resource.Quantity) {
 	c.requestChannel <- &request{
 		requestType:     setCPUPercentage,
 		function:        function,

@@ -13,6 +13,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
 	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7 // indirect
+	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/dchest/uniuri v0.0.0-20160212164326-8902c56451e9
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
@@ -24,6 +25,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ini/ini v1.62.0 // indirect
+	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/go-openapi/spec v0.19.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
@@ -33,6 +35,7 @@ require (
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/imdario/mergo v0.3.5
 	github.com/influxdata/influxdb v1.2.0
+	github.com/kr/pty v1.1.8 // indirect
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
@@ -58,6 +61,7 @@ require (
 	go.opencensus.io v0.22.4
 	go.uber.org/multierr v1.5.0 // indirect
 	go.uber.org/zap v1.10.0
+	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect

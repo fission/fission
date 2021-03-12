@@ -32,6 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -167,19 +168,29 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 }
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
-	podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.env.ObjectMeta.Namespace).List(v1.ListOptions{
-		LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
-		FieldSelector: "status.phase=Running",
-	})
-	if err != nil {
-		gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
-	} else {
-		for item := range podMetricsList.Items {
-			gp.logger.Info(fmt.Sprintf("%+v", item))
+	for {
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(v1.ListOptions{
+			LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
+		})
+
+		gp.logger.Info(fmt.Sprintf("Namespace %v", gp.namespace))
+		gp.logger.Info(fmt.Sprintf("Label selector %v", labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()))
+		if err != nil {
+			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
+		} else {
+			gp.logger.Info(fmt.Sprintf("length %v", len(podMetricsList.Items)))
+			for _, val := range podMetricsList.Items {
+				p, _ := resource.ParseQuantity("0m")
+				gp.logger.Info(fmt.Sprintf("Container Usage %+v", val.Containers))
+				for _, container := range val.Containers {
+					p.Add(container.Usage["cpu"])
+				}
+				gp.logger.Info(fmt.Sprintf("Usage %v", p))
+			}
 		}
+
+		time.Sleep(30 * time.Second)
 	}
-	time.Sleep(30 * time.Second)
-	return
 }
 
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
