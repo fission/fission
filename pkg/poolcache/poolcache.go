@@ -34,7 +34,7 @@ const (
 	setValue
 	markAvailable
 	deleteValue
-	setCPUPercentage
+	setCPUUtilization
 )
 
 type (
@@ -56,7 +56,7 @@ type (
 		address         interface{}
 		value           interface{}
 		requestsPerPod  int
-		cpuLimit        resource.Quantity
+		cpuUsage        resource.Quantity
 		responseChannel chan *response
 	}
 	response struct {
@@ -90,7 +90,7 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuUsage.Cmp(req.cpuLimit) < 1 {
+					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuUsage.Cmp(req.cpuUsage) < 1 {
 						// mark active
 						values[addr].activeRequests++
 						resp.value = values[addr].val
@@ -124,14 +124,14 @@ func (c *Cache) service() {
 			}
 			resp.allValues = vals
 			req.responseChannel <- resp
-		case setCPUPercentage:
+		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
 			}
 			if _, ok := c.cache[req.function][req.address]; !ok {
 				c.cache[req.function][req.address] = &value{}
 			}
-			c.cache[req.function][req.address].cpuUsage = req.cpuLimit
+			c.cache[req.function][req.address].cpuUsage = req.cpuUsage
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
@@ -156,7 +156,7 @@ func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit reso
 		requestType:     getValue,
 		function:        function,
 		requestsPerPod:  requestsPerPod,
-		cpuLimit:        cpuLimit,
+		cpuUsage:        cpuLimit,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
@@ -186,13 +186,13 @@ func (c *Cache) SetValue(function, address, value interface{}) {
 	}
 }
 
-// SetCPUPercentage updates/sets the CPU utilization limit for the pod
-func (c *Cache) SetCPUPercentage(function, address interface{}, cpuLimit resource.Quantity) {
+// SetCPUUtilization updates/sets the CPU utilization limit for the pod
+func (c *Cache) SetCPUUtilization(function, address interface{}, cpuUsage resource.Quantity) {
 	c.requestChannel <- &request{
-		requestType:     setCPUPercentage,
+		requestType:     setCPUUtilization,
 		function:        function,
 		address:         address,
-		cpuLimit:        cpuLimit,
+		cpuUsage:        cpuUsage,
 		responseChannel: make(chan *response),
 	}
 }

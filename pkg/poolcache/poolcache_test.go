@@ -3,6 +3,8 @@ package poolcache
 import (
 	"log"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func checkErr(err error) {
@@ -28,7 +30,8 @@ func TestPoolCache(t *testing.T) {
 	}
 
 	c.MarkAvailable("func", "ip")
-	_, active, err := c.GetValue("func", 5, 85)
+	cpuUsage, _ := resource.ParseQuantity("2m")
+	_, active, err := c.GetValue("func", 5, cpuUsage)
 	if active != 1 {
 		log.Panicln("Expected 1 active, found", active)
 	}
@@ -36,18 +39,23 @@ func TestPoolCache(t *testing.T) {
 
 	checkErr(c.DeleteValue("func", "ip"))
 
-	_, active, err = c.GetValue("func", 5, 85)
+	_, active, err = c.GetValue("func", 5, cpuUsage)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
 
+	cpuLimit, _ := resource.ParseQuantity("3m")
+
 	c.SetValue("cpulimit", "100", "value")
-	c.SetCPUPercentage("cpulimit", "100", 95)
+	c.SetCPUUtilization("cpulimit", "100", cpuLimit)
 	c.MarkAvailable("cpulimit", "100")
-	_, _, err = c.GetValue("cpulimit", 5, 85)
+	currentValue, _ := resource.ParseQuantity("2m")
+	_, _, err = c.GetValue("cpulimit", 5, currentValue)
+
 	if err == nil {
 		log.Panicf("received pod address with higher CPU usage than limit")
 	}
-	_, _, err = c.GetValue("cpulimit", 5, 99)
+	currentValue, _ = resource.ParseQuantity("5m")
+	_, _, err = c.GetValue("cpulimit", 5, currentValue)
 	checkErr(err)
 }

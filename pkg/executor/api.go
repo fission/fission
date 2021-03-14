@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -57,7 +58,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 	if t == fv1.ExecutorTypePoolmgr {
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, fn.Spec.RequestsPerPod, 85)
+		cpuLimit, _ := resource.ParseQuantity("2m")
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, fn.Spec.RequestsPerPod, cpuLimit)
 		if err == nil {
 			if et.IsValid(fsvc) {
 				// Cached, return svc address

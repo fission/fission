@@ -31,6 +31,7 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -166,7 +167,7 @@ func (deploy *NewDeploy) UnTapService(key string, svcHost string) {
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for NewDeployment
-func (deploy *NewDeploy) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error) {
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit resource.Quantity) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
 }

@@ -185,6 +185,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 				for _, container := range val.Containers {
 					p.Add(container.Usage["cpu"])
 				}
+				gp.fsCache.SetCPUUtilization()
 				gp.logger.Info(fmt.Sprintf("Usage %v", p))
 			}
 		}

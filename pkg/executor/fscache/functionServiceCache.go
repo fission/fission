@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -177,7 +178,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key.
-func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int, cpuLimit float64) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int, cpuLimit resource.Quantity) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
 	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod, cpuLimit)
@@ -351,6 +352,10 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
 			zap.Error(err),
 		)
 	}
+}
+
+func (fsc *FunctionServiceCache) SetCPUUtilization(key string, svcHost string, cpuUsage resource.Quantity) {
+	fsc.connFunctionCache.setCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // DeleteOld deletes aged function service entries from cache.

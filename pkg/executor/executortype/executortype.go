@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -39,7 +40,7 @@ type ExecutorType interface {
 	GetFuncSvcFromCache(*fv1.Function) (*fscache.FuncSvc, error)
 
 	// GetFuncSvcFromPoolCache retrieves function service after filtering on requestsPerPod and CPULimit
-	GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit float64) (*fscache.FuncSvc, int, error)
+	GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int, cpuLimit resource.Quantity) (*fscache.FuncSvc, int, error)
 
 	// DeleteFuncSvcFromCache deletes function service entry in cache.
 	DeleteFuncSvcFromCache(*fscache.FuncSvc)
