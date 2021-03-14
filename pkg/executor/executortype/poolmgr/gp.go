@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -75,6 +76,7 @@ type (
 		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
+		podFSVCMap               sync.Map
 	}
 )
 
@@ -126,6 +128,7 @@ func MakeGenericPool(
 		stopReadyPodControllerCh: make(chan struct{}),
 		poolInstanceID:           uniuri.NewLen(8),
 		instanceID:               instanceID,
+		podFSVCMap:               sync.Map{},
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -180,12 +183,19 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 		} else {
 			gp.logger.Info(fmt.Sprintf("length %v", len(podMetricsList.Items)))
 			for _, val := range podMetricsList.Items {
+				gp.logger.Info(fmt.Sprintf("Container %+v", val))
 				p, _ := resource.ParseQuantity("0m")
 				gp.logger.Info(fmt.Sprintf("Container Usage %+v", val.Containers))
 				for _, container := range val.Containers {
 					p.Add(container.Usage["cpu"])
 				}
-				gp.fsCache.SetCPUUtilization()
+				if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
+					valArray, ok1 := value.([]interface{})
+					if ok1 {
+						function, address := valArray[0], valArray[1]
+						gp.fsCache.SetCPUUtilization(function.(string), address.(string), p)
+					}
+				}
 				gp.logger.Info(fmt.Sprintf("Usage %v", p))
 			}
 		}
@@ -668,7 +678,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Ctime:             time.Now(),
 		Atime:             time.Now(),
 	}
-
+	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
 	gp.fsCache.AddFunc(*fsvc)
 
 	gp.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))

@@ -355,7 +355,7 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
 }
 
 func (fsc *FunctionServiceCache) SetCPUUtilization(key string, svcHost string, cpuUsage resource.Quantity) {
-	fsc.connFunctionCache.setCPUUtilization(key, svcHost, cpuUsage)
+	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // DeleteOld deletes aged function service entries from cache.
