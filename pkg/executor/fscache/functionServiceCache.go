@@ -179,10 +179,10 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key.
-func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int, cpuLimit resource.Quantity) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod, cpuLimit)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, active, err
