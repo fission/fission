@@ -608,7 +608,6 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
-	gp.logger.Info(fmt.Sprintf("------pod---\n%+v", pod))
 	gp.logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.Any("function", fn.ObjectMeta))
 
 	var svcHost string
