@@ -40,9 +40,10 @@ const (
 type (
 	// value used as "value" in cache
 	value struct {
-		val            interface{}
-		activeRequests int
-		cpuUsage       resource.Quantity
+		val             interface{}
+		activeRequests  int
+		currentCPUUsage resource.Quantity
+		cpuLimit        resource.Quantity
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
@@ -90,7 +91,7 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if values[addr].activeRequests < req.requestsPerPod && values[addr].cpuUsage.Cmp(req.cpuUsage) < 1 {
+					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
 						// mark active
 						values[addr].activeRequests++
 						resp.value = values[addr].val
@@ -113,6 +114,7 @@ func (c *Cache) service() {
 			}
 			c.cache[req.function][req.address].val = req.value
 			c.cache[req.function][req.address].activeRequests++
+			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]interface{}, 0)
 			for _, values := range c.cache {
@@ -131,7 +133,7 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function][req.address]; !ok {
 				c.cache[req.function][req.address] = &value{}
 			}
-			c.cache[req.function][req.address].cpuUsage = req.cpuUsage
+			c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
@@ -150,13 +152,12 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}, requestsPerPod int, cpuLimit resource.Quantity) (interface{}, int, error) {
+func (c *Cache) GetValue(function interface{}, requestsPerPod int) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     getValue,
 		function:        function,
 		requestsPerPod:  requestsPerPod,
-		cpuUsage:        cpuLimit,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
@@ -175,13 +176,14 @@ func (c *Cache) ListAvailableValue() []interface{} {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *Cache) SetValue(function, address, value interface{}) {
+func (c *Cache) SetValue(function, address, value interface{}, cpuLimit resource.Quantity) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     setValue,
 		function:        function,
 		address:         address,
 		value:           value,
+		cpuUsage:        cpuLimit,
 		responseChannel: respChannel,
 	}
 }

@@ -55,6 +55,7 @@ type (
 		Address           string                  // Host:Port or IP:Port that the function's service can be reached at.
 		KubernetesObjects []apiv1.ObjectReference // Kubernetes Objects (within the function namespace)
 		Executor          fv1.ExecutorType
+		CPULimit          resource.Quantity
 
 		Ctime time.Time
 		Atime time.Time
@@ -219,7 +220,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 // AddFunc adds a function service to pool cache.
 func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
-	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
