@@ -180,7 +180,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 		if err != nil {
 			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
 		} else {
-			gp.logger.Info("pods found", zap.Any("length", len(podMetricsList.Items)))
+			gp.logger.Debug("pods found", zap.Any("length", len(podMetricsList.Items)))
 			for _, val := range podMetricsList.Items {
 				p, _ := resource.ParseQuantity("0m")
 				for _, container := range val.Containers {
