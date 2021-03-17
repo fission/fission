@@ -359,7 +359,7 @@ type (
 		OnceOnly bool `json:"onceonly,omitempty"`
 
 		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
-		// This is optional. If not specified default value will be taken as 5
+		// This is optional. If not specified default value will be taken as 1
 		RequestsPerPod int `json:"requestsperpod,omitempty"`
 	}
 
