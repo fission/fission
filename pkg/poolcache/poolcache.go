@@ -130,10 +130,9 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
 			}
-			if _, ok := c.cache[req.function][req.address]; !ok {
-				c.cache[req.function][req.address] = &value{}
+			if _, ok := c.cache[req.function][req.address]; ok {
+				c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
 			}
-			c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {

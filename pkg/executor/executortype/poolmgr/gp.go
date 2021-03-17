@@ -174,30 +174,25 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 func (gp *GenericPool) updateCPUUtilizationSvc() {
 	for {
 		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(v1.ListOptions{
-			LabelSelector: labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String(),
+			LabelSelector: "managed=false",
 		})
 
-		gp.logger.Info(fmt.Sprintf("Namespace %v", gp.namespace))
-		gp.logger.Info(fmt.Sprintf("Label selector %v", labels.Set(gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()))
 		if err != nil {
 			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
 		} else {
-			gp.logger.Info(fmt.Sprintf("length %v", len(podMetricsList.Items)))
+			gp.logger.Info("pods found", zap.Any("length", len(podMetricsList.Items)))
 			for _, val := range podMetricsList.Items {
-				gp.logger.Info(fmt.Sprintf("Container %+v", val))
 				p, _ := resource.ParseQuantity("0m")
-				gp.logger.Info(fmt.Sprintf("Container Usage %+v", val.Containers))
 				for _, container := range val.Containers {
 					p.Add(container.Usage["cpu"])
 				}
 				if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
-					valArray, ok1 := value.([]interface{})
-					if ok1 {
+					if valArray, ok1 := value.([]interface{}); ok1 {
 						function, address := valArray[0], valArray[1]
-						gp.fsCache.SetCPUUtilization(function.(string), address.(string), p)
+						gp.fsCache.SetCPUUtilizaton(function.(string), address.(string), p)
+						gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
 					}
 				}
-				gp.logger.Info(fmt.Sprintf("Usage %v", p))
 			}
 		}
 
@@ -677,6 +672,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		gp.logger.Error("failed to get 85 of CPU usage", zap.Error(err))
 		cpuLimit = cpuUsage
 	}
+	gp.logger.Debug("cpuLimit set to", zap.Any("cpulimit", cpuLimit))
 
 	m := fn.ObjectMeta // only cache necessary part
 	fsvc := &fscache.FuncSvc{

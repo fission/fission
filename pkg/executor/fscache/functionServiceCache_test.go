@@ -1,6 +1,7 @@
 package fscache
 
 import (
+	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -175,38 +176,36 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		Ctime:             now,
 		Atime:             now,
 	}
-	// fn := &fv1.Function{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name: "foo",
-	// 		UID:  "1212",
-	// 	},
-	// }
+	fn := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "foo",
+			UID:  "1212",
+		},
+	}
 
 	fsc.AddFunc(*fsvc)
-	log.Panic("Hello")
-	// cpuLimit, _ := resource.ParseQuantity("2m")
-	// _, active, err := fsc.GetFuncSvc(fsvc.Function, 5, cpuLimit)
-	// if err != nil {
-	// 	logger.Panic("received error while retrieving value from cache")
-	// }
-	// if active != 1 {
-	// 	logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
-	// }
+	_, active, err := fsc.GetFuncSvc(fsvc.Function, 5)
+	if err != nil {
+		logger.Panic("received error while retrieving value from cache")
+	}
+	if active != 1 {
+		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
+	}
 
-	// key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
-	// fsc.MarkAvailable(key, fsvc.Address)
+	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
+	fsc.MarkAvailable(key, fsvc.Address)
 
-	// _, _, err = fsc.GetFuncSvc(fsvc.Function, 5, cpuLimit)
-	// if err != nil {
-	// 	logger.Panic("received error while retrieving value from cache")
-	// }
+	_, _, err = fsc.GetFuncSvc(fsvc.Function, 5)
+	if err != nil {
+		logger.Panic("received error while retrieving value from cache")
+	}
 
-	// vals, err := fsc.ListOldForPool(30 * time.Second)
-	// if err != nil {
-	// 	logger.Panic("received error while get list of old values")
-	// }
-	// if len(vals) != 0 {
-	// 	logger.Panic(fmt.Sprintln("list of old values didn't matched the expected: 1", "received", len(vals)))
-	// }
-	// fsc.DeleteFunctionSvc(fsvc)
+	vals, err := fsc.ListOldForPool(30 * time.Second)
+	if err != nil {
+		logger.Panic("received error while get list of old values")
+	}
+	if len(vals) != 0 {
+		logger.Panic(fmt.Sprintln("list of old values didn't matched the expected: 1", "received", len(vals)))
+	}
+	fsc.DeleteFunctionSvc(fsvc)
 }

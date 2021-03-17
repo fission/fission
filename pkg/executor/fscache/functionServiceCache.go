@@ -149,8 +149,7 @@ func (fsc *FunctionServiceCache) service() {
 			fscs := fsc.connFunctionCache.ListAvailableValue()
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
-				fsvc := funcSvc.(*FuncSvc)
-				if time.Since(fsvc.Atime) > req.age {
+				if fsvc, ok := funcSvc.(*FuncSvc); ok && time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
 			}
@@ -226,6 +225,11 @@ func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
 	fsvc.Atime = now
 
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
+}
+
+// SetCPUUtilizaton updates/sets CPUutilization in the pool cache
+func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cpuUsage resource.Quantity) {
+	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // MarkAvailable marks the value at key [function][address] as available.
