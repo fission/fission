@@ -715,10 +715,7 @@ func (gp *GenericPool) get85Percent(cpuUsage resource.Quantity) (resource.Quanti
 		valInt -= 20
 		val++
 	}
-	// round up to 1
-	if val == 0 {
-		val = 1
-	}
+
 	return resource.ParseQuantity(fmt.Sprintf("%d%s", val, exponent))
 }
 
