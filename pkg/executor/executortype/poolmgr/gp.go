@@ -151,11 +151,7 @@ func MakeGenericPool(
 	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
 	go gp.startReadyPodController()
-	if gp.metricsClient != nil {
-		go gp.updateCPUUtilizationSvc()
-	} else {
-		gp.logger.Warn("cpubased scaling won't apply as metricsClient creation failed")
-	}
+	go gp.updateCPUUtilizationSvc()
 	return gp, nil
 }
 
