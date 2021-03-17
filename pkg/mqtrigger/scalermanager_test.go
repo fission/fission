@@ -382,6 +382,7 @@ func newUnstructured(apiVersion, kind, namespace, name, resourceVersion string) 
 	}
 }
 
+// commented because this fails with k8s.io/client-go v0.17.2
 // func Test_getResourceVersion(t *testing.T) {
 // 	scheme := runtime.NewScheme()
 // 	fakeDynamicClient := &dynfake.FakeDynamicClient
