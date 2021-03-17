@@ -55,7 +55,7 @@ var (
 				},
 				"requestsperpod": {
 					Type:        "integer",
-					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 5",
+					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 1",
 				},
 			},
 		},
