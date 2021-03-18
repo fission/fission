@@ -61,7 +61,11 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if concurrency == 0 {
 			concurrency = 5
 		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, fn.Spec.RequestsPerPod)
+		requestsPerpod := fn.Spec.RequestsPerPod
+		if requestsPerpod == 0 {
+			requestsPerpod = 1
+		}
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, requestsPerpod)
 		if err == nil {
 			if et.IsValid(fsvc) {
 				// Cached, return svc address
