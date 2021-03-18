@@ -35,7 +35,7 @@ func Commands() *cobra.Command {
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
-			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnOnceOnly, flag.FnRequestsPerPod,
+			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 
 			// TODO retired pkg & trigger related flags from function cmd
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -86,7 +86,7 @@ func Commands() *cobra.Command {
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
-			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnOnceOnly, flag.FnRequestsPerPod,
+			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,
