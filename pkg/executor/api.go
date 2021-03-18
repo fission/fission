@@ -57,6 +57,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 	if t == fv1.ExecutorTypePoolmgr {
+		concurrency := fn.Spec.Concurrency
+		if concurrency == 0 {
+			concurrency = 5
+		}
 		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, fn.Spec.RequestsPerPod)
 		if err == nil {
 			if et.IsValid(fsvc) {
@@ -73,8 +77,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 			active--
 		}
 
-		if active >= fn.Spec.Concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, fn.Spec.Concurrency)
+		if active >= concurrency {
+			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
 			executor.logger.Error("error occurred", zap.String("error", errMsg))
 			http.Error(w, errMsg, http.StatusTooManyRequests)
 			return
