@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -78,6 +79,7 @@ type (
 		funcController k8sCache.Controller
 		pkgStore       k8sCache.Store
 		pkgController  k8sCache.Controller
+		podInformer    k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
 	}
@@ -134,6 +136,9 @@ func MakeGenericPoolManager(
 
 	gpm.pkgStore, gpm.pkgController = gpm.makePkgController(gpm.fissionClient, gpm.kubernetesClient, gpm.namespace)
 
+	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(kubernetesClient, 0, k8sInformers.WithNamespace(gpm.namespace))
+	gpm.podInformer = informerFactory.Core().V1().Pods().Informer()
+
 	return gpm
 }
 
@@ -143,6 +148,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.eagerPoolCreator()
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
+	go gpm.podInformer.Run(ctx.Done())
 	go gpm.idleObjectReaper()
 }
 
@@ -193,12 +199,30 @@ func (gpm *GenericPoolManager) TapService(svcHost string) error {
 	return nil
 }
 
+func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod, error) {
+	store := gpm.podInformer.GetStore()
+
+	item, exists, err := store.Get(obj)
+	if err != nil || !exists {
+		item, exists, err = store.GetByKey(fmt.Sprintf("%s/%s", obj.Namespace, obj.Name))
+	}
+
+	if !exists {
+		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performace issues for your function.")
+		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+		return pod, err
+	}
+
+	pod := item.(*apiv1.Pod)
+	return pod, nil
+}
+
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
-			pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+			pod, err := gpm.getPodInfo(obj)
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].
