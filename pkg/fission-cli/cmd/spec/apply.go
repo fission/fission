@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-git/go-git/v5"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +124,8 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			}
 		}
 
+		warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
+
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources)
 		if err != nil {
@@ -183,6 +186,27 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 	}
 
 	return nil
+}
+
+func warnIfDirtyWorkTree(path string) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return
+	}
+
+	workTree, err := repo.Worktree()
+	if err != nil {
+		return
+	}
+
+	status, err := workTree.Status()
+	if err != nil {
+		return
+	}
+
+	if !status.IsClean() {
+		fmt.Println("[WARN] Worktree is not clean")
+	}
 }
 
 func ignoreFile(path string) bool {
