@@ -67,7 +67,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, requestsPerpod)
 		if err == nil {
-			if et.IsValid(fsvc) {
+			if active > 0 || et.IsValid(fsvc) {
 				// Cached, return svc address
 				executor.logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
