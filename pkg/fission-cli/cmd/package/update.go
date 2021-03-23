@@ -160,7 +160,7 @@ func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (
 	} else if input.IsSet(flagkey.PkgDeployChecksum) {
 		pkg.Spec.Deployment.Checksum = fv1.Checksum{
 			Type: fv1.ChecksumTypeSHA256,
-			Sum:  srcChecksum,
+			Sum:  deployChecksum,
 		}
 		needToUpdate = true
 	}
