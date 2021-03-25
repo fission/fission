@@ -51,6 +51,7 @@ type (
 		FnMetadata     metav1.ObjectMeta
 		FnExecutorType fv1.ExecutorType
 		ServiceURL     string
+		OnceOnly       bool
 	}
 )
 
@@ -97,12 +98,13 @@ func (c *Client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 }
 
 // UnTapService sends a request to /v2/unTapService.
-func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error {
+func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL, onceOnly bool) error {
 	url := c.executorURL + "/v2/unTapService"
 	tapSvc := TapServiceRequest{
 		FnMetadata:     fnMeta,
 		FnExecutorType: executorType,
 		ServiceURL:     strings.TrimPrefix(serviceURL.String(), "http://"),
+		OnceOnly:       onceOnly,
 	}
 
 	body, err := json.Marshal(tapSvc)

@@ -205,7 +205,9 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
+
 	key := fmt.Sprintf("%v_%v", tapSvcReq.FnMetadata.UID, tapSvcReq.FnMetadata.ResourceVersion)
+
 	t := tapSvcReq.FnExecutorType
 	if t != fv1.ExecutorTypePoolmgr {
 		msg := fmt.Sprintf("Unknown executor type '%v'", t)
@@ -214,8 +216,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	et := executor.executorTypes[t]
-
-	et.UnTapService(key, tapSvcReq.ServiceURL)
+	et.UnTapService(key, tapSvcReq.ServiceURL, tapSvcReq.OnceOnly)
 
 	w.WriteHeader(http.StatusOK)
 }

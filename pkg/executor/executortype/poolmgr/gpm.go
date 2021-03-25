@@ -179,8 +179,14 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	gpm.fsCache.DeleteFunctionSvc(fsvc)
 }
 
-func (gpm *GenericPoolManager) UnTapService(key string, svcHost string) {
+func (gpm *GenericPoolManager) UnTapService(key string, svcHost string, onceOnly bool) {
 	gpm.fsCache.MarkAvailable(key, svcHost)
+	if onceOnly {
+		err := gpm.fsCache.UpdateAtime(key, time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC))
+		if err != nil {
+			gpm.logger.Error("encountered error while updating Atime to mark function pod for deletion", zap.Error(err))
+		}
+	}
 }
 
 func (gpm *GenericPoolManager) GetTotalAvailable(fn *fv1.Function) int {

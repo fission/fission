@@ -161,7 +161,7 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 }
 
 // UnTapService has not been implemented for NewDeployment.
-func (deploy *NewDeploy) UnTapService(key string, svcHost string) {
+func (deploy *NewDeploy) UnTapService(key string, svcHost string, onceOnly bool) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 

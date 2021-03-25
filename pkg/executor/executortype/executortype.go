@@ -46,7 +46,7 @@ type ExecutorType interface {
 	TapService(serviceUrl string) error
 
 	// UnTapService updates the isActive to false
-	UnTapService(key string, svcHost string)
+	UnTapService(key string, svcHost string, onceOnly bool)
 
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.
