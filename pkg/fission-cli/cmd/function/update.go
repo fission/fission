@@ -155,6 +155,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
+	if input.IsSet(flagkey.FnOnceOnly) {
+		function.Spec.OnceOnly = input.Bool(flagkey.FnOnceOnly)
+	}
+
 	if input.IsSet(flagkey.FnConcurrency) {
 		function.Spec.Concurrency = input.Int(flagkey.FnConcurrency)
 	}

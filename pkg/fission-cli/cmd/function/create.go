@@ -97,6 +97,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
+	fnOnceOnly := input.Bool(flagkey.FnOnceOnly)
+
 	fnConcurrency := DEFAULT_CONCURRENCY
 	if input.IsSet(flagkey.FnConcurrency) {
 		fnConcurrency = input.Int(flagkey.FnConcurrency)

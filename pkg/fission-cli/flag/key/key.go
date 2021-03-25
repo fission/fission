@@ -64,6 +64,7 @@ const (
 	FnTestQuery             = "query"
 	FnIdleTimeout           = "idletimeout"
 	FnConcurrency           = "concurrency"
+	FnOnceOnly              = "onceonly"
 
 	HtName              = resourceName
 	HtMethod            = "method"
