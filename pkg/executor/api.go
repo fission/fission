@@ -67,7 +67,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, requestsPerpod)
 		if err == nil {
-			// if pod is already serving request than it already exist else validated
+			// if a pod is already serving request then it already exists else validated
 			executor.logger.Debug("from cache", zap.Int("active", active))
 			if active > 1 || et.IsValid(fsvc) {
 				// Cached, return svc address
