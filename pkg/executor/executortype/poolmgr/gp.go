@@ -668,7 +668,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	// set cpuLimit to 85th percentage of the cpuUsage
-	cpuLimit, err := gp.getPercent(cpuUsage, 85)
+	cpuLimit, err := gp.getPercent(cpuUsage, 0.85)
 	if err != nil {
 		gp.logger.Error("failed to get 85 of CPU usage", zap.Error(err))
 		cpuLimit = cpuUsage
@@ -697,8 +697,8 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 }
 
 // getPercent returns  x percent of the quantity i.e multiple it x/100
-func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, x float64) (resource.Quantity, error) {
-	val := int64(math.Ceil(float64(cpuUsage.MilliValue()) * x))
+func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64) (resource.Quantity, error) {
+	val := int64(math.Ceil(float64(cpuUsage.MilliValue()) * percentage))
 	return resource.ParseQuantity(fmt.Sprintf("%dm", val))
 }
 
