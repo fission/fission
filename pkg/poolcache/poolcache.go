@@ -41,9 +41,9 @@ type (
 	// value used as "value" in cache
 	value struct {
 		val             interface{}
-		activeRequests  int
-		currentCPUUsage resource.Quantity
-		cpuLimit        resource.Quantity
+		activeRequests  int               // number of requests served by function pod
+		currentCPUUsage resource.Quantity // current cpu usage of the specialized function pod
+		cpuLimit        resource.Quantity // if currentCPUUsage is more than cpuLimit cache miss occurs in getValue request
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
