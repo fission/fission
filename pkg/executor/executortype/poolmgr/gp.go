@@ -20,9 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -667,7 +667,8 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		cpuUsage.Add(val)
 	}
 
-	cpuLimit, err := gp.get85Percent(cpuUsage)
+	// set cpuLimit to 85th percentage of the cpuUsage
+	cpuLimit, err := gp.getPercent(cpuUsage, 85)
 	if err != nil {
 		gp.logger.Error("failed to get 85 of CPU usage", zap.Error(err))
 		cpuLimit = cpuUsage
@@ -695,28 +696,10 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	return fsvc, nil
 }
 
-// get85Percent returns 85 percent of the quantity i.e multiple it by 17/20
-func (gp *GenericPool) get85Percent(cpuUsage resource.Quantity) (resource.Quantity, error) {
-	result := resource.MustParse("0m")
-
-	// repeatative addition for multiplication
-	for i := 0; i < 17; i++ {
-		result.Add(cpuUsage)
-	}
-
-	var out1, out2 []byte
-	_, exponent := result.CanonicalizeBytes(out1)
-	valByte, _ := result.AsCanonicalBytes(out2)
-	valInt, _ := strconv.Atoi(string(valByte))
-
-	// repeatative subtraction for division
-	val := 0
-	for valInt > 0 {
-		valInt -= 20
-		val++
-	}
-
-	return resource.ParseQuantity(fmt.Sprintf("%d%s", val, exponent))
+// getPercent returns  x percent of the quantity i.e multiple it x/100
+func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, x float64) (resource.Quantity, error) {
+	val := int64(math.Ceil(float64(cpuUsage.MilliValue()) * x))
+	return resource.ParseQuantity(fmt.Sprintf("%dm", val))
 }
 
 // destroys the pool -- the deployment, replicaset and pods
