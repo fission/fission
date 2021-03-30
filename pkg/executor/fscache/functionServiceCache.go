@@ -177,7 +177,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-// GetFuncSvc gets a function service from pool cache using function key.
+// GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
 func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
