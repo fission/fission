@@ -356,7 +356,7 @@ type (
 
 		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
 		// This is optional. If not specified default value will be taken as 1
-		RequestsPerPod int `json:"requestsperpod,omitempty"`
+		RequestsPerPod int `json:"requestsPerPod,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.
