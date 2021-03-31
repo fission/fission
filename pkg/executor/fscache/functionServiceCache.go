@@ -196,7 +196,7 @@ func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod
 }
 
 func (fsc *FunctionServiceCache) UpdateAtime(key string, t time.Time) error {
-	fsvcI, err := fsc.connFunctionCache.GetValue(key)
+	fsvcI, _, err := fsc.connFunctionCache.GetValue(key, 1)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return err
@@ -204,7 +204,11 @@ func (fsc *FunctionServiceCache) UpdateAtime(key string, t time.Time) error {
 	// update atime
 	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = t
-	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	// GetValue marks the function pod as active, so would have to call markAvailble
+	fsc.MarkAvailable(crd.CacheKey(fsvc.Function), fsvc.Address)
+	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, resource.MustParse("2m"))
+	// SetValue marks the function pod as active, so would have to call markAvailble
+	fsc.MarkAvailable(crd.CacheKey(fsvc.Function), fsvc.Address)
 	return nil
 }
 
