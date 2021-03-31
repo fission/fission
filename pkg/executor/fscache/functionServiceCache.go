@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -30,7 +31,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
-	poolcache "github.com/fission/fission/pkg/newcache"
+	"github.com/fission/fission/pkg/poolcache"
 )
 
 type fscRequestType int
@@ -54,6 +55,7 @@ type (
 		Address           string                  // Host:Port or IP:Port that the function's service can be reached at.
 		KubernetesObjects []apiv1.ObjectReference // Kubernetes Objects (within the function namespace)
 		Executor          fv1.ExecutorType
+		CPULimit          resource.Quantity
 
 		Ctime time.Time
 		Atime time.Time
@@ -147,8 +149,7 @@ func (fsc *FunctionServiceCache) service() {
 			fscs := fsc.connFunctionCache.ListAvailableValue()
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
-				fsvc := funcSvc.(*FuncSvc)
-				if time.Since(fsvc.Atime) > req.age {
+				if fsvc, ok := funcSvc.(*FuncSvc); ok && time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
 			}
@@ -176,14 +177,14 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-// GetFuncSvc gets a function service from pool cache using function key.
-func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, error) {
+// GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
+func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, err := fsc.connFunctionCache.GetValue(key)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
-		return nil, err
+		return nil, active, err
 	}
 
 	// update atime
@@ -191,7 +192,7 @@ func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta) (*FuncSvc, err
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
-	return &fsvcCopy, nil
+	return &fsvcCopy, active, nil
 }
 
 func (fsc *FunctionServiceCache) UpdateAtime(key string, t time.Time) error {
@@ -231,7 +232,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 // AddFunc adds a function service to pool cache.
 func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
-	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc)
+	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
@@ -239,9 +240,9 @@ func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
 	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 }
 
-// GetTotalAvailable returns the total number active function services.
-func (fsc *FunctionServiceCache) GetTotalAvailable(m *metav1.ObjectMeta) int {
-	return fsc.connFunctionCache.GetTotalAvailable(crd.CacheKey(m))
+// SetCPUUtilizaton updates/sets CPUutilization in the pool cache
+func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cpuUsage resource.Quantity) {
+	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // MarkAvailable marks the value at key [function][address] as available.
@@ -369,6 +370,10 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
 			zap.Error(err),
 		)
 	}
+}
+
+func (fsc *FunctionServiceCache) SetCPUUtilization(key string, svcHost string, cpuUsage resource.Quantity) {
+	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // DeleteOld deletes aged function service entries from cache.

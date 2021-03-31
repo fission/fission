@@ -65,6 +65,7 @@ const (
 	FnIdleTimeout           = "idletimeout"
 	FnConcurrency           = "concurrency"
 	FnOnceOnly              = "onceonly"
+	FnRequestsPerPod        = "requestsperpod"
 
 	HtName              = resourceName
 	HtMethod            = "method"

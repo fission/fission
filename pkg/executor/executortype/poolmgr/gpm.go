@@ -36,6 +36,7 @@ import (
 	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
@@ -62,6 +63,7 @@ type (
 
 		pools            map[string]*GenericPool
 		kubernetesClient *kubernetes.Clientset
+		metricsClient    *metricsclient.Clientset
 		namespace        string
 
 		fissionClient  *crd.FissionClient
@@ -97,6 +99,7 @@ func MakeGenericPoolManager(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
+	metricsClient *metricsclient.Clientset,
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string) executortype.ExecutorType {
@@ -107,6 +110,7 @@ func MakeGenericPoolManager(
 		logger:                 gpmLogger,
 		pools:                  make(map[string]*GenericPool),
 		kubernetesClient:       kubernetesClient,
+		metricsClient:          metricsClient,
 		namespace:              functionNamespace,
 		fissionClient:          fissionClient,
 		functionEnv:            cache.MakeCache(10*time.Second, 0),
@@ -172,7 +176,11 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta)
+	return nil, nil
+}
+
+func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
@@ -187,10 +195,6 @@ func (gpm *GenericPoolManager) UnTapService(key string, svcHost string, onceOnly
 			gpm.logger.Error("encountered error while updating Atime to mark function pod for deletion", zap.Error(err))
 		}
 	}
-}
-
-func (gpm *GenericPoolManager) GetTotalAvailable(fn *fv1.Function) int {
-	return gpm.fsCache.GetTotalAvailable(&fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) TapService(svcHost string) error {
@@ -463,7 +467,7 @@ func (gpm *GenericPoolManager) service() {
 				}
 
 				pool, err = MakeGenericPool(gpm.logger,
-					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
+					gpm.fissionClient, gpm.kubernetesClient, gpm.metricsClient, req.env, poolsize,
 					ns, gpm.namespace, gpm.fsCache, gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
 				if err != nil {
 					req.responseChannel <- &response{error: err}

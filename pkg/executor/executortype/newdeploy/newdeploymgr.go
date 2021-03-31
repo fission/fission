@@ -165,10 +165,10 @@ func (deploy *NewDeploy) UnTapService(key string, svcHost string, onceOnly bool)
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
-// GetTotalAvailable has not been implemented for NewDeployment.
-func (deploy *NewDeploy) GetTotalAvailable(fn *fv1.Function) int {
+// GetFuncSvcFromPoolCache has not been implemented for NewDeployment
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
-	return 0
+	return nil, 0, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
