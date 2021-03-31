@@ -306,6 +306,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
+			OnceOnly:        fnOnceOnly,
 		},
 	}
 
