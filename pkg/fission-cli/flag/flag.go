@@ -111,6 +111,7 @@ var (
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
 	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 5}
+	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod", DefaultValue: 1}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: String, Name: flagkey.HtMethod, Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD", DefaultValue: http.MethodGet}

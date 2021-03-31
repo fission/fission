@@ -28,7 +28,7 @@ import (
 func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
 	bmLogger := logger.Named("builder_manager")
 
-	fissionClient, kubernetesClient, _, err := crd.MakeFissionClient()
+	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
 	}
