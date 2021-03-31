@@ -195,23 +195,6 @@ func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod
 	return &fsvcCopy, active, nil
 }
 
-func (fsc *FunctionServiceCache) UpdateAtime(key string, t time.Time) error {
-	fsvcI, _, err := fsc.connFunctionCache.GetValue(key, 1)
-	if err != nil {
-		fsc.logger.Info("Not found in Cache")
-		return err
-	}
-	// update atime
-	fsvc := fsvcI.(*FuncSvc)
-	fsvc.Atime = t
-	// GetValue marks the function pod as active, so would have to call markAvailble
-	fsc.MarkAvailable(crd.CacheKey(fsvc.Function), fsvc.Address)
-	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, resource.MustParse("2m"))
-	// SetValue marks the function pod as active, so would have to call markAvailble
-	fsc.MarkAvailable(crd.CacheKey(fsvc.Function), fsvc.Address)
-	return nil
-}
-
 // GetByFunctionUID gets a function service from cache using function UUID.
 func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, error) {
 	mI, err := fsc.byFunctionUID.Get(uid)
