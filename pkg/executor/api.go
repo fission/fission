@@ -59,7 +59,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	if t == fv1.ExecutorTypePoolmgr {
 		concurrency := fn.Spec.Concurrency
 		if concurrency == 0 {
-			concurrency = 5
+			concurrency = 500
 		}
 		requestsPerpod := fn.Spec.RequestsPerPod
 		if requestsPerpod == 0 {
