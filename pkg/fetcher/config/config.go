@@ -176,6 +176,27 @@ func (cfg *Config) fetcherCommand(extraArgs ...string) []string {
 }
 
 func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
+
+	items := make([]apiv1.DownwardAPIVolumeFile, 0)
+	podNameFieldSelector := apiv1.ObjectFieldSelector{
+		FieldPath: "metadata.name",
+	}
+
+	podNamespaceFieldSelector := apiv1.ObjectFieldSelector{
+		FieldPath: "metadata.namespace",
+	}
+	podName := apiv1.DownwardAPIVolumeFile{
+		Path:     "name",
+		FieldRef: &podNameFieldSelector,
+	}
+
+	podNamespace := apiv1.DownwardAPIVolumeFile{
+		Path:     "namespace",
+		FieldRef: &podNamespaceFieldSelector,
+	}
+
+	items = append(items, podName, podNamespace)
+	dwAPIVol := apiv1.DownwardAPIVolumeSource{Items: items}
 	volumes := []apiv1.Volume{
 		{
 			Name: fv1.SharedVolumeUserfunc,
@@ -195,6 +216,12 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 				EmptyDir: &apiv1.EmptyDirVolumeSource{},
 			},
 		},
+		{
+			Name: fv1.PodInfoVolume,
+			VolumeSource: apiv1.VolumeSource{
+				DownwardAPI: &dwAPIVol,
+			},
+		},
 	}
 	mounts := []apiv1.VolumeMount{
 		{
@@ -208,6 +235,10 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 		{
 			Name:      fv1.SharedVolumeConfigmaps,
 			MountPath: cfg.sharedCfgMapPath,
+		},
+		{
+			Name:      fv1.PodInfoVolume,
+			MountPath: fv1.PodInfoMount,
 		},
 	}
 

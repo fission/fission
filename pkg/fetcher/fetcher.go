@@ -32,9 +32,15 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
+	"k8s.io/klog"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -54,6 +60,11 @@ type (
 		fissionClient    *crd.FissionClient
 		kubeClient       *kubernetes.Clientset
 		httpClient       *http.Client
+		Info             PodInfo
+	}
+	PodInfo struct {
+		Name      string
+		Namespace string
 	}
 )
 
@@ -80,6 +91,17 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 	if err != nil {
 		return nil, errors.Wrap(err, "error making the fission / kube client")
 	}
+
+	name, err := ioutil.ReadFile(fv1.PodInfoMount + "/name")
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading pod name from downward volume")
+	}
+
+	namespace, err := ioutil.ReadFile(fv1.PodInfoMount + "/namespace")
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
+	}
+
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,
@@ -87,6 +109,10 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		sharedConfigPath: sharedConfigPath,
 		fissionClient:    fissionClient,
 		kubeClient:       kubeClient,
+		Info: PodInfo{
+			Name:      string(name),
+			Namespace: string(namespace),
+		},
 		httpClient: &http.Client{
 			Transport: &ochttp.Transport{},
 		},
@@ -661,4 +687,76 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	}
 
 	return errors.Wrapf(err, "error specializing function pod after %v times", maxRetries)
+}
+
+func (fetcher *Fetcher) WebsocketHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
+		return
+	}
+	rec, err := eventRecorder(fetcher.kubeClient)
+	if err != nil {
+		klog.Errorf("Error creating recorder %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(metav1.ListOptions{
+		FieldSelector: "metadata.name=" + fetcher.Info.Name,
+	})
+	if err != nil {
+		fetcher.logger.Error("Failed to get the pod", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	for _, pod := range pods.Items {
+		ref, err := reference.GetReference(scheme.Scheme, &pod)
+		if err != nil {
+			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		rec.Event(ref, corev1.EventTypeNormal, "websocket", "Websocket connection has been formed ")
+		fetcher.logger.Info("Sent websocket initiation event")
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (fetcher *Fetcher) InactiveHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
+		return
+	}
+	rec, err := eventRecorder(fetcher.kubeClient)
+	if err != nil {
+		klog.Errorf("Error creating recorder %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(metav1.ListOptions{
+		FieldSelector: "metadata.name=" + fetcher.Info.Name,
+	})
+	if err != nil {
+		fetcher.logger.Error("Failed to get the pod", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	for _, pod := range pods.Items {
+		// There will only be one time since we've used field selector
+		ref, err := reference.GetReference(scheme.Scheme, &pod)
+		if err != nil {
+			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
+		rec.Event(ref, corev1.EventTypeNormal, "inactive", "Connection has been inactive")
+		fetcher.logger.Info("Sent websocket initiation event")
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func eventRecorder(kubeClient *kubernetes.Clientset) (record.EventRecorder, error) {
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(zap.S().Infof)
+	eventBroadcaster.StartRecordingToSink(
+		&typedcorev1.EventSinkImpl{
+			Interface: kubeClient.CoreV1().Events("")})
+	recorder := eventBroadcaster.NewRecorder(
+		scheme.Scheme,
+		corev1.EventSource{Component: "fetcher"})
+	return recorder, nil
 }
