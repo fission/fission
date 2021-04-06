@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type requestType int
@@ -33,13 +34,16 @@ const (
 	setValue
 	markAvailable
 	deleteValue
+	setCPUUtilization
 )
 
 type (
 	// value used as "value" in cache
 	value struct {
-		val      interface{}
-		isActive bool
+		val             interface{}
+		activeRequests  int               // number of requests served by function pod
+		currentCPUUsage resource.Quantity // current cpu usage of the specialized function pod
+		cpuLimit        resource.Quantity // if currentCPUUsage is more than cpuLimit cache miss occurs in getValue request
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
@@ -52,13 +56,15 @@ type (
 		function        interface{}
 		address         interface{}
 		value           interface{}
+		requestsPerPod  int
+		cpuUsage        resource.Quantity
 		responseChannel chan *response
 	}
 	response struct {
 		error
-		allValues      []interface{}
-		value          interface{}
-		totalAvailable int
+		allValues   []interface{}
+		value       interface{}
+		totalActive int
 	}
 )
 
@@ -85,57 +91,52 @@ func (c *Cache) service() {
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
 				for addr := range values {
-					if !values[addr].isActive {
-						// update atime
+					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
 						// mark active
-						values[addr].isActive = true
+						values[addr].activeRequests++
 						resp.value = values[addr].val
 						found = true
 						break
 					}
 				}
-			}
-			if !found {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' No inactive function found", req.function))
+				if !found {
+					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
+				}
+				resp.totalActive = len(values)
 			}
 			req.responseChannel <- resp
+		case setValue:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = make(map[interface{}]*value)
+			}
+			if _, ok := c.cache[req.function][req.address]; !ok {
+				c.cache[req.function][req.address] = &value{}
+			}
+			c.cache[req.function][req.address].val = req.value
+			c.cache[req.function][req.address].activeRequests++
+			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]interface{}, 0)
 			for _, values := range c.cache {
 				for _, value := range values {
-					if !value.isActive {
+					if value.activeRequests == 0 {
 						vals = append(vals, value.val)
 					}
 				}
 			}
 			resp.allValues = vals
 			req.responseChannel <- resp
-		case getTotalAvailable:
-			if values, ok := c.cache[req.function]; ok {
-				for addr := range values {
-					if values[addr].isActive {
-						resp.totalAvailable++
-					}
-				}
-			}
-			req.responseChannel <- resp
-		case setValue:
-			if _, ok := c.cache[req.function]; ok {
-				c.cache[req.function][req.address] = &value{
-					val:      req.value,
-					isActive: true,
-				}
-			} else {
+		case setCPUUtilization:
+			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = make(map[interface{}]*value)
-				c.cache[req.function][req.address] = &value{
-					val:      req.value,
-					isActive: true,
-				}
+			}
+			if _, ok := c.cache[req.function][req.address]; ok {
+				c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
 			}
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
-					c.cache[req.function][req.address].isActive = false
+					c.cache[req.function][req.address].activeRequests--
 				}
 			}
 		case deleteValue:
@@ -150,15 +151,16 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}) (interface{}, error) {
+func (c *Cache) GetValue(function interface{}, requestsPerPod int) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     getValue,
 		function:        function,
+		requestsPerPod:  requestsPerPod,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.value, resp.error
+	return resp.value, resp.totalActive, resp.error
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache
@@ -172,27 +174,27 @@ func (c *Cache) ListAvailableValue() []interface{} {
 	return resp.allValues
 }
 
-// GetTotalAvailable returns a total number active function services
-func (c *Cache) GetTotalAvailable(function interface{}) int {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     getTotalAvailable,
-		function:        function,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-	return resp.totalAvailable
-}
-
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *Cache) SetValue(function, address, value interface{}) {
+func (c *Cache) SetValue(function, address, value interface{}, cpuLimit resource.Quantity) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     setValue,
 		function:        function,
 		address:         address,
 		value:           value,
+		cpuUsage:        cpuLimit,
 		responseChannel: respChannel,
+	}
+}
+
+// SetCPUUtilization updates/sets the CPU utilization limit for the pod
+func (c *Cache) SetCPUUtilization(function, address interface{}, cpuUsage resource.Quantity) {
+	c.requestChannel <- &request{
+		requestType:     setCPUUtilization,
+		function:        function,
+		address:         address,
+		cpuUsage:        cpuUsage,
+		responseChannel: make(chan *response),
 	}
 }
 
