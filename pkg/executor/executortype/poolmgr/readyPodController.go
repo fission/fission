@@ -23,7 +23,6 @@ func (gp *GenericPool) startReadyPodController() {
 		options.FieldSelector = "status.phase=Running"
 	}
 	readyPodWatcher := cache.NewFilteredListWatchFromClient(gp.kubernetesClient.CoreV1().RESTClient(), "pods", gp.namespace, optionsModifier)
-
 	gp.readyPodQueue = workqueue.NewDelayingQueue()
 	gp.readyPodIndexer, gp.readyPodController = cache.NewIndexerInformer(readyPodWatcher, &apiv1.Pod{}, 0, cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {

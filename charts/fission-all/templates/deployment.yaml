@@ -147,6 +147,13 @@ rules:
   - triggerauthentications/status
   verbs:
   - '*'
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
 
 
 ---

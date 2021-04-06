@@ -36,7 +36,7 @@ type ArchivePruner struct {
 const defaultPruneInterval int = 60 // in minutes
 
 func MakeArchivePruner(logger *zap.Logger, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
-	crdClient, _, _, err := crd.MakeFissionClient()
+	crdClient, _, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil, err
 	}

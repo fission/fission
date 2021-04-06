@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -171,10 +172,10 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		},
 		Address:           "xxx",
 		KubernetesObjects: objects,
+		CPULimit:          resource.MustParse("5m"),
 		Ctime:             now,
 		Atime:             now,
 	}
-
 	fn := &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foo",
@@ -183,8 +184,10 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	}
 
 	fsc.AddFunc(*fsvc)
-
-	active := fsc.GetTotalAvailable(fsvc.Function)
+	_, active, err := fsc.GetFuncSvc(fsvc.Function, 5)
+	if err != nil {
+		logger.Panic("received error while retrieving value from cache")
+	}
 	if active != 1 {
 		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
 	}
@@ -192,11 +195,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
 	fsc.MarkAvailable(key, fsvc.Address)
 
-	if fsc.GetTotalAvailable(fsvc.Function) != 0 {
-		log.Panicln("active instances not matched")
-	}
-
-	_, err = fsc.GetFuncSvc(fsvc.Function)
+	_, _, err = fsc.GetFuncSvc(fsvc.Function, 5)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}

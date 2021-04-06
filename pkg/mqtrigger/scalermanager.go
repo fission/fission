@@ -67,7 +67,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
 func StartScalerManager(logger *zap.Logger, routerURL string) error {
-	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
 	}
