@@ -205,7 +205,7 @@ func warnIfDirtyWorkTree(path string) {
 	}
 
 	if !status.IsClean() {
-		fmt.Println("[WARN] Worktree is not clean")
+		console.Warn("Worktree is not clean")
 	}
 }
 
