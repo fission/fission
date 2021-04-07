@@ -689,6 +689,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	return errors.Wrapf(err, "error specializing function pod after %v times", maxRetries)
 }
 
+// WebsocketHandler is used to generate websocket events in Kubernetes
 func (fetcher *Fetcher) WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
@@ -712,12 +713,13 @@ func (fetcher *Fetcher) WebsocketHandler(w http.ResponseWriter, r *http.Request)
 			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		rec.Event(ref, corev1.EventTypeNormal, "websocket", "Websocket connection has been formed ")
+		rec.Event(ref, corev1.EventTypeNormal, "Websocket", "Websocket connection has been formed ")
 		fetcher.logger.Info("Sent websocket initiation event")
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
+// InactiveHandler is used to generate inactive events in Kubernetes
 func (fetcher *Fetcher) InactiveHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
@@ -743,8 +745,8 @@ func (fetcher *Fetcher) InactiveHandler(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
-		rec.Event(ref, corev1.EventTypeNormal, "inactive", "Connection has been inactive")
-		fetcher.logger.Info("Sent websocket initiation event")
+		rec.Event(ref, corev1.EventTypeNormal, "Inactive", "Connection has been inactive")
+		fetcher.logger.Info("Sent inactive event")
 	}
 	w.WriteHeader(http.StatusOK)
 }

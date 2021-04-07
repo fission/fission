@@ -68,8 +68,9 @@ type (
 		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
 		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
 		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
-
-		requestChannel chan *fscRequest
+		PodToFsvc         map[string]*FuncSvc
+		WebsocketFsvc     map[string]bool
+		requestChannel    chan *fscRequest
 	}
 
 	fscRequest struct {
@@ -110,6 +111,8 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunctionUID:     cache.MakeCache(0, 0),
 		connFunctionCache: poolcache.NewPoolCache(),
 		requestChannel:    make(chan *fscRequest),
+		PodToFsvc:         make(map[string]*FuncSvc),
+		WebsocketFsvc:     make(map[string]bool),
 	}
 	go fsc.service()
 	return fsc
