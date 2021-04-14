@@ -689,8 +689,8 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	return errors.Wrapf(err, "error specializing function pod after %v times", maxRetries)
 }
 
-// WebsocketHandler is used to generate websocket events in Kubernetes
-func (fetcher *Fetcher) WebsocketHandler(w http.ResponseWriter, r *http.Request) {
+// WsStartHandler is used to generate websocket events in Kubernetes
+func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -713,14 +713,14 @@ func (fetcher *Fetcher) WebsocketHandler(w http.ResponseWriter, r *http.Request)
 			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		rec.Event(ref, corev1.EventTypeNormal, "Websocket", "Websocket connection has been formed ")
+		rec.Event(ref, corev1.EventTypeNormal, "WsConnectionStarted", "Websocket connection has been formed on this pod")
 		fetcher.logger.Info("Sent websocket initiation event")
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-// InactiveHandler is used to generate inactive events in Kubernetes
-func (fetcher *Fetcher) InactiveHandler(w http.ResponseWriter, r *http.Request) {
+// WsEndHandler is used to generate inactive events in Kubernetes
+func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -745,8 +745,8 @@ func (fetcher *Fetcher) InactiveHandler(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
-		rec.Event(ref, corev1.EventTypeNormal, "Inactive", "Connection has been inactive")
-		fetcher.logger.Info("Sent inactive event")
+		rec.Event(ref, corev1.EventTypeNormal, "NoActiveConnections", "Connection has been inactive")
+		fetcher.logger.Info("Sent no active connections event")
 	}
 	w.WriteHeader(http.StatusOK)
 }

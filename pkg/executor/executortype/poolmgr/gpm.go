@@ -602,9 +602,9 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 
 	pollSleep := 5 * time.Second
 
-	go gpm.WebsocketEventChecker(gpm.kubernetesClient)
+	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 
-	go gpm.InactiveEventChecker(gpm.kubernetesClient)
+	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
 
 	for {
 		time.Sleep(pollSleep)
@@ -694,17 +694,17 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 	}
 }
 
-// WebsocketEventChecker checks if the pod has emitted a websocket event
-func (gpm *GenericPoolManager) WebsocketEventChecker(kubeClient *kubernetes.Clientset) {
+// WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
+func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes.Clientset) {
 
 	informer := k8scache.NewSharedInformer(
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=Websocket"
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=Websocket"
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
 			},
 		},
@@ -730,17 +730,17 @@ func (gpm *GenericPoolManager) WebsocketEventChecker(kubeClient *kubernetes.Clie
 
 }
 
-// InactiveEventChecker checks if the pod has emitted an inactive event
-func (gpm *GenericPoolManager) InactiveEventChecker(kubeClient *kubernetes.Clientset) {
+// NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
+func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubernetes.Clientset) {
 
 	informer := k8scache.NewSharedInformer(
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=Inactive"
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=Inactive"
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
 			},
 		},
@@ -753,9 +753,6 @@ func (gpm *GenericPoolManager) InactiveEventChecker(kubeClient *kubernetes.Clien
 	informer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			mObj := obj.(metav1.Object)
-			fmt.Println()
-			fmt.Println()
-			fmt.Println()
 			gpm.logger.Info("Inactive event detected for pod",
 				zap.String("Pod name", mObj.GetName()))
 
