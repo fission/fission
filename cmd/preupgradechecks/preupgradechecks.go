@@ -65,30 +65,16 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 
 // IsFissionReInstall checks if there is at least one fission CRD, i.e. function in this case, on this cluster.
 // We need this to find out if fission had been previously installed on this cluster
-func (client *PreUpgradeTaskClient) IsFissionReInstall() (bool, error) {
+func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
 	for i := 0; i < maxRetries; i++ {
-		crd, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
+		_, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
-			return false, nil
-		}
+			return false
 
-		versions := crd.Spec.Versions
-		var foundV2 bool
-		for _, v := range versions {
-			if v.Name == "v2" {
-				foundV2 = true
-			}
-		}
-		client.logger.Sugar().Infof("Crd %v", crd.Spec.Versions)
-		if !foundV2 {
-			return true, errors.New("Version 1 of CRD is deprecated. Please apply Version 2 of CRD")
-		}
-		if err == nil {
-			return true, nil
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and

@@ -1,0 +1,119 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: environments.fission.io
+spec:
+  conversion:
+    strategy: None
+  group: fission.io
+  names:
+    kind: Environment
+    listKind: EnvironmentList
+    plural: environments
+    singular: environment
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Environments are the language-specific runtime parts of Fission.
+          An Environment contains just enough software to build and run a Fission
+          Function.
+        properties:
+          spec:
+            description: Specification of the desired behaviour of the Environment
+            properties:
+              allowAccessToExternalNetwork:
+                description: To enable accessibility of external network for builder/function
+                  pod, set to 'true'.
+                type: boolean
+              allowedFunctionsPerContainer:
+                description: 'Allowed functions per container. Allowed Values: single,
+                  multiple'
+                type: string
+              builder:
+                description: (Optional) Builder is configuration for builder manager
+                  to launch environment builder to build source code into deployable
+                  binary.
+                properties:
+                  command:
+                    description: (Optional) Default build command to run for this
+                      build environment.
+                    type: string
+                  container:
+                    description: |-
+                      (Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy
+                       You can set either PodSpec or Container, but not both.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  image:
+                    description: Image for containing the language runtime.
+                    type: string
+                  podspec:
+                    description: |-
+                      (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.
+                       You can set either PodSpec or Container, but not both.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
+              imagepullsecret:
+                description: ImagePullSecret is the secret for Kubernetes to pull
+                  an image from a private registry.
+                type: string
+              keeparchive:
+                description: KeepArchive is used by fetcher to determine if the extracted
+                  archive should be extracted. For compiled languages such as Java,
+                  it should be true
+                type: boolean
+              poolsize:
+                description: The initial pool size for environment
+                type: integer
+              resources:
+                description: The request and limit CPU/MEM resource setting for the
+                  pods of the function. Can be overridden at Function in case of newdeployment
+                  executor type
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              runtime:
+                description: Runtime is configuration for running function, like container
+                  image etc.
+                properties:
+                  container:
+                    description: |-
+                      (Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: Name, Image (set to the Runtime.Image), TerminationMessagePath, ImagePullPolicy
+                       You can set either PodSpec or Container, but not both.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  image:
+                    description: Image for containing the language runtime.
+                    type: string
+                  podspec:
+                    description: |-
+                      (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec.
+                       You can set either PodSpec or Container, but not both.
+                       More info for podspec:
+                       https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#podspec-v1-core
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
+              terminationGracePeriod:
+                description: The grace time for pod to perform connection draining
+                  before termination. The unit is in seconds.
+                format: int64
+                type: integer
+              version:
+                description: Version is the Environment API version
+                type: integer
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: Environment
+    listKind: EnvironmentList
+    plural: environments
+    singular: environment
+  storedVersions:
+  - v1

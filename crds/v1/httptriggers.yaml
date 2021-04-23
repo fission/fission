@@ -1,9 +1,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  generation: 1
   name: httptriggers.fission.io
-  selfLink: /apis/apiextensions.k8s.io/v1/customresourcedefinitions/httptriggers.fission.io
 spec:
   conversion:
     strategy: None
@@ -18,9 +16,6 @@ spec:
   versions:
   - name: v1
     served: true
-    storage: false
-  - name: v2
-    served: true
     storage: true
 status:
   acceptedNames:
@@ -29,4 +24,4 @@ status:
     plural: httptriggers
     singular: httptrigger
   storedVersions:
-  - v2
+  - v1

@@ -65,14 +65,10 @@ Options:
 			zap.Error(err))
 	}
 
-	installed, err := crdBackedClient.IsFissionReInstall()
+	installed := crdBackedClient.IsFissionReInstall()
 	if !installed {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
-	}
-
-	if err != nil {
-		logger.Fatal("error , CRD version is old, please upgrade to newer version", zap.Error(err))
 	}
 
 	crdBackedClient.VerifyFunctionSpecReferences()

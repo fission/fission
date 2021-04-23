@@ -28,7 +28,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-FISSION_CRD_VERSION=v2
+FISSION_CRD_VERSION=v1
 
 source "swagger.sh"
 

@@ -29,6 +29,6 @@ limitations under the License.
 package v1
 
 const (
-	CRD_VERSION          = "fission.io/v2"
+	CRD_VERSION          = "fission.io/v1"
 	CRD_NAME_ENVIRONMENT = "Environment"
 )

@@ -2,7 +2,6 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: messagequeuetriggers.fission.io
-  selfLink: /apis/apiextensions.k8s.io/v1/customresourcedefinitions/messagequeuetriggers.fission.io
 spec:
   conversion:
     strategy: None
@@ -17,9 +16,6 @@ spec:
   versions:
   - name: v1
     served: true
-    storage: false
-  - name: v2
-    served: true
     storage: true
 status:
   acceptedNames:
@@ -28,4 +24,4 @@ status:
     plural: messagequeuetriggers
     singular: messagequeuetrigger
   storedVersions:
-  - v2
+  - v1

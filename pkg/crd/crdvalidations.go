@@ -54,38 +54,6 @@ var (
 					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 1",
 				},
 			},
-		},
-	}
-
-	// Function validation schema properties
-	functionSchemaPropsV2 = map[string]apiextensionsv1beta1.JSONSchemaProps{
-		"spec": {
-			Type:        "object",
-			Description: "Specification of the desired behaviour of the Function",
-			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"environment": environmentReferenceSchema,
-				"package":     functionPackageRefSchema,
-				"secrets":     secretReferenceSchema,
-				"configmaps":  configMapReferenceSchema,
-				"resources": {
-					Type:                   "object",
-					Description:            "ResourceRequirements describes the compute resource requirements. This is only for newdeploy to set up resource limitation when creating deployment for a function.",
-					XPreserveUnknownFields: boolPtr(true),
-				},
-				"InvokeStrategy": invokeStrategySchema,
-				"functionTimeout": {
-					Type:        "integer",
-					Description: " FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete.\nThis is optional. If not specified default value will be taken as 60s",
-				},
-				"idletimeout": {
-					Type:        "integer",
-					Description: "IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.",
-				},
-				"concurrency": {
-					Type:        "integer",
-					Description: "Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.\n This is optional. If not specified default value will be taken as 5",
-				},
-			},
 			XPreserveUnknownFields: boolPtr(true),
 		},
 	}
@@ -97,72 +65,15 @@ var (
 		Properties:  functionSchemaProps,
 	}
 
-	// Function validation schema
-	functionSchemaV2 = apiextensionsv1beta1.JSONSchemaProps{
-		Type:        "object",
-		Description: "A Function is a code and a runtime environment which can be used to execute code",
-		Properties:  functionSchemaPropsV2,
-	}
-
 	// Function validation object
 	functionValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &functionSchema,
-	}
-	// Function validation object
-	functionValidationV2 = &apiextensionsv1beta1.CustomResourceValidation{
-		OpenAPIV3Schema: &functionSchemaV2,
 	}
 )
 
 var (
 	// Environment validation schema properties
 	environmentSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
-		"spec": {
-			Type:        "object",
-			Description: "Specification of the desired behaviour of the Environment",
-			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"version": {
-					Type:        "integer",
-					Description: "Version is the Environment API version",
-				},
-				"runtime": runtimeSchema,
-				"builder": builderSchema,
-				"allowedFunctionsPerContainer": {
-					Type:        "string",
-					Description: "Allowed functions per container. Allowed Values: single, multiple",
-				},
-				"allowAccessToExternalNetwork": {
-					Type:        "boolean",
-					Description: "To enable accessibility of external network for builder/function pod, set to 'true'.",
-				},
-				"resources": {
-					Type:                   "object",
-					Description:            "The request and limit CPU/MEM resource setting for the pods of the function. Can be overridden at Function in case of newdeployment executor type",
-					XPreserveUnknownFields: boolPtr(true),
-				},
-				"poolsize": {
-					Type:        "integer",
-					Description: "The initial pool size for environment",
-				},
-				"terminationGracePeriod": {
-					Type:        "integer",
-					Format:      "int64",
-					Description: "The grace time for pod to perform connection draining before termination. The unit is in seconds.",
-				},
-				"keeparchive": {
-					Type:        "boolean",
-					Description: "KeepArchive is used by fetcher to determine if the extracted archive should be extracted. For compiled languages such as Java, it should be true",
-				},
-				"imagepullsecret": {
-					Type:        "string",
-					Description: "ImagePullSecret is the secret for Kubernetes to pull an image from a private registry.",
-				},
-			},
-		},
-	}
-
-	// Environment validation schema properties
-	environmentSchemaPropsV2 = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
 			Description: "Specification of the desired behaviour of the Environment",
@@ -216,20 +127,9 @@ var (
 		Properties:  environmentSchemaProps,
 	}
 
-	// Environment validation schema
-	environmentSchemaV2 = apiextensionsv1beta1.JSONSchemaProps{
-		Type:        "object",
-		Description: "Environments are the language-specific runtime parts of Fission. An Environment contains just enough software to build and run a Fission Function.",
-		Properties:  environmentSchemaPropsV2,
-	}
 	// Environment validation object
 	environmentValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &environmentSchema,
-	}
-
-	// Environment validation object
-	environmentValidationV2 = &apiextensionsv1beta1.CustomResourceValidation{
-		OpenAPIV3Schema: &environmentSchemaV2,
 	}
 )
 
@@ -237,43 +137,6 @@ var (
 
 	// Package validation schema properties
 	packageSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
-		"spec": {
-			Type:        "object",
-			Description: "Specification of the desired behaviour of the package.",
-			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"environment": environmentReferenceSchema,
-				"source":      archiveSchema,
-				"deployment":  archiveSchema,
-				"configmaps":  configMapReferenceSchema,
-				"buildcmd": {
-					Type:        "string",
-					Description: "BuildCommand is a custom build command that builder uses to build the source archive.",
-				},
-			},
-		},
-		"status": {
-			Type:        "object",
-			Description: "PackageStatus contains the build status of a package also the build log for examination.",
-			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-				"buildstatus": {
-					Type:        "string",
-					Description: "BuildStatus is the package build status.",
-				},
-				"buildlog": {
-					Type:        "string",
-					Description: "BuildCommand is a custom build command that builder used to build the source archive.",
-				},
-				"lastUpdateTimestamp": {
-					Type:        "string",
-					Nullable:    true,
-					Description: "LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.",
-				},
-			},
-		},
-	}
-
-	// Package validation schema properties
-	packageSchemaPropsV2 = map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"spec": {
 			Type:        "object",
 			Description: "Specification of the desired behaviour of the package.",
@@ -318,21 +181,9 @@ var (
 		Properties:  packageSchemaProps,
 	}
 
-	// Package validation schema
-	packageSchemaV2 = apiextensionsv1beta1.JSONSchemaProps{
-		Type:        "object",
-		Description: "A Package is a Fission object containing a Deployment Archive and a Source Archive (if any). A Package also references a certain environment.",
-		Properties:  packageSchemaPropsV2,
-	}
-
 	// Environment validation object
 	packageValidation = &apiextensionsv1beta1.CustomResourceValidation{
 		OpenAPIV3Schema: &packageSchema,
-	}
-
-	// Environment validation object
-	packageValidationV2 = &apiextensionsv1beta1.CustomResourceValidation{
-		OpenAPIV3Schema: &packageSchemaV2,
 	}
 )
 

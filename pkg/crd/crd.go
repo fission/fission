@@ -29,7 +29,6 @@ import (
 const (
 	crdGroupName = "fission.io"
 	crdVersion   = "v1"
-	crdVersion2  = "v2"
 )
 
 // ensureCRD checks if the given CRD type exists, and creates it if
@@ -62,80 +61,6 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 // EnsureFissionCRDs creates the CRDs
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
 
-	versions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
-	functionVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
-	environmentVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
-	packageVersions := make([]apiextensionsv1beta1.CustomResourceDefinitionVersion, 0)
-
-	//NOTE:
-	// 1. Different versions cannot have same Schema. Version one of schemas of Functions, Environments and Packages don't have XPreserveUnknownFields flag set in their spec whereas version 2 does.
-	// This allows us to be flexible with fields for the near future as lot of features are being developed.
-	// 2. If conversion is set to Webhook Strategy , we cannot set XPreserveUnknownFields flag to true. We can use "None" conversion stratergy if the only Schema changes involve adding fields like `XPreserveUnkownFields`, `Nullable`, etc.
-	// If we have to change the name/types of fields, then a webhook is required
-	// 3. Schema is a required parameter for CRD API v1 . v1beta1 is going to deprecate in K8s version 1.21, hence having a schema set now makes sense
-	functionVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion,
-		Served:  true,
-		Storage: false,
-		Schema:  functionValidation,
-	}
-
-	functionVersion2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion2,
-		Served:  true,
-		Storage: true,
-		Schema:  functionValidationV2,
-	}
-
-	environmentVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion,
-		Served:  true,
-		Storage: false,
-		Schema:  environmentValidation,
-	}
-
-	environmentVersion2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion2,
-		Served:  true,
-		Storage: true,
-		Schema:  environmentValidationV2,
-	}
-
-	packageVersion1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion,
-		Served:  true,
-		Storage: false,
-		Schema:  packageValidation,
-	}
-
-	packageVersion2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion2,
-		Served:  true,
-		Storage: true,
-		Schema:  packageValidationV2,
-	}
-
-	version1 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion,
-		Served:  true,
-		Storage: false,
-	}
-
-	version2 := apiextensionsv1beta1.CustomResourceDefinitionVersion{
-		Name:    crdVersion2,
-		Served:  true,
-		Storage: true,
-	}
-
-	versions = append(versions, version1, version2)
-	functionVersions = append(functionVersions, functionVersion1, functionVersion2)
-	environmentVersions = append(environmentVersions, environmentVersion1, environmentVersion2)
-	packageVersions = append(packageVersions, packageVersion1, packageVersion2)
-
-	conversion := apiextensionsv1beta1.CustomResourceConversion{
-		Strategy: apiextensionsv1beta1.ConversionStrategyType("None"),
-	}
-
 	crds := []apiextensionsv1beta1.CustomResourceDefinition{
 		// Functions
 		{
@@ -143,16 +68,16 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "functions.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "Function",
 					Plural:   "functions",
 					Singular: "function",
 				},
 				PreserveUnknownFields: boolPtr(false),
-				Versions:              functionVersions,
-				Conversion:            &conversion,
+				Validation:            functionValidation,
 			},
 		},
 		// Environments (function containers)
@@ -161,16 +86,16 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "environments.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "Environment",
 					Plural:   "environments",
 					Singular: "environment",
 				},
 				PreserveUnknownFields: boolPtr(false),
-				Versions:              environmentVersions,
-				Conversion:            &conversion,
+				Validation:            environmentValidation,
 			},
 		},
 		// HTTP triggers for functions
@@ -179,15 +104,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "httptriggers.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "HTTPTrigger",
 					Plural:   "httptriggers",
 					Singular: "httptrigger",
 				},
-				Versions:   versions,
-				Conversion: &conversion,
 			},
 		},
 		// Kubernetes watch triggers for functions
@@ -196,15 +120,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "kuberneteswatchtriggers.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "KubernetesWatchTrigger",
 					Plural:   "kuberneteswatchtriggers",
 					Singular: "kuberneteswatchtrigger",
 				},
-				Versions:   versions,
-				Conversion: &conversion,
 			},
 		},
 		// Time-based triggers for functions
@@ -213,15 +136,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "timetriggers.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "TimeTrigger",
 					Plural:   "timetriggers",
 					Singular: "timetrigger",
 				},
-				Versions:   versions,
-				Conversion: &conversion,
 			},
 		},
 		// Message queue triggers for functions
@@ -230,15 +152,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "messagequeuetriggers.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "MessageQueueTrigger",
 					Plural:   "messagequeuetriggers",
 					Singular: "messagequeuetrigger",
 				},
-				Versions:   versions,
-				Conversion: &conversion,
 			},
 		},
 		// Packages: archives containing source or binaries for one or more functions
@@ -247,16 +168,16 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "packages.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "Package",
 					Plural:   "packages",
 					Singular: "package",
 				},
 				PreserveUnknownFields: boolPtr(false),
-				Versions:              packageVersions,
-				Conversion:            &conversion,
+				Validation:            packageValidation,
 			},
 		},
 		// CanaryConfig: configuration for canary deployment of functions
@@ -265,15 +186,14 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 				Name: "canaryconfigs.fission.io",
 			},
 			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group: crdGroupName,
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Group:   crdGroupName,
+				Version: crdVersion,
+				Scope:   apiextensionsv1beta1.NamespaceScoped,
 				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
 					Kind:     "CanaryConfig",
 					Plural:   "canaryconfigs",
 					Singular: "canaryconfig",
 				},
-				Versions:   versions,
-				Conversion: &conversion,
 			},
 		},
 	}
