@@ -54,7 +54,6 @@ var (
 					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 1",
 				},
 			},
-			XPreserveUnknownFields: boolPtr(true),
 		},
 	}
 
@@ -115,8 +114,6 @@ var (
 					Description: "ImagePullSecret is the secret for Kubernetes to pull an image from a private registry.",
 				},
 			},
-			// New fields can be added under spec even if they belong to properties. We can move them to properties in the next CR version
-			XPreserveUnknownFields: boolPtr(true),
 		},
 	}
 
@@ -150,7 +147,6 @@ var (
 					Description: "BuildCommand is a custom build command that builder uses to build the source archive.",
 				},
 			},
-			XPreserveUnknownFields: boolPtr(true),
 		},
 		"status": {
 			Type:        "object",
@@ -170,7 +166,6 @@ var (
 					Description: "LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.",
 				},
 			},
-			XPreserveUnknownFields: boolPtr(true),
 		},
 	}
 

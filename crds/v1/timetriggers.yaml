@@ -23,5 +23,6 @@ status:
     listKind: TimeTriggerList
     plural: timetriggers
     singular: timetrigger
+  conditions: []
   storedVersions:
   - v1
