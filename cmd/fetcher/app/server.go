@@ -115,6 +115,8 @@ func Run(logger *zap.Logger) {
 	mux.HandleFunc("/specialize", f.SpecializeHandler)
 	mux.HandleFunc("/upload", f.UploadHandler)
 	mux.HandleFunc("/version", f.VersionHandler)
+	mux.HandleFunc("/wsevent/start", f.WsStartHandler)
+	mux.HandleFunc("/wsevent/end", f.WsEndHandler)
 
 	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
 		if !*specializeOnStart || readyToServe {
