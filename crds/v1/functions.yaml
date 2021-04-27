@@ -1,0 +1,163 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null 
+  name: functions.fission.io
+spec:
+  conversion:
+    strategy: None
+  group: fission.io
+  names:
+    kind: Function
+    listKind: FunctionList
+    plural: functions
+    singular: function
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: A Function is a code and a runtime environment which can be used
+          to execute code
+        properties:
+          spec:
+            description: Specification of the desired behaviour of the Function
+            properties:
+              InvokeStrategy:
+                description: 'InvokeStrategy is a set of controls over how the function
+                  executes. It affects the performance and resource usage of the function.
+                  An InvokeStrategy is of one of two types: ExecutionStrategy, which
+                  controls low-level parameters such as which ExecutorType to use,
+                  when to autoscale, minimum and maximum number of running instances,
+                  etc.'
+                properties:
+                  ExecutionStrategy:
+                    description: ExecutionStrategy specifies low-level parameters
+                      for function execution, such as the number of instances, scaling
+                      strategy etc.
+                    properties:
+                      ExecutorType:
+                        description: 'ExecutorType is the executor type of a function
+                          used. Defaults to poolmgr. Available value: poolmgr, newdeploy'
+                        type: string
+                      MaxScale:
+                        description: Only for newdeploy executor to set up maximum
+                          replicas of deployment.
+                        type: integer
+                      MinScale:
+                        description: Only for newdeploy executor to set up minimum
+                          replicas of deployment.
+                        type: integer
+                      SpecializationTimeout:
+                        description: Timeout setting for executor to wait for pod
+                          specialization.
+                        type: integer
+                      TargetCPUPercent:
+                        description: Only for newdeploy executor to set up target
+                          CPU utilization of HPA.
+                        type: integer
+                    type: object
+                  StrategyType:
+                    description: StrategyType is the strategy type of a function.
+                    type: string
+                type: object
+              concurrency:
+                description: |-
+                  Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.
+                   This is optional. If not specified default value will be taken as 500
+                type: integer
+              configmaps:
+                items:
+                  description: Reference to a Kubernetes ConfigMap.
+                  properties:
+                    name:
+                      description: Name of the ConfigMap to use
+                      type: string
+                    namespace:
+                      description: Namespace for corresponding ConfigMap
+                      type: string
+                  type: object
+                nullable: true
+                type: array
+              environment:
+                description: Reference to Fission Environment type custom resource.
+                properties:
+                  name:
+                    description: Name of the Environment to use
+                    type: string
+                  namespace:
+                    description: Namespace for corresponding Environment
+                    type: string
+                type: object
+              functionTimeout:
+                description: |2-
+                   FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete.
+                  This is optional. If not specified default value will be taken as 60s
+                type: integer
+              idletimeout:
+                description: IdleTimeout specifies the length of time that a function
+                  is idle before the function pod(s) are eligible for deletion. If
+                  no traffic to the function is detected within the idle timeout,
+                  the executor will then recycle the function pod(s) to release resources.
+                type: integer
+              package:
+                description: FunctionPackageRef includes the reference to the package.
+                properties:
+                  functionName:
+                    description: FunctionName specifies a specific function within
+                      the package using the path and specific function and varies
+                      based on language/environment
+                    type: string
+                  packageref:
+                    description: Package Reference
+                    properties:
+                      name:
+                        description: Name of the Package to use
+                        type: string
+                      namespace:
+                        description: Namespace for corresponding Package
+                        type: string
+                      resourceversion:
+                        description: Including resource version in the reference forces
+                          the function to be updated on package update, making it
+                          possible to cache the function based on its metadata.
+                        type: string
+                    type: object
+                type: object
+              requestsPerPod:
+                description: |-
+                  RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.
+                   This is optional. If not specified default value will be taken as 1
+                type: integer
+              resources:
+                description: ResourceRequirements describes the compute resource requirements.
+                  This is only for newdeploy to set up resource limitation when creating
+                  deployment for a function.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              secrets:
+                items:
+                  description: Reference to a Kubernetes secret.
+                  properties:
+                    name:
+                      description: Name of the secret to use
+                      type: string
+                    namespace:
+                      description: Namespace for corresponding secret
+                      type: string
+                  type: object
+                nullable: true
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: Function
+    listKind: FunctionList
+    plural: functions
+    singular: function
+  conditions: []
+  storedVersions:
+  - v1
