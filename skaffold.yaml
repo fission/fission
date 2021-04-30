@@ -91,4 +91,4 @@ profiles:
       value: "NodePort"
     - op: replace
       path: /deploy/helm/releases/0/setValues/prometheus.enabled
-      value: true
+      value: false
