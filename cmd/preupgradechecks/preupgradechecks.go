@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -66,15 +67,33 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 // IsFissionReInstall checks if there is at least one fission CRD, i.e. function in this case, on this cluster.
 // We need this to find out if fission had been previously installed on this cluster
 func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
+	var found bool
 	for i := 0; i < maxRetries; i++ {
+		found = true
 		_, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
-			return false
-
+			found = false
 		}
 	}
 
-	return false
+	return found
+}
+
+// LatestSchemaApplied ensures that the end user has applied the latest CRDs generated to the cluster.
+// For future reference: whenever a new field is added, we need to check for that field's existence in this function
+func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
+	client.logger.Info("Checking if user has applied the latest CRDs")
+	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get("functions.fission.io", metav1.GetOptions{})
+	if err != nil {
+		client.logger.Error("Could not get the CRD")
+		return err
+	}
+	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
+	if strings.Contains(crd.Spec.String(), "RequestsPerPod") {
+		return nil
+	}
+	client.logger.Error("Could not find the newer fields")
+	return errors.New("Apply the newer CRDs before upgrading")
 }
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and

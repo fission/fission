@@ -71,5 +71,9 @@ Options:
 		return
 	}
 
+	err = crdBackedClient.LatestSchemaApplied()
+	if err != nil {
+		panic("New CRDs are not applied")
+	}
 	crdBackedClient.VerifyFunctionSpecReferences()
 }
