@@ -38,7 +38,6 @@ require (
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
 	github.com/minio/minio-go v6.0.14+incompatible
-	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 	github.com/nats-io/nats-streaming-server v0.17.0
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.6.0
@@ -66,6 +65,5 @@ require (
 	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v0.17.2
 	k8s.io/klog v1.0.0
-	k8s.io/klog/v2 v2.8.0
 	k8s.io/metrics v0.17.2
 )
