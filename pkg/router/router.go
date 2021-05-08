@@ -119,7 +119,7 @@ func serveMetric(logger *zap.Logger) {
 
 // Start starts a router
 func Start(logger *zap.Logger, port int, executorURL string) {
-	_ = MakeAnalytics("")
+	go runAnalytics(logger)
 
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
