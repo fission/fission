@@ -67,10 +67,10 @@ spec:
             value: {{ .Values.router.displayAccessLog | default false | quote }}
 {{- if .Values.analytics }}
           - name: GA_TRACKING_ID
-            value: "UA-196546703-1""
+            value: "{{ .Values.gaTrackingID }}"
 {{- else if .Values.analyticsNonHelmInstall }}
           - name: GA_TRACKING_ID
-            value: "UA-196546703-1""
+            value: "{{ .Values.gaTrackingID }}"
 {{- end }}
         readinessProbe:
           httpGet:

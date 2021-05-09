@@ -270,6 +270,9 @@ analytics: true
 ## Internally used for generating an analytics job for non-helm installs
 analyticsNonHelmInstall: false
 
+## Google Analytics Tracking ID
+gaTrackingID: UA-196546703-1
+
 ## Enable Heapster only in clusters where heapster does not exist already
 heapster: false
 
@@ -288,6 +291,9 @@ pruneInterval: 60
 
 ## Fission pre-install/pre-upgrade checks live in this image
 preUpgradeChecksImage: fission/pre-upgrade-checks
+
+## Fission ppost-install/post-upgrade reporting live in this image
+postUpgradeReportImage: fission/reporter
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response

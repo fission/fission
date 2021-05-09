@@ -22,15 +22,20 @@ spec:
       labels:
         release: {{ .Release.Name }}
         app: {{ template "name" . }}
-      annotations:
-        {{- if .Values.enableIstio }}
-        "sidecar.istio.io/inject": "false"
-        {{- end }}
     spec:
       restartPolicy: Never
       containers:
         - name: post-upgrade-job
-          image: "fission/alpinecurl"
+        {{- if .Values.imageTag }}
+          image: {{ .Values.postUpgradeReportImage }}:{{ .Values.imageTag }}
+        {{- else }}
+          image: {{ .Values.postUpgradeReportImage }}
+        {{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-upgrade\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.io/analytics || true"]
+          command: [ "/reporter" ]
+          args: ["event", "-c", "fission-use", "-a", "helm-post-upgrade", "-l", "{{ .Chart.Name }}-{{ .Chart.Version }}"]
+          env:
+            - name: GA_TRACKING_ID
+              value: "{{ .Values.gaTrackingID }}"
+      serviceAccountName: fission-svc
 {{- end }}

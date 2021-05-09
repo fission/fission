@@ -24,6 +24,7 @@ setupCIBuildEnv
 build_and_push_go_mod_cache_image $REPO/go-mod-image-cache
 build_and_push_fission_bundle $REPO/$IMAGE:$TAG $REPO/go-mod-image-cache
 build_and_push_pre_upgrade_check_image $PRE_UPGRADE_CHECK_IMAGE:$TAG $REPO/go-mod-image-cache
+build_and_push_reporter_image $REPORTER_IMAGE:$TAG $REPO/go-mod-image-cache
 build_and_push_fetcher $FETCHER_IMAGE:$TAG $REPO/go-mod-image-cache
 build_and_push_builder $BUILDER_IMAGE:$TAG $REPO/go-mod-image-cache
 
