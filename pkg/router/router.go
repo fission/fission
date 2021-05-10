@@ -119,8 +119,6 @@ func serveMetric(logger *zap.Logger) {
 
 // Start starts a router
 func Start(logger *zap.Logger, port int, executorURL string) {
-	go runAnalytics(logger)
-
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()

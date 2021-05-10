@@ -65,13 +65,6 @@ spec:
             value: {{ .Values.debugEnv | quote }}
           - name: DISPLAY_ACCESS_LOG
             value: {{ .Values.router.displayAccessLog | default false | quote }}
-{{- if .Values.analytics }}
-          - name: GA_TRACKING_ID
-            value: "{{ .Values.gaTrackingID }}"
-{{- else if .Values.analyticsNonHelmInstall }}
-          - name: GA_TRACKING_ID
-            value: "{{ .Values.gaTrackingID }}"
-{{- end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
