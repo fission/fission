@@ -293,7 +293,7 @@ pruneInterval: 60
 preUpgradeChecksImage: fission/pre-upgrade-checks
 
 ## Fission ppost-install/post-upgrade reporting live in this image
-postUpgradeReportImage: fission/reporter
+postInstallReportImage: fission/reporter
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response

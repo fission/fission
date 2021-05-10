@@ -25,11 +25,11 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: post-upgrade-job
+        - name: post-install-job
         {{- if .Values.imageTag }}
-          image: {{ .Values.postUpgradeReportImage }}:{{ .Values.imageTag }}
+          image: {{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
         {{- else }}
-          image: {{ .Values.postUpgradeReportImage }}
+          image: {{ .Values.postInstallReportImage }}
         {{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           command: [ "/reporter" ]
