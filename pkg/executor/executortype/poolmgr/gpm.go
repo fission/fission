@@ -32,10 +32,13 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
+	k8scache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -598,6 +601,11 @@ func (gpm *GenericPoolManager) getEnvPoolsize(env *fv1.Environment) int32 {
 func (gpm *GenericPoolManager) idleObjectReaper() {
 
 	pollSleep := 5 * time.Second
+
+	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
+
+	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
+
 	for {
 		time.Sleep(pollSleep)
 
@@ -636,6 +644,9 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				continue
 			}
 
+			if _, ok := gpm.fsCache.WebsocketFsvc[fsvc.Name]; ok {
+				continue
+			}
 			// For function with the environment that no longer exists, executor
 			// cleanups the idle pod as usual and prints log to notify user.
 			if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
@@ -681,4 +692,88 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			}()
 		}
 	}
+}
+
+// WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
+func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes.Clientset) {
+
+	informer := k8scache.NewSharedInformer(
+		&k8scache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
+			},
+		},
+		&apiv1.Event{},
+		0,
+	)
+
+	stopper := make(chan struct{})
+	defer close(stopper)
+	informer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			mObj := obj.(metav1.Object)
+			gpm.logger.Info("Websocket event detected for pod",
+				zap.String("Pod name", mObj.GetName()))
+
+			podName := strings.SplitAfter(mObj.GetName(), ".")
+			if fsvc, ok := gpm.fsCache.PodToFsvc[strings.TrimSuffix(podName[0], ".")]; ok {
+				gpm.fsCache.WebsocketFsvc[fsvc.Name] = true
+			}
+		},
+	})
+	informer.Run(stopper)
+
+}
+
+// NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
+func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubernetes.Clientset) {
+
+	informer := k8scache.NewSharedInformer(
+		&k8scache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
+			},
+		},
+		&apiv1.Event{},
+		0,
+	)
+
+	stopper := make(chan struct{})
+	defer close(stopper)
+	informer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			mObj := obj.(metav1.Object)
+			gpm.logger.Info("Inactive event detected for pod",
+				zap.String("Pod name", mObj.GetName()))
+
+			podName := strings.SplitAfter(mObj.GetName(), ".")
+			if fsvc, ok := gpm.fsCache.PodToFsvc[strings.TrimSuffix(podName[0], ".")]; ok {
+
+				gpm.fsCache.DeleteFunctionSvc(fsvc)
+				for i := range fsvc.KubernetesObjects {
+					gpm.logger.Info("release idle function resources due to  inactivity",
+						zap.String("function", fsvc.Function.Name),
+						zap.String("address", fsvc.Address),
+						zap.String("executor", string(fsvc.Executor)),
+						zap.String("pod", fsvc.Name),
+					)
+					reaper.CleanupKubeObject(gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+
+		},
+	})
+	informer.Run(stopper)
+
 }

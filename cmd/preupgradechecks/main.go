@@ -65,12 +65,11 @@ Options:
 			zap.Error(err))
 	}
 
-	if !crdBackedClient.IsFissionReInstall() {
+	installed := crdBackedClient.IsFissionReInstall()
+	if !installed {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
 
 	crdBackedClient.VerifyFunctionSpecReferences()
-	crdBackedClient.RemoveClusterAdminRolesForFissionSAs()
-	crdBackedClient.SetupRoleBindings()
 }
