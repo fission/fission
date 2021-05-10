@@ -38,7 +38,6 @@ require (
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
 	github.com/minio/minio-go v6.0.14+incompatible
-	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 	github.com/nats-io/nats-streaming-server v0.17.0
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.6.0
@@ -58,15 +57,13 @@ require (
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.10.0
-	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	k8s.io/api v0.17.2
+	k8s.io/api v0.17.17
 	k8s.io/apiextensions-apiserver v0.17.2
-	k8s.io/apimachinery v0.17.2
-	k8s.io/client-go v0.17.2
+	k8s.io/apimachinery v0.17.17
+	k8s.io/client-go v0.17.17
 	k8s.io/klog v1.0.0
-	k8s.io/klog/v2 v2.8.0
 	k8s.io/metrics v0.17.2
 )
