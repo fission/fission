@@ -33,7 +33,7 @@ spec:
         {{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           command: [ "/reporter" ]
-          args: ["event", "-c", "fission-use", "-a", "helm-post-install", "-l", "{{ .Chart.Name }}-{{ .Chart.Version }}"]
+          args: ["event", "-c", "fission-use", "-a", "yaml-post-install", "-l", "{{ .Chart.Name }}-{{ .Chart.Version }}"]
           env:
             - name: GA_TRACKING_ID
               value: "{{ .Values.gaTrackingID }}"

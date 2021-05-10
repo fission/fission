@@ -55,6 +55,7 @@ deploy:
           imageTag: ""
           prometheus.enabled: false
           debugEnv: false
+          analytics: false
         wait: true
         recreatePods: false
         packaged: null

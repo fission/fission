@@ -16,13 +16,16 @@ metadata:
     "helm.sh/hook": post-install
     "helm.sh/hook-delete-policy": hook-succeeded
 spec:
-  backoffLimit: 0
   template:
     metadata:
       name: {{ template "fullname" . }}
       labels:
         release: {{ .Release.Name }}
         app: {{ template "name" . }}
+      annotations:
+        {{- if .Values.enableIstio }}
+        "sidecar.istio.io/inject": "false"
+        {{- end }}
     spec:
       restartPolicy: Never
       containers:

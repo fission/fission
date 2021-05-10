@@ -51,7 +51,6 @@ setupCIBuildEnv() {
     export ROUTER_SERVICE_TYPE=LoadBalancer
     export SERVICE_TYPE=LoadBalancer
     export PRE_UPGRADE_CHECK_IMAGE=$REPO/pre-upgrade-checks
-    export REPORTER_IMAGE=$REPO/reporter
 }
 
 setupIngressController() {
@@ -95,19 +94,6 @@ build_and_push_pre_upgrade_check_image() {
 
     gcloud docker -- push $image_tag &
     travis_fold_end build_and_push_pre_upgrade_check_image
-}
-
-build_and_push_reporter_image() {
-    image_tag=$1
-    cache_image=$2
-    travis_fold_start build_and_push_reporter_image $image_tag
-
-    docker build -q -t $image_tag -f $ROOT/cmd/reporter/Dockerfile.reporter --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
-
-    gcloud_login
-
-    gcloud docker -- push $image_tag &
-    travis_fold_end build_and_push_reporter_image
 }
 
 build_and_push_fission_bundle() {

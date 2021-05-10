@@ -85,7 +85,7 @@ build_builder_image() {
     docker tag $tag fission/builder:latest
 }
 
-# Build pre-upgrade-checks image
+# Build reporter image
 build_reporter_image() {
     local version=$1
     local date=$2
