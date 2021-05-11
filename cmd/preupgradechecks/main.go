@@ -18,6 +18,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
@@ -73,7 +74,8 @@ Options:
 
 	err = crdBackedClient.LatestSchemaApplied()
 	if err != nil {
-		panic("New CRDs are not applied")
+		logger.Info("New CRDs are not applied")
+		os.Exit(1)
 	}
 	crdBackedClient.VerifyFunctionSpecReferences()
 }
