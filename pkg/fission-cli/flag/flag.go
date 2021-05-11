@@ -110,7 +110,7 @@ var (
 	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
 	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
-	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 5}
+	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 500}
 	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod", DefaultValue: 1}
 	FnOnceOnly              = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime"}
 

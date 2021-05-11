@@ -41,7 +41,7 @@ import (
 const (
 	DEFAULT_MIN_SCALE             = 1
 	DEFAULT_TARGET_CPU_PERCENTAGE = 80
-	DEFAULT_CONCURRENCY           = 5
+	DEFAULT_CONCURRENCY           = 500
 )
 
 type CreateSubCommand struct {

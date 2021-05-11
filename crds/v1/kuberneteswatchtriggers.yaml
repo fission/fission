@@ -1,0 +1,29 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null 
+  name: kuberneteswatchtriggers.fission.io
+spec:
+  conversion:
+    strategy: None
+  group: fission.io
+  names:
+    kind: KubernetesWatchTrigger
+    listKind: KubernetesWatchTriggerList
+    plural: kuberneteswatchtriggers
+    singular: kuberneteswatchtrigger
+  preserveUnknownFields: true
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: KubernetesWatchTrigger
+    listKind: KubernetesWatchTriggerList
+    plural: kuberneteswatchtriggers
+    singular: kuberneteswatchtrigger
+  conditions: []
+  storedVersions:
+  - v1
