@@ -131,6 +131,95 @@ var (
 )
 
 var (
+	// Environment validation schema properties
+	mqtSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"spec": {
+			Type:        "object",
+			Description: "Specification of the desired behaviour of the MQT",
+			Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				"functionref": functionRefSchema,
+				"messageQueueType": {
+					Type:        "string",
+					Description: "Type of message queue (NATS, Kafka, AzureQueue)",
+				},
+				"topic": {
+					Type:        "string",
+					Description: " Subscribed topic",
+				},
+				"respTopic": {
+					Type:        "string",
+					Description: "Topic for message queue trigger to sent response from function.",
+				},
+				"errorTopic": {
+					Type:        "string",
+					Description: "Topic for message queue trigger to sent response from function.",
+				},
+				"maxRetries": {
+					Type:        "integer",
+					Description: "Maximum times for message queue trigger to retry",
+				},
+				"contentType": {
+					Type:        "string",
+					Description: "Content type of payload",
+				},
+				"pollingInterval": {
+					Type:        "integer",
+					Description: " Applicable only to KEDA. The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly",
+				},
+				"cooldownPeriod": {
+					Type:        "integer",
+					Description: "The period to wait after the last trigger reported active before scaling the deployment back to 0",
+				},
+				"minReplicaCount": {
+					Type:        "integer",
+					Description: "Minimum number of replicas KEDA will scale the deployment down to",
+				},
+				"maxReplicaCount": {
+					Type:        "integer",
+					Description: "Maximum number of replicas KEDA will scale the deployment up to",
+				},
+				"metadata": {
+					Type:        "object",
+					Description: "Fields of KEDA's ScalerTrigger  ",
+				},
+				"secret": {
+					Type:        "string",
+					Description: "Name of Kubernetes Secret  to inject",
+				},
+				"mqtkind": {
+					Type:        "string",
+					Description: "Kind of Message Queue Trigger to be created. Possible values: fission, keda",
+				},
+			},
+		},
+	}
+
+	functionRefSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "The reference to a function for message queue trigger to invoke with when receiving messages from subscribed topic.",
+		Properties:  functionRefProps,
+	}
+
+	functionRefProps = map[string]apiextensionsv1beta1.JSONSchemaProps{
+		"type": {
+			Type:        "string",
+			Description: " Type indicates whether this function reference is by name or selector. Can be either name or function weights ",
+			// Not sure how to populate Enum here
+		},
+	}
+
+	messageQueueTriggerSchema = apiextensionsv1beta1.JSONSchemaProps{
+		Type:        "object",
+		Description: "MessageQueueTrigger defines a binding from a topic in a message queue to a function.",
+		Properties:  mqtSchemaProps,
+	}
+
+	mqtValidation = &apiextensionsv1beta1.CustomResourceValidation{
+		OpenAPIV3Schema: &messageQueueTriggerSchema,
+	}
+)
+
+var (
 
 	// Package validation schema properties
 	packageSchemaProps = map[string]apiextensionsv1beta1.JSONSchemaProps{

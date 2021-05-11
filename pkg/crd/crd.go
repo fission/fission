@@ -160,6 +160,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 					Plural:   "messagequeuetriggers",
 					Singular: "messagequeuetrigger",
 				},
+				Validation: mqtValidation,
 			},
 		},
 		// Packages: archives containing source or binaries for one or more functions
