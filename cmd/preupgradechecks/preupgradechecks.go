@@ -85,7 +85,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 	client.logger.Info("Checking if user has applied the latest CRDs")
 	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get("functions.fission.io", metav1.GetOptions{})
 	if err != nil {
-		client.logger.Error("Could not get the CRD")
+		client.logger.Error("Could not get the Function CRD")
 		return err
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
