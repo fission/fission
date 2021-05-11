@@ -669,8 +669,9 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			if time.Since(fsvc.Atime) < idlePodReapTime {
 				continue
 			}
+			idleTime := (time.Since(fsvc.Atime) - idlePodReapTime).Seconds()
+			gpm.fsCache.IdleTime(fsvc.Name, fsvc.Address, idleTime)
 
-			gpm.fsCache.IdleTime(fsvc.Name, fsvc.Address, float64(time.Since(fsvc.Atime)-idlePodReapTime))
 			go func() {
 				startTime := time.Now()
 				deleted, err := gpm.fsCache.DeleteOldPoolCache(fsvc, idlePodReapTime)

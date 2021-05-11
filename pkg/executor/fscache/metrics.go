@@ -37,19 +37,21 @@ var (
 		},
 		[]string{"funcname", "funcuid"},
 	)
-	funcReapTime = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_pod_reaptime_seconds",
-			Help: "Amount of seconds to reap a pod",
+	funcReapTime = prometheus.NewSummaryVec(
+		prometheus.SummaryOpts{
+			Name:       "fission_pod_reaptime_seconds",
+			Help:       "Amount of seconds to reap a pod",
+			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcaddress", "reaptime"},
+		[]string{"funcname", "funcaddress"},
 	)
-	idleTime = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_idle_pod_time",
-			Help: "Number of seconds it took for Reaper to detect the pod was idle",
+	idleTime = prometheus.NewSummaryVec(
+		prometheus.SummaryOpts{
+			Name:       "fission_idle_pod_time",
+			Help:       "Number of seconds it took for Reaper to detect the pod was idle",
+			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcaddress", "time"},
+		[]string{"funcname", "funcaddress"},
 	)
 )
 
@@ -86,10 +88,10 @@ func (fsc *FunctionServiceCache) setFuncAlive(funcname, funcuid string, isAlive 
 
 // ReapTime is the amount of time taken to reap a pod
 func (fsc *FunctionServiceCache) ReapTime(funcName, funcAddress string, time float64) {
-	funcReapTime.WithLabelValues(funcName, funcAddress).Set(float64(time))
+	funcReapTime.WithLabelValues(funcName, funcAddress).Observe(float64(time))
 }
 
 // IdleTime is the amount of time it took Reaper to find out the pod was idle
 func (fsc *FunctionServiceCache) IdleTime(funcName, funcAddress string, time float64) {
-	idleTime.WithLabelValues(funcName, funcAddress).Set(time)
+	idleTime.WithLabelValues(funcName, funcAddress).Observe(time)
 }
