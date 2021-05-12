@@ -24,6 +24,9 @@ build:
     - image: preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+    - image: reporter
+      docker:
+        dockerfile: cmd/reporter/Dockerfile.reporter
 
 deploy:
   helm:
@@ -41,6 +44,7 @@ deploy:
         artifactOverrides:
           image: "fission"
           preUpgradeChecksImage: "preupgradechecks"
+          postInstallReportImage: "reporter"
           fetcher.image: "fetcher"        
         setValues:
           namespace: fission
@@ -51,6 +55,7 @@ deploy:
           imageTag: ""
           prometheus.enabled: false
           debugEnv: false
+          analytics: false
         wait: true
         recreatePods: false
         packaged: null
