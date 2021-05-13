@@ -119,11 +119,9 @@ func serveMetric(logger *zap.Logger) {
 
 // Start starts a router
 func Start(logger *zap.Logger, port int, executorURL string) {
-	_ = MakeAnalytics("")
-
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
-	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		logger.Fatal("error connecting to kubernetes API", zap.Error(err))
 	}

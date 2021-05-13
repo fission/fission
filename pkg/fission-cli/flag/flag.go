@@ -110,7 +110,8 @@ var (
 	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
 	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
-	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 5}
+	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 500}
+	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod", DefaultValue: 1}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: String, Name: flagkey.HtMethod, Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD", DefaultValue: http.MethodGet}
@@ -176,14 +177,15 @@ var (
 	PkgSrcChecksum    = Flag{Type: String, Name: flagkey.PkgSrcChecksum, Usage: "SHA256 checksum of source archive when providing URL"}
 	PkgInsecure       = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
 
-	SpecSave     = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}
-	SpecDir      = Flag{Type: String, Name: flagkey.SpecDir, Usage: "Directory to store specs, defaults to ./specs"}
-	SpecName     = Flag{Type: String, Name: flagkey.SpecName, Usage: "Name for the app, applied to resources as a Kubernetes annotation"}
-	SpecDeployID = Flag{Type: String, Name: flagkey.SpecDeployID, Aliases: []string{"id"}, Usage: "Deployment ID for the spec deployment config"}
-	SpecWait     = Flag{Type: Bool, Name: flagkey.SpecWait, Usage: "Wait for package builds"}
-	SpecWatch    = Flag{Type: Bool, Name: flagkey.SpecWatch, Usage: "Watch local files for change, and re-apply specs as necessary"}
-	SpecDelete   = Flag{Type: Bool, Name: flagkey.SpecDelete, Usage: "Allow apply to delete resources that no longer exist in the specification"}
-	SpecDry      = Flag{Type: Bool, Name: flagkey.SpecDry, Usage: "View the generated specs"}
+	SpecSave       = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}
+	SpecDir        = Flag{Type: String, Name: flagkey.SpecDir, Usage: "Directory to store specs, defaults to ./specs"}
+	SpecName       = Flag{Type: String, Name: flagkey.SpecName, Usage: "Name for the app, applied to resources as a Kubernetes annotation"}
+	SpecDeployID   = Flag{Type: String, Name: flagkey.SpecDeployID, Aliases: []string{"id"}, Usage: "Deployment ID for the spec deployment config"}
+	SpecWait       = Flag{Type: Bool, Name: flagkey.SpecWait, Usage: "Wait for package builds"}
+	SpecWatch      = Flag{Type: Bool, Name: flagkey.SpecWatch, Usage: "Watch local files for change, and re-apply specs as necessary"}
+	SpecDelete     = Flag{Type: Bool, Name: flagkey.SpecDelete, Usage: "Allow apply to delete resources that no longer exist in the specification"}
+	SpecDry        = Flag{Type: Bool, Name: flagkey.SpecDry, Usage: "View the generated specs"}
+	SpecValidation = Flag{Type: String, Name: flagkey.SpecValidate, Usage: "Turns server side validations of Fission objects on/off"}
 
 	SupportOutput = Flag{Type: String, Name: flagkey.SupportOutput, Short: "o", Usage: "Output directory to save dump archive/files", DefaultValue: flagkey.DefaultSpecOutputDir}
 	SupportNoZip  = Flag{Type: Bool, Name: flagkey.SupportNoZip, Usage: "Save dump information into multiple files instead of single zip file"}

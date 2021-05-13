@@ -28,8 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -44,43 +42,68 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	}
 
 	// get function metadata
-	m := metav1.ObjectMeta{}
-	err = json.Unmarshal(body, &m)
+	fn := &fv1.Function{}
+	err = json.Unmarshal(body, &fn)
 	if err != nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
 
-	fn, err := executor.fissionClient.CoreV1().Functions(m.Namespace).Get(m.Name, metav1.GetOptions{})
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			http.Error(w, "Failed to find function", http.StatusNotFound)
-		} else {
-			http.Error(w, "Failed to get function", http.StatusInternalServerError)
-		}
-		return
-	}
-
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et, exists := executor.executorTypes[t]
-	if !exists {
-		http.Error(w, fmt.Sprintf("Unknown executor type '%v'", t), http.StatusNotFound)
-		return
-	}
+	et := executor.executorTypes[t]
 
-	executor.logger.Debug(fmt.Sprintf("active instances: %v", et.GetTotalAvailable(fn)))
-	conncurrency := fn.Spec.Concurrency
-	if conncurrency == 0 {
-		// set to default conncurrency
-		conncurrency = 5
-		executor.logger.Debug(fmt.Sprintf("concurrency specified in function: %v", fn.Spec.Concurrency))
-		executor.logger.Debug("setting concurrency to 5")
-	}
-	if t == fv1.ExecutorTypePoolmgr && et.GetTotalAvailable(fn) >= conncurrency {
-		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, conncurrency)
-		executor.logger.Error("error occurred", zap.String("error", errMsg))
-		http.Error(w, errMsg, http.StatusTooManyRequests)
-		return
+	// Check function -> svc cache
+	executor.logger.Debug("checking for cached function service",
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
+	if t == fv1.ExecutorTypePoolmgr {
+		concurrency := fn.Spec.Concurrency
+		if concurrency == 0 {
+			concurrency = 500
+		}
+		requestsPerpod := fn.Spec.RequestsPerPod
+		if requestsPerpod == 0 {
+			requestsPerpod = 1
+		}
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, requestsPerpod)
+		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+		if err == nil {
+			// if a pod is already serving request then it already exists else validated
+			executor.logger.Debug("from cache", zap.Int("active", active))
+			if active > 1 || et.IsValid(fsvc) {
+				// Cached, return svc address
+				executor.logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+				return
+			}
+			executor.logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(fsvc)
+			active--
+		}
+
+		if active >= concurrency {
+			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
+			executor.logger.Error("error occurred", zap.String("error", errMsg))
+			http.Error(w, errMsg, http.StatusTooManyRequests)
+			return
+		}
+	} else {
+		fsvc, err := et.GetFuncSvcFromCache(fn)
+		if err == nil {
+			if et.IsValid(fsvc) {
+				// Cached, return svc address
+				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+				return
+			}
+			executor.logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(fsvc)
+		}
 	}
 
 	serviceName, err := executor.getServiceForFunction(fn)
@@ -88,17 +111,20 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
 			zap.Error(err),
-			zap.String("function", m.Name),
+			zap.String("function", fn.ObjectMeta.Name),
 			zap.String("fission_http_error", msg))
 		http.Error(w, msg, code)
 		return
 	}
+	executor.writeResponse(w, serviceName, fn.ObjectMeta.Name)
+}
 
-	_, err = w.Write([]byte(serviceName))
+func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
+	_, err := w.Write([]byte(serviceName))
 	if err != nil {
 		executor.logger.Error(
 			"error writing HTTP response",
-			zap.String("function", m.Name),
+			zap.String("function", fnName),
 			zap.Error(err),
 		)
 	}
@@ -114,26 +140,6 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et := executor.executorTypes[t]
-	// Check function -> svc cache
-	executor.logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-
-	fsvc, err := et.GetFuncSvcFromCache(fn)
-	if err == nil {
-		if et.IsValid(fsvc) {
-			// Cached, return svc address
-			return fsvc.Address, nil
-		}
-		executor.logger.Debug("deleting cache entry for invalid address",
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace),
-			zap.String("address", fsvc.Address))
-		et.DeleteFuncSvcFromCache(fsvc)
-	}
-
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
 		function: fn,

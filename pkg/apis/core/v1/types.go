@@ -351,8 +351,12 @@ type (
 		IdleTimeout *int `json:"idletimeout,omitempty"`
 
 		// Maximum number of pods to be specialized which will serve requests
-		// This is optional. If not specified default value will be taken as 5
+		// This is optional. If not specified default value will be taken as 500
 		Concurrency int `json:"concurrency,omitempty"`
+
+		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
+		// This is optional. If not specified default value will be taken as 1
+		RequestsPerPod int `json:"requestsPerPod,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

@@ -64,6 +64,7 @@ const (
 	FnTestQuery             = "query"
 	FnIdleTimeout           = "idletimeout"
 	FnConcurrency           = "concurrency"
+	FnRequestsPerPod        = "requestsperpod"
 
 	HtName              = resourceName
 	HtMethod            = "method"
@@ -137,6 +138,7 @@ const (
 	SpecWatch    = "watch"
 	SpecDelete   = "delete"
 	SpecDry      = "dry"
+	SpecValidate = "validation"
 
 	SupportOutput = Output
 	SupportNoZip  = "nozip"

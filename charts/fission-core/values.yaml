@@ -17,7 +17,7 @@ repository: index.docker.io
 image: fission/fission-bundle
 
 ## Fission image version
-imageTag: 1.11.2
+imageTag: 1.12.0
 
 ## Image pull policy
 pullPolicy: IfNotPresent
@@ -43,7 +43,7 @@ fetcher:
   ## Fetcher repository
   image: fission/fetcher
   ## Fetcher image version
-  imageTag: 1.11.2
+  imageTag: 1.12.0
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -170,6 +170,9 @@ analytics: true
 ## Internally used for generating an analytics job for non-helm installs
 analyticsNonHelmInstall: false
 
+## Google Analytics Tracking ID
+gaTrackingID: UA-196546703-1
+
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
@@ -177,6 +180,9 @@ pruneInterval: 60
 
 ## Fission pre-install/pre-upgrade checks live in this image
 preUpgradeChecksImage: fission/pre-upgrade-checks
+
+## Fission ppost-install/post-upgrade reporting live in this image
+postInstallReportImage: fission/reporter
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response
@@ -205,16 +211,16 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: 1
+      tag: v0.5
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: 1
+      tag: v0.5
     awskinesis:
       image: fission/keda-awskinesis-http-connector
-      tag: 1
+      tag: v0.5
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: 1
+      tag: v0.5
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: 1
+      tag: v0.5

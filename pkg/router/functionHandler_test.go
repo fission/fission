@@ -65,5 +65,5 @@ func TestProxyErrorHandler(t *testing.T) {
 
 	respRecorder = httptest.NewRecorder()
 	errHandler(respRecorder, req, errors.New("dummy"))
-	assert.Equal(t, http.StatusBadGateway, respRecorder.Code)
+	assert.Equal(t, http.StatusInternalServerError, respRecorder.Code)
 }

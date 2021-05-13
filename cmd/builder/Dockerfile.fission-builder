@@ -1,4 +1,4 @@
-FROM golang:1.12-alpine as godep
+FROM golang:1.14-alpine as godep
 RUN apk add bash ca-certificates git gcc g++ libc-dev
 
 ARG GOPKG=github.com/fission/fission
@@ -31,13 +31,13 @@ ARG BUILDVERSION=unknown
 ARG BUILDDATE=unknown
 # E.g. BUILDDATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 go build \
     -o /go/bin/builder \
     -gcflags=-trimpath=$GOPATH \
     -asmflags=-trimpath=$GOPATH \
     -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=${GITCOMMIT} -X github.com/fission/fission/pkg/info.BuildDate=${BUILDDATE} -X github.com/fission/fission/pkg/info.Version=${BUILDVERSION}"
 
-FROM alpine:3.10 as base
+FROM alpine:3.13 as base
 RUN apk add --update ca-certificates
 COPY --from=builder /go/bin/builder /
 EXPOSE 8001

@@ -354,7 +354,7 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	_, kubeClient, _, err := crd.GetKubernetesClient()
+	_, kubeClient, _, _, err := crd.GetKubernetesClient()
 	panicIf(err)
 
 	// testNS isolation for running multiple CI builds concurrently.

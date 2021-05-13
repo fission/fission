@@ -20,9 +20,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -32,13 +34,16 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -63,14 +68,17 @@ type (
 		useIstio                 bool
 		runtimeImagePullPolicy   apiv1.PullPolicy // pull policy for generic pool to created env deployment
 		kubernetesClient         *kubernetes.Clientset
+		metricsClient            *metricsclient.Clientset
 		fissionClient            *crd.FissionClient
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
 		readyPodController       cache.Controller
 		readyPodIndexer          cache.Indexer
-		readyPodQueue            workqueue.RateLimitingInterface
+		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
+		// TODO: move this field into fsCache
+		podFSVCMap sync.Map
 	}
 )
 
@@ -79,6 +87,7 @@ func MakeGenericPool(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
+	metricsClient *metricsclient.Clientset,
 	env *fv1.Environment,
 	initialReplicas int32,
 	namespace string,
@@ -110,6 +119,7 @@ func MakeGenericPool(
 		replicas:                 initialReplicas, // TODO make this an env param instead?
 		fissionClient:            fissionClient,
 		kubernetesClient:         kubernetesClient,
+		metricsClient:            metricsClient,
 		namespace:                namespace,
 		functionNamespace:        functionNamespace,
 		podReadyTimeout:          podReadyTimeout,
@@ -120,6 +130,7 @@ func MakeGenericPool(
 		stopReadyPodControllerCh: make(chan struct{}),
 		poolInstanceID:           uniuri.NewLen(8),
 		instanceID:               instanceID,
+		podFSVCMap:               sync.Map{},
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -141,7 +152,7 @@ func MakeGenericPool(
 	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
 	go gp.startReadyPodController()
-
+	go gp.updateCPUUtilizationSvc()
 	return gp, nil
 }
 
@@ -161,10 +172,40 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 	}
 }
 
+func (gp *GenericPool) updateCPUUtilizationSvc() {
+	for {
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(v1.ListOptions{
+			LabelSelector: "managed=false",
+		})
+
+		if err != nil {
+			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
+		} else {
+			gp.logger.Debug("pods found", zap.Any("length", len(podMetricsList.Items)))
+			for _, val := range podMetricsList.Items {
+				p, _ := resource.ParseQuantity("0m")
+				for _, container := range val.Containers {
+					p.Add(container.Usage["cpu"])
+				}
+				if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
+					if valArray, ok1 := value.([]interface{}); ok1 {
+						function, address := valArray[0], valArray[1]
+						gp.fsCache.SetCPUUtilizaton(function.(string), address.(string), p)
+						gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
+					}
+				}
+			}
+		}
+
+		time.Sleep(30 * time.Second)
+	}
+}
+
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
+	expoDelay := 100 * time.Millisecond
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
@@ -175,35 +216,33 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		var chosenPod *apiv1.Pod
 		var key string
 
-		if gp.readyPodQueue.Len() > 0 {
-			item, quit := gp.readyPodQueue.Get()
-			if quit {
-				gp.logger.Error("readypod controller is not running")
-				return "", nil, errors.New("readypod controller is not running")
-			}
+		item, quit := gp.readyPodQueue.Get()
+		if quit {
+			gp.logger.Error("readypod controller is not running")
+			return "", nil, errors.New("readypod controller is not running")
+		}
+		key = item.(string)
+		gp.logger.Debug("got key from the queue", zap.String("key", key))
 
-			key := item.(string)
-			obj, exists, err := gp.readyPodIndexer.GetByKey(key)
-			if err != nil {
-				gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
-				return "", nil, err
-			}
+		obj, exists, err := gp.readyPodIndexer.GetByKey(key)
+		if err != nil {
+			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+			return "", nil, err
+		}
 
-			if !exists {
-				gp.logger.Warn("pod deleted from store", zap.String("pod", key))
-				continue
-			}
-
-			if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
-				continue
-			}
-			chosenPod = obj.(*apiv1.Pod).DeepCopy()
-		} else {
-			// Wait for pods to get ready and retry
-			gp.logger.Info("waiting for ready pods")
-			time.Sleep(1000 * time.Millisecond)
+		if !exists {
+			gp.logger.Warn("pod deleted from store", zap.String("pod", key))
 			continue
 		}
+
+		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+			gp.logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
+			gp.readyPodQueue.Done(key)
+			gp.readyPodQueue.AddAfter(key, expoDelay)
+			expoDelay *= 2
+			continue
+		}
+		chosenPod = obj.(*apiv1.Pod).DeepCopy()
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
@@ -220,7 +259,10 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 			gp.logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name))
+				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
+				gp.readyPodQueue.Done(key)
+				gp.readyPodQueue.AddAfter(key, expoDelay)
+				expoDelay *= 2
 				continue
 			}
 
@@ -556,16 +598,9 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		return nil, err
 	}
-
-	defer gp.readyPodQueue.Done(key)
+	gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		if gp.readyPodQueue.NumRequeues(key) < 5 {
-			gp.readyPodQueue.AddRateLimited(key)
-		} else {
-			gp.readyPodQueue.Forget(key)
-		}
-
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
@@ -627,6 +662,19 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 			UID:             pod.ObjectMeta.UID,
 		},
 	}
+	cpuUsage := resource.MustParse("0m")
+	for _, container := range pod.Spec.Containers {
+		val := *container.Resources.Limits.Cpu()
+		cpuUsage.Add(val)
+	}
+
+	// set cpuLimit to 85th percentage of the cpuUsage
+	cpuLimit, err := gp.getPercent(cpuUsage, 0.85)
+	if err != nil {
+		gp.logger.Error("failed to get 85 of CPU usage", zap.Error(err))
+		cpuLimit = cpuUsage
+	}
+	gp.logger.Debug("cpuLimit set to", zap.Any("cpulimit", cpuLimit))
 
 	m := fn.ObjectMeta // only cache necessary part
 	fsvc := &fscache.FuncSvc{
@@ -636,15 +684,28 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Address:           svcHost,
 		KubernetesObjects: kubeObjRefs,
 		Executor:          fv1.ExecutorTypePoolmgr,
+		CPULimit:          cpuLimit,
 		Ctime:             time.Now(),
 		Atime:             time.Now(),
 	}
 
+	if gp.fsCache.PodToFsvc == nil {
+		gp.fsCache.PodToFsvc = make(map[string]*fscache.FuncSvc)
+	}
+	gp.fsCache.PodToFsvc[pod.GetObjectMeta().GetName()] = fsvc
+
+	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
 	gp.fsCache.AddFunc(*fsvc)
 
 	gp.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 
 	return fsvc, nil
+}
+
+// getPercent returns  x percent of the quantity i.e multiple it x/100
+func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64) (resource.Quantity, error) {
+	val := int64(math.Ceil(float64(cpuUsage.MilliValue()) * percentage))
+	return resource.ParseQuantity(fmt.Sprintf("%dm", val))
 }
 
 // destroys the pool -- the deployment, replicaset and pods

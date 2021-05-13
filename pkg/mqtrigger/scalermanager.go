@@ -27,14 +27,21 @@ import (
 )
 
 var (
+	// Group refers to the group name in KEDA CRD
+	Group = "keda.sh"
+	// Version refers to the version name in KEDA CRD
+	Version = "v1alpha1"
+
+	// apiVersion refers to the api version name in KEDA CRD
+	apiVersion      = Group + "/" + Version
 	scaledObjectGVR = schema.GroupVersionResource{
-		Group:    "keda.k8s.io",
-		Version:  "v1alpha1",
+		Group:    Group,
+		Version:  Version,
 		Resource: "scaledobjects",
 	}
 	authTriggerGVR = schema.GroupVersionResource{
-		Group:    "keda.k8s.io",
-		Version:  "v1alpha1",
+		Group:    Group,
+		Version:  Version,
 		Resource: "triggerauthentications",
 	}
 	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
@@ -60,7 +67,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
 func StartScalerManager(logger *zap.Logger, routerURL string) error {
-	fissionClient, kubeClient, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
 	}
@@ -306,7 +313,7 @@ func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, 
 	authTriggerObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "TriggerAuthentication",
-			"apiVersion": "keda.k8s.io/v1alpha1",
+			"apiVersion": apiVersion,
 			"metadata": map[string]interface{}{
 				"name":      authenticationRef,
 				"namespace": mqt.ObjectMeta.Namespace,
@@ -469,7 +476,7 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ScaledObject",
-			"apiVersion": "keda.k8s.io/v1alpha1",
+			"apiVersion": apiVersion,
 			"metadata": map[string]interface{}{
 				"name":      mqt.ObjectMeta.Name,
 				"namespace": mqt.ObjectMeta.Namespace,
@@ -489,7 +496,7 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 				"minReplicaCount": &mqt.Spec.MinReplicaCount,
 				"pollingInterval": &mqt.Spec.PollingInterval,
 				"scaleTargetRef": map[string]interface{}{
-					"deploymentName": mqt.ObjectMeta.Name,
+					"name": mqt.ObjectMeta.Name,
 				},
 				"triggers": []interface{}{
 					map[string]interface{}{
