@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -220,13 +221,19 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			req.URL.Scheme = roundTripper.serviceURL.Scheme
 			req.URL.Host = roundTripper.serviceURL.Host
 
-			// To keep the function run container simple, it
-			// doesn't do any routing.  In the future if we have
-			// multiple functions per container, we could use the
-			// function metadata here.
-			// leave the query string intact (req.URL.RawQuery)
-			req.URL.Path = "/"
-
+			if strings.HasSuffix(roundTripper.funcHandler.httpTrigger.Spec.RelativeURL, "/*") {
+				// If prefix based route mentioned, then pass to app by filtering
+				prefixURL := strings.TrimPrefix(req.URL.Path, strings.TrimSuffix(roundTripper.funcHandler.httpTrigger.Spec.RelativeURL, "/*"))
+				roundTripper.logger.Debug("prefix request URL", zap.Any("url", prefixURL))
+				req.URL.Path = prefixURL
+			} else {
+				// To keep the function run container simple, it
+				// doesn't do any routing.  In the future if we have
+				// multiple functions per container, we could use the
+				// function metadata here.
+				// leave the query string intact (req.URL.RawQuery)
+				req.URL.Path = "/"
+			}
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)

@@ -19,6 +19,7 @@ package router
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -167,8 +168,16 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			}
 		}
 
-		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
-		ht.Methods(trigger.Spec.Method)
+		var ht *mux.Route
+
+		if strings.HasSuffix(trigger.Spec.RelativeURL, "/*") {
+			urlWithoutSuffix := strings.TrimSuffix(trigger.Spec.RelativeURL, "*")
+			ht = muxRouter.PathPrefix(urlWithoutSuffix).HandlerFunc(fh.handler)
+		} else {
+			ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+			ht.Methods(trigger.Spec.Method)
+		}
+
 		if trigger.Spec.Host != "" {
 			ht.Host(trigger.Spec.Host)
 		}
