@@ -141,6 +141,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 }
 
 func doHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
+	// TODO: check if GetMethods should be called.
 	method, err := httptrigger.GetMethod(method)
 	if err != nil {
 		return nil, err

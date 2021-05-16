@@ -131,6 +131,7 @@ func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger) error {
 			// Same resource. No need to check.
 			continue
 		}
+		// TODO: Compare with multiple methods sorted.
 		if ht.Spec.RelativeURL == t.Spec.RelativeURL && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return ferror.MakeError(ferror.ErrorNameExists,
 				fmt.Sprintf("HTTPTrigger with same Host, URL & method already exists (%v)",

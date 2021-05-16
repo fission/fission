@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,7 +94,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
-	method, err := GetMethod(input.String(flagkey.HtMethod))
+	method, err := GetMethods(input.String(flagkey.HtMethod))
 	if err != nil {
 		return err
 	}
@@ -205,6 +206,24 @@ func GetMethod(method string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid or unsupported HTTP Method %v", method)
 	}
+}
+
+func GetMethods(method string) (string, error) {
+	result := &multierror.Error{}
+	methods := []string{}
+
+	for _, httpMethod := range strings.Split(method, ",") {
+		m, err := GetMethod(httpMethod)
+		if err != nil {
+			result = multierror.Append(result, err)
+			continue
+		}
+		methods = append(methods, m)
+	}
+	if result.ErrorOrNil() != nil {
+		return method, result
+	}
+	return strings.Join(methods, ","), nil
 }
 
 func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.FunctionReference, error) {

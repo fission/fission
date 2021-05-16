@@ -343,7 +343,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
-	method, err := httptrigger.GetMethod(input.String(flagkey.HtMethod))
+	method, err := httptrigger.GetMethods(input.String(flagkey.HtMethod))
 	if err != nil {
 		return errors.Wrap(err, "error getting HTTP trigger method")
 	}

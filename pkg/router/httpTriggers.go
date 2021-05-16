@@ -175,7 +175,8 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			ht = muxRouter.PathPrefix(urlWithoutSuffix).HandlerFunc(fh.handler)
 		} else {
 			ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
-			ht.Methods(trigger.Spec.Method)
+			// Split for multiple values and pass to lower function
+			ht.Methods(strings.Split(trigger.Spec.Method, ",")...)
 		}
 
 		if trigger.Spec.Host != "" {
