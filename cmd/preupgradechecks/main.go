@@ -18,7 +18,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
@@ -66,8 +65,8 @@ Options:
 			zap.Error(err))
 	}
 
-	installed := crdBackedClient.IsFissionReInstall()
-	if !installed {
+	crd := crdBackedClient.IsFissionInstalled()
+	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
@@ -75,7 +74,6 @@ Options:
 	err = crdBackedClient.LatestSchemaApplied()
 	if err != nil {
 		logger.Fatal("New CRDs are not applied")
-		os.Exit(1)
 	}
 	crdBackedClient.VerifyFunctionSpecReferences()
 }
