@@ -67,16 +67,14 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 // IsFissionReInstall checks if there is at least one fission CRD, i.e. function in this case, on this cluster.
 // We need this to find out if fission had been previously installed on this cluster
 func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
-	var found bool
 	for i := 0; i < maxRetries; i++ {
-		found = true
 		_, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
-			found = false
+			continue
 		}
+		return true
 	}
-
-	return found
+	return false
 }
 
 // LatestSchemaApplied ensures that the end user has applied the latest CRDs generated to the cluster.
@@ -89,11 +87,11 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 		return err
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
-	if strings.Contains(crd.Spec.String(), "RequestsPerPod") {
-		return nil
+	if !strings.Contains(crd.Spec.String(), "RequestsPerPod") {
+		client.logger.Error("Could not find RequestsPerPod field in function spec")
+		return errors.New("Apply the newer CRDs before upgrading")
 	}
-	client.logger.Error("Could not find the newer fields")
-	return errors.New("Apply the newer CRDs before upgrading")
+	return nil
 }
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and
