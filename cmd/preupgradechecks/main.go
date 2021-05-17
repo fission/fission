@@ -74,7 +74,7 @@ Options:
 
 	err = crdBackedClient.LatestSchemaApplied()
 	if err != nil {
-		logger.Info("New CRDs are not applied")
+		logger.Fatal("New CRDs are not applied")
 		os.Exit(1)
 	}
 	crdBackedClient.VerifyFunctionSpecReferences()
