@@ -63,7 +63,7 @@ go run $DIR/stan-pub/main.go -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $p
 # Wait for message on error topic
 #
 log "Waiting for response"
-response=$(timeout 5s go run $DIR/stan-sub/main.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $errortopic 2>&1 || true)
+response=$(timeout 10s go run $DIR/stan-sub/main.go --last -s $FISSION_NATS_STREAMING_URL -c $clusterID -id $subClientID $errortopic 2>&1 || true)
 log "Output from subscriber"
 echo "$response"
 echo "$response" | grep "$expectedRespOutput"
