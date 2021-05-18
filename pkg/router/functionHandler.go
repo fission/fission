@@ -45,7 +45,7 @@ const (
 	// FORWARDED represents the 'Forwarded' request header
 	FORWARDED = "Forwarded"
 
-	// XForwardedHost represents the 'XForwardedHost' request header
+	// XForwardedHost represents the 'X-Forwarded-Host' request header
 	XForwardedHost = "X-Forwarded-Host"
 )
 

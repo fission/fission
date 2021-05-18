@@ -1,6 +1,7 @@
 package fscache
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -88,64 +89,32 @@ func init() {
 
 // IncreaseColdStarts increments the counter by 1.
 func (fsc *FunctionServiceCache) IncreaseColdStarts(funcname, funcuid string, cached bool) {
-	var c string
-	if cached {
-		c = "true"
-	} else {
-		c = "false"
-	}
-	coldStarts.WithLabelValues(funcname, funcuid, c).Inc()
+	coldStarts.WithLabelValues(funcname, funcuid, strconv.FormatBool(cached)).Inc()
 }
 
 func (fsc *FunctionServiceCache) observeFuncRunningTime(funcname, funcuid string, running float64, cached bool) {
-	var c string
-	if cached {
-		c = "true"
-	} else {
-		c = "false"
-	}
-	funcRunningSummary.WithLabelValues(funcname, funcuid, c).Observe(running)
+	funcRunningSummary.WithLabelValues(funcname, funcuid, strconv.FormatBool(cached)).Observe(running)
 }
 
 func (fsc *FunctionServiceCache) observeFuncAliveTime(funcname, funcuid string, alive float64, cached bool) {
-	var c string
-	if cached {
-		c = "true"
-	} else {
-		c = "false"
-	}
-	funcAliveSummary.WithLabelValues(funcname, funcuid, c).Observe(alive)
+	funcAliveSummary.WithLabelValues(funcname, funcuid, strconv.FormatBool(cached)).Observe(alive)
 }
 
 // ObserveChoosePodTime observes the time taken to choose a pod
 func (fsc *FunctionServiceCache) ObserveChoosePodTime(envName, envuid string, duration time.Duration) {
-
 	funcChoosePod.WithLabelValues(envName, envuid).Observe(float64(duration.Nanoseconds()) / 1e9)
 }
 
 // ObserveSpecialisePodTime observes the time taken to choose a pod
 func (fsc *FunctionServiceCache) ObserveSpecialisePodTime(envName, envuid string, err bool, duration time.Duration) {
-
-	var e string
-	if err {
-		e = "true"
-	} else {
-		e = "false"
-	}
-	funcSpecialisePod.WithLabelValues(envName, envuid, e).Observe(float64(duration.Nanoseconds()) / 1e9)
+	funcSpecialisePod.WithLabelValues(envName, envuid, strconv.FormatBool(err)).Observe(float64(duration.Nanoseconds()) / 1e9)
 }
 func (fsc *FunctionServiceCache) setFuncAlive(funcname, funcuid string, isAlive bool, cached bool) {
-	var c string
-	if cached {
-		c = "true"
-	} else {
-		c = "false"
-	}
 	count := 0
 	if isAlive {
 		count = 1
 	}
-	funcIsAlive.WithLabelValues(funcname, funcuid, c).Set(float64(count))
+	funcIsAlive.WithLabelValues(funcname, funcuid, strconv.FormatBool(cached)).Set(float64(count))
 }
 
 // ReapTime is the amount of time taken to reap a pod
