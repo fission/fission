@@ -84,12 +84,10 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 	client.logger.Info("Checking if user has applied the latest CRDs")
 	crd := client.GetFunctionCRD()
 	if crd == nil {
-		client.logger.Error("Could not get the Function CRD")
 		return errors.New("Could not get the Function CRD")
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
 	if !strings.Contains(crd.Spec.String(), "RequestsPerPod") {
-		client.logger.Error("Could not find RequestsPerPod field in function spec")
 		return errors.New("Apply the newer CRDs before upgrading")
 	}
 	return nil
