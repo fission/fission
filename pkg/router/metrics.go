@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -176,11 +177,5 @@ func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration 
 }
 
 func observeServiceURLFetchTime(duration time.Duration, err bool) {
-	var e string
-	if err {
-		e = "true"
-	} else {
-		e = "false"
-	}
-	serviceURLFetch.WithLabelValues(e).Observe(float64(duration.Nanoseconds()) / 1e9)
+	serviceURLFetch.WithLabelValues(strconv.FormatBool(err)).Observe(float64(duration.Nanoseconds()) / 1e9)
 }
