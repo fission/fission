@@ -80,13 +80,10 @@ func init() {
 	prometheus.MustRegister(funcRunningSummary)
 	prometheus.MustRegister(funcAliveSummary)
 	prometheus.MustRegister(funcIsAlive)
-<<<<<<< HEAD
 	prometheus.MustRegister(funcReapTime)
 	prometheus.MustRegister(idleTime)
-=======
 	prometheus.MustRegister(funcSpecialisePod)
 	prometheus.MustRegister(funcChoosePod)
->>>>>>> 99ac163... Remove call to ready pod metric
 }
 
 // IncreaseColdStarts increments the counter by 1.
