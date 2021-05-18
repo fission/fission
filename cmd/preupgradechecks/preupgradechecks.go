@@ -23,6 +23,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,27 +65,27 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 	}, nil
 }
 
-// IsFissionReInstall checks if there is at least one fission CRD, i.e. function in this case, on this cluster.
-// We need this to find out if fission had been previously installed on this cluster
-func (client *PreUpgradeTaskClient) IsFissionReInstall() bool {
+// GetFunctionCRD checks if function CRD is present on the cluster and returns it. It returns nil if not found
+// We can use this to find out if fission had been previously installed on this cluster too.
+func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1beta1.CustomResourceDefinition {
 	for i := 0; i < maxRetries; i++ {
-		_, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
 		}
-		return true
+		return crd
 	}
-	return false
+	return nil
 }
 
 // LatestSchemaApplied ensures that the end user has applied the latest CRDs generated to the cluster.
 // For future reference: whenever a new field is added, we need to check for that field's existence in this function
 func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 	client.logger.Info("Checking if user has applied the latest CRDs")
-	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get("functions.fission.io", metav1.GetOptions{})
-	if err != nil {
+	crd := client.GetFunctionCRD()
+	if crd == nil {
 		client.logger.Error("Could not get the Function CRD")
-		return err
+		return errors.New("Could not get the Function CRD")
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
 	if !strings.Contains(crd.Spec.String(), "RequestsPerPod") {
