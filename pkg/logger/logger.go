@@ -187,7 +187,7 @@ func Start() {
 		}
 	}
 	go symlinkReaper(zapLogger)
-	_, kubernetesClient, _, err := crd.MakeFissionClient()
+	_, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}

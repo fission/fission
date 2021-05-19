@@ -66,6 +66,8 @@ const (
 	SharedVolumePackages   = "packages"
 	SharedVolumeSecrets    = "secrets"
 	SharedVolumeConfigmaps = "configmaps"
+	PodInfoVolume          = "podinfo"
+	PodInfoMount           = "/etc/podinfo"
 )
 
 const (

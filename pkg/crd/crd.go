@@ -58,8 +58,9 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 	return err
 }
 
-// Ensure CRDs
+// EnsureFissionCRDs creates the CRDs
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
+
 	crds := []apiextensionsv1beta1.CustomResourceDefinition{
 		// Functions
 		{

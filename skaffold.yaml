@@ -24,12 +24,15 @@ build:
     - image: preupgradechecks
       docker:
         dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+    - image: reporter
+      docker:
+        dockerfile: cmd/reporter/Dockerfile.reporter
 
 deploy:
   helm:
     flags:
       upgrade:
-        ["--timeout=3m", "--install","--dependency-update", "--force", "--debug"]
+        ["--timeout=3m", "--install", "--force", "--debug"]
       install:
         ["--timeout=3m","--debug","--dependency-update"]
     releases:
@@ -41,6 +44,7 @@ deploy:
         artifactOverrides:
           image: "fission"
           preUpgradeChecksImage: "preupgradechecks"
+          postInstallReportImage: "reporter"
           fetcher.image: "fetcher"        
         setValues:
           namespace: fission
@@ -50,6 +54,8 @@ deploy:
           fetcher.imageTag: ""
           imageTag: ""
           prometheus.enabled: false
+          debugEnv: false
+          analytics: false
         wait: true
         recreatePods: false
         packaged: null
@@ -66,6 +72,17 @@ profiles:
       - op: replace
         path: /deploy/helm/releases/0/setValues/routerServiceType
         value: "NodePort"
+  - name: kind-debug
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/repository
+        value: ""
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/routerServiceType
+        value: "NodePort"
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/debugEnv
+        value: true
   - name: kind-ci
     patches:
     - op: replace

@@ -38,8 +38,8 @@ fi
 
 log "Download test script"
 
-url1="https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js"
-url2="https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello-callback.js"
+url1="https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js"
+url2="https://raw.githubusercontent.com/fission/examples/master/nodejs/hello-callback.js"
 
 wget ${url1}
 sum=$(shasum -a 256 hello.js|cut -d' ' -f 1)
