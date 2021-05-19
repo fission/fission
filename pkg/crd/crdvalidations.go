@@ -53,6 +53,10 @@ var (
 					Type:        "integer",
 					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 1",
 				},
+				"onceOnly": {
+					Type:        "boolean",
+					Description: "OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request.\nThis is optional. If not specified default value will be taken as false",
+				},
 			},
 		},
 	}
