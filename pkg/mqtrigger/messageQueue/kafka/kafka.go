@@ -286,20 +286,6 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		}
 	}
 
-	if resp == nil {
-		kafka.logger.Warn("every function invocation retry failed; final retry gave empty response",
-			zap.String("function_url", url),
-			zap.String("trigger", trigger.ObjectMeta.Name))
-		return
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-
-	kafka.logger.Debug("got response from function invocation",
-		zap.String("function_url", url),
-		zap.String("trigger", trigger.ObjectMeta.Name),
-		zap.String("body", string(body)))
-
 	generateErrorHeaders := func(errString string) []sarama.RecordHeader {
 		var errorHeaders []sarama.RecordHeader
 		if kafka.version.IsAtLeast(sarama.V0_11_0_0) {
@@ -313,6 +299,21 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		}
 		return errorHeaders
 	}
+
+	if resp == nil {
+		errorString := fmt.Sprintf("request exceed retries: %v", trigger.Spec.MaxRetries)
+		errorHeaders := generateErrorHeaders(errorString)
+		errorHandler(kafka.logger, trigger, producer, url,
+			fmt.Errorf(errorString), errorHeaders)
+		return
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	kafka.logger.Debug("got response from function invocation",
+		zap.String("function_url", url),
+		zap.String("trigger", trigger.ObjectMeta.Name),
+		zap.String("body", string(body)))
 
 	if err != nil {
 		errorString := string("request body error: " + string(body))

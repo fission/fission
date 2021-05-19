@@ -95,9 +95,9 @@ func optionalFlags(cmd *cobra.Command, flags ...flag.Flag) {
 		toCobraFlag(cmd, f, false)
 		if f.Deprecated {
 			usage := fmt.Sprintf("Use --%v instead. The flag still works for now and will be removed in future", f.Substitute)
-			cmd.Flags().MarkDeprecated(f.Name, usage)
+			cmd.Flags().MarkDeprecated(f.Name, usage) //nolint: errCheck
 		} else if f.Hidden {
-			cmd.Flags().MarkHidden(f.Name)
+			cmd.Flags().MarkHidden(f.Name) //nolint: errCheck
 		}
 	}
 }
@@ -105,7 +105,7 @@ func optionalFlags(cmd *cobra.Command, flags ...flag.Flag) {
 func requiredFlags(cmd *cobra.Command, flags ...flag.Flag) {
 	for _, f := range flags {
 		toCobraFlag(cmd, f, false)
-		cmd.MarkFlagRequired(f.Name)
+		cmd.MarkFlagRequired(f.Name) //nolint: errCheck
 	}
 }
 

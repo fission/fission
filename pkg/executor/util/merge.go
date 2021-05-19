@@ -126,6 +126,66 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.Hostname = targetPodSpec.Hostname
 	}
 
+	if targetPodSpec.RuntimeClassName != nil {
+		srcPodSpec.RuntimeClassName = targetPodSpec.RuntimeClassName
+	}
+
+	if targetPodSpec.RestartPolicy != "" {
+		srcPodSpec.RestartPolicy = targetPodSpec.RestartPolicy
+	}
+
+	if targetPodSpec.ActiveDeadlineSeconds != nil {
+		srcPodSpec.ActiveDeadlineSeconds = targetPodSpec.ActiveDeadlineSeconds
+	}
+
+	if targetPodSpec.DNSPolicy != "" {
+		srcPodSpec.DNSPolicy = targetPodSpec.DNSPolicy
+	}
+
+	if targetPodSpec.ServiceAccountName != "" {
+		srcPodSpec.ServiceAccountName = targetPodSpec.ServiceAccountName
+	}
+
+	if targetPodSpec.DeprecatedServiceAccount != "" {
+		srcPodSpec.DeprecatedServiceAccount = targetPodSpec.DeprecatedServiceAccount
+	}
+
+	if targetPodSpec.AutomountServiceAccountToken != nil {
+		srcPodSpec.AutomountServiceAccountToken = targetPodSpec.AutomountServiceAccountToken
+	}
+
+	if targetPodSpec.HostNetwork != false {
+		srcPodSpec.HostNetwork = targetPodSpec.HostNetwork
+	}
+
+	if targetPodSpec.HostPID != false {
+		srcPodSpec.HostPID = targetPodSpec.HostPID
+	}
+
+	if targetPodSpec.HostIPC != false {
+		srcPodSpec.HostIPC = targetPodSpec.HostIPC
+	}
+
+	if targetPodSpec.ShareProcessNamespace != nil {
+		srcPodSpec.ShareProcessNamespace = targetPodSpec.ShareProcessNamespace
+	}
+
+	if targetPodSpec.PriorityClassName != "" {
+		srcPodSpec.PriorityClassName = targetPodSpec.PriorityClassName
+	}
+
+	if targetPodSpec.Priority != nil {
+		srcPodSpec.Priority = targetPodSpec.Priority
+	}
+
+	if targetPodSpec.PreemptionPolicy != nil {
+		srcPodSpec.PreemptionPolicy = targetPodSpec.PreemptionPolicy
+	}
+
+	if targetPodSpec.EnableServiceLinks != nil {
+		srcPodSpec.EnableServiceLinks = targetPodSpec.EnableServiceLinks
+	}
+
 	srcPodSpec.ImagePullSecrets = append(srcPodSpec.ImagePullSecrets, targetPodSpec.ImagePullSecrets...)
 	srcPodSpec.Tolerations = append(srcPodSpec.Tolerations, targetPodSpec.Tolerations...)
 	srcPodSpec.HostAliases = append(srcPodSpec.HostAliases, targetPodSpec.HostAliases...)

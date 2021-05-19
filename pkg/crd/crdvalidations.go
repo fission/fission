@@ -47,7 +47,15 @@ var (
 				},
 				"concurrency": {
 					Type:        "integer",
-					Description: "Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.\n This is optional. If not specified default value will be taken as 5",
+					Description: "Concurrency specifies the maximum number of pods that can be specialized concurrently to serve requests.\n This is optional. If not specified default value will be taken as 500",
+				},
+				"requestsPerPod": {
+					Type:        "integer",
+					Description: "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod.\n This is optional. If not specified default value will be taken as 1",
+				},
+				"onceOnly": {
+					Type:        "boolean",
+					Description: "OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request.\nThis is optional. If not specified default value will be taken as false",
 				},
 			},
 		},

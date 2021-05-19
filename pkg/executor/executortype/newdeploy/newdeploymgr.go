@@ -165,10 +165,10 @@ func (deploy *NewDeploy) UnTapService(key string, svcHost string) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
-// GetTotalAvailable has not been implemented for NewDeployment.
-func (deploy *NewDeploy) GetTotalAvailable(fn *fv1.Function) int {
+// GetFuncSvcFromPoolCache has not been implemented for NewDeployment
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
-	return 0
+	return nil, 0, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
@@ -402,7 +402,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 }
 
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
-	funcList, err := deploy.fissionClient.CoreV1().Functions(m.Namespace).List(metav1.ListOptions{})
+	funcList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
 	}
@@ -845,7 +845,10 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				continue
 			}
 
+			deploy.fsCache.IdleTime(fsvc.Name, fsvc.Address, float64(time.Since(fsvc.Atime)-idlePodReapTime))
+
 			go func() {
+				startTime := time.Now()
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -870,6 +873,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				if err != nil {
 					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}
+				deploy.fsCache.ReapTime(fsvc.Function.Name, fsvc.Address, time.Since(startTime).Seconds())
 			}()
 		}
 	}

@@ -85,6 +85,19 @@ build_builder_image() {
     docker tag $tag fission/builder:latest
 }
 
+# Build reporter image
+build_reporter_image() {
+    local version=$1
+    local date=$2
+    local gitcommit=$3
+
+    local tag=fission/reporter:$version
+
+    docker build -t $tag -f $DIR/cmd/reporter/Dockerfile.reporter \
+        --build-arg GITCOMMIT=$gitcommit --build-arg BUILDDATE=$date --build-arg BUILDVERSION=$version $DIR
+    docker tag $tag fission/reporter:latest
+}
+
 # Build pre-upgrade-checks image
 build_pre_upgrade_checks_image() {
     local version=$1
@@ -182,6 +195,7 @@ build_all() {
     build_builder_image $version $date $gitcommit
     build_all_cli $version $date $gitcommit
     build_pre_upgrade_checks_image $version $date $gitcommit
+    build_reporter_image $version $date $gitcommit
 
     remove_generated_swagger_doc
 }

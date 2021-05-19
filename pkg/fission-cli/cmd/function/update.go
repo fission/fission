@@ -159,6 +159,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.Concurrency = input.Int(flagkey.FnConcurrency)
 	}
 
+	if input.IsSet(flagkey.FnRequestsPerPod) {
+		function.Spec.RequestsPerPod = input.Int(flagkey.FnRequestsPerPod)
+	}
+
+	if input.IsSet(flagkey.FnOnceOnly) {
+		function.Spec.OnceOnly = input.Bool(flagkey.FnOnceOnly)
+	}
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
 	}

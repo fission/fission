@@ -170,7 +170,13 @@ func Start() {
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
-	defer zapLogger.Sync()
+
+	defer func() {
+		err := zapLogger.Sync()
+		if err != nil {
+			log.Fatalf("failed to sync zap logger: %v", err)
+		}
+	}()
 
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		zapLogger.Info("symlink path not exist, create it",
@@ -181,7 +187,7 @@ func Start() {
 		}
 	}
 	go symlinkReaper(zapLogger)
-	_, kubernetesClient, _, err := crd.MakeFissionClient()
+	_, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}
