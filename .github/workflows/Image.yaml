@@ -30,20 +30,20 @@ jobs:
 
     - name: docker build builder
       run: |
-        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:builder_arch -f /cmd/builder/Dockerfile.fission-builder .
+        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:builder_arch -f ./cmd/builder/Dockerfile.fission-builder
 
     - name: docker build fetcher
       run: |
-        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:fetcher_arch -f /cmd/fetcher/Dockerfile.fission-fetcher .
+        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:fetcher_arch -f ./cmd/fetcher/Dockerfile.fission-fetcher
 
     - name: docker build fission-bundle
       run: |
-        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:fission-bundle_arch -f /cmd/fission-bundle/Dockerfile.fission-bundle .
+        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:fission-bundle_arch -f ./cmd/fission-bundle/Dockerfile.fission-bundle
     
     - name: docker build preupgradechecks
       run: |
-        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:preupgradechecks_arch -f /cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
+        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:preupgradechecks_arch -f ./cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
 
     - name: docker build reporter
       run: |
-        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:reporter_arch -f /cmd/reporter/Dockerfile.reporter .
+        docker buildx build --push --platform linux/amd64,linux/arm/v7,linux/arm64 -t msat1234/dibas:reporter_arch -f ./cmd/reporter/Dockerfile.reporter
