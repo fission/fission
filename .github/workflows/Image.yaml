@@ -1,4 +1,4 @@
-name: Multi_Arch Images series
+name: Multi_Arch Images series build
 on: 
   push:
     branches:
