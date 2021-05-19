@@ -23,6 +23,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	nats "github.com/nats-io/nats.go"
@@ -168,10 +169,10 @@ func main() {
 	// Run cleanup when signal is received
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
-	signal.Notify(signalChan, os.Interrupt)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		for range signalChan {
-			fmt.Printf("\nReceived an interrupt, unsubscribing and closing connection...\n\n")
+		for sig := range signalChan {
+			fmt.Printf("\nReceived signal %s, unsubscribing and closing connection...\n\n", sig.String())
 			// Do not unsubscribe a durable on exit, except if asked to.
 			if durable == "" || unsubscribe {
 				sub.Unsubscribe()
