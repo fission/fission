@@ -900,7 +900,10 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				continue
 			}
 
+			deploy.fsCache.IdleTime(fsvc.Name, fsvc.Address, float64(time.Since(fsvc.Atime)-idlePodReapTime))
+
 			go func() {
+				startTime := time.Now()
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -925,6 +928,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 				if err != nil {
 					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}
+				deploy.fsCache.ReapTime(fsvc.Function.Name, fsvc.Address, time.Since(startTime).Seconds())
 			}()
 		}
 	}

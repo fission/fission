@@ -5,6 +5,7 @@ cmd/fission-cli/fission-cli
 cmd/fetcher/fetcher
 cmd/builder/builder
 cmd/preupgradechecks/pre-upgrade-checks
+cmd/reporter/reporter
 
 # Logs
 test/logs/

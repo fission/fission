@@ -30,7 +30,16 @@ spec:
       restartPolicy: Never
       containers:
         - name: post-install-job
-          image: "fission/alpinecurl"
+        {{- if .Values.imageTag }}
+          image: {{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
+        {{- else }}
+          image: {{ .Values.postInstallReportImage }}
+        {{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ["sh", "-c", "/usr/bin/curl -m 5 -H \"Content-Type: application/json\" -X POST -d '{\"type\": \"helm-post-install\", \"chartName\": \"{{ .Chart.Name }}\", \"chartVersion\": \"{{ .Chart.Version }}\"}' https://g.fission.io/analytics || true"]
+          command: [ "/reporter" ]
+          args: ["event", "-c", "fission-use", "-a", "helm-post-install", "-l", "{{ .Chart.Name }}-{{ .Chart.Version }}"]
+          env:
+            - name: GA_TRACKING_ID
+              value: "{{ .Values.gaTrackingID }}"
+      serviceAccountName: fission-svc
 {{- end }}
