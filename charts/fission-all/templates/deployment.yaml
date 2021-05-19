@@ -72,6 +72,7 @@ rules:
   - services
   - serviceaccounts
   - namespaces
+  - events
   verbs:
   - create
   - delete
@@ -211,8 +212,17 @@ rules:
   resources:
   - configmaps
   - secrets
+  - pods
   verbs:
   - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - '*'
 - apiGroups:
   - fission.io
   resources:

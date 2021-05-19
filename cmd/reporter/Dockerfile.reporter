@@ -20,7 +20,7 @@ WORKDIR /go/src/${GOPKG}
 # Copy whole fission directory to work dir
 COPY ./ ./
 
-WORKDIR /go/src/${GOPKG}/cmd/fetcher
+WORKDIR /go/src/${GOPKG}/cmd/reporter
 
 ARG GITCOMMIT=unknown
 # E.g. GITCOMMIT=$(git rev-parse HEAD)
@@ -32,14 +32,12 @@ ARG BUILDDATE=unknown
 # E.g. BUILDDATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
 RUN CGO_ENABLED=0 go build \
-    -o /go/bin/fetcher \
+    -o /go/bin/reporter \
     -gcflags=-trimpath=$GOPATH \
     -asmflags=-trimpath=$GOPATH \
     -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=${GITCOMMIT} -X github.com/fission/fission/pkg/info.BuildDate=${BUILDDATE} -X github.com/fission/fission/pkg/info.Version=${BUILDVERSION}"
 
 FROM alpine:3.13 as base
 RUN apk add --update ca-certificates
-COPY --from=builder /go/bin/fetcher /
-EXPOSE 8000
-
-ENTRYPOINT ["/fetcher"]
+COPY --from=builder /go/bin/reporter /
+ENTRYPOINT ["/reporter"]
