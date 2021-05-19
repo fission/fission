@@ -72,6 +72,7 @@ rules:
   - services
   - serviceaccounts
   - namespaces
+  - events
   verbs:
   - create
   - delete
@@ -211,8 +212,17 @@ rules:
   resources:
   - configmaps
   - secrets
+  - pods
   verbs:
   - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - '*'
 - apiGroups:
   - fission.io
   resources:
@@ -1085,6 +1095,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: CONNECTOR_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
         - name: KAFKA_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.kafka.image }}:{{ .Values.mqt_keda.connector_images.kafka.tag }}"
         - name: RABBITMQ_IMAGE

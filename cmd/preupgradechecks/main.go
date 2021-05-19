@@ -65,12 +65,15 @@ Options:
 			zap.Error(err))
 	}
 
-	if !crdBackedClient.IsFissionReInstall() {
+	crd := crdBackedClient.GetFunctionCRD()
+	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
 
+	err = crdBackedClient.LatestSchemaApplied()
+	if err != nil {
+		logger.Fatal("New CRDs are not applied")
+	}
 	crdBackedClient.VerifyFunctionSpecReferences()
-	crdBackedClient.RemoveClusterAdminRolesForFissionSAs()
-	crdBackedClient.SetupRoleBindings()
 }
