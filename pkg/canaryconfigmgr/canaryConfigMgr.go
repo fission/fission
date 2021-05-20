@@ -242,7 +242,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 	}
 
 	// get the http trigger object associated with this canary config
-	triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(canaryConfig.ObjectMeta.Namespace).Get(canaryConfig.Spec.Trigger, metav1.GetOptions{})
+	triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(canaryConfig.ObjectMeta.Namespace).Get(context.Background(), canaryConfig.Spec.Trigger, metav1.GetOptions{})
 	if err != nil {
 		// if the http trigger is not found, then give up processing this config.
 		if k8serrors.IsNotFound(err) {
@@ -361,7 +361,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 
 func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, triggerNamespace string, fnWeights map[string]int) (err error) {
 	for i := 0; i < maxRetries; i++ {
-		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(triggerName, metav1.GetOptions{})
+		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(context.Background(), triggerName, metav1.GetOptions{})
 		if err != nil {
 			e := "error getting http trigger object"
 			canaryCfgMgr.logger.Error(e, zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
@@ -370,7 +370,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 
 		triggerObj.Spec.FunctionReference.FunctionWeights = fnWeights
 
-		_, err = canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Update(triggerObj)
+		_, err = canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Update(context.Background(), triggerObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
 			canaryCfgMgr.logger.Debug("updated http trigger", zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
@@ -396,7 +396,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 
 func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName, cfgNamespace string, status string) (err error) {
 	for i := 0; i < maxRetries; i++ {
-		canaryCfgObj, err := canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Get(cfgName, metav1.GetOptions{})
+		canaryCfgObj, err := canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Get(context.Background(), cfgName, metav1.GetOptions{})
 		if err != nil {
 			e := "error getting http canary config object"
 			canaryCfgMgr.logger.Error(e,
@@ -414,7 +414,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName
 
 		canaryCfgObj.Status.Status = status
 
-		_, err = canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Update(canaryCfgObj)
+		_, err = canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Update(context.Background(), canaryCfgObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
 			canaryCfgMgr.logger.Info("updated canary config",

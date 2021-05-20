@@ -94,7 +94,7 @@ func initConfigmapController(logger *zap.Logger, fissionClient *crd.FissionClien
 }
 
 func getConfigmapRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClient *crd.FissionClient) ([]fv1.Function, error) {
-	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func initSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
 }
 
 func getSecretRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClient *crd.FissionClient) ([]fv1.Function, error) {
-	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

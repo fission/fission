@@ -248,7 +248,7 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 
 func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
-	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.Background(), f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -289,7 +289,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources() {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
 		return
@@ -525,7 +525,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environmen
 	}
 
 	// Get env from controller
-	env, err = gpm.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name, metav1.GetOptions{})
+	env, err = gpm.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(context.Background(), fn.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +547,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 	pollSleep := 2 * time.Second
 	for {
 		// get list of envs from controller
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
@@ -609,7 +609,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err))
 			continue
@@ -620,7 +620,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			envList[env.ObjectMeta.UID] = struct{}{}
 		}
 
-		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err))
 			continue
@@ -705,11 +705,11 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.Background(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.Background(), options)
 			},
 		},
 		&apiv1.Event{},
@@ -741,11 +741,11 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.Background(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.Background(), options)
 			},
 		},
 		&apiv1.Event{},

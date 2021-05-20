@@ -70,17 +70,17 @@ func functionTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	fi := crdClient.Functions(testNS)
 
 	// cleanup from old crashed tests, ignore errors
-	fi.Delete(function.ObjectMeta.Name, nil) //nolint: errcheck
+	fi.Delete(context.Background(), function.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint: errcheck
 
 	// create
-	f, err := fi.Create(function)
+	f, err := fi.Create(context.Background(), function, metav1.CreateOptions{})
 	panicIf(err)
 	if f.ObjectMeta.Name != function.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", f)
 	}
 
 	// read
-	f, err = fi.Get(function.ObjectMeta.Name, metav1.GetOptions{})
+	f, err = fi.Get(context.Background(), function.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if f.Spec.Environment.Name != function.Spec.Environment.Name {
 		log.Panicf("Bad result from Get: %v", f)
@@ -91,13 +91,13 @@ func functionTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// update
 	function.ObjectMeta.ResourceVersion = f.ObjectMeta.ResourceVersion
 	function.Spec.Environment.Name = "yyy"
-	f, err = fi.Update(function)
+	f, err = fi.Update(context.Background(), function, metav1.UpdateOptions{})
 	panicIf(err)
 
 	log.Printf("f.ObjectMeta = %#v", f.ObjectMeta)
 
 	// list
-	fl, err := fi.List(metav1.ListOptions{})
+	fl, err := fi.List(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 	if len(fl.Items) != 1 {
 		log.Panicf("wrong count from function list: %v", len(fl.Items))
@@ -107,19 +107,19 @@ func functionTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	}
 
 	// delete
-	err = fi.Delete(f.ObjectMeta.Name, nil)
+	err = fi.Delete(context.Background(), f.ObjectMeta.Name, metav1.DeleteOptions{})
 	panicIf(err)
 
 	// start a watch
-	wi, err := fi.Watch(metav1.ListOptions{})
+	wi, err := fi.Watch(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
 	function.ObjectMeta.ResourceVersion = ""
-	f, err = fi.Create(function)
+	f, err = fi.Create(context.Background(), function, metav1.CreateOptions{})
 	panicIf(err)
 	defer func() {
-		err := fi.Delete(f.ObjectMeta.Name, nil)
+		err := fi.Delete(context.Background(), f.ObjectMeta.Name, metav1.DeleteOptions{})
 		panicIf(err)
 	}()
 
@@ -169,17 +169,17 @@ func environmentTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	ei := crdClient.Environments(testNS)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(environment.ObjectMeta.Name, nil) //nolint: errCheck
+	ei.Delete(context.Background(), environment.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint: errCheck
 
 	// create
-	e, err := ei.Create(environment)
+	e, err := ei.Create(context.Background(), environment, metav1.CreateOptions{})
 	panicIf(err)
 	if e.ObjectMeta.Name != environment.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(environment.ObjectMeta.Name, metav1.GetOptions{})
+	e, err = ei.Get(context.Background(), environment.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if len(e.Spec.Runtime.Image) != len(environment.Spec.Runtime.Image) {
 		log.Panicf("Bad result from Get: %#v", e)
@@ -188,11 +188,11 @@ func environmentTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// update
 	environment.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	environment.Spec.Runtime.Image = "www"
-	e, err = ei.Update(environment)
+	e, err = ei.Update(context.Background(), environment, metav1.UpdateOptions{})
 	panicIf(err)
 
 	// list
-	el, err := ei.List(metav1.ListOptions{})
+	el, err := ei.List(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from environment list: %v", len(el.Items))
@@ -202,19 +202,19 @@ func environmentTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	}
 
 	// delete
-	err = ei.Delete(e.ObjectMeta.Name, nil)
+	err = ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(metav1.ListOptions{})
+	wi, err := ei.Watch(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
 	environment.ObjectMeta.ResourceVersion = ""
-	e, err = ei.Create(environment)
+	e, err = ei.Create(context.Background(), environment, metav1.CreateOptions{})
 	panicIf(err)
 	defer func() {
-		err := ei.Delete(e.ObjectMeta.Name, nil)
+		err := ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 		panicIf(err)
 	}()
 
@@ -262,17 +262,17 @@ func httpTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	ei := crdClient.HTTPTriggers(testNS)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(httpTrigger.ObjectMeta.Name, nil) //nolint: errCheck
+	ei.Delete(context.Background(), httpTrigger.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint: errCheck
 
 	// create
-	e, err := ei.Create(httpTrigger)
+	e, err := ei.Create(context.Background(), httpTrigger, metav1.CreateOptions{})
 	panicIf(err)
 	if e.ObjectMeta.Name != httpTrigger.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(httpTrigger.ObjectMeta.Name, metav1.GetOptions{})
+	e, err = ei.Get(context.Background(), httpTrigger.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if len(e.Spec.Method) != len(httpTrigger.Spec.Method) {
 		log.Panicf("Bad result from Get: %#v", e)
@@ -281,11 +281,11 @@ func httpTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// update
 	httpTrigger.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	httpTrigger.Spec.Method = "POST"
-	e, err = ei.Update(httpTrigger)
+	e, err = ei.Update(context.Background(), httpTrigger, metav1.UpdateOptions{})
 	panicIf(err)
 
 	// list
-	el, err := ei.List(metav1.ListOptions{})
+	el, err := ei.List(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from http trigger list: %v", len(el.Items))
@@ -295,19 +295,19 @@ func httpTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	}
 
 	// delete
-	err = ei.Delete(e.ObjectMeta.Name, nil)
+	err = ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(metav1.ListOptions{})
+	wi, err := ei.Watch(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
 	httpTrigger.ObjectMeta.ResourceVersion = ""
-	e, err = ei.Create(httpTrigger)
+	e, err = ei.Create(context.Background(), httpTrigger, metav1.CreateOptions{})
 	panicIf(err)
 	defer func() {
-		err := ei.Delete(e.ObjectMeta.Name, nil)
+		err := ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 		panicIf(err)
 	}()
 
@@ -358,17 +358,17 @@ func kubernetesWatchTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	ei := crdClient.KubernetesWatchTriggers(testNS)
 
 	// cleanup from old crashed tests, ignore errors
-	ei.Delete(kubernetesWatchTrigger.ObjectMeta.Name, nil) //nolint: errCheck
+	ei.Delete(context.Background(), kubernetesWatchTrigger.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint: errCheck
 
 	// create
-	e, err := ei.Create(kubernetesWatchTrigger)
+	e, err := ei.Create(context.Background(), kubernetesWatchTrigger, metav1.CreateOptions{})
 	panicIf(err)
 	if e.ObjectMeta.Name != kubernetesWatchTrigger.ObjectMeta.Name {
 		log.Panicf("Bad result from create: %v", e)
 	}
 
 	// read
-	e, err = ei.Get(kubernetesWatchTrigger.ObjectMeta.Name, metav1.GetOptions{})
+	e, err = ei.Get(context.Background(), kubernetesWatchTrigger.ObjectMeta.Name, metav1.GetOptions{})
 	panicIf(err)
 	if e.Spec.Type != kubernetesWatchTrigger.Spec.Type {
 		log.Panicf("Bad result from Get: %#v", e)
@@ -377,11 +377,11 @@ func kubernetesWatchTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	// update
 	kubernetesWatchTrigger.ObjectMeta.ResourceVersion = e.ObjectMeta.ResourceVersion
 	kubernetesWatchTrigger.Spec.Type = "service"
-	e, err = ei.Update(kubernetesWatchTrigger)
+	e, err = ei.Update(context.Background(), kubernetesWatchTrigger, metav1.UpdateOptions{})
 	panicIf(err)
 
 	// list
-	el, err := ei.List(metav1.ListOptions{})
+	el, err := ei.List(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 	if len(el.Items) != 1 {
 		log.Panicf("wrong count from kubeWatcher list: %v", len(el.Items))
@@ -391,19 +391,19 @@ func kubernetesWatchTriggerTests(crdClient genInformerCoreV1.CoreV1Interface) {
 	}
 
 	// delete
-	err = ei.Delete(e.ObjectMeta.Name, nil)
+	err = ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 	panicIf(err)
 
 	// start a watch
-	wi, err := ei.Watch(metav1.ListOptions{})
+	wi, err := ei.Watch(context.Background(), metav1.ListOptions{})
 	panicIf(err)
 
 	start := time.Now()
 	kubernetesWatchTrigger.ObjectMeta.ResourceVersion = ""
-	e, err = ei.Create(kubernetesWatchTrigger)
+	e, err = ei.Create(context.Background(), kubernetesWatchTrigger, metav1.CreateOptions{})
 	panicIf(err)
 	defer func() {
-		err := ei.Delete(e.ObjectMeta.Name, nil)
+		err := ei.Delete(context.Background(), e.ObjectMeta.Name, metav1.DeleteOptions{})
 		panicIf(err)
 	}()
 

@@ -223,7 +223,7 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 // RefreshFuncPods deleted pods related to the function so that new pods are replenished
 func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
-	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.Background(), f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (deploy *NewDeploy) AdoptExistingResources() {
-	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("error getting function list", zap.Error(err))
 		return
@@ -384,7 +384,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
 				funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
 				for _, f := range funcs {
-					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(f.ObjectMeta.Name, metav1.GetOptions{})
+					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(context.Background(), f.ObjectMeta.Name, metav1.GetOptions{})
 					if err != nil {
 						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
 						continue
@@ -402,7 +402,7 @@ func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controlle
 }
 
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
-	funcList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	funcList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
 	}
@@ -458,7 +458,7 @@ func (deploy *NewDeploy) deleteFunction(fn *fv1.Function) error {
 func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	env, err := deploy.fissionClient.CoreV1().
 		Environments(fn.Spec.Environment.Namespace).
-		Get(fn.Spec.Environment.Name, metav1.GetOptions{})
+		Get(context.Background(), fn.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +664,7 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 
 	if deployChanged {
 		env, err := deploy.fissionClient.CoreV1().Environments(newFn.Spec.Environment.Namespace).
-			Get(newFn.Spec.Environment.Name, metav1.GetOptions{})
+			Get(context.Background(), newFn.Spec.Environment.Name, metav1.GetOptions{})
 		if err != nil {
 			deploy.updateStatus(oldFn, err, "failed to get environment while updating function")
 			return err
@@ -794,7 +794,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := deploy.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(metav1.ListOptions{})
+		envs, err := deploy.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			deploy.logger.Fatal("failed to get environment list", zap.Error(err))
 		}
@@ -825,7 +825,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 					zap.String("function", fsvc.Name))
 			}
 
-			fn, err := deploy.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name, metav1.GetOptions{})
+			fn, err := deploy.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(context.Background(), fsvc.Function.Name, metav1.GetOptions{})
 			if err != nil {
 				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
 				// so we ignore the not found error for functions with newdeploy executor type here.

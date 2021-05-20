@@ -360,13 +360,11 @@ func TestMain(m *testing.M) {
 
 	// testNS isolation for running multiple CI builds concurrently.
 	testNS = uuid.NewV4().String()
-	_, err = kubeClient.CoreV1().Namespaces().Create(&v1.Namespace{
-		context.Background(),
+	_, err = kubeClient.CoreV1().Namespaces().Create(context.Background(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testNS,
 		},
-		metav1.CreateOptions{},
-	})
+	}, metav1.CreateOptions{})
 	panicIf(err)
 	defer panicIf(kubeClient.CoreV1().Namespaces().Delete(context.Background(), testNS, metav1.DeleteOptions{}))
 

@@ -174,7 +174,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
 	for {
-		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(v1.ListOptions{
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.Background(), v1.ListOptions{
 			LabelSelector: "managed=false",
 		})
 
