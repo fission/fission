@@ -38,9 +38,11 @@ import (
 
 type (
 
-	// Packages. Think of these as function-level images.
+	// Package Think of these as function-level images.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	Package struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -53,6 +55,7 @@ type (
 
 	// PackageList is a list of Packages.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -62,6 +65,8 @@ type (
 	// Function is function runs within environment runtime with given package and secrets/configmaps.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	Function struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -70,6 +75,7 @@ type (
 
 	// FunctionList is a list of Functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	FunctionList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -79,6 +85,8 @@ type (
 	// Environment is environment for building and running user functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	Environment struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -87,6 +95,7 @@ type (
 
 	// EnvironmentList is a list of Environments.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	EnvironmentList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -96,6 +105,8 @@ type (
 	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	HTTPTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -104,6 +115,7 @@ type (
 
 	// HTTPTriggerList is a list of HTTPTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -113,6 +125,8 @@ type (
 	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	KubernetesWatchTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -121,6 +135,7 @@ type (
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -130,6 +145,8 @@ type (
 	// TimeTrigger invokes functions based on given cron schedule.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
+	//+kubebuilder:subresource:status
 	TimeTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -139,6 +156,7 @@ type (
 
 	// TimeTriggerList is a list of TimeTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -149,6 +167,7 @@ type (
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	MessageQueueTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -158,6 +177,7 @@ type (
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -167,6 +187,7 @@ type (
 	// CanaryConfig is for canary deployment of two functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -176,6 +197,7 @@ type (
 
 	// CanaryConfigList is a list of CanaryConfigs.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -205,7 +227,7 @@ type (
 	// externally.
 	ArchiveType string
 
-	// Package contains or references a collection of source or
+	// Archive contains or references a collection of source or
 	// binary files.
 	Archive struct {
 		// Type defines how the package is specified: literal or URL.
@@ -285,8 +307,10 @@ type (
 
 	// PackageRef is a reference to the package.
 	PackageRef struct {
+		// +optional
 		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
+		// +optional
+		Name string `json:"name"`
 
 		// Including resource version in the reference forces the function to be updated on
 		// package update, making it possible to cache the function based on its metadata.
@@ -296,6 +320,7 @@ type (
 	// FunctionPackageRef includes the reference to the package also the entrypoint of package.
 	FunctionPackageRef struct {
 		// Package reference
+		// +optional
 		PackageRef PackageRef `json:"packageref"`
 
 		// FunctionName specifies a specific function within the package. This allows
@@ -326,40 +351,48 @@ type (
 		Package FunctionPackageRef `json:"package"`
 
 		// Reference to a list of secrets.
+		// +optional
 		Secrets []SecretReference `json:"secrets"`
 
 		// Reference to a list of configmaps.
+		// +optional
 		ConfigMaps []ConfigMapReference `json:"configmaps"`
 
 		// cpu and memory resources as per K8S standards
 		// This is only for newdeploy to set up resource limitation
 		// when creating deployment for a function.
+		// +optional
 		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// InvokeStrategy is a set of controls which affect how function executes
-		InvokeStrategy InvokeStrategy
+		InvokeStrategy InvokeStrategy `json:"invokeStrategy"`
 
 		// FunctionTimeout provides a maximum amount of duration within which a request for
 		// a particular function execution should be complete.
 		// This is optional. If not specified default value will be taken as 60s
+		// +optional
 		FunctionTimeout int `json:"functionTimeout,omitempty"`
 
 		// IdleTimeout specifies the length of time that a function is idle before the
 		// function pod(s) are eligible for deletion. If no traffic to the function
 		// is detected within the idle timeout, the executor will then recycle the
 		// function pod(s) to release resources.
+		// +optional
 		IdleTimeout *int `json:"idletimeout,omitempty"`
 
 		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 500
+		// +optional
 		Concurrency int `json:"concurrency,omitempty"`
 
 		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
 		// This is optional. If not specified default value will be taken as 1
+		// +optional
 		RequestsPerPod int `json:"requestsPerPod,omitempty"`
 
 		// OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request
 		// This is optional. If not specified default value will be taken as false
+		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
 	}
 
@@ -375,11 +408,13 @@ type (
 
 		// ExecutionStrategy specifies low-level parameters for function execution,
 		// such as the number of instances.
-		ExecutionStrategy ExecutionStrategy
+		// +optional
+		ExecutionStrategy ExecutionStrategy `json:"executionStrategy"`
 
 		// StrategyType is the strategy type of a function.
 		// Now it only supports 'execution'.
-		StrategyType StrategyType
+		// +optional
+		StrategyType StrategyType `json:"strategyType"`
 	}
 
 	// ExecutionStrategy specifies low-level parameters for function execution,
@@ -400,23 +435,29 @@ type (
 		// Available value:
 		//  - poolmgr
 		//  - newdeploy
-		ExecutorType ExecutorType
+		// +optional
+		ExecutorType ExecutorType `json:"executorType"`
 
+		// +optional
 		// This is only for newdeploy to set up minimum replicas of deployment.
-		MinScale int
+		MinScale int `json:"minScale"`
 
+		// +optional
 		// This is only for newdeploy to set up maximum replicas of deployment.
-		MaxScale int
+		MaxScale int `json:"maxScale"`
 
+		// +optional
 		// This is only for newdeploy to set up target CPU utilization of HPA.
-		TargetCPUPercent int
+		TargetCPUPercent int `json:"targetCPUPercent"`
 
+		// +optional
 		// This is the timeout setting for executor to wait for pod specialization.
-		SpecializationTimeout int
+		SpecializationTimeout int `json:"specializationTimeout"`
 	}
-
+	// FunctionReferenceType refers to type of Function
 	FunctionReferenceType string
 
+	// FunctionReference refers to a function
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:
@@ -564,7 +605,7 @@ type (
 		// private registry.
 		ImagePullSecret string `json:"imagepullsecret"`
 	}
-
+	// AllowedFunctionsPerContainer defaults to 'single'. Related to Fission Workflows
 	AllowedFunctionsPerContainer string
 
 	//
@@ -615,7 +656,7 @@ type (
 		TLS string `json:"tls"`
 	}
 
-	// KubernetesWatchTriggerSpec
+	// KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger
 	KubernetesWatchTriggerSpec struct {
 		Namespace string `json:"namespace"`
 
@@ -630,7 +671,7 @@ type (
 		FunctionReference FunctionReference `json:"functionref"`
 	}
 
-	// Type of message queue
+	// MessageQueueType refers to Type of message queue
 	MessageQueueType string
 
 	// MessageQueueTriggerSpec defines a binding from a topic in a
@@ -696,7 +737,7 @@ type (
 		// The reference to function
 		FunctionReference `json:"functionref"`
 	}
-
+	// FailureType refers to the type of failure
 	FailureType string
 
 	// CanaryConfigSpec defines the canary configuration spec
@@ -734,6 +775,7 @@ type (
 	}
 )
 
+//IsEmpty checks if the archive byte and litreal are of length 0
 func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0
 }
