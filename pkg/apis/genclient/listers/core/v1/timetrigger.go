@@ -26,8 +26,10 @@ import (
 )
 
 // TimeTriggerLister helps list TimeTriggers.
+// All objects returned here must be treated as read-only.
 type TimeTriggerLister interface {
 	// List lists all TimeTriggers in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.TimeTrigger, err error)
 	// TimeTriggers returns an object that can list and get TimeTriggers.
 	TimeTriggers(namespace string) TimeTriggerNamespaceLister
@@ -58,10 +60,13 @@ func (s *_timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespace
 }
 
 // TimeTriggerNamespaceLister helps list and get TimeTriggers.
+// All objects returned here must be treated as read-only.
 type TimeTriggerNamespaceLister interface {
 	// List lists all TimeTriggers in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.TimeTrigger, err error)
 	// Get retrieves the TimeTrigger from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.TimeTrigger, error)
 	TimeTriggerNamespaceListerExpansion
 }

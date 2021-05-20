@@ -26,8 +26,10 @@ import (
 )
 
 // FunctionLister helps list Functions.
+// All objects returned here must be treated as read-only.
 type FunctionLister interface {
 	// List lists all Functions in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.Function, err error)
 	// Functions returns an object that can list and get Functions.
 	Functions(namespace string) FunctionNamespaceLister
@@ -58,10 +60,13 @@ func (s *_functionLister) Functions(namespace string) FunctionNamespaceLister {
 }
 
 // FunctionNamespaceLister helps list and get Functions.
+// All objects returned here must be treated as read-only.
 type FunctionNamespaceLister interface {
 	// List lists all Functions in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.Function, err error)
 	// Get retrieves the Function from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.Function, error)
 	FunctionNamespaceListerExpansion
 }
