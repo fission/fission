@@ -37,11 +37,11 @@ const (
 // ensureCRD checks if the given CRD type exists, and creates it if
 // needed. (Note that this creates the CRD type; it doesn't create any
 // _instances_ of that type.)
-func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd *apiextensionsv1.CustomResourceDefinition) (err error) {
+func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd string) (err error) {
 	maxRetries := 5
 
 	for i := 0; i < maxRetries; i++ {
-		_, err = clientset.ApiextensionsV1().CustomResourceDefinitions().Create(context.Background(), crd, metav1.CreateOptions{})
+		_, err = clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), crd, metav1.GetOptions{})
 		if err == nil {
 			return nil
 		}
@@ -63,180 +63,10 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 
 // EnsureFissionCRDs defines all the CRDs that need to be ensured
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
-	functionCrdVersions = append(functionCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: functionValidation,
-		})
+	crds := []string{"canaryconfigs.fission.io", "packages.fission.io", "environments.fission.io", "functions.fission.io", "httptriggers.fission.io", "kuberneteswatchtriggers.fission.io", "messagequeuetriggers.fission.io", "timetriggers.fission.io"}
 
-	environmentCrdVersions = append(environmentCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: environmentValidation,
-		})
-
-	packageCrdVersions = append(packageCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: packageValidation,
-		})
-
-	httpTriggerCrdVersions = append(httpTriggerCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: httpTriggerValidation,
-		})
-
-	k8swatchTriggerCrdVersions = append(k8swatchTriggerCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: k8swatchTriggerValidation,
-		})
-
-	timeTriggerCrdVersions = append(timeTriggerCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: timeTriggerValidation,
-		})
-
-	mqTriggerCrdVersions = append(mqTriggerCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: mqTriggerValidation,
-		})
-	canaryconfigCrdVersions = append(canaryconfigCrdVersions,
-		apiextensionsv1.CustomResourceDefinitionVersion{Name: crdVersion, Served: true, Storage: true,
-			Schema: canaryconfigValidation,
-		})
-
-	crds := []apiextensionsv1.CustomResourceDefinition{
-		// Functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "functions.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: functionCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "Function",
-					Plural:   "functions",
-					Singular: "function",
-				},
-				PreserveUnknownFields: false,
-			},
-		},
-		// Environments (function containers)
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "environments.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: environmentCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "Environment",
-					Plural:   "environments",
-					Singular: "environment",
-				},
-				PreserveUnknownFields: false,
-			},
-		},
-		// HTTP triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "httptriggers.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: httpTriggerCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "HTTPTrigger",
-					Plural:   "httptriggers",
-					Singular: "httptrigger",
-				},
-			},
-		},
-		// Kubernetes watch triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kuberneteswatchtriggers.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: k8swatchTriggerCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "KubernetesWatchTrigger",
-					Plural:   "kuberneteswatchtriggers",
-					Singular: "kuberneteswatchtrigger",
-				},
-			},
-		},
-		// Time-based triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "timetriggers.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: timeTriggerCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "TimeTrigger",
-					Plural:   "timetriggers",
-					Singular: "timetrigger",
-				},
-			},
-		},
-		// Message queue triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "messagequeuetriggers.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: mqTriggerCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "MessageQueueTrigger",
-					Plural:   "messagequeuetriggers",
-					Singular: "messagequeuetrigger",
-				},
-			},
-		},
-		// Packages: archives containing source or binaries for one or more functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "packages.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: packageCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "Package",
-					Plural:   "packages",
-					Singular: "package",
-				},
-				PreserveUnknownFields: false,
-			},
-		},
-		// CanaryConfig: configuration for canary deployment of functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "canaryconfigs.fission.io",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group:    crdGroupName,
-				Versions: canaryconfigCrdVersions,
-				Scope:    apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Kind:     "CanaryConfig",
-					Plural:   "canaryconfigs",
-					Singular: "canaryconfig",
-				},
-			},
-		},
-	}
 	for _, crd := range crds {
-		err := ensureCRD(logger, clientset, &crd)
+		err := ensureCRD(logger, clientset, crd)
 		if err != nil {
 			return err
 		}
