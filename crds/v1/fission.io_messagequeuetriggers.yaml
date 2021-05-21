@@ -1,0 +1,113 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
+  creationTimestamp: null
+  name: messagequeuetriggers.fission.io
+spec:
+  group: fission.io
+  names:
+    kind: MessageQueueTrigger
+    listKind: MessageQueueTriggerList
+    plural: messagequeuetriggers
+    singular: messagequeuetrigger
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MessageQueueTriggerSpec defines a binding from a topic in a message queue to a function.
+            properties:
+              contentType:
+                description: Content type of payload
+                type: string
+              cooldownPeriod:
+                description: The period to wait after the last trigger reported active before scaling the deployment back to 0
+                format: int32
+                type: integer
+              errorTopic:
+                description: Topic to collect error response sent from function
+                type: string
+              functionref:
+                description: The reference to a function for message queue trigger to invoke with when receiving messages from subscribed topic.
+                properties:
+                  functionweights:
+                    additionalProperties:
+                      type: integer
+                    description: Function Reference by weight. this map contains function name as key and its weight as the value. This is for canary upgrade purpose.
+                    type: object
+                  name:
+                    description: Name of the function.
+                    type: string
+                  type:
+                    description: 'Type indicates whether this function reference is by name or selector. For now, the only supported reference type is by "name".  Future reference types:   * Function by label or annotation   * Branch or tag of a versioned function   * A "rolling upgrade" from one version of a function to another Available value: - name - function-weights'
+                    type: string
+                required:
+                - functionweights
+                - name
+                - type
+                type: object
+              maxReplicaCount:
+                description: Maximum number of replicas KEDA will scale the deployment up to
+                format: int32
+                type: integer
+              maxRetries:
+                description: Maximum times for message queue trigger to retry
+                type: integer
+              messageQueueType:
+                description: Type of message queue (NATS, Kafka, AzureQueue)
+                type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                description: ScalerTrigger fields
+                type: object
+              minReplicaCount:
+                description: Minimum number of replicas KEDA will scale the deployment down to
+                format: int32
+                type: integer
+              mqtkind:
+                description: Kind of Message Queue Trigger to be created, by default its fission
+                type: string
+              pollingInterval:
+                description: The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly
+                format: int32
+                type: integer
+              respTopic:
+                description: Topic for message queue trigger to sent response from function.
+                type: string
+              secret:
+                description: Secret name
+                type: string
+              topic:
+                description: Subscribed topic
+                type: string
+            required:
+            - topic
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

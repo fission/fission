@@ -634,42 +634,50 @@ type (
 		// TODO: remove this field since we have IngressConfig already
 		// Deprecated: the original idea of this field is not for setting Ingress.
 		// Since we have IngressConfig now, remove Host after couple releases.
+		// +optional
 		Host string `json:"host"`
 
 		// RelativeURL is the exposed URL for external client to access a function with.
 		RelativeURL string `json:"relativeurl"`
 
 		// HTTP method to access a function.
+		// +optional
 		Method string `json:"method"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`
 
 		// If CreateIngress is true, router will create a ingress definition.
+		// +optional
 		CreateIngress bool `json:"createingress"`
 
 		// TODO: make IngressConfig a independent Fission resource
 		// IngressConfig for router to set up Ingress.
+		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
 	}
 
 	// IngressConfig is for router to set up Ingress.
 	IngressConfig struct {
 		// Annotations will be add to metadata when creating Ingress.
+		// +optional
 		Annotations map[string]string `json:"annotations"`
 
 		// Path is for path matching. The format of path
 		// depends on what ingress controller you used.
+		// +optional
 		Path string `json:"path"`
 
 		// Host is for ingress controller to apply rules. If
 		// host is empty or "*", the rule applies to all
 		// inbound HTTP traffic.
+		// +optional
 		Host string `json:"host"`
 
 		// TLS is for user to specify a Secret that contains
 		// TLS key and certificate. The domain name in the
 		// key and crt must match the value of Host field.
+		// +optional
 		TLS string `json:"tls"`
 	}
 
@@ -681,6 +689,7 @@ type (
 		Type string `json:"type"`
 
 		// Resource labels
+		// +optional
 		LabelSelector map[string]string `json:"labelselector"`
 
 		// The reference to a function for kubewatcher to invoke with
@@ -696,24 +705,30 @@ type (
 	MessageQueueTriggerSpec struct {
 		// The reference to a function for message queue trigger to invoke with
 		// when receiving messages from subscribed topic.
+		// +optional
 		FunctionReference FunctionReference `json:"functionref"`
 
 		// Type of message queue (NATS, Kafka, AzureQueue)
+		// +optional
 		MessageQueueType MessageQueueType `json:"messageQueueType"`
 
 		// Subscribed topic
 		Topic string `json:"topic"`
 
 		// Topic for message queue trigger to sent response from function.
+		// +optional
 		ResponseTopic string `json:"respTopic,omitempty"`
 
 		// Topic to collect error response sent from function
+		// +optional
 		ErrorTopic string `json:"errorTopic"`
 
 		// Maximum times for message queue trigger to retry
+		// +optional
 		MaxRetries int `json:"maxRetries"`
 
 		// Content type of payload
+		// +optional
 		ContentType string `json:"contentType"`
 
 		// The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly
@@ -769,14 +784,18 @@ type (
 		OldFunction string `json:"oldfunction"`
 
 		// Weight increment step for function
+		// +optional
 		WeightIncrement int `json:"weightincrement"`
 
 		// Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d (default: "2m")
+		// +optional
 		WeightIncrementDuration string `json:"duration"`
 
 		// Threshold in percentage beyond which the new version of the function is considered unstable
-		FailureThreshold int         `json:"failurethreshold"`
-		FailureType      FailureType `json:"failureType"`
+		// +optional
+		FailureThreshold int `json:"failurethreshold"`
+		// +optional
+		FailureType FailureType `json:"failureType"`
 	}
 
 	// CanaryConfigStatus represents canary config status
