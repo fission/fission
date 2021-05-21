@@ -234,17 +234,21 @@ type (
 		// Available value:
 		//  - literal
 		//  - url
+		// +optional
 		Type ArchiveType `json:"type,omitempty"`
 
 		// Literal contents of the package. Can be used for
 		// encoding packages below TODO (256KB?) size.
+		// +optional
 		Literal []byte `json:"literal,omitempty"`
 
 		// URL references a package.
+		// +optional
 		URL string `json:"url,omitempty"`
 
 		// Checksum ensures the integrity of packages
 		// referenced by URL. Ignored for literals.
+		// +optional
 		Checksum Checksum `json:"checksum,omitempty"`
 	}
 
@@ -277,12 +281,15 @@ type (
 		// Source is the archive contains source code and dependencies file.
 		// If the package status is in PENDING state, builder manager will then
 		// notify builder to compile source and save the result as deployable archive.
+		// +optional
 		Source Archive `json:"source,omitempty"`
 
 		// Deployment is the deployable archive that environment runtime used to run user function.
+		// +optional
 		Deployment Archive `json:"deployment,omitempty"`
 
 		// BuildCommand is a custom build command that builder used to build the source archive.
+		// +optional
 		BuildCommand string `json:"buildcmd,omitempty"`
 
 		// In the future, we can have a debug build here too
@@ -567,10 +574,12 @@ type (
 
 		// (Optional) Builder is configuration for builder manager to launch environment builder to build source code into
 		// deployable binary.
+		// +optional
 		Builder Builder `json:"builder"`
 
 		// NOT USED NOW.
 		// (Optional) Strongly encouraged. Used to populate links from UI, CLI, etc.
+		// +optional
 		DocumentationURL string `json:"-"` // `json:"documentationurl,omitempty"`
 
 		// (Optional) defaults to 'single'. Fission workflow uses
@@ -578,31 +587,39 @@ type (
 		// Available value:
 		// - single
 		// - infinite
+		// +optional
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
 
 		// Istio default blocks all egress traffic for safety.
 		// To enable accessibility of external network for builder/function pod, set to 'true'.
 		// (Optional) defaults to 'false'
+		// +optional
 		AllowAccessToExternalNetwork bool `json:"allowAccessToExternalNetwork,omitempty"`
 
 		// The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.
 		// (Optional) defaults to no limitation.
+		// +optional
 		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// The initial pool size for environment
+		// +optional
 		Poolsize int `json:"poolsize,omitempty"`
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
 		// (Optional) defaults to 360 seconds
+		// +optional
 		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
 
 		// KeepArchive is used by fetcher to determine if the extracted archive
 		// or unarchived file should be placed, which is then used by specialize handler.
 		// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
+		// +optional
+
 		KeepArchive bool `json:"keeparchive"`
 
 		// ImagePullSecret is the secret for Kubernetes to pull an image from a
 		// private registry.
+		// +optional
 		ImagePullSecret string `json:"imagepullsecret"`
 	}
 	// AllowedFunctionsPerContainer defaults to 'single'. Related to Fission Workflows
