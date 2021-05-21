@@ -104,6 +104,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	requestsPerPod := input.Int(flagkey.FnRequestsPerPod)
 
+	fnOnceOnly := input.Bool(flagkey.FnOnceOnly)
+
 	pkgName := input.String(flagkey.FnPackageName)
 
 	secretNames := input.StringSlice(flagkey.FnSecret)
@@ -304,6 +306,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
+			OnceOnly:        fnOnceOnly,
 		},
 	}
 

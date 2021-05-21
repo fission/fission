@@ -56,7 +56,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	executor.logger.Debug("checking for cached function service",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-	if t == fv1.ExecutorTypePoolmgr {
+	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
 		concurrency := fn.Spec.Concurrency
 		if concurrency == 0 {
 			concurrency = 500
@@ -90,7 +90,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 			http.Error(w, errMsg, http.StatusTooManyRequests)
 			return
 		}
-	} else {
+	} else if t == fv1.ExecutorTypeNewdeploy {
 		fsvc, err := et.GetFuncSvcFromCache(fn)
 		if err == nil {
 			if et.IsValid(fsvc) {
