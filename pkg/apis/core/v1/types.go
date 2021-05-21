@@ -42,7 +42,7 @@ type (
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:resource:singular="package",scope="Namespaced",shortName={pkg}
 	Package struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -50,6 +50,7 @@ type (
 		Spec PackageSpec `json:"spec"`
 
 		// Status indicates the build status of package.
+		//+optional
 		Status PackageStatus `json:"status"`
 	}
 
@@ -65,8 +66,9 @@ type (
 	// Function is function runs within environment runtime with given package and secrets/configmaps.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:singular="function",scope="Namespaced",shortName={fn}
 	Function struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -301,14 +303,18 @@ type (
 		//   is ready for deploy instead of setting "none" in build status.
 
 		// BuildStatus is the package build status.
+		// +kubebuilder:default:="Pending"
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
 		// BuildLog stores build log during the compilation.
+		//+optional
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
 		// LastUpdateTimestamp will store the timestamp the package was last updated
 		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
 		// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
+		//+optional
+		//+nullable
 		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
 	}
 
@@ -359,11 +365,13 @@ type (
 
 		// Reference to a list of secrets.
 		// +optional
-		Secrets []SecretReference `json:"secrets"`
+		// +nullable
+		Secrets []SecretReference `json:"secrets,omitempty"`
 
 		// Reference to a list of configmaps.
 		// +optional
-		ConfigMaps []ConfigMapReference `json:"configmaps"`
+		// +nullable
+		ConfigMaps []ConfigMapReference `json:"configmaps,omitempty"`
 
 		// cpu and memory resources as per K8S standards
 		// This is only for newdeploy to set up resource limitation
@@ -372,7 +380,7 @@ type (
 		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// InvokeStrategy is a set of controls which affect how function executes
-		InvokeStrategy InvokeStrategy `json:"invokeStrategy"`
+		InvokeStrategy InvokeStrategy `json:"InvokeStrategy"`
 
 		// FunctionTimeout provides a maximum amount of duration within which a request for
 		// a particular function execution should be complete.
@@ -416,12 +424,12 @@ type (
 		// ExecutionStrategy specifies low-level parameters for function execution,
 		// such as the number of instances.
 		// +optional
-		ExecutionStrategy ExecutionStrategy `json:"executionStrategy"`
+		ExecutionStrategy ExecutionStrategy `json:"ExecutionStrategy"`
 
 		// StrategyType is the strategy type of a function.
 		// Now it only supports 'execution'.
 		// +optional
-		StrategyType StrategyType `json:"strategyType"`
+		StrategyType StrategyType `json:"StrategyType"`
 	}
 
 	// ExecutionStrategy specifies low-level parameters for function execution,
@@ -443,23 +451,23 @@ type (
 		//  - poolmgr
 		//  - newdeploy
 		// +optional
-		ExecutorType ExecutorType `json:"executorType"`
+		ExecutorType ExecutorType `json:"ExecutorType"`
 
 		// +optional
 		// This is only for newdeploy to set up minimum replicas of deployment.
-		MinScale int `json:"minScale"`
+		MinScale int `json:"MinScale"`
 
 		// +optional
 		// This is only for newdeploy to set up maximum replicas of deployment.
-		MaxScale int `json:"maxScale"`
+		MaxScale int `json:"MaxScale"`
 
 		// +optional
 		// This is only for newdeploy to set up target CPU utilization of HPA.
-		TargetCPUPercent int `json:"targetCPUPercent"`
+		TargetCPUPercent int `json:"TargetCPUPercent"`
 
 		// +optional
 		// This is the timeout setting for executor to wait for pod specialization.
-		SpecializationTimeout int `json:"specializationTimeout"`
+		SpecializationTimeout int `json:"SpecializationTimeout"`
 	}
 	// FunctionReferenceType refers to type of Function
 	FunctionReferenceType string
@@ -481,6 +489,7 @@ type (
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.
+		//+nullable
 		FunctionWeights map[string]int `json:"functionweights"`
 	}
 
@@ -520,6 +529,7 @@ type (
 		// - ImagePullPolicy
 		//
 		// You can set either PodSpec or Container, but not both.
+		// kubebuilder:validation:XPreserveUnknownFields=true
 		Container *apiv1.Container `json:"container,omitempty"`
 
 		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
@@ -531,6 +541,7 @@ type (
 		// - Structs are merged and variables from pod spec take precedence
 		//
 		// You can set either PodSpec or Container, but not both.
+		// kubebuilder:validation:XPreserveUnknownFields
 		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
@@ -661,6 +672,7 @@ type (
 	IngressConfig struct {
 		// Annotations will be add to metadata when creating Ingress.
 		// +optional
+		// +nullable
 		Annotations map[string]string `json:"annotations"`
 
 		// Path is for path matching. The format of path

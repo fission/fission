@@ -42,6 +42,7 @@ spec:
                     additionalProperties:
                       type: integer
                     description: Function Reference by weight. this map contains function name as key and its weight as the value. This is for canary upgrade purpose.
+                    nullable: true
                     type: object
                   name:
                     description: Name of the function.
@@ -64,6 +65,7 @@ spec:
                     additionalProperties:
                       type: string
                     description: Annotations will be add to metadata when creating Ingress.
+                    nullable: true
                     type: object
                   host:
                     description: Host is for ingress controller to apply rules. If host is empty or "*", the rule applies to all inbound HTTP traffic.

@@ -49,6 +49,7 @@ spec:
                     additionalProperties:
                       type: integer
                     description: Function Reference by weight. this map contains function name as key and its weight as the value. This is for canary upgrade purpose.
+                    nullable: true
                     type: object
                   name:
                     description: Name of the function.

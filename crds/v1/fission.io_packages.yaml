@@ -13,6 +13,8 @@ spec:
     kind: Package
     listKind: PackageList
     plural: packages
+    shortNames:
+    - pkg
     singular: package
   scope: Namespaced
   versions:
@@ -102,22 +104,21 @@ spec:
                 description: BuildLog stores build log during the compilation.
                 type: string
               buildstatus:
+                default: Pending
                 description: BuildStatus is the package build status.
                 type: string
               lastUpdateTimestamp:
                 description: LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON. https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
                 format: date-time
+                nullable: true
                 type: string
             type: object
         required:
         - metadata
         - spec
-        - status
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
 status:
   acceptedNames:
     kind: ""

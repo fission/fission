@@ -13,6 +13,8 @@ spec:
     kind: Function
     listKind: FunctionList
     plural: functions
+    shortNames:
+    - fn
     singular: function
   scope: Namespaced
   versions:
@@ -32,6 +34,32 @@ spec:
           spec:
             description: FunctionSpec describes the contents of the function.
             properties:
+              InvokeStrategy:
+                description: InvokeStrategy is a set of controls which affect how function executes
+                properties:
+                  ExecutionStrategy:
+                    description: ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.
+                    properties:
+                      ExecutorType:
+                        description: "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\". \n Available value:  - poolmgr  - newdeploy"
+                        type: string
+                      MaxScale:
+                        description: This is only for newdeploy to set up maximum replicas of deployment.
+                        type: integer
+                      MinScale:
+                        description: This is only for newdeploy to set up minimum replicas of deployment.
+                        type: integer
+                      SpecializationTimeout:
+                        description: This is the timeout setting for executor to wait for pod specialization.
+                        type: integer
+                      TargetCPUPercent:
+                        description: This is only for newdeploy to set up target CPU utilization of HPA.
+                        type: integer
+                    type: object
+                  StrategyType:
+                    description: StrategyType is the strategy type of a function. Now it only supports 'execution'.
+                    type: string
+                type: object
               concurrency:
                 description: Maximum number of pods to be specialized which will serve requests This is optional. If not specified default value will be taken as 500
                 type: integer
@@ -48,6 +76,7 @@ spec:
                   - name
                   - namespace
                   type: object
+                nullable: true
                 type: array
               environment:
                 description: Environment is the build and runtime environment that this function is associated with. An Environment with this name should exist, otherwise the function cannot be invoked.
@@ -66,32 +95,6 @@ spec:
               idletimeout:
                 description: IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.
                 type: integer
-              invokeStrategy:
-                description: InvokeStrategy is a set of controls which affect how function executes
-                properties:
-                  executionStrategy:
-                    description: ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.
-                    properties:
-                      executorType:
-                        description: "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\". \n Available value:  - poolmgr  - newdeploy"
-                        type: string
-                      maxScale:
-                        description: This is only for newdeploy to set up maximum replicas of deployment.
-                        type: integer
-                      minScale:
-                        description: This is only for newdeploy to set up minimum replicas of deployment.
-                        type: integer
-                      specializationTimeout:
-                        description: This is the timeout setting for executor to wait for pod specialization.
-                        type: integer
-                      targetCPUPercent:
-                        description: This is only for newdeploy to set up target CPU utilization of HPA.
-                        type: integer
-                    type: object
-                  strategyType:
-                    description: StrategyType is the strategy type of a function. Now it only supports 'execution'.
-                    type: string
-                type: object
               onceOnly:
                 description: OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request This is optional. If not specified default value will be taken as false
                 type: boolean
@@ -151,10 +154,11 @@ spec:
                   - name
                   - namespace
                   type: object
+                nullable: true
                 type: array
             required:
+            - InvokeStrategy
             - environment
-            - invokeStrategy
             - package
             type: object
         required:
