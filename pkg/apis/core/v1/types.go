@@ -41,7 +41,7 @@ type (
 	// Package Think of these as function-level images.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	// +kubebuilder:resource:singular="package",scope="Namespaced",shortName={pkg}
 	Package struct {
 		metav1.TypeMeta   `json:",inline"`
@@ -56,7 +56,7 @@ type (
 
 	// PackageList is a list of Packages.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -87,8 +87,8 @@ type (
 	// Environment is environment for building and running user functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	Environment struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -107,8 +107,8 @@ type (
 	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	HTTPTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -127,8 +127,8 @@ type (
 	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	KubernetesWatchTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -137,7 +137,7 @@ type (
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -147,8 +147,8 @@ type (
 	// TimeTrigger invokes functions based on given cron schedule.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
-	//+kubebuilder:subresource:status
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	TimeTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -158,7 +158,7 @@ type (
 
 	// TimeTriggerList is a list of TimeTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -169,7 +169,7 @@ type (
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	MessageQueueTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -179,7 +179,7 @@ type (
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -189,7 +189,7 @@ type (
 	// CanaryConfig is for canary deployment of two functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -199,7 +199,7 @@ type (
 
 	// CanaryConfigList is a list of CanaryConfigs.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-	//+kubebuilder:object:root=true
+	// +kubebuilder:object:root=true
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -307,14 +307,14 @@ type (
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
 		// BuildLog stores build log during the compilation.
-		//+optional
+		// +optional
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
 		// LastUpdateTimestamp will store the timestamp the package was last updated
 		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
 		// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
-		//+optional
-		//+nullable
+		// +optional
+		// +nullable
 		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
 	}
 
@@ -489,7 +489,7 @@ type (
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.
-		//+nullable
+		// +nullable
 		FunctionWeights map[string]int `json:"functionweights"`
 	}
 
@@ -529,7 +529,6 @@ type (
 		// - ImagePullPolicy
 		//
 		// You can set either PodSpec or Container, but not both.
-		// kubebuilder:validation:XPreserveUnknownFields=true
 		Container *apiv1.Container `json:"container,omitempty"`
 
 		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
@@ -541,7 +540,6 @@ type (
 		// - Structs are merged and variables from pod spec take precedence
 		//
 		// You can set either PodSpec or Container, but not both.
-		// kubebuilder:validation:XPreserveUnknownFields
 		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
@@ -625,7 +623,6 @@ type (
 		// or unarchived file should be placed, which is then used by specialize handler.
 		// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
 		// +optional
-
 		KeepArchive bool `json:"keeparchive"`
 
 		// ImagePullSecret is the secret for Kubernetes to pull an image from a
