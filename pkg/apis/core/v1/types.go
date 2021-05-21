@@ -529,6 +529,7 @@ type (
 		// - ImagePullPolicy
 		//
 		// You can set either PodSpec or Container, but not both.
+		// kubebuilder:validation:XPreserveUnknownFields=true
 		Container *apiv1.Container `json:"container,omitempty"`
 
 		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec

@@ -4541,7 +4541,7 @@ spec:
                 description: Runtime is configuration for running function, like container image etc.
                 properties:
                   container:
-                    description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: - Name - Image; set to the Runtime.Image - TerminationMessagePath - ImagePullPolicy \n You can set either PodSpec or Container, but not both."
+                    description: "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: - Name - Image; set to the Runtime.Image - TerminationMessagePath - ImagePullPolicy \n You can set either PodSpec or Container, but not both. kubebuilder:validation:XPreserveUnknownFields=true"
                     properties:
                       args:
                         description: 'Arguments to the entrypoint. The docker image''s CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container''s environment. If a variable cannot be resolved, the reference in the input string will be unchanged. The $(VAR_NAME) syntax can be escaped with a double $$, ie: $$(VAR_NAME). Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell'
