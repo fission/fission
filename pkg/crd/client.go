@@ -102,7 +102,7 @@ func (fc *FissionClient) WaitForCRDs() error {
 	start := time.Now()
 	for {
 		fi := fc.CoreV1().Functions(metav1.NamespaceDefault)
-		_, err := fi.List(context.Background(), metav1.ListOptions{})
+		_, err := fi.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {

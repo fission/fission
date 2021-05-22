@@ -212,7 +212,7 @@ func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod
 
 	if !exists {
 		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performace issues for your function.")
-		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.Background(), obj.Name, metav1.GetOptions{})
+		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
 		return pod, err
 	}
 
@@ -248,7 +248,7 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 
 func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
-	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.Background(), f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 
 	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -276,7 +276,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 	}
 
 	for _, po := range podList.Items {
-		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(context.Background(), po.ObjectMeta.Name, metav1.DeleteOptions{})
+		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(context.TODO(), po.ObjectMeta.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -289,7 +289,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources() {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
 		return
@@ -321,7 +321,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(l).AsSelector().String(),
 	})
 
@@ -344,7 +344,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(context.Background(), pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
 				// just log the error since it won't affect the function serving
 				gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
@@ -525,7 +525,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(fn *fv1.Function) (*fv1.Environmen
 	}
 
 	// Get env from controller
-	env, err = gpm.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(context.Background(), fn.Spec.Environment.Name, metav1.GetOptions{})
+	env, err = gpm.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(context.TODO(), fn.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +547,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 	pollSleep := 2 * time.Second
 	for {
 		// get list of envs from controller
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
@@ -609,7 +609,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 	for {
 		time.Sleep(pollSleep)
 
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err))
 			continue
@@ -620,7 +620,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 			envList[env.ObjectMeta.UID] = struct{}{}
 		}
 
-		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err))
 			continue
@@ -705,11 +705,11 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.Background(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.Background(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.TODO(), options)
 			},
 		},
 		&apiv1.Event{},
@@ -741,11 +741,11 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 		&k8scache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.Background(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.Background(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.TODO(), options)
 			},
 		},
 		&apiv1.Event{},

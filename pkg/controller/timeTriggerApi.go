@@ -106,7 +106,7 @@ func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.CoreV1().TimeTriggers(ns).List(context.Background(), metav1.ListOptions{})
+	triggers, err := a.fissionClient.CoreV1().TimeTriggers(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -150,7 +150,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Create(context.Background(), &t, metav1.CreateOptions{})
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Create(context.TODO(), &t, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -174,7 +174,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.CoreV1().TimeTriggers(ns).Get(context.Background(), name, metav1.GetOptions{})
+	t, err := a.fissionClient.CoreV1().TimeTriggers(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -219,7 +219,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Update(context.Background(), &t, metav1.UpdateOptions{})
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Update(context.TODO(), &t, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -241,7 +241,7 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().TimeTriggers(ns).Delete(context.Background(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().TimeTriggers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

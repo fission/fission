@@ -79,7 +79,7 @@ func NewKubernetesObjectDumper(clientset *kubernetes.Clientset, objType string, 
 func (res KubernetesObjectDumper) Dump(dumpDir string) {
 	switch res.objType {
 	case KubernetesService:
-		objs, err := res.client.CoreV1().Services(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.CoreV1().Services(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -92,7 +92,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesDeployment:
-		objs, err := res.client.AppsV1().Deployments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.AppsV1().Deployments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -104,7 +104,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesPod:
-		objs, err := res.client.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -116,7 +116,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesHPA:
-		objs, err := res.client.AutoscalingV2beta1().HorizontalPodAutoscalers(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.AutoscalingV2beta1().HorizontalPodAutoscalers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -128,7 +128,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesDaemonSet:
-		objs, err := res.client.AppsV1().DaemonSets(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.AppsV1().DaemonSets(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -140,7 +140,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesNode:
-		objs, err := res.client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return
@@ -198,7 +198,7 @@ func NewKubernetesPodLogDumper(clientset *kubernetes.Clientset, selector string)
 func (res KubernetesPodLogDumper) Dump(dumpDir string) {
 	l, err := res.client.CoreV1().
 		Pods(metav1.NamespaceAll).
-		List(context.Background(), metav1.ListOptions{LabelSelector: res.labelSelector})
+		List(context.TODO(), metav1.ListOptions{LabelSelector: res.labelSelector})
 	if err != nil {
 		console.Error(fmt.Sprintf("Error getting controller list: %v", err))
 		return

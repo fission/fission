@@ -50,14 +50,14 @@ func MakeSAObj(sa, ns string) *apiv1.ServiceAccount {
 
 // SetupSA checks if a service account is present in the namespace, if not creates it.
 func SetupSA(k8sClient *kubernetes.Clientset, sa, ns string) (*apiv1.ServiceAccount, error) {
-	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(context.Background(), sa, metav1.GetOptions{})
+	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(context.TODO(), sa, metav1.GetOptions{})
 	if err == nil {
 		return saObj, nil
 	}
 
 	if k8serrors.IsNotFound(err) {
 		saObj = MakeSAObj(sa, ns)
-		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(context.Background(), saObj, metav1.CreateOptions{})
+		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(context.TODO(), saObj, metav1.CreateOptions{})
 	}
 
 	return saObj, err
@@ -121,7 +121,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 	}
 
 	for i := 0; i < maxRetries; i++ {
-		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Patch(context.Background(), roleBinding, types.JSONPatchType, patchJson, metav1.PatchOptions{})
+		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Patch(context.TODO(), roleBinding, types.JSONPatchType, patchJson, metav1.PatchOptions{})
 		if err == nil {
 			logger.Debug("patched rolebinding",
 				zap.String("role_binding", roleBinding),
@@ -137,7 +137,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 			// someone may have deleted the object between us checking if the object is present and deciding to patch
 			// so just create the object again
 			rbObj := makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
-			_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(context.Background(), rbObj, metav1.CreateOptions{})
+			_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(context.TODO(), rbObj, metav1.CreateOptions{})
 			if err == nil {
 				logger.Debug("created rolebinding",
 					zap.String("role_binding", roleBinding),
@@ -179,7 +179,7 @@ func AddSaToRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Cli
 func RemoveSAFromRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs string, saToRemove map[string]bool) (err error) {
 	for i := 0; i < maxRetries; i++ {
 		rbObj, err := k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Get(
-			context.Background(),
+			context.TODO(),
 			roleBinding, metav1.GetOptions{})
 		if err != nil {
 			// silently ignoring the error. there's no need for us to remove sa anymore.
@@ -212,7 +212,7 @@ func RemoveSAFromRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernete
 		rbObj.Subjects = newSubjects
 
 		// cant use patch for deletes, the results become in-deterministic, so using update.
-		_, err = k8sClient.RbacV1beta1().RoleBindings(rbObj.Namespace).Update(context.Background(), rbObj, metav1.UpdateOptions{})
+		_, err = k8sClient.RbacV1beta1().RoleBindings(rbObj.Namespace).Update(context.TODO(), rbObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
 			logger.Debug("removed service accounts from rolebinding",
@@ -239,7 +239,7 @@ func RemoveSAFromRoleBindingWithRetries(logger *zap.Logger, k8sClient *kubernete
 func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs, role, roleKind, sa, saNamespace string) error {
 	// get the role binding object
 	rbObj, err := k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Get(
-		context.Background(),
+		context.TODO(),
 		roleBinding, metav1.GetOptions{})
 
 	if err == nil {
@@ -266,7 +266,7 @@ func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleB
 			zap.String("role_binding", roleBinding),
 			zap.String("role_binding_namespace", roleBindingNs))
 		rbObj = makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
-		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(context.Background(), rbObj, metav1.CreateOptions{})
+		_, err = k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Create(context.TODO(), rbObj, metav1.CreateOptions{})
 		if k8serrors.IsAlreadyExists(err) {
 			logger.Debug("rolebinding already exists in namespace - adding service account to rolebinding",
 				zap.String("service_account_name", sa),
@@ -285,7 +285,7 @@ func SetupRoleBinding(logger *zap.Logger, k8sClient *kubernetes.Clientset, roleB
 func DeleteRoleBinding(k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs string) error {
 	// if deleteRoleBinding is invoked by 2 fission services at the same time for the same rolebinding,
 	// the first call will succeed while the 2nd will fail with isNotFound. but we dont want to error out then.
-	err := k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Delete(context.Background(), roleBinding, metav1.DeleteOptions{})
+	err := k8sClient.RbacV1beta1().RoleBindings(roleBindingNs).Delete(context.TODO(), roleBinding, metav1.DeleteOptions{})
 	if err == nil || k8serrors.IsNotFound(err) {
 		return nil
 	}

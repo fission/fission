@@ -41,7 +41,7 @@ func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd
 	maxRetries := 5
 
 	for i := 0; i < maxRetries; i++ {
-		_, err = clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), crd, metav1.GetOptions{})
+		_, err = clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crd, metav1.GetOptions{})
 		if err == nil {
 			return nil
 		}

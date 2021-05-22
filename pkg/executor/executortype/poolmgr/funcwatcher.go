@@ -125,7 +125,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 					}
 
 					// create function istio service if it does not exist
-					_, err = kubernetesClient.CoreV1().Services(envNs).Create(context.Background(), &svc, metav1.CreateOptions{})
+					_, err = kubernetesClient.CoreV1().Services(envNs).Create(context.TODO(), &svc, metav1.CreateOptions{})
 					if err != nil && !kerrors.IsAlreadyExists(err) {
 						gpm.logger.Error("error creating istio service for function",
 							zap.Error(err),
@@ -152,7 +152,7 @@ func (gpm *GenericPoolManager) makeFuncController(fissionClient *crd.FissionClie
 				if istioEnabled {
 					svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
 					// delete function istio service
-					err := kubernetesClient.CoreV1().Services(envNs).Delete(context.Background(), svcName, metav1.DeleteOptions{})
+					err := kubernetesClient.CoreV1().Services(envNs).Delete(context.TODO(), svcName, metav1.DeleteOptions{})
 					if err != nil && !kerrors.IsNotFound(err) {
 						gpm.logger.Error("error deleting istio service for function",
 							zap.Error(err),

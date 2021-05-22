@@ -360,13 +360,13 @@ func TestMain(m *testing.M) {
 
 	// testNS isolation for running multiple CI builds concurrently.
 	testNS = uuid.NewV4().String()
-	_, err = kubeClient.CoreV1().Namespaces().Create(context.Background(), &v1.Namespace{
+	_, err = kubeClient.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testNS,
 		},
 	}, metav1.CreateOptions{})
 	panicIf(err)
-	defer panicIf(kubeClient.CoreV1().Namespaces().Delete(context.Background(), testNS, metav1.DeleteOptions{}))
+	defer panicIf(kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{}))
 
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder

@@ -24,7 +24,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,7 +70,7 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 // We can use this to find out if fission had been previously installed on this cluster too.
 func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1.CustomResourceDefinition {
 	for i := 0; i < maxRetries; i++ {
-		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
 		}
@@ -103,7 +103,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	var fList *fv1.FunctionList
 
 	for i := 0; i < maxRetries; i++ {
-		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err == nil {
 			break
 		}

@@ -119,7 +119,7 @@ func runPortForward(labelSelector string, localPort string, ns string, kubeConte
 
 	// get the pod; if there is more than one, ask the user to disambiguate
 	podList, err := clientset.CoreV1().Pods(ns).
-		List(context.Background(), meta_v1.ListOptions{LabelSelector: labelSelector})
+		List(context.TODO(), meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
 	} else if len(podList.Items) == 0 {
@@ -165,7 +165,7 @@ func runPortForward(labelSelector string, localPort string, ns string, kubeConte
 
 	// get the service and the target port
 	svcs, err := clientset.CoreV1().Services(podNameSpace).
-		List(context.Background(), meta_v1.ListOptions{LabelSelector: labelSelector})
+		List(context.TODO(), meta_v1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return errors.Wrapf(err, "Error getting %v service", labelSelector)
 	}

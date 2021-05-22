@@ -47,7 +47,7 @@ func MakeWatchSync(logger *zap.Logger, client *crd.FissionClient, kubeWatcher *K
 func (ws *WatchSync) syncSvc() {
 	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err))
 		}

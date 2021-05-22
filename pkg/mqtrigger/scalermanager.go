@@ -208,7 +208,7 @@ func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient ku
 	// Add Auth Fields
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
-		secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.Background(), secretName, metav1.GetOptions{})
+		secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.TODO(), secretName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -290,7 +290,7 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 }
 
 func getResourceVersion(scaledObjectName string, kedaClient dynamic.ResourceInterface) (version string, err error) {
-	scaledObject, err := kedaClient.Get(context.Background(), scaledObjectName, metav1.GetOptions{})
+	scaledObject, err := kedaClient.Get(context.TODO(), scaledObjectName, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -298,7 +298,7 @@ func getResourceVersion(scaledObjectName string, kedaClient dynamic.ResourceInte
 }
 
 func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*unstructured.Unstructured, error) {
-	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.Background(), mqt.Spec.Secret, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.TODO(), mqt.Spec.Secret, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +444,7 @@ func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	if err != nil {
 		return err
 	}
-	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Create(context.Background(), deployment, metav1.CreateOptions{})
+	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	if err != nil {
 		return err
 	}
-	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Update(context.Background(), deployment, metav1.UpdateOptions{})
+	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Update(context.TODO(), deployment, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 
 func deleteDeployment(name string, kubeClient *kubernetes.Clientset) error {
 	deletePolicy := metav1.DeletePropagationForeground
-	if err := kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Delete(context.Background(), name, metav1.DeleteOptions{
+	if err := kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil {
 		return err

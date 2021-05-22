@@ -148,7 +148,7 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 func (envw *environmentWatcher) watchEnvironments() {
 	rv := ""
 	for {
-		wi, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).Watch(context.Background(),
+		wi, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).Watch(context.TODO(),
 			metav1.ListOptions{
 				ResourceVersion: rv,
 			})
@@ -183,7 +183,7 @@ func (envw *environmentWatcher) watchEnvironments() {
 func (envw *environmentWatcher) sync() {
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
-		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))
@@ -372,7 +372,7 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace string) error {
 	err := envw.kubernetesClient.CoreV1().
 		Services(namespace).
-		Delete(context.Background(), name, delOpt)
+		Delete(context.TODO(), name, delOpt)
 	if err != nil {
 		return errors.Wrapf(err, "error deleting builder service %s.%s", name, namespace)
 	}
@@ -382,7 +382,7 @@ func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace strin
 func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace string) error {
 	err := envw.kubernetesClient.AppsV1().
 		Deployments(namespace).
-		Delete(context.Background(), name, delOpt)
+		Delete(context.TODO(), name, delOpt)
 	if err != nil {
 		return errors.Wrapf(err, "error deleting builder deployment %s.%s", name, namespace)
 	}
@@ -391,7 +391,7 @@ func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace st
 
 func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns string) ([]apiv1.Service, error) {
 	svcList, err := envw.kubernetesClient.CoreV1().Services(ns).List(
-		context.Background(),
+		context.TODO(),
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
@@ -436,7 +436,7 @@ func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns st
 		},
 	}
 	envw.logger.Info("creating builder service", zap.String("service_name", name))
-	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(context.Background(), &service, metav1.CreateOptions{})
+	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(context.TODO(), &service, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns st
 
 func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, ns string) ([]appsv1.Deployment, error) {
 	deployList, err := envw.kubernetesClient.AppsV1().Deployments(ns).List(
-		context.Background(),
+		context.TODO(),
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
@@ -533,7 +533,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(context.Background(), deployment, metav1.CreateOptions{})
+	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}

@@ -142,7 +142,7 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 func (mqt *MessageQueueTriggerManager) syncTriggers() {
 	for {
 		// get new set of triggers
-		newTriggers, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		newTriggers, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				mqt.logger.Error("encountered network error, will retry", zap.Error(err))

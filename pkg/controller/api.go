@@ -135,14 +135,14 @@ func (api *API) createNsIfNotExists(ns string) error {
 		return nil
 	}
 
-	_, err := api.kubernetesClient.CoreV1().Namespaces().Get(context.Background(), ns, metav1.GetOptions{})
+	_, err := api.kubernetesClient.CoreV1().Namespaces().Get(context.TODO(), ns, metav1.GetOptions{})
 	if err != nil && kerrors.IsNotFound(err) {
 		ns := &apiv1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ns,
 			},
 		}
-		_, err = api.kubernetesClient.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+		_, err = api.kubernetesClient.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
 	}
 
 	return err
@@ -184,7 +184,7 @@ func (api *API) HealthHandler(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 	appLabelSelector := "application=" + r.URL.Query().Get("application")
-	services, err := api.kubernetesClient.CoreV1().Services(podNamespace).List(context.Background(), metav1.ListOptions{
+	services, err := api.kubernetesClient.CoreV1().Services(podNamespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: appLabelSelector,
 	})
 	if err != nil || len(services.Items) > 1 || len(services.Items) == 0 {
