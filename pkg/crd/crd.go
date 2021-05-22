@@ -18,58 +18,42 @@ package crd
 
 import (
 	"context"
-	"time"
+	"fmt"
 
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var functionCrdVersions, environmentCrdVersions, packageCrdVersions, httpTriggerCrdVersions, timeTriggerCrdVersions, k8swatchTriggerCrdVersions, mqTriggerCrdVersions, canaryconfigCrdVersions []apiextensionsv1.CustomResourceDefinitionVersion
-
-const (
-	crdGroupName = "fission.io"
-	crdVersion   = "v1"
-)
-
-// ensureCRD checks if the given CRD type exists, and creates it if
-// needed. (Note that this creates the CRD type; it doesn't create any
-// _instances_ of that type.)
-func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd string) (err error) {
-	maxRetries := 5
-
-	for i := 0; i < maxRetries; i++ {
-		_, err = clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crd, metav1.GetOptions{})
-		if err == nil {
-			return nil
-		}
-
-		// return if the resource already exists
-		if k8serrors.IsAlreadyExists(err) {
-			return nil
-		} else {
-			// The requests fail to connect to k8s api server before
-			// istio-prxoy is ready to serve traffic. Retry again.
-			logger.Info("error connecting to kubernetes api service, retrying", zap.Error(err))
-			time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-			continue
-		}
-	}
-
-	return err
-}
-
-// EnsureFissionCRDs defines all the CRDs that need to be ensured
+// EnsureFissionCRDs checks if all Fission CRDs are present
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
-	crds := []string{"canaryconfigs.fission.io", "packages.fission.io", "environments.fission.io", "functions.fission.io", "httptriggers.fission.io", "kuberneteswatchtriggers.fission.io", "messagequeuetriggers.fission.io", "timetriggers.fission.io"}
+	crds, err := clientset.ApiextensionsV1().CustomResourceDefinitions().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
 
-	for _, crd := range crds {
-		err := ensureCRD(logger, clientset, crd)
-		if err != nil {
-			return err
+	var crdsPresent = make(map[string]bool)
+	for _, crd := range crds.Items {
+		if crd.Spec.Group == "fission.io" {
+			crdsPresent[crd.GetObjectMeta().GetName()] = true
 		}
 	}
-	return nil
+	crdsExpected := []string{
+		"canaryconfigs.fission.io",
+		"environments.fission.io",
+		"functions.fission.io",
+		"httptriggers.fission.io",
+		"kuberneteswatchtriggers.fission.io",
+		"messagequeuetriggers.fission.io",
+		"packages.fission.io",
+		"timetriggers.fission.io",
+	}
+	errs := &multierror.Error{}
+	for _, crdName := range crdsExpected {
+		if _, ok := crdsPresent[crdName]; !ok {
+			multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
+		}
+	}
+	return errs.ErrorOrNil()
 }
