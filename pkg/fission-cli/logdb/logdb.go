@@ -50,6 +50,25 @@ type LogEntry struct {
 	Pod       string
 }
 
+type ByTimestampSort struct {
+	entries []LogEntry
+	desc    bool
+}
+
+func (a ByTimestampSort) Len() int      { return len(a.entries) }
+func (a ByTimestampSort) Swap(i, j int) { a.entries[i], a.entries[j] = a.entries[j], a.entries[i] }
+func (a ByTimestampSort) Less(i, j int) bool {
+	if a.desc {
+		return a.entries[i].Timestamp.UnixNano() > a.entries[j].Timestamp.UnixNano()
+	} else {
+		return a.entries[i].Timestamp.UnixNano() < a.entries[j].Timestamp.UnixNano()
+	}
+}
+
+func ByTimestamp(entries []LogEntry, desc bool) ByTimestampSort {
+	return ByTimestampSort{entries, desc}
+}
+
 func GetLogDB(dbType string, serverURL string) (LogDatabase, error) {
 	switch dbType {
 	case INFLUXDB:
