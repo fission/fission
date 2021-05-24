@@ -124,7 +124,10 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			}
 		}
 
-		warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
+		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
+		if err != nil {
+			console.Warn(err.Error())
+		}
 
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources)
@@ -188,25 +191,28 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func warnIfDirtyWorkTree(path string) {
+func warnIfDirtyWorkTree(path string) error {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
-		return
+		console.Info("Spec doesn't belong to Git Tree.")
+		return nil
 	}
 
 	workTree, err := repo.Worktree()
 	if err != nil {
-		return
+		return err
 	}
 
 	status, err := workTree.Status()
 	if err != nil {
-		return
+		return err
 	}
 
 	if !status.IsClean() {
-		console.Warn("Worktree is not clean")
+		console.Warn("Worktree is not clean, please ensure you have committed the changes to git.")
 	}
+
+	return nil
 }
 
 func ignoreFile(path string) bool {
