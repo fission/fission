@@ -25,6 +25,7 @@ require (
 	github.com/emicklei/go-restful-openapi v1.2.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/go-openapi/spec v0.19.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
@@ -32,7 +33,7 @@ require (
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/imdario/mergo v0.3.5
+	github.com/imdario/mergo v0.3.9
 	github.com/influxdata/influxdb v1.2.0
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v1.1.0 // indirect
