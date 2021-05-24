@@ -1,1 +1,1 @@
-kubectl delete crds canaryconfigs.fission.io packages.fission.io environments.fission.io functions.fission.io httptriggers.fission.io kuberneteswatchtriggers.fission.io messagequeuetriggers.fission.io timetriggers.fission.io 
+kubectl get crds -o custom-columns=:metadata.name | grep 'fission.io' | xargs kubectl delete crds
