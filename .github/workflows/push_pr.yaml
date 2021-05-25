@@ -2,9 +2,9 @@ name: Fission CI
 
 on: 
   push:
-    branches: [ master ]
+    branches: [ testing ]
   pull_request:
-    branches: [ master ]
+    branches: [ testing ]
 
 jobs:
   # Job to run change detection

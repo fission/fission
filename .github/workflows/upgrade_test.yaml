@@ -57,8 +57,7 @@ jobs:
       run: |
         kubectl create ns fission
         skaffold run -p kind-ci
-        sleep 60
-        echo "..........checking all pods........"
+        echo "**************** Checking all running PODs **************"
         kubectl get pods -A
 
  #   - name: Installaing Fission using Helm.
