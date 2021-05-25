@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -69,7 +70,7 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 // We can use this to find out if fission had been previously installed on this cluster too.
 func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1beta1.CustomResourceDefinition {
 	for i := 0; i < maxRetries; i++ {
-		crd, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
 		}

@@ -212,7 +212,7 @@ func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod
 
 	if !exists {
 		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performace issues for your function.")
-		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.Background(), obj.Name, metav1.GetOptions{})
 		return pod, err
 	}
 
@@ -267,7 +267,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 
 	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -276,7 +276,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 	}
 
 	for _, po := range podList.Items {
-		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(po.ObjectMeta.Name, &metav1.DeleteOptions{})
+		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(context.Background(), po.ObjectMeta.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -321,7 +321,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labels.Set(l).AsSelector().String(),
 	})
 
@@ -344,7 +344,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(context.Background(), pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
 				// just log the error since it won't affect the function serving
 				gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
