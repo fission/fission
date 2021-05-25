@@ -53,6 +53,12 @@ jobs:
         kubectl run nginx-web-server --image=nginx
         kubectl get pods
    
+    - name: Build and Install Fission CLI
+      run: |
+        go build -o fission cmd/fission-cli/main.go
+        sudo mv fission /usr/local/bin
+        fission version
+
     - name: Build and install new fission version
       run: |
         kubectl create ns fission
