@@ -53,31 +53,9 @@ jobs:
         kubectl run nginx-web-server --image=nginx
         kubectl get pods
    
-    - name: Build and Install Fission new version
+    - name: Build and install new fission version
       run: |
         kubectl create ns fission
         skaffold run -p kind-ci
-        echo "**************** Checking all running PODs **************"
-        kubectl get pods -A
-
- #   - name: Installaing Fission using Helm.
- #     run: |
- #       echo "...........Starting helm installation............."
- #       export FISSION_NAMESPACE="fission"
- #       kubectl create namespace $FISSION_NAMESPACE
- #       helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
- #       sleep 30
- #       echo ".................Priting all Pods............................"
- #       kubectl get pods -A
- #       echo ".................installing fission CLI............................"
- #       curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
- #       echo "....................Showing fission version......................."
- #       fission version
- #       echo ".................Creating fission function............................"
- #       fission env create --name nodejs --image fission/node-env:latest
- #       curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
- #       fission function create --name hello --env nodejs --code hello.js
- #       echo "...********************* Testing the Fission function **********************..."
- #       fission function test --name hello
-        
+        /bin/bash ./upgrade_test/upgrade_pre_req.sh
         
