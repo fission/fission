@@ -64,3 +64,7 @@ jobs:
         go build -o fission cmd/fission-cli/main.go
         sudo mv fission /usr/local/bin
         fission version
+        fission env create --name nodejs --image fission/node-env:latest
+        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
+        fission function create --name hello --env nodejs --code hello.js
+        fission function test --name hello
