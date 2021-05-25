@@ -61,10 +61,10 @@ require (
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	k8s.io/api v0.17.2
-	k8s.io/apiextensions-apiserver v0.17.2
-	k8s.io/apimachinery v0.17.2
-	k8s.io/client-go v0.17.2
+	k8s.io/api v0.19.2
+	k8s.io/apiextensions-apiserver v0.19.2
+	k8s.io/apimachinery v0.19.2
+	k8s.io/client-go v0.19.2
 	k8s.io/klog v1.0.0
-	k8s.io/metrics v0.17.2
+	k8s.io/metrics v0.19.2
 )
