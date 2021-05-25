@@ -2,7 +2,7 @@ name: Integration test with new Upgrade
 
 on: 
   push:
-    branches: [ upgrade-testing ]
+    branches: [ testing ]
 
 jobs:
   
