@@ -28,17 +28,6 @@ import (
 
 // EnsureFissionCRDs checks if all Fission CRDs are present
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
-	crds, err := clientset.ApiextensionsV1().CustomResourceDefinitions().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	var crdsPresent = make(map[string]bool)
-	for _, crd := range crds.Items {
-		if crd.Spec.Group == "fission.io" {
-			crdsPresent[crd.GetObjectMeta().GetName()] = true
-		}
-	}
 	crdsExpected := []string{
 		"canaryconfigs.fission.io",
 		"environments.fission.io",
@@ -51,7 +40,11 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 	}
 	errs := &multierror.Error{}
 	for _, crdName := range crdsExpected {
-		if _, ok := crdsPresent[crdName]; !ok {
+		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crdName, metav1.GetOptions{})
+		if err != nil {
+			multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
+		}
+		if crd == nil {
 			multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
 		}
 	}
