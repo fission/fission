@@ -51,7 +51,6 @@ spec:
                     description: 'Type indicates whether this function reference is by name or selector. For now, the only supported reference type is by "name".  Future reference types:   * Function by label or annotation   * Branch or tag of a versioned function   * A "rolling upgrade" from one version of a function to another Available value: - name - function-weights'
                     type: string
                 required:
-                - functionweights
                 - name
                 - type
                 type: object

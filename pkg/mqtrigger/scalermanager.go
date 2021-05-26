@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -265,7 +267,12 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		updated = true
 	}
 	if len(newMqt.Spec.FunctionReference.Name) > 0 && newMqt.Spec.FunctionReference.Name != mqt.Spec.FunctionReference.Name {
-		newMqt.Spec.FunctionReference.Name = mqt.Spec.FunctionReference.Name
+		mqt.Spec.FunctionReference.Name = newMqt.Spec.FunctionReference.Name
+		updated = true
+	}
+
+	if !reflect.DeepEqual(newMqt.Spec.PodSpec, mqt.Spec.PodSpec) {
+		mqt.Spec.PodSpec = newMqt.Spec.PodSpec
 		updated = true
 	}
 
@@ -395,6 +402,21 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	image := os.Getenv(strings.ToUpper(imageName))
 	imagePullPolicy := utils.GetImagePullPolicy(os.Getenv("CONNECTOR_IMAGE_PULL_POLICY"))
 
+	podSpec := &apiv1.PodSpec{
+		Containers: []apiv1.Container{
+			{
+				Name:            mqt.ObjectMeta.Name,
+				Image:           image,
+				ImagePullPolicy: imagePullPolicy,
+				Env:             envVars,
+			},
+		},
+	}
+	podSpec, err = util.MergePodSpec(podSpec, mqt.Spec.PodSpec)
+	if err != nil {
+		return nil, err
+	}
+
 	blockOwnerDeletion := true
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -424,16 +446,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 						"app": mqt.ObjectMeta.Name,
 					},
 				},
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:            mqt.ObjectMeta.Name,
-							Image:           image,
-							ImagePullPolicy: imagePullPolicy,
-							Env:             envVars,
-						},
-					},
-				},
+				Spec: *podSpec,
 			},
 		},
 	}, nil
