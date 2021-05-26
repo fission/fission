@@ -356,7 +356,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
 	if len(secrets) > 0 {
 		for _, secret := range secrets {
-			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
+			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(context.TODO(), secret.Name, metav1.GetOptions{})
 
 			if err != nil {
 				e := "error getting secret from kubeapi"
@@ -400,7 +400,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cf
 
 	if len(cfgmaps) > 0 {
 		for _, config := range cfgmaps {
-			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(config.Name, metav1.GetOptions{})
+			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(context.TODO(), config.Name, metav1.GetOptions{})
 
 			if err != nil {
 				e := "error getting configmap from kubeapi"
@@ -584,7 +584,7 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(req.Package.Name, metav1.GetOptions{})
+		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(context.TODO(), req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			return pkg, nil
 		}
@@ -700,7 +700,7 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 		klog.Errorf("Error creating recorder %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(metav1.ListOptions{
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(context.TODO(), metav1.ListOptions{
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
@@ -730,7 +730,7 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 		klog.Errorf("Error creating recorder %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(metav1.ListOptions{
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(context.TODO(), metav1.ListOptions{
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
