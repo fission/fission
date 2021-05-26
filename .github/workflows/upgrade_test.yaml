@@ -6,7 +6,7 @@ on:
 
 jobs:
   
-  integration-test:
+  upgrade-functionality-check:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
