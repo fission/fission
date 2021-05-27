@@ -16,6 +16,7 @@ setup_fission_function() {
       echo "Failure, received a non zero response"
       exit
       fi
+    sleep 3
 }
 
 test_fission_function() {
