@@ -29,7 +29,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -85,7 +84,7 @@ func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1.CustomResourceDefinitio
 func (client *PreUpgradeTaskClient) GetMqtCRD() *v1.CustomResourceDefinition {
 	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), MqtCRD, metav1.GetOptions{})
 	if err != nil {
-		klog.Error("Could not find MQT CRD", err)
+		client.logger.Error("Could not find MQT CRD", zap.Error(err))
 		return nil
 	}
 	return crd
