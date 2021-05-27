@@ -9,10 +9,10 @@ jobs:
   upgrade-functionality-test:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout sources
+    - name: Checkout action sources
       uses: actions/checkout@v2.3.4
 
-    - name: Checkout sources
+    - name: Checkout fission sources
       uses: actions/checkout@v2.3.4
       with:
         repository: fission/examples
@@ -23,41 +23,41 @@ jobs:
       with:
         go-version: '1.14.15'
 
-    - name: Helm installation
+    - name: Setup Helm
       uses: Azure/setup-helm@v1
       with:
         version: v3.3.4
     
-    - name: Helm update
+    - name: Update helm
       run: helm repo add helm https://charts.helm.sh/stable 
 
-    - name: Install Skaffold 
+    - name: Setup Skaffold 
       run: |
         curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
         sudo install skaffold /usr/local/bin/
         skaffold version
 
-    - name: Kind Clutser
+    - name: Setup Kind Clutser
       uses: engineerd/setup-kind@v0.5.0
       with:
         config: kind.yaml
         
-    - name: Configuring and testing the Installation      
+    - name: Setup kubectl & fetch node information
       run: |
         kubectl cluster-info --context kind-kind
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
         sudo apt-get install -y apache2-utils
    
-    - name: Build and install new fission version
+    - name: Build and install fission
       run: |
         kubectl create ns fission
         skaffold run -p kind-ci
                 
-    - name: Build and Install fission CLI
+    - name: Build and install fission CLI
       run: |
         /bin/bash ./upgrade_test/fission_cli.sh
 
-    - name: Executing fission checks
+    - name: Setup fission checks
       run: |
         /bin/bash ./upgrade_test/fission_check.sh
