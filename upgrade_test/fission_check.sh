@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+set -ex
 
 
 setup_fission_function() {

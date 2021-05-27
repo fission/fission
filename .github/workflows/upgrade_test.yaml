@@ -54,10 +54,10 @@ jobs:
         kubectl create ns fission
         skaffold run -p kind-ci
                 
-    - name: Build and Install Fission CLI
+    - name: Build and Install fission CLI
       run: |
         /bin/bash ./upgrade_test/fission_cli.sh
 
     - name: Executing fission checks
       run: |
-        /bin/bash ./upgrade_test/upgrade_fn_check.sh
+        /bin/bash ./upgrade_test/fission_check.sh
