@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -105,7 +106,7 @@ func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request)
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).List(metav1.ListOptions{})
+	triggers, err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -139,7 +140,7 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().MessageQueueTriggers(mqTrigger.ObjectMeta.Namespace).Create(&mqTrigger)
+	tnew, err := a.fissionClient.CoreV1().MessageQueueTriggers(mqTrigger.ObjectMeta.Namespace).Create(context.TODO(), &mqTrigger, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -162,7 +163,7 @@ func (a *API) MessageQueueTriggerApiGet(w http.ResponseWriter, r *http.Request) 
 		ns = metav1.NamespaceDefault
 	}
 
-	mqTrigger, err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).Get(name, metav1.GetOptions{})
+	mqTrigger, err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -198,7 +199,7 @@ func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().MessageQueueTriggers(mqTrigger.ObjectMeta.Namespace).Update(&mqTrigger)
+	tnew, err := a.fissionClient.CoreV1().MessageQueueTriggers(mqTrigger.ObjectMeta.Namespace).Update(context.TODO(), &mqTrigger, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -220,7 +221,7 @@ func (a *API) MessageQueueTriggerApiDelete(w http.ResponseWriter, r *http.Reques
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().MessageQueueTriggers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

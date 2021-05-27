@@ -23,7 +23,7 @@ jobs:
     - name: setup go
       uses: actions/setup-go@v2.1.3
       with:
-        go-version: '1.14.15'
+        go-version: '1.15.12'
 
     - name: Helm installation
       uses: Azure/setup-helm@v1
@@ -63,6 +63,7 @@ jobs:
     - name: Build and Install Fission
       run: |
         kubectl create ns fission
+        kubectl create -k crds/v1
         skaffold run -p kind-ci
     
     - name: Build and Install Fission CLI

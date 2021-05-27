@@ -174,7 +174,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
 	for {
-		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(v1.ListOptions{
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.TODO(), v1.ListOptions{
 			LabelSelector: "managed=false",
 		})
 
@@ -257,7 +257,7 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
 			gp.logger.Info("relabel pod", zap.String("pod", patch))
-			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(context.TODO(), chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
 				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
 				gp.readyPodQueue.Done(key)
@@ -305,7 +305,7 @@ func (gp *GenericPool) scheduleDeletePod(name string) {
 		// cleaned up.  (We need a better solutions for both those things; log
 		// aggregation and storage will help.)
 		gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
-		err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(name, nil)
+		err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 		if err != nil {
 			gp.logger.Error(
 				"error deleting pod",
@@ -502,13 +502,13 @@ func (gp *GenericPool) createPool() error {
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(deployment.Name, metav1.GetOptions{})
+	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(context.TODO(), deployment.Name, metav1.GetOptions{})
 	if err == nil {
 		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceID {
 			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
-			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(deployment)
+			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{})
 		}
 		gp.deployment = depl
 		return err
@@ -517,7 +517,7 @@ func (gp *GenericPool) createPool() error {
 		return err
 	}
 
-	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(deployment)
+	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err
@@ -545,7 +545,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 			Selector: labels,
 		},
 	}
-	svc, err := gp.kubernetesClient.CoreV1().Services(gp.namespace).Create(&service)
+	svc, err := gp.kubernetesClient.CoreV1().Services(gp.namespace).Create(context.TODO(), &service, metav1.CreateOptions{})
 	return svc, err
 }
 
@@ -580,7 +580,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 			"functionName": fn.ObjectMeta.Name,
 			"functionUid":  string(fn.ObjectMeta.UID),
 		}
-		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(metav1.ListOptions{
+		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 		if err != nil {
@@ -590,7 +590,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		// Remove old versions function pods
 		for _, pod := range podList.Items {
 			// Delete pod no matter what status it is
-			gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(pod.ObjectMeta.Name, nil) //nolint errcheck
+			gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(context.TODO(), pod.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint errcheck
 		}
 	}
 
@@ -636,7 +636,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
 	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
 		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
-	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch))
+	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
 		// just log the error since it won't affect the function serving
 		gp.logger.Warn("error patching svc-host to pod", zap.Error(err),
@@ -718,7 +718,7 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	err := gp.kubernetesClient.AppsV1().
-		Deployments(gp.namespace).Delete(gp.deployment.ObjectMeta.Name, &delOpt)
+		Deployments(gp.namespace).Delete(context.TODO(), gp.deployment.ObjectMeta.Name, delOpt)
 	if err != nil {
 		gp.logger.Error("error destroying deployment",
 			zap.Error(err),

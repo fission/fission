@@ -34,7 +34,7 @@ func Start(logger *zap.Logger, port int, unitTestFlag bool) {
 
 	err = crd.EnsureFissionCRDs(cLogger, apiExtClient)
 	if err != nil {
-		cLogger.Fatal("failed to create fission CRDs", zap.Error(err))
+		cLogger.Fatal("failed to find fission CRDs", zap.Error(err))
 	}
 
 	err = fc.WaitForCRDs()
