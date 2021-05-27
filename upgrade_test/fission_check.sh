@@ -3,8 +3,8 @@ set -ex
 
 
 setup_fission_function() {
-    log "==== Setting up objects for upgrade test ===="
-    log "Creating env, function and route"
+    echo "==== Setting up objects for upgrade test ===="
+    echo "Creating env, function and route"
     fission env create --name nodejs --image fission/node-env:latest
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     
