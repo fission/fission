@@ -60,4 +60,4 @@ jobs:
 
     - name: Executing fission checks
       run: |
-        /bin/bash ./upgrade_test/upgrade_fn_chcek.sh
+        /bin/bash ./upgrade_test/upgrade_fn_check.sh
