@@ -57,7 +57,8 @@ jobs:
 
     - name: Install fission cli stable version from upstream
       run: |
-        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-osx && chmod +x fission && sudo mv fission /usr/local/bin/
+        sleep 10
+        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
         fission version
 
 
