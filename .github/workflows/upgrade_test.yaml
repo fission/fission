@@ -56,8 +56,8 @@ jobs:
                 
     - name: Build and install fission CLI
       run: |
-        /bin/bash ./upgrade_test/fission_cli.sh
+        /bin/bash ./test/upgrade_test/fission_cli.sh
 
-    - name: Setup fission checks
+    - name: Running fission checks
       run: |
-        /bin/bash ./upgrade_test/fission_check.sh
+        /bin/bash ./test/upgrade_test/fission_check.sh
