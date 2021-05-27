@@ -1,4 +1,4 @@
-name: Upgrade compatibility test
+name: Upgrade functionality test
 
 on: 
   push:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   
-  upgrade-functionality-check:
+  upgrade-functionality-test:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
@@ -56,13 +56,8 @@ jobs:
                 
     - name: Build and Install Fission CLI
       run: |
-       # go build -o fission cmd/fission-cli/main.go
-       # sudo mv fission /usr/local/bin
-        go build -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=XTYGHJGHJG -X github.com/fission/fission/pkg/info.BuildDate=May-26-2021 -X github.com/fission/fission/pkg/info.Version=1.12" -o fission cmd/fission-cli/main.go
-        sudo mv fission /usr/local/bin
-        fission version
-        fission env create --name nodejs --image fission/node-env:latest
-        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
-        fission function create --name hello --env nodejs --code hello.js
-        sleep 30
-        fission function test --name hello
+        /bin/bash ./upgrade_test/fission_cli.sh
+
+    - name: Executing fission checks
+      run: |
+        /bin/bash ./upgrade_test/upgrade_fn_chcek.sh
