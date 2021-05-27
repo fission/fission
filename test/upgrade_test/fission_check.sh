@@ -4,7 +4,7 @@ flag=0
 
 setup_fission_function() {
 
-    echo "==== Setting up objects for upgrade test ===="
+    echo "Creating up objects for upgrade test..."
     
     fission env create --name nodejs --image fission/node-env:latest
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
@@ -16,8 +16,9 @@ setup_fission_function() {
       echo "Failure, received a non zero response"
       exit
       fi
+}
 
-    sleep 2
+test_fission_function() {
 
     echo "Testing function...."
     fission function test --name hello
@@ -28,6 +29,11 @@ setup_fission_function() {
       echo "Failure, received a non zero response"
       flag=1
       fi
+}
+
+setup_fission_function
+test_fission_function
+
 
     if [ $flag == 0 ]
       then
@@ -35,8 +41,3 @@ setup_fission_function() {
       else
       echo "Oops.. some failure occured :-("
       fi
-
-
-}
-
-setup_fission_function
