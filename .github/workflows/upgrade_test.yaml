@@ -70,7 +70,6 @@ jobs:
 
     - name: Build and install latest fission
       run: |
-        kubectl create ns fission
         skaffold run -p kind-ci
 
     - name: Build and install latest fission CLI
