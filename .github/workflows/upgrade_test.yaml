@@ -66,6 +66,13 @@ jobs:
         fission function create --name hello --env nodejs --code hello.js
         sleep 5
         fission function test --name hello
+        sleep 10
 
+    - name: Build and install latest fission
+      run: |
+        kubectl create ns fission
+        skaffold run -p kind-ci
 
-
+    - name: Build and install latest fission CLI
+      run: |
+        /bin/bash ./test/upgrade_test/fission_cli.sh
