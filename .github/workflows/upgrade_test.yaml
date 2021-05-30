@@ -69,7 +69,7 @@ jobs:
         sleep 10
 
     - name: Build and install latest fission
-     run: |
+      run: |
         skaffold run -p kind-ci
         sleep 60
         echo "waiting......"
