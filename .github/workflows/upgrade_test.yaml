@@ -48,7 +48,7 @@ jobs:
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
         sudo apt-get install -y apache2-utils
-   
+           
 #    - name: Build and install fission stable version from upstream repo 
 #      run: |
 #        export FISSION_NAMESPACE="fission"
@@ -70,6 +70,7 @@ jobs:
 
     - name: Build and install latest fission
       run: |
+        kubectl create namespace fission
         skaffold run -p kind-ci
         echo "waiting for 60 sec......"
         sleep 60
