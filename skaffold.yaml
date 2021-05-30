@@ -31,8 +31,8 @@ build:
 deploy:
   helm:
     flags:
-#      upgrade:
-#        ["--timeout=3m", "--install", "--force", "--debug"]
+      upgrade:
+        ["--timeout=3m", "--install", "--force", "--debug"]
       install:
         ["--timeout=3m","--debug","--dependency-update"]
     releases:
