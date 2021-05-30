@@ -72,11 +72,6 @@ jobs:
 
     - name: Build docker image for latest fission
       run: |
-#        skaffold run -p kind-ci,
-#        echo "waiting for 60 sec......"
-#        sleep 60
-#        kubectl get pods -A
-#        fission version
         docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
         docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
         docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
