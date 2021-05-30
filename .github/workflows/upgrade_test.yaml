@@ -75,7 +75,7 @@ jobs:
         docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
         docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
         docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
-        docker build -t reporter -f cmd/builder/Dockerfile.reporter .
+        docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
 
 
     - name: Build and install latest fission CLI
