@@ -42,7 +42,6 @@ echo "Creating namespace $ns"
 kubectl create ns $ns
 helm install \
 --namespace $ns \
---set prometheus.enabled=false \
 --name-template fission \
 https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-all-${CURRENT_VERSION}.tgz
 
@@ -78,9 +77,15 @@ TAG=latest
 PRUNE_INTERVAL=1 # Unit - Minutes; Controls the interval to run archivePruner.
 ROUTER_SERVICE_TYPE=ClusterIP
 
-helmVars=repository=$REPO,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAGE,fetcher.imageTag=$TAG,analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,prometheus.enabled=false
+helmVars=repository=$REPO,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAGE,fetcher.imageTag=$TAG,analytics=false,pruneInterval=60,routerServiceType=LoadBalancer
+
+echo "running helm depedency update...."
+
+helm dependency update
+sleep 30
 
 echo "Upgrading fission"
+
 helm upgrade	\
  --timeout 540s	 \
  --set $helmVars \
