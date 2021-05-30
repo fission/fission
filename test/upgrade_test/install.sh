@@ -42,6 +42,7 @@ echo "Creating namespace $ns"
 kubectl create ns $ns
 helm install \
 --namespace $ns \
+--set prometheus.enabled=false \
 --name-template fission \
 https://github.com/fission/fission/releases/download/${CURRENT_VERSION}/fission-all-${CURRENT_VERSION}.tgz
 
