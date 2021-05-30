@@ -56,6 +56,7 @@ jobs:
         helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
         echo "wait time after stable release..."
         sleep 60
+        kubectl get pods -A
 
     - name: Install fission cli stable version from upstream
       run: |
@@ -70,26 +71,26 @@ jobs:
 #        fission function test --name hello
 #        sleep 10
 
-    - name: Build docker image for latest fission
-      run: |
-        docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
-        docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
-        docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
-        docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
+#    - name: Build docker image for latest fission
+#      run: |
+#        docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
+#        docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
+#        docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
+#        docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
 
-    - name: Install new version via helm
-      run: |
-        echo "setting up helm vars"
-        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer,prometheus.enabled=false
-        echo "Upgrading fission....."
-        helm upgrade \
-        --wait \
-        --timeout 540s \
-        --set $helmVars	\
-        --namespace fission \
-        fission ./charts/fission-all
-        echo "waiting for fission upgrade..this make take few seconds...."
-        sleep 60
+#    - name: Install new version via helm
+#      run: |
+#        echo "setting up helm vars"
+#        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer,prometheus.enabled=false
+#        echo "Upgrading fission....."
+#        helm upgrade \
+#        --wait \
+#        --timeout 540s \
+#        --set $helmVars	\
+#        --namespace fission \
+#        fission ./charts/fission-all
+#        echo "waiting for fission upgrade..this make take few seconds...."
+#        sleep 60
 
 
 #    - name: Build and install latest fission CLI
