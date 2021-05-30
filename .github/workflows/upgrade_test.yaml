@@ -77,10 +77,21 @@ jobs:
         docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
         docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
 
-
-    - name: Build and install latest fission CLI
+    - name: Install new version via helm
       run: |
-        echo "remove old fission cli"
-        rm -rf /usr/local/bin/fission
-        sleep 1
-        /bin/bash ./test/upgrade_test/fission_cli.sh
+        echo "setting up helm vars"
+        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer
+        echo "Upgrading fission....."
+        helm upgrade \
+        --wait \
+        --timeout 540s \
+        --set $helmVars	\
+        --namespace fission \
+        fission ./charts/fission-all
+        echo "waiting for fission upgrade..this make take few seconds...."
+        sleep 60
+
+
+#    - name: Build and install latest fission CLI
+#      run: |
+#         /bin/bash ./test/upgrade_test/fission_cli.sh
