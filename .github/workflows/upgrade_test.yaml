@@ -49,17 +49,19 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
            
-#    - name: Build and install fission stable version from upstream repo 
-#      run: |
-#        export FISSION_NAMESPACE="fission"
-#        kubectl create namespace $FISSION_NAMESPACE
-#        helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
+    - name: Build and install fission stable version from upstream repo 
+      run: |
+        export FISSION_NAMESPACE="fission"
+        kubectl create namespace $FISSION_NAMESPACE
+        helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
+        echo "wait time after stable release..."
+        sleep 60
 
-#    - name: Install fission cli stable version from upstream
-#      run: |
-#        sleep 10
-#        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
-#        fission version
+    - name: Install fission cli stable version from upstream
+      run: |
+        sleep 10
+        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+        fission version
 #        sleep 2
 #        fission env create --name nodejs --image fission/node-env:latest
 #        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
@@ -70,7 +72,7 @@ jobs:
 
     - name: Build and install latest fission
       run: |
-        kubectl create namespace fission
+#        kubectl create namespace fission
         skaffold run -p kind-ci
         echo "waiting for 60 sec......"
         sleep 60
@@ -80,4 +82,7 @@ jobs:
 
     - name: Build and install latest fission CLI
       run: |
+        echo "remove old fission cli"
+        rm -rf /usr/local/bin/fission
+        sleep 1
         /bin/bash ./test/upgrade_test/fission_cli.sh
