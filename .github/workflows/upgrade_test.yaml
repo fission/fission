@@ -49,31 +49,32 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
    
-    - name: Build and install fission stable version from upstream repo 
-      run: |
-        export FISSION_NAMESPACE="fission"
-        kubectl create namespace $FISSION_NAMESPACE
-        helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
+#    - name: Build and install fission stable version from upstream repo 
+#      run: |
+#        export FISSION_NAMESPACE="fission"
+#        kubectl create namespace $FISSION_NAMESPACE
+#        helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
 
-    - name: Install fission cli stable version from upstream
-      run: |
-        sleep 10
-        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
-        fission version
-        sleep 2
-        fission env create --name nodejs --image fission/node-env:latest
-        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
-        fission function create --name hello --env nodejs --code hello.js
-        sleep 5
-        fission function test --name hello
-        sleep 10
+#    - name: Install fission cli stable version from upstream
+#      run: |
+#        sleep 10
+#        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
+#        fission version
+#        sleep 2
+#        fission env create --name nodejs --image fission/node-env:latest
+#        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
+#        fission function create --name hello --env nodejs --code hello.js
+#        sleep 5
+#        fission function test --name hello
+#        sleep 10
 
     - name: Build and install latest fission
       run: |
         skaffold run -p kind-ci
+        echo "waiting for 60 sec......"
         sleep 60
-        echo "waiting......"
-        fission version
+        kubectl get pods -A
+#        fission version
 
 
 #    - name: Build and install latest fission CLI
