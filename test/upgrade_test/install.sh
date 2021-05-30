@@ -69,7 +69,6 @@ sleep 5
 
 echo "fission helm upgrade....."
 
-REPO=""
 IMAGE=fission-bundle
 FETCHER_IMAGE=fetcher
 BUILDER_IMAGE=builder
@@ -77,12 +76,7 @@ TAG=latest
 PRUNE_INTERVAL=1 # Unit - Minutes; Controls the interval to run archivePruner.
 ROUTER_SERVICE_TYPE=ClusterIP
 
-helmVars=repository=$REPO,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAGE,fetcher.imageTag=$TAG,analytics=false,pruneInterval=60,routerServiceType=LoadBalancer
-
-echo "running helm depedency update...."
-
-helm dependency update
-sleep 30
+helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer
 
 echo "Upgrading fission"
 
