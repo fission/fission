@@ -69,9 +69,13 @@ jobs:
         sleep 10
 
     - name: Build and install latest fission
-      run: |
+     run: |
         skaffold run -p kind-ci
+        sleep 60
+        echo "waiting......"
+        fission version
 
-    - name: Build and install latest fission CLI
-      run: |
-        /bin/bash ./test/upgrade_test/fission_cli.sh
+
+#    - name: Build and install latest fission CLI
+#      run: |
+#        /bin/bash ./test/upgrade_test/fission_cli.sh
