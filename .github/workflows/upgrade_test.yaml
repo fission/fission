@@ -80,7 +80,7 @@ jobs:
     - name: Install new version via helm
       run: |
         echo "setting up helm vars"
-        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer
+        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer,prometheus.enabled=false
         echo "Upgrading fission....."
         helm upgrade \
         --wait \
