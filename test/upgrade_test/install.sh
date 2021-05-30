@@ -6,7 +6,7 @@ generate_test_id() {
     echo $(((10000 + $RANDOM) % 99999))
 }
 
-ROOT=/root/clone/fission/
+ROOT=$(pwd)
 #pushd $ROOT_RELPATH
 #ROOT=$(pwd)
 #popd
@@ -54,3 +54,39 @@ curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.
 fission function create --name hello --env nodejs --code hello.js
 sleep 5
 fission function test --name hello
+
+
+sleep 10
+
+echo "Running new fission build..."
+
+docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
+docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
+docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
+docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
+
+sleep 5
+
+echo "fission helm upgrade....."
+
+REPO=""
+IMAGE=fission-bundle
+FETCHER_IMAGE=fetcher
+BUILDER_IMAGE=builder
+TAG=latest
+PRUNE_INTERVAL=1 # Unit - Minutes; Controls the interval to run archivePruner.
+ROUTER_SERVICE_TYPE=ClusterIP
+
+helmVars=repository=$REPO,image=$IMAGE,imageTag=$TAG,fetcher.image=$FETCHER_IMAGE,fetcher.imageTag=$TAG,analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,prometheus.enabled=false
+
+echo "Upgrading fission"
+helm upgrade	\
+ --timeout 540s	 \
+ --set $helmVars \
+ --namespace $ns  \
+ fission \
+ $ROOT/charts/fission-all
+
+sleep 30
+
+kubectl get pods -A
