@@ -28,6 +28,41 @@ build:
       docker:
         dockerfile: cmd/reporter/Dockerfile.reporter
 
+deploy:
+  helm:
+    flags:
+      upgrade:
+        ["--timeout=3m", "--install", "--force", "--debug"]
+#      install:
+ #       ["--timeout=3m","--debug","--dependency-update"]
+    releases:
+      - name: fission
+        chartPath: ./charts/fission-all
+        valuesFiles:
+          - ./charts/fission-all/values.yaml
+        namespace: "fission"
+        artifactOverrides:
+          image: "fission"
+          preUpgradeChecksImage: "preupgradechecks"
+          postInstallReportImage: "reporter"
+          fetcher.image: "fetcher"        
+        setValues:
+          namespace: fission
+          repository: "index.docker.io"
+          routerServiceType: LoadBalancer
+          pruneInterval: 60
+          fetcher.imageTag: ""
+          imageTag: ""
+          prometheus.enabled: false
+          debugEnv: false
+          analytics: false
+        wait: true
+        recreatePods: false
+        packaged: null
+        imageStrategy:
+          fqn: null
+          helm: null
+
 profiles:
   - name: kind
     patches:
