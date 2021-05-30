@@ -72,7 +72,6 @@ jobs:
 
     - name: Build and install latest fission
       run: |
-#        kubectl create namespace fission
         skaffold run -p kind-ci
         echo "waiting for 60 sec......"
         sleep 60
