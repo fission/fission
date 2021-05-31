@@ -2,7 +2,7 @@ name: Upgrade functionality test
 
 on: 
   push:
-    branches: [ upgrade-testingA ]
+    branches: [ upgrade-testing ]
 
 jobs:
   
