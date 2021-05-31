@@ -101,8 +101,9 @@ install_current_release () {
     #helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
     helm upgrade --namespace $ns fission $ROOT/charts/fission-all
     sleep 30
-    kubectl get pods -A # For testing purpose
-}
+    echo "Fetch failed container log.."
+    failed_fission_id=$(kubectl get pods -A | grep "fission-fission-all" | awk {'print $2'})
+    kubectl logs $failed_fission_id -n $ns
 
 
 dump_system_info
