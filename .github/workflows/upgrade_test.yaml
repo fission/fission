@@ -51,4 +51,10 @@ jobs:
            
     - name: Configure fission and run upgrade test
       run: |
-        /bin/bash ./test/upgrade_test/run_tests.sh
+        docker build -t dev-apache .
+        kind load docker-image dev-apache --name kind
+        echo "checking image load status..."
+        docker exec -t kind-control-plane crictl images
+        kubectl apply -f ./apache-deployment.yaml
+        sleep 30
+        kubectl get pods -A
