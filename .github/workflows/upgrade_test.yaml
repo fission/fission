@@ -49,52 +49,6 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
            
-    - name: Build and install fission stable version from upstream repo 
+    - name: Configure fission and run upgrade test
       run: |
-        /bin/bash ./test/upgrade_test/install.sh
-#        export FISSION_NAMESPACE="fission"
-#        kubectl create namespace $FISSION_NAMESPACE
-#        helm install --namespace $FISSION_NAMESPACE --name-template fission https://github.com/fission/fission/releases/download/1.12.0/fission-all-1.12.0.tgz
-#        echo "wait time after stable release..."
-#        sleep 60
-#        kubectl get pods -A
-    
-
-#    - name: Install fission cli stable version from upstream
-#      run: |
-#        sleep 10
-#        curl -Lo fission https://github.com/fission/fission/releases/download/1.12.0/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/
-#        fission version
-#        sleep 2
-#        fission env create --name nodejs --image fission/node-env:latest
-#        curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
-#        fission function create --name hello --env nodejs --code hello.js
-#        sleep 5
-#        fission function test --name hello
-#        sleep 10
-
-#    - name: Build docker image for latest fission
-#      run: |
-#        docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
-#        docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
-#        docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
-#        docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
-
-#    - name: Install new version via helm
-#      run: |
-#        echo "setting up helm vars"
-#        helmVars=repository=“”,image=fission-bundle,imageTag=latest,fetcher.image=fetcher,fetcher.imageTag=latest,functionNamespace=fission,controllerPort=31234,pullPolicy=Always,analytics=false,pruneInterval=1,routerServiceType=LoadBalancer,prometheus.enabled=false
-#        echo "Upgrading fission....."
-#        helm upgrade \
-#        --wait \
-#        --timeout 540s \
-#        --set $helmVars	\
-#        --namespace fission \
-#        fission ./charts/fission-all
-#        echo "waiting for fission upgrade..this make take few seconds...."
-#        sleep 60
-
-
-#    - name: Build and install latest fission CLI
-#      run: |
-#         /bin/bash ./test/upgrade_test/fission_cli.sh
+        /bin/bash ./test/upgrade_test/run_tests.sh
