@@ -19,6 +19,8 @@ limitations under the License.
 package fake
 
 import (
+	"context"
+
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -39,7 +41,7 @@ var messagequeuetriggersResource = schema.GroupVersionResource{Group: "fission.i
 var messagequeuetriggersKind = schema.GroupVersionKind{Group: "fission.io", Version: "v1", Kind: "MessageQueueTrigger"}
 
 // Get takes name of the _messageQueueTrigger, and returns the corresponding messageQueueTrigger object, and an error if there is any.
-func (c *FakeMessageQueueTriggers) Get(name string, options v1.GetOptions) (result *corev1.MessageQueueTrigger, err error) {
+func (c *FakeMessageQueueTriggers) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.MessageQueueTrigger, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewGetAction(messagequeuetriggersResource, c.ns, name), &corev1.MessageQueueTrigger{})
 
@@ -50,7 +52,7 @@ func (c *FakeMessageQueueTriggers) Get(name string, options v1.GetOptions) (resu
 }
 
 // List takes label and field selectors, and returns the list of MessageQueueTriggers that match those selectors.
-func (c *FakeMessageQueueTriggers) List(opts v1.ListOptions) (result *corev1.MessageQueueTriggerList, err error) {
+func (c *FakeMessageQueueTriggers) List(ctx context.Context, opts v1.ListOptions) (result *corev1.MessageQueueTriggerList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewListAction(messagequeuetriggersResource, messagequeuetriggersKind, c.ns, opts), &corev1.MessageQueueTriggerList{})
 
@@ -72,14 +74,14 @@ func (c *FakeMessageQueueTriggers) List(opts v1.ListOptions) (result *corev1.Mes
 }
 
 // Watch returns a watch.Interface that watches the requested messageQueueTriggers.
-func (c *FakeMessageQueueTriggers) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeMessageQueueTriggers) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(messagequeuetriggersResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _messageQueueTrigger and creates it.  Returns the server's representation of the messageQueueTrigger, and an error, if there is any.
-func (c *FakeMessageQueueTriggers) Create(_messageQueueTrigger *corev1.MessageQueueTrigger) (result *corev1.MessageQueueTrigger, err error) {
+func (c *FakeMessageQueueTriggers) Create(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts v1.CreateOptions) (result *corev1.MessageQueueTrigger, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewCreateAction(messagequeuetriggersResource, c.ns, _messageQueueTrigger), &corev1.MessageQueueTrigger{})
 
@@ -90,7 +92,7 @@ func (c *FakeMessageQueueTriggers) Create(_messageQueueTrigger *corev1.MessageQu
 }
 
 // Update takes the representation of a _messageQueueTrigger and updates it. Returns the server's representation of the messageQueueTrigger, and an error, if there is any.
-func (c *FakeMessageQueueTriggers) Update(_messageQueueTrigger *corev1.MessageQueueTrigger) (result *corev1.MessageQueueTrigger, err error) {
+func (c *FakeMessageQueueTriggers) Update(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts v1.UpdateOptions) (result *corev1.MessageQueueTrigger, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateAction(messagequeuetriggersResource, c.ns, _messageQueueTrigger), &corev1.MessageQueueTrigger{})
 
@@ -101,7 +103,7 @@ func (c *FakeMessageQueueTriggers) Update(_messageQueueTrigger *corev1.MessageQu
 }
 
 // Delete takes name of the _messageQueueTrigger and deletes it. Returns an error if one occurs.
-func (c *FakeMessageQueueTriggers) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakeMessageQueueTriggers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewDeleteAction(messagequeuetriggersResource, c.ns, name), &corev1.MessageQueueTrigger{})
 
@@ -109,15 +111,15 @@ func (c *FakeMessageQueueTriggers) Delete(name string, options *v1.DeleteOptions
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeMessageQueueTriggers) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(messagequeuetriggersResource, c.ns, listOptions)
+func (c *FakeMessageQueueTriggers) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewDeleteCollectionAction(messagequeuetriggersResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &corev1.MessageQueueTriggerList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched messageQueueTrigger.
-func (c *FakeMessageQueueTriggers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *corev1.MessageQueueTrigger, err error) {
+func (c *FakeMessageQueueTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.MessageQueueTrigger, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewPatchSubresourceAction(messagequeuetriggersResource, c.ns, name, pt, data, subresources...), &corev1.MessageQueueTrigger{})
 

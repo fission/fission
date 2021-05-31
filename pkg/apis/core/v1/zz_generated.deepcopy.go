@@ -737,6 +737,11 @@ func (in *MessageQueueTriggerSpec) DeepCopyInto(out *MessageQueueTriggerSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.PodSpec != nil {
+		in, out := &in.PodSpec, &out.PodSpec
+		*out = new(corev1.PodSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

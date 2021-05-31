@@ -1,6 +1,7 @@
 package mqtrigger
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -95,7 +96,7 @@ func Test_getEnvVarlist(t *testing.T) {
 	}
 
 	kubeClient := fake.NewSimpleClientset()
-	_, err := kubeClient.CoreV1().Secrets(namespace).Create(secret)
+	_, err := kubeClient.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
 	}
@@ -479,7 +480,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	}
 
 	kubeClient := fake.NewSimpleClientset()
-	_, err := kubeClient.CoreV1().Secrets(namespace).Create(secret)
+	_, err := kubeClient.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
 	}

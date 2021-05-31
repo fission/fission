@@ -19,6 +19,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -37,14 +38,14 @@ type KubernetesWatchTriggersGetter interface {
 
 // KubernetesWatchTriggerInterface has methods to work with KubernetesWatchTrigger resources.
 type KubernetesWatchTriggerInterface interface {
-	Create(*v1.KubernetesWatchTrigger) (*v1.KubernetesWatchTrigger, error)
-	Update(*v1.KubernetesWatchTrigger) (*v1.KubernetesWatchTrigger, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.KubernetesWatchTrigger, error)
-	List(opts metav1.ListOptions) (*v1.KubernetesWatchTriggerList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.KubernetesWatchTrigger, err error)
+	Create(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.CreateOptions) (*v1.KubernetesWatchTrigger, error)
+	Update(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.UpdateOptions) (*v1.KubernetesWatchTrigger, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.KubernetesWatchTrigger, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.KubernetesWatchTriggerList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.KubernetesWatchTrigger, err error)
 	KubernetesWatchTriggerExpansion
 }
 
@@ -63,20 +64,20 @@ func newKubernetesWatchTriggers(c *CoreV1Client, namespace string) *kubernetesWa
 }
 
 // Get takes name of the _kubernetesWatchTrigger, and returns the corresponding kubernetesWatchTrigger object, and an error if there is any.
-func (c *kubernetesWatchTriggers) Get(name string, options metav1.GetOptions) (result *v1.KubernetesWatchTrigger, err error) {
+func (c *kubernetesWatchTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.KubernetesWatchTrigger, err error) {
 	result = &v1.KubernetesWatchTrigger{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of KubernetesWatchTriggers that match those selectors.
-func (c *kubernetesWatchTriggers) List(opts metav1.ListOptions) (result *v1.KubernetesWatchTriggerList, err error) {
+func (c *kubernetesWatchTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.KubernetesWatchTriggerList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -87,13 +88,13 @@ func (c *kubernetesWatchTriggers) List(opts metav1.ListOptions) (result *v1.Kube
 		Resource("kuberneteswatchtriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested kubernetesWatchTriggers.
-func (c *kubernetesWatchTriggers) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *kubernetesWatchTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -104,71 +105,74 @@ func (c *kubernetesWatchTriggers) Watch(opts metav1.ListOptions) (watch.Interfac
 		Resource("kuberneteswatchtriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a _kubernetesWatchTrigger and creates it.  Returns the server's representation of the kubernetesWatchTrigger, and an error, if there is any.
-func (c *kubernetesWatchTriggers) Create(_kubernetesWatchTrigger *v1.KubernetesWatchTrigger) (result *v1.KubernetesWatchTrigger, err error) {
+func (c *kubernetesWatchTriggers) Create(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.CreateOptions) (result *v1.KubernetesWatchTrigger, err error) {
 	result = &v1.KubernetesWatchTrigger{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_kubernetesWatchTrigger).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a _kubernetesWatchTrigger and updates it. Returns the server's representation of the kubernetesWatchTrigger, and an error, if there is any.
-func (c *kubernetesWatchTriggers) Update(_kubernetesWatchTrigger *v1.KubernetesWatchTrigger) (result *v1.KubernetesWatchTrigger, err error) {
+func (c *kubernetesWatchTriggers) Update(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.UpdateOptions) (result *v1.KubernetesWatchTrigger, err error) {
 	result = &v1.KubernetesWatchTrigger{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
 		Name(_kubernetesWatchTrigger.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_kubernetesWatchTrigger).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the _kubernetesWatchTrigger and deletes it. Returns an error if one occurs.
-func (c *kubernetesWatchTriggers) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *kubernetesWatchTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *kubernetesWatchTriggers) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *kubernetesWatchTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched kubernetesWatchTrigger.
-func (c *kubernetesWatchTriggers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.KubernetesWatchTrigger, err error) {
+func (c *kubernetesWatchTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.KubernetesWatchTrigger, err error) {
 	result = &v1.KubernetesWatchTrigger{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("kuberneteswatchtriggers").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }

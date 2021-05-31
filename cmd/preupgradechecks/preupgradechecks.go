@@ -17,13 +17,14 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +48,7 @@ type (
 const (
 	maxRetries  = 5
 	FunctionCRD = "functions.fission.io"
+	MqtCRD      = "messagequeuetriggers.fission.io"
 )
 
 func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) (*PreUpgradeTaskClient, error) {
@@ -67,9 +69,9 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 
 // GetFunctionCRD checks if function CRD is present on the cluster and returns it. It returns nil if not found
 // We can use this to find out if fission had been previously installed on this cluster too.
-func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1beta1.CustomResourceDefinition {
+func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1.CustomResourceDefinition {
 	for i := 0; i < maxRetries; i++ {
-		crd, err := client.apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
 		}
@@ -78,16 +80,36 @@ func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1beta1.CustomResourceDefi
 	return nil
 }
 
+// GetMqtCRD checks if MQT CRD is present on the cluster and returns it. It returns nil if not found
+func (client *PreUpgradeTaskClient) GetMqtCRD() *v1.CustomResourceDefinition {
+	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), MqtCRD, metav1.GetOptions{})
+	if err != nil {
+		client.logger.Error("Could not find MQT CRD", zap.Error(err))
+		return nil
+	}
+	return crd
+}
+
 // LatestSchemaApplied ensures that the end user has applied the latest CRDs generated to the cluster.
 // For future reference: whenever a new field is added, we need to check for that field's existence in this function
 func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 	client.logger.Info("Checking if user has applied the latest CRDs")
-	crd := client.GetFunctionCRD()
-	if crd == nil {
+	funcCRD := client.GetFunctionCRD()
+	if funcCRD == nil {
 		return errors.New("Could not get the Function CRD")
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
-	if !strings.Contains(crd.Spec.String(), "RequestsPerPod") || !strings.Contains(crd.Spec.String(), "OnceOnly") {
+	if !strings.Contains(funcCRD.Spec.String(), "RequestsPerPod") || !strings.Contains(funcCRD.Spec.String(), "OnceOnly") {
+		return errors.New("Apply the newer CRDs before upgrading")
+	}
+
+	mqtCRD := client.GetMqtCRD()
+	if mqtCRD == nil {
+		return errors.New("Could not get the MQT CRD")
+	}
+
+	// Any new field added in MQT spec can be checked here provided the substring matches the description in CRD Validation of the field
+	if !strings.Contains(mqtCRD.Spec.String(), "PodSpec") {
 		return errors.New("Apply the newer CRDs before upgrading")
 	}
 	return nil
@@ -102,7 +124,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	var fList *fv1.FunctionList
 
 	for i := 0; i < maxRetries; i++ {
-		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err == nil {
 			break
 		}
