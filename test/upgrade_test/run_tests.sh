@@ -72,8 +72,11 @@ build_docker_images () {
 
 install_current_release () {
     set -x
-    echo "Updating helm dependencies..."
-    helm dependency update $ROOT/charts/fission-all
+    #echo "Updating helm dependencies..."
+    #helm dependency update $ROOT/charts/fission-all
+    echo "Replacing CRDs..."
+    kubectl replace -k crds/v1
+    sleep 30
     
     IMAGE=fission-bundle
     FETCHER_IMAGE=fetcher
