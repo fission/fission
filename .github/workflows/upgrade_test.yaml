@@ -48,16 +48,7 @@ jobs:
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
         sudo apt-get install -y apache2-utils
-   
-    - name: Build and install fission
+           
+    - name: Configure fission and run upgrade test
       run: |
-        kubectl create ns fission
-        skaffold run -p kind-ci
-                
-    - name: Build and install fission CLI
-      run: |
-        /bin/bash ./test/upgrade_test/fission_cli.sh
-
-    - name: Running fission checks
-      run: |
-        /bin/bash ./test/upgrade_test/fission_check.sh
+        /bin/bash ./test/upgrade_test/run_tests.sh
