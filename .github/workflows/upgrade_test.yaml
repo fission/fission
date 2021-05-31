@@ -58,3 +58,7 @@ jobs:
         kubectl apply -f ./apache-deployment.yaml
         sleep 30
         kubectl get pods -A
+
+    - name: Configure fission and run upgrade test
+      run: |
+        /bin/bash ./test/upgrade_test/run_tests.sh

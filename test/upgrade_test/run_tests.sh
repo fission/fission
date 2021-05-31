@@ -97,11 +97,11 @@ install_current_release () {
     IMAGE=fission-bundle
     FETCHER_IMAGE=fetcher
     BUILDER_IMAGE=builder
-    TAG=latest
-    helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
+    #TAG=latest
+    #helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
     helm upgrade	\
     --timeout 540s	 \
-    --set $helmVars \
+    #--set $helmVars \
     --namespace $ns  \
     fission \
     $ROOT/charts/fission-all
