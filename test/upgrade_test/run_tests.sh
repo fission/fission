@@ -4,6 +4,7 @@ set -e
 
 RANDOM=124
 ROOT=$(pwd)
+REPO="docker.io/library"
 
 generate_test_id() {
     echo $(((10000 + $RANDOM) % 99999))
@@ -70,6 +71,20 @@ build_docker_images () {
     docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
 }
 
+
+kind_image_load () {
+    echo "Loading Docker images into Kind cluster...."
+    kind load docker-image fission-bundle --name kind
+    kind load docker-image fetcher --name kind
+    kind load docker-image builder --name kind
+    kind load docker-image reporter --name kind
+    sleep 5
+    echo "checking image load status..."
+    docker exec -t kind-control-plane crictl images
+
+}
+
+
 install_current_release () {
     set -x
     echo "Updating helm dependencies..."
@@ -83,7 +98,7 @@ install_current_release () {
     FETCHER_IMAGE=fetcher
     BUILDER_IMAGE=builder
     TAG=latest
-    helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer
+    helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
     helm upgrade	\
     --timeout 540s	 \
     --set $helmVars \
@@ -100,4 +115,5 @@ install_stable_release
 create_fission_objects
 test_fission_objects
 build_docker_images
+kind_image_load
 install_current_release
