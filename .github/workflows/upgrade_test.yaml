@@ -62,3 +62,5 @@ jobs:
     - name: Configure fission and run upgrade test
       run: |
         /bin/bash ./test/upgrade_test/run_tests.sh
+        sleep 60
+        kubectl get pods -A
