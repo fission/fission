@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+#set -e
 
 RANDOM=124
 ROOT=$(pwd)
@@ -71,7 +71,6 @@ build_docker_images () {
     docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
 }
 
-
 kind_image_load () {
     echo "Loading Docker images into Kind cluster...."
     kind load docker-image fission-bundle --name kind
@@ -83,7 +82,6 @@ kind_image_load () {
     docker exec -t kind-control-plane crictl images
 
 }
-
 
 install_current_release () {
     set -x
