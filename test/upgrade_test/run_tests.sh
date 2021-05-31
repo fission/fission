@@ -104,7 +104,7 @@ install_current_release () {
     echo "Fetch failed container log.."
     failed_fission_id=$(kubectl get pods -A | grep "fission-fission-all" | awk {'print $2'})
     kubectl logs $failed_fission_id -n $ns
-
+}
 
 dump_system_info
 install_stable_release
