@@ -17,7 +17,7 @@ repository: docker.io/library
 image: fission-bundle
 
 ## Image pull policy
-pullPolicy: Never
+pullPolicy: IfNotPresent
 
 ## Fission image version
 imageTag: latest
