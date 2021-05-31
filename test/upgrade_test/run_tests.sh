@@ -87,6 +87,8 @@ kind_image_load () {
 
 install_current_release () {
     set -x
+    echo "List existing Helm charts..."
+    helm list -A
     echo "Updating helm dependencies..."
     helm dependency update $ROOT/charts/fission-all
     sleep 2
@@ -99,12 +101,7 @@ install_current_release () {
     BUILDER_IMAGE=builder
     #TAG=latest
     #helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
-    helm upgrade	\
-    --timeout 540s	 \
-    #--set $helmVars \
-    --namespace $ns  \
-    fission \
-    $ROOT/charts/fission-all
+    helm upgrade --namespace $ns fission $ROOT/charts/fission-all
     sleep 30
     kubectl get pods -A # For testing purpose
 }
