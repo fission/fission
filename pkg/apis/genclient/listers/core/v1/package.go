@@ -26,8 +26,10 @@ import (
 )
 
 // PackageLister helps list Packages.
+// All objects returned here must be treated as read-only.
 type PackageLister interface {
 	// List lists all Packages in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.Package, err error)
 	// Packages returns an object that can list and get Packages.
 	Packages(namespace string) PackageNamespaceLister
@@ -58,10 +60,13 @@ func (s *_packageLister) Packages(namespace string) PackageNamespaceLister {
 }
 
 // PackageNamespaceLister helps list and get Packages.
+// All objects returned here must be treated as read-only.
 type PackageNamespaceLister interface {
 	// List lists all Packages in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.Package, err error)
 	// Get retrieves the Package from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.Package, error)
 	PackageNamespaceListerExpansion
 }
