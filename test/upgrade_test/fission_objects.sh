@@ -42,8 +42,7 @@ create_fission_objects () {
     echo "Creating Fission objects"
     fission env create --name nodejs --image fission/node-env:latest
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
-    fission function create --name hello --env nodejs --code hello.js
-    if [ $? == 0 ]
+    if fission function create --name hello --env nodejs --code hello.js
       then
       echo "Success, function created successfully"
       else
@@ -55,8 +54,7 @@ create_fission_objects () {
 
 test_fission_objects () {
     echo "Testing Fission objects"
-    fission function test --name hello
-    if [ $? == 0 ]
+    if fission function test --name hello
       then
       echo "Test success"
       else
