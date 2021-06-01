@@ -55,7 +55,7 @@ test_fission_objects () {
     fission function test --name hello
     if [ $? == 0 ]
       then
-      echo "Success, function response received !!!"
+      echo "Test success"
       else
       echo "Test failed"
     fi
@@ -93,7 +93,5 @@ install_current_release () {
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
     sleep 30
-    HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter" 
-    
     helm upgrade --namespace $ns --set $helmVars=$HELM_VARS fission $ROOT/charts/fission-all
 }
