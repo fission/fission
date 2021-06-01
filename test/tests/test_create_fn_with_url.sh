@@ -10,7 +10,7 @@ ROOT=$(dirname $0)/../..
 
 env=nodejs-$TEST_ID
 fn=nodejs-hello-$TEST_ID
-code_url=https://raw.githubusercontent.com/fission/fission/master/examples/nodejs/hello.js
+code_url=https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
 base64val=$(wget -O- ${code_url} | base64)
 
 cleanup() {

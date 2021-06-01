@@ -37,9 +37,10 @@ build:
 	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
 	go build -o cmd/fetcher/fetcher ./cmd/fetcher/
 	go build -o cmd/fetcher/builder ./cmd/builder/
+	go build -o cmd/reporter/reporter ./cmd/reporter/
 
 # install CLI binary to $PATH
-install: build
+install-cli: build
 	mv cmd/fission-cli/fission $(GOPATH)/bin
 
 # build images (environment images are not included)
@@ -47,6 +48,7 @@ image:
 	docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
 	docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
 	docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
+	docker build -t reporter -f cmd/builder/Dockerfile.reporter .
 
 # build multi-architecture images for release.
 image-multiarch:
@@ -54,9 +56,23 @@ image-multiarch:
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/preupgradechecks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
+
+generate-crds:
+	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  paths=./pkg/apis/core/v1  output:crd:artifacts:config=crds/v1
+
+create-crds:
+	@kubectl create -k crds/v1
+
+update-crds:
+	@kubectl replace -k crds/v1
+
+delete-crds:
+	@./hack/delete-crds.sh
 
 clean:
 	@rm -f cmd/fission-bundle/fission-bundle
 	@rm -f cmd/fission-cli/fission
 	@rm -f cmd/fetcher/fetcher
 	@rm -f cmd/fetcher/builder
+	@rm -f cmd/reporter/reporter

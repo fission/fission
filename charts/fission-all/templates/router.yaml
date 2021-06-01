@@ -65,13 +65,6 @@ spec:
             value: {{ .Values.debugEnv | quote }}
           - name: DISPLAY_ACCESS_LOG
             value: {{ .Values.router.displayAccessLog | default false | quote }}
-{{- if .Values.analytics }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.io/metrics"
-{{- else if .Values.analyticsNonHelmInstall }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.io/metrics"
-{{- end }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"

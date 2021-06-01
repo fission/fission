@@ -17,6 +17,7 @@ limitations under the License.
 package storagesvc
 
 import (
+	"context"
 	"time"
 
 	"go.uber.org/zap"
@@ -36,7 +37,7 @@ type ArchivePruner struct {
 const defaultPruneInterval int = 60 // in minutes
 
 func MakeArchivePruner(logger *zap.Logger, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
-	crdClient, _, _, err := crd.MakeFissionClient()
+	crdClient, _, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 	var archiveID string
 
 	// get all pkgs from kubernetes
-	pkgList, err := pruner.crdClient.CoreV1().Packages(metav1.NamespaceAll).List(metav1.ListOptions{})
+	pkgList, err := pruner.crdClient.CoreV1().Packages(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))
 		return

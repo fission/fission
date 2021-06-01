@@ -17,190 +17,36 @@ limitations under the License.
 package crd
 
 import (
-	"time"
+	"context"
+	"fmt"
 
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	crdGroupName = "fission.io"
-	crdVersion   = "v1"
-)
-
-// ensureCRD checks if the given CRD type exists, and creates it if
-// needed. (Note that this creates the CRD type; it doesn't create any
-// _instances_ of that type.)
-func ensureCRD(logger *zap.Logger, clientset *apiextensionsclient.Clientset, crd *apiextensionsv1beta1.CustomResourceDefinition) (err error) {
-	maxRetries := 5
-
-	for i := 0; i < maxRetries; i++ {
-		_, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
-		if err == nil {
-			return nil
-		}
-
-		// return if the resource already exists
-		if k8serrors.IsAlreadyExists(err) {
-			return nil
-		} else {
-			// The requests fail to connect to k8s api server before
-			// istio-prxoy is ready to serve traffic. Retry again.
-			logger.Info("error connecting to kubernetes api service, retrying", zap.Error(err))
-			time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-			continue
-		}
-	}
-
-	return err
-}
-
-// Ensure CRDs
+// EnsureFissionCRDs checks if all Fission CRDs are present
 func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
-	crds := []apiextensionsv1beta1.CustomResourceDefinition{
-		// Functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "functions.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "Function",
-					Plural:   "functions",
-					Singular: "function",
-				},
-				PreserveUnknownFields: boolPtr(false),
-				Validation:            functionValidation,
-			},
-		},
-		// Environments (function containers)
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "environments.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "Environment",
-					Plural:   "environments",
-					Singular: "environment",
-				},
-				PreserveUnknownFields: boolPtr(false),
-				Validation:            environmentValidation,
-			},
-		},
-		// HTTP triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "httptriggers.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "HTTPTrigger",
-					Plural:   "httptriggers",
-					Singular: "httptrigger",
-				},
-			},
-		},
-		// Kubernetes watch triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kuberneteswatchtriggers.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "KubernetesWatchTrigger",
-					Plural:   "kuberneteswatchtriggers",
-					Singular: "kuberneteswatchtrigger",
-				},
-			},
-		},
-		// Time-based triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "timetriggers.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "TimeTrigger",
-					Plural:   "timetriggers",
-					Singular: "timetrigger",
-				},
-			},
-		},
-		// Message queue triggers for functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "messagequeuetriggers.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "MessageQueueTrigger",
-					Plural:   "messagequeuetriggers",
-					Singular: "messagequeuetrigger",
-				},
-			},
-		},
-		// Packages: archives containing source or binaries for one or more functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "packages.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "Package",
-					Plural:   "packages",
-					Singular: "package",
-				},
-				PreserveUnknownFields: boolPtr(false),
-				Validation:            packageValidation,
-			},
-		},
-		// CanaryConfig: configuration for canary deployment of functions
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "canaryconfigs.fission.io",
-			},
-			Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-				Group:   crdGroupName,
-				Version: crdVersion,
-				Scope:   apiextensionsv1beta1.NamespaceScoped,
-				Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-					Kind:     "CanaryConfig",
-					Plural:   "canaryconfigs",
-					Singular: "canaryconfig",
-				},
-			},
-		},
+	crdsExpected := []string{
+		"canaryconfigs.fission.io",
+		"environments.fission.io",
+		"functions.fission.io",
+		"httptriggers.fission.io",
+		"kuberneteswatchtriggers.fission.io",
+		"messagequeuetriggers.fission.io",
+		"packages.fission.io",
+		"timetriggers.fission.io",
 	}
-	for _, crd := range crds {
-		err := ensureCRD(logger, clientset, &crd)
+	errs := &multierror.Error{}
+	for _, crdName := range crdsExpected {
+		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err != nil {
-			return err
+			multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
+		}
+		if crd == nil {
+			multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
 		}
 	}
-	return nil
+	return errs.ErrorOrNil()
 }

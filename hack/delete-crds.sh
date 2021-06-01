@@ -1,0 +1,1 @@
+kubectl get crds -o custom-columns=:metadata.name | grep 'fission.io' | xargs kubectl delete crds

@@ -51,7 +51,7 @@ Options:
   --fn-pod-namespace=<podNamespace>                        Namespace where function pods get deployed.
   --envbuilder-namespace=<envBuilderNamespace>             Namespace where builder env pods are deployed.`
 
-	arguments, err := docopt.Parse(usage, nil, true, info.BuildInfo().String(), false)
+	arguments, err := docopt.ParseArgs(usage, nil, info.BuildInfo().String())
 	if err != nil {
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}
@@ -65,12 +65,15 @@ Options:
 			zap.Error(err))
 	}
 
-	if !crdBackedClient.IsFissionReInstall() {
+	crd := crdBackedClient.GetFunctionCRD()
+	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
 
+	err = crdBackedClient.LatestSchemaApplied()
+	if err != nil {
+		logger.Fatal("New CRDs are not applied")
+	}
 	crdBackedClient.VerifyFunctionSpecReferences()
-	crdBackedClient.RemoveClusterAdminRolesForFissionSAs()
-	crdBackedClient.SetupRoleBindings()
 }

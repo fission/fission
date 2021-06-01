@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+commonLabels:
+  group: fission.io
+resources:
+  - fission.io_canaryconfigs.yaml
+  - fission.io_environments.yaml
+  - fission.io_functions.yaml
+  - fission.io_httptriggers.yaml
+  - fission.io_kuberneteswatchtriggers.yaml
+  - fission.io_messagequeuetriggers.yaml
+  - fission.io_packages.yaml
+  - fission.io_timetriggers.yaml

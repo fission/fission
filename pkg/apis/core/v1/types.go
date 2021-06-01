@@ -38,9 +38,11 @@ import (
 
 type (
 
-	// Packages. Think of these as function-level images.
+	// Package Think of these as function-level images.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:resource:singular="package",scope="Namespaced",shortName={pkg}
 	Package struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -48,11 +50,13 @@ type (
 		Spec PackageSpec `json:"spec"`
 
 		// Status indicates the build status of package.
+		//+optional
 		Status PackageStatus `json:"status"`
 	}
 
 	// PackageList is a list of Packages.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -62,6 +66,9 @@ type (
 	// Function is function runs within environment runtime with given package and secrets/configmaps.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:singular="function",scope="Namespaced",shortName={fn}
 	Function struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -70,6 +77,7 @@ type (
 
 	// FunctionList is a list of Functions.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	FunctionList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -79,6 +87,8 @@ type (
 	// Environment is environment for building and running user functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	Environment struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -87,6 +97,7 @@ type (
 
 	// EnvironmentList is a list of Environments.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	EnvironmentList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -96,6 +107,8 @@ type (
 	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	HTTPTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -104,6 +117,7 @@ type (
 
 	// HTTPTriggerList is a list of HTTPTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	//+kubebuilder:object:root=true
 	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -113,6 +127,8 @@ type (
 	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	KubernetesWatchTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -121,6 +137,7 @@ type (
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -130,6 +147,8 @@ type (
 	// TimeTrigger invokes functions based on given cron schedule.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	TimeTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -139,6 +158,7 @@ type (
 
 	// TimeTriggerList is a list of TimeTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -149,6 +169,7 @@ type (
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	MessageQueueTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -158,6 +179,7 @@ type (
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -167,6 +189,7 @@ type (
 	// CanaryConfig is for canary deployment of two functions.
 	// +genclient
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
@@ -176,6 +199,7 @@ type (
 
 	// CanaryConfigList is a list of CanaryConfigs.
 	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+	// +kubebuilder:object:root=true
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
 		metav1.ListMeta `json:"metadata"`
@@ -205,24 +229,28 @@ type (
 	// externally.
 	ArchiveType string
 
-	// Package contains or references a collection of source or
+	// Archive contains or references a collection of source or
 	// binary files.
 	Archive struct {
 		// Type defines how the package is specified: literal or URL.
 		// Available value:
 		//  - literal
 		//  - url
+		// +optional
 		Type ArchiveType `json:"type,omitempty"`
 
 		// Literal contents of the package. Can be used for
 		// encoding packages below TODO (256KB?) size.
+		// +optional
 		Literal []byte `json:"literal,omitempty"`
 
 		// URL references a package.
+		// +optional
 		URL string `json:"url,omitempty"`
 
 		// Checksum ensures the integrity of packages
 		// referenced by URL. Ignored for literals.
+		// +optional
 		Checksum Checksum `json:"checksum,omitempty"`
 	}
 
@@ -255,12 +283,15 @@ type (
 		// Source is the archive contains source code and dependencies file.
 		// If the package status is in PENDING state, builder manager will then
 		// notify builder to compile source and save the result as deployable archive.
+		// +optional
 		Source Archive `json:"source,omitempty"`
 
 		// Deployment is the deployable archive that environment runtime used to run user function.
+		// +optional
 		Deployment Archive `json:"deployment,omitempty"`
 
 		// BuildCommand is a custom build command that builder used to build the source archive.
+		// +optional
 		BuildCommand string `json:"buildcmd,omitempty"`
 
 		// In the future, we can have a debug build here too
@@ -272,21 +303,27 @@ type (
 		//   is ready for deploy instead of setting "none" in build status.
 
 		// BuildStatus is the package build status.
+		// +kubebuilder:default:="Pending"
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
 		// BuildLog stores build log during the compilation.
+		// +optional
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
 		// LastUpdateTimestamp will store the timestamp the package was last updated
 		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
 		// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
+		// +optional
+		// +nullable
 		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
 	}
 
 	// PackageRef is a reference to the package.
 	PackageRef struct {
+		// +optional
 		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
+		// +optional
+		Name string `json:"name"`
 
 		// Including resource version in the reference forces the function to be updated on
 		// package update, making it possible to cache the function based on its metadata.
@@ -296,6 +333,7 @@ type (
 	// FunctionPackageRef includes the reference to the package also the entrypoint of package.
 	FunctionPackageRef struct {
 		// Package reference
+		// +optional
 		PackageRef PackageRef `json:"packageref"`
 
 		// FunctionName specifies a specific function within the package. This allows
@@ -326,33 +364,51 @@ type (
 		Package FunctionPackageRef `json:"package"`
 
 		// Reference to a list of secrets.
-		Secrets []SecretReference `json:"secrets"`
+		// +optional
+		// +nullable
+		Secrets []SecretReference `json:"secrets,omitempty"`
 
 		// Reference to a list of configmaps.
-		ConfigMaps []ConfigMapReference `json:"configmaps"`
+		// +optional
+		// +nullable
+		ConfigMaps []ConfigMapReference `json:"configmaps,omitempty"`
 
 		// cpu and memory resources as per K8S standards
 		// This is only for newdeploy to set up resource limitation
 		// when creating deployment for a function.
+		// +optional
 		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// InvokeStrategy is a set of controls which affect how function executes
-		InvokeStrategy InvokeStrategy
+		InvokeStrategy InvokeStrategy `json:"InvokeStrategy"`
 
 		// FunctionTimeout provides a maximum amount of duration within which a request for
 		// a particular function execution should be complete.
 		// This is optional. If not specified default value will be taken as 60s
+		// +optional
 		FunctionTimeout int `json:"functionTimeout,omitempty"`
 
 		// IdleTimeout specifies the length of time that a function is idle before the
 		// function pod(s) are eligible for deletion. If no traffic to the function
 		// is detected within the idle timeout, the executor will then recycle the
 		// function pod(s) to release resources.
+		// +optional
 		IdleTimeout *int `json:"idletimeout,omitempty"`
 
 		// Maximum number of pods to be specialized which will serve requests
-		// This is optional. If not specified default value will be taken as 5
+		// This is optional. If not specified default value will be taken as 500
+		// +optional
 		Concurrency int `json:"concurrency,omitempty"`
+
+		// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
+		// This is optional. If not specified default value will be taken as 1
+		// +optional
+		RequestsPerPod int `json:"requestsPerPod,omitempty"`
+
+		// OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request
+		// This is optional. If not specified default value will be taken as false
+		// +optional
+		OnceOnly bool `json:"onceOnly,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.
@@ -367,11 +423,13 @@ type (
 
 		// ExecutionStrategy specifies low-level parameters for function execution,
 		// such as the number of instances.
-		ExecutionStrategy ExecutionStrategy
+		// +optional
+		ExecutionStrategy ExecutionStrategy `json:"ExecutionStrategy"`
 
 		// StrategyType is the strategy type of a function.
 		// Now it only supports 'execution'.
-		StrategyType StrategyType
+		// +optional
+		StrategyType StrategyType `json:"StrategyType"`
 	}
 
 	// ExecutionStrategy specifies low-level parameters for function execution,
@@ -392,23 +450,29 @@ type (
 		// Available value:
 		//  - poolmgr
 		//  - newdeploy
-		ExecutorType ExecutorType
+		// +optional
+		ExecutorType ExecutorType `json:"ExecutorType"`
 
+		// +optional
 		// This is only for newdeploy to set up minimum replicas of deployment.
-		MinScale int
+		MinScale int `json:"MinScale"`
 
+		// +optional
 		// This is only for newdeploy to set up maximum replicas of deployment.
-		MaxScale int
+		MaxScale int `json:"MaxScale"`
 
+		// +optional
 		// This is only for newdeploy to set up target CPU utilization of HPA.
-		TargetCPUPercent int
+		TargetCPUPercent int `json:"TargetCPUPercent"`
 
+		// +optional
 		// This is the timeout setting for executor to wait for pod specialization.
-		SpecializationTimeout int
+		SpecializationTimeout int `json:"SpecializationTimeout"`
 	}
-
+	// FunctionReferenceType refers to type of Function
 	FunctionReferenceType string
 
+	// FunctionReference refers to a function
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:
@@ -425,6 +489,8 @@ type (
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.
+		// +nullable
+		// +optional
 		FunctionWeights map[string]int `json:"functionweights"`
 	}
 
@@ -464,6 +530,7 @@ type (
 		// - ImagePullPolicy
 		//
 		// You can set either PodSpec or Container, but not both.
+		// kubebuilder:validation:XPreserveUnknownFields=true
 		Container *apiv1.Container `json:"container,omitempty"`
 
 		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
@@ -518,10 +585,12 @@ type (
 
 		// (Optional) Builder is configuration for builder manager to launch environment builder to build source code into
 		// deployable binary.
+		// +optional
 		Builder Builder `json:"builder"`
 
 		// NOT USED NOW.
 		// (Optional) Strongly encouraged. Used to populate links from UI, CLI, etc.
+		// +optional
 		DocumentationURL string `json:"-"` // `json:"documentationurl,omitempty"`
 
 		// (Optional) defaults to 'single'. Fission workflow uses
@@ -529,34 +598,41 @@ type (
 		// Available value:
 		// - single
 		// - infinite
+		// +optional
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
 
 		// Istio default blocks all egress traffic for safety.
 		// To enable accessibility of external network for builder/function pod, set to 'true'.
 		// (Optional) defaults to 'false'
+		// +optional
 		AllowAccessToExternalNetwork bool `json:"allowAccessToExternalNetwork,omitempty"`
 
 		// The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.
 		// (Optional) defaults to no limitation.
+		// +optional
 		Resources apiv1.ResourceRequirements `json:"resources"`
 
 		// The initial pool size for environment
+		// +optional
 		Poolsize int `json:"poolsize,omitempty"`
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
 		// (Optional) defaults to 360 seconds
+		// +optional
 		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
 
 		// KeepArchive is used by fetcher to determine if the extracted archive
 		// or unarchived file should be placed, which is then used by specialize handler.
 		// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
+		// +optional
 		KeepArchive bool `json:"keeparchive"`
 
 		// ImagePullSecret is the secret for Kubernetes to pull an image from a
 		// private registry.
+		// +optional
 		ImagePullSecret string `json:"imagepullsecret"`
 	}
-
+	// AllowedFunctionsPerContainer defaults to 'single'. Related to Fission Workflows
 	AllowedFunctionsPerContainer string
 
 	//
@@ -568,46 +644,55 @@ type (
 		// TODO: remove this field since we have IngressConfig already
 		// Deprecated: the original idea of this field is not for setting Ingress.
 		// Since we have IngressConfig now, remove Host after couple releases.
+		// +optional
 		Host string `json:"host"`
 
 		// RelativeURL is the exposed URL for external client to access a function with.
 		RelativeURL string `json:"relativeurl"`
 
 		// HTTP method to access a function.
+		// +optional
 		Method string `json:"method"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`
 
 		// If CreateIngress is true, router will create a ingress definition.
+		// +optional
 		CreateIngress bool `json:"createingress"`
 
 		// TODO: make IngressConfig a independent Fission resource
 		// IngressConfig for router to set up Ingress.
+		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
 	}
 
 	// IngressConfig is for router to set up Ingress.
 	IngressConfig struct {
 		// Annotations will be add to metadata when creating Ingress.
+		// +optional
+		// +nullable
 		Annotations map[string]string `json:"annotations"`
 
 		// Path is for path matching. The format of path
 		// depends on what ingress controller you used.
+		// +optional
 		Path string `json:"path"`
 
 		// Host is for ingress controller to apply rules. If
 		// host is empty or "*", the rule applies to all
 		// inbound HTTP traffic.
+		// +optional
 		Host string `json:"host"`
 
 		// TLS is for user to specify a Secret that contains
 		// TLS key and certificate. The domain name in the
 		// key and crt must match the value of Host field.
+		// +optional
 		TLS string `json:"tls"`
 	}
 
-	// KubernetesWatchTriggerSpec
+	// KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger
 	KubernetesWatchTriggerSpec struct {
 		Namespace string `json:"namespace"`
 
@@ -615,6 +700,7 @@ type (
 		Type string `json:"type"`
 
 		// Resource labels
+		// +optional
 		LabelSelector map[string]string `json:"labelselector"`
 
 		// The reference to a function for kubewatcher to invoke with
@@ -622,7 +708,7 @@ type (
 		FunctionReference FunctionReference `json:"functionref"`
 	}
 
-	// Type of message queue
+	// MessageQueueType refers to Type of message queue
 	MessageQueueType string
 
 	// MessageQueueTriggerSpec defines a binding from a topic in a
@@ -630,24 +716,30 @@ type (
 	MessageQueueTriggerSpec struct {
 		// The reference to a function for message queue trigger to invoke with
 		// when receiving messages from subscribed topic.
+		// +optional
 		FunctionReference FunctionReference `json:"functionref"`
 
 		// Type of message queue (NATS, Kafka, AzureQueue)
+		// +optional
 		MessageQueueType MessageQueueType `json:"messageQueueType"`
 
 		// Subscribed topic
 		Topic string `json:"topic"`
 
 		// Topic for message queue trigger to sent response from function.
+		// +optional
 		ResponseTopic string `json:"respTopic,omitempty"`
 
 		// Topic to collect error response sent from function
+		// +optional
 		ErrorTopic string `json:"errorTopic"`
 
 		// Maximum times for message queue trigger to retry
+		// +optional
 		MaxRetries int `json:"maxRetries"`
 
 		// Content type of payload
+		// +optional
 		ContentType string `json:"contentType"`
 
 		// The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly
@@ -677,6 +769,16 @@ type (
 		// Kind of Message Queue Trigger to be created, by default its fission
 		// +optional
 		MqtKind string `json:"mqtkind,omitempty"`
+
+		// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
+		// The merging logic is briefly described below and detailed MergePodSpec function
+		// - Volumes mounts and env variables for function and fetcher container are appended
+		// - All additional containers and init containers are appended
+		// - Volume definitions are appended
+		// - Lists such as tolerations, ImagePullSecrets, HostAliases are appended
+		// - Structs are merged and variables from pod spec take precedence
+		// +optional
+		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
 	// TimeTriggerSpec invokes the specific function at a time or
@@ -688,7 +790,7 @@ type (
 		// The reference to function
 		FunctionReference `json:"functionref"`
 	}
-
+	// FailureType refers to the type of failure
 	FailureType string
 
 	// CanaryConfigSpec defines the canary configuration spec
@@ -703,14 +805,18 @@ type (
 		OldFunction string `json:"oldfunction"`
 
 		// Weight increment step for function
+		// +optional
 		WeightIncrement int `json:"weightincrement"`
 
 		// Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d (default: "2m")
+		// +optional
 		WeightIncrementDuration string `json:"duration"`
 
 		// Threshold in percentage beyond which the new version of the function is considered unstable
-		FailureThreshold int         `json:"failurethreshold"`
-		FailureType      FailureType `json:"failureType"`
+		// +optional
+		FailureThreshold int `json:"failurethreshold"`
+		// +optional
+		FailureType FailureType `json:"failureType"`
 	}
 
 	// CanaryConfigStatus represents canary config status
@@ -726,6 +832,7 @@ type (
 	}
 )
 
+//IsEmpty checks if the archive byte and litreal are of length 0
 func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0
 }

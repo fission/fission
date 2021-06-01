@@ -96,7 +96,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 		return
 	}
 
-	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(pkg.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(context.TODO(), pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
 		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
@@ -201,7 +201,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
 
 			fnList, err := pkgw.fissionClient.CoreV1().
-				Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+				Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 			if err != nil {
 				e := "error getting function list"
 				pkgw.logger.Error(e, zap.Error(err))
@@ -225,7 +225,7 @@ func (pkgw *packageWatcher) build(buildCache *cache.Cache, srcpkg *fv1.Package) 
 					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
 					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
 					// update CRD
-					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(&fn)
+					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(context.TODO(), &fn, metav1.UpdateOptions{})
 					if err != nil {
 						e := "error updating function package resource version"
 						pkgw.logger.Error(e, zap.Error(err))
@@ -352,5 +352,5 @@ func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (
 	}
 
 	// TODO: use UpdateStatus to update status
-	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(pkg)
+	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(context.TODO(), pkg, metav1.UpdateOptions{})
 }

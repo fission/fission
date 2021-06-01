@@ -64,6 +64,8 @@ const (
 	FnTestQuery             = "query"
 	FnIdleTimeout           = "idletimeout"
 	FnConcurrency           = "concurrency"
+	FnRequestsPerPod        = "requestsperpod"
+	FnOnceOnly              = "onceonly"
 
 	HtName              = resourceName
 	HtMethod            = "method"

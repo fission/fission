@@ -52,7 +52,7 @@ func panicIf(err error) {
 
 // return the number of pods in the given namespace matching the given labels
 func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]string) int {
-	pods, err := kubeClient.CoreV1().Pods(ns).List(metav1.ListOptions{
+	pods, err := kubeClient.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(labelz).AsSelector().String(),
 	})
 	if err != nil {
@@ -62,11 +62,11 @@ func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]st
 }
 
 func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
-	_, err := kubeClient.CoreV1().Namespaces().Create(&apiv1.Namespace{
+	_, err := kubeClient.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
-	})
+	}, metav1.CreateOptions{})
 	if err != nil {
 		log.Panicf("failed to create ns %v: %v", ns, err)
 	}
@@ -75,7 +75,7 @@ func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
 
 // create a nodeport service
 func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *apiv1.Service {
-	svc, err := kubeClient.CoreV1().Services(ns).Create(&apiv1.Service{
+	svc, err := kubeClient.CoreV1().Services(ns).Create(context.TODO(), &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -91,7 +91,7 @@ func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetP
 			},
 			Selector: labels,
 		},
-	})
+	}, metav1.CreateOptions{})
 	if err != nil {
 		log.Panicf("Failed to create svc: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestExecutor(t *testing.T) {
 
 	// connect to k8s
 	// and get CRD client
-	fissionClient, kubeClient, apiExtClient, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, apiExtClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Panicf("failed to connect: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestExecutor(t *testing.T) {
 	// create the test's namespaces
 	createTestNamespace(kubeClient, fissionNs)
 	defer func() {
-		err := kubeClient.CoreV1().Namespaces().Delete(fissionNs, nil)
+		err := kubeClient.CoreV1().Namespaces().Delete(context.TODO(), fissionNs, metav1.DeleteOptions{})
 		if err != nil {
 			log.Fatalf("failed to delete namespace: %v", err)
 		}
@@ -131,7 +131,7 @@ func TestExecutor(t *testing.T) {
 
 	createTestNamespace(kubeClient, functionNs)
 	defer func() {
-		err := kubeClient.CoreV1().Namespaces().Delete(fissionNs, nil)
+		err := kubeClient.CoreV1().Namespaces().Delete(context.TODO(), functionNs, metav1.DeleteOptions{})
 		if err != nil {
 			log.Fatalf("failed to delete namespace: %v", err)
 		}
@@ -154,7 +154,7 @@ func TestExecutor(t *testing.T) {
 	}
 
 	// create an env on the cluster
-	env, err := fissionClient.CoreV1().Environments(fissionNs).Create(&fv1.Environment{
+	env, err := fissionClient.CoreV1().Environments(fissionNs).Create(context.TODO(), &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nodejs",
 			Namespace: fissionNs,
@@ -166,7 +166,7 @@ func TestExecutor(t *testing.T) {
 			},
 			Builder: fv1.Builder{},
 		},
-	})
+	}, metav1.CreateOptions{})
 	if err != nil {
 		log.Panicf("failed to create env: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestExecutor(t *testing.T) {
 			Deployment:  deployment,
 		},
 	}
-	p, err = fissionClient.CoreV1().Packages(fissionNs).Create(p)
+	p, err = fissionClient.CoreV1().Packages(fissionNs).Create(context.TODO(), p, metav1.CreateOptions{})
 	if err != nil {
 		log.Panicf("failed to create package: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 	}
-	_, err = fissionClient.CoreV1().Functions(fissionNs).Create(f)
+	_, err = fissionClient.CoreV1().Functions(fissionNs).Create(context.TODO(), f, metav1.CreateOptions{})
 	if err != nil {
 		log.Panicf("failed to create function: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestExecutor(t *testing.T) {
 	var fetcherPort int32 = 30001
 	fetcherSvc := createSvc(kubeClient, functionNs, fmt.Sprintf("%v-%v", f.ObjectMeta.Name, "fetcher"), 8000, fetcherPort, labels)
 	defer func() {
-		err := kubeClient.CoreV1().Services(functionNs).Delete(fetcherSvc.ObjectMeta.Name, nil)
+		err := kubeClient.CoreV1().Services(functionNs).Delete(context.TODO(), fetcherSvc.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil {
 			log.Fatalf("failed to delete service: %v", err)
 		}
@@ -248,7 +248,7 @@ func TestExecutor(t *testing.T) {
 	var funcSvcPort int32 = 30002
 	functionSvc := createSvc(kubeClient, functionNs, f.ObjectMeta.Name, 8888, funcSvcPort, labels)
 	defer func() {
-		err := kubeClient.CoreV1().Services(functionNs).Delete(functionSvc.ObjectMeta.Name, nil)
+		err := kubeClient.CoreV1().Services(functionNs).Delete(context.TODO(), functionSvc.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil {
 			log.Fatalf("failed to delete service: %v", err)
 		}
@@ -256,7 +256,7 @@ func TestExecutor(t *testing.T) {
 
 	// the main test: get a service for a given function
 	t1 := time.Now()
-	svc, err := poolmgrClient.GetServiceForFunction(context.Background(), &f.ObjectMeta)
+	svc, err := poolmgrClient.GetServiceForFunction(context.TODO(), f)
 	if err != nil {
 		log.Panicf("failed to get func svc: %v", err)
 	}

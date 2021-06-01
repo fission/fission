@@ -17,6 +17,7 @@ limitations under the License.
 package crd
 
 import (
+	"context"
 	"errors"
 	"os"
 	"time"
@@ -28,20 +29,22 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	genClientset "github.com/fission/fission/pkg/apis/genclient/clientset/versioned"
 )
 
 type (
+	// FissionClient exports the client interface to be used
 	FissionClient struct {
 		genClientset.Interface
 	}
 )
 
-// Get a kubernetes client using the kubeconfig file at the
+// GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
 // environment var $KUBECONFIG, or an in-cluster config if that's
 // undefined.
-func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsclient.Clientset, error) {
+func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
 	var config *rest.Config
 	var err error
 
@@ -51,52 +54,55 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 	if len(kubeConfig) != 0 {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	} else {
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	apiExtClientset, err := apiextensionsclient.NewForConfig(config)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return config, clientset, apiExtClientset, nil
+	metricsClient, _ := metricsclient.NewForConfig(config)
+
+	return config, clientset, apiExtClientset, metricsClient, nil
 }
 
-func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, error) {
-	config, kubeClient, apiExtClient, err := GetKubernetesClient()
+func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
+	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// make a CRD REST client with the config
 	crdClient, err := genClientset.NewForConfig(config)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	fc := &FissionClient{
 		Interface: crdClient,
 	}
-	return fc, kubeClient, apiExtClient, nil
+	return fc, kubeClient, apiExtClient, metricsClient, nil
 }
 
+// WaitForCRDs does a timeout to check if CRDs have been installed
 func (fc *FissionClient) WaitForCRDs() error {
 	start := time.Now()
 	for {
 		fi := fc.CoreV1().Functions(metav1.NamespaceDefault)
-		_, err := fi.List(metav1.ListOptions{})
+		_, err := fi.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {
