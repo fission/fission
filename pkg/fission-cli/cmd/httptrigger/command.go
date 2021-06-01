@@ -30,10 +30,10 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Create),
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.HtUrl, flag.HtFnName},
-		Optional: []flag.Flag{flag.HtName, flag.HtMethod, flag.HtIngress,
+		Required: []flag.Flag{flag.HtFnName},
+		Optional: []flag.Flag{flag.HtUrl, flag.HtName, flag.HtMethod, flag.HtIngress,
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry, flag.HtPrefix},
 	})
 
 	getCmd := &cobra.Command{
@@ -56,7 +56,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtFnName,
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
-			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger},
+			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger, flag.HtPrefix},
 	})
 
 	deleteCmd := &cobra.Command{

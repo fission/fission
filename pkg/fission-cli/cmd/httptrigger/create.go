@@ -19,6 +19,7 @@ package httptrigger
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -93,6 +94,16 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
 	}
 
+	prefix := input.String(flagkey.HtPrefix)
+	if len(prefix) != 0 && len(triggerUrl) > 2 {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
+	}
+
+	if len(prefix) == 0 && len(triggerUrl) < 2 {
+		console.Error("You need to supply either Prefix or URL/RelativeURL")
+		os.Exit(1)
+	}
+
 	method, err := GetMethod(input.String(flagkey.HtMethod))
 	if err != nil {
 		return err
@@ -149,6 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
+			Prefix:            &prefix,
 		},
 	}
 

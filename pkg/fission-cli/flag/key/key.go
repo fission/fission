@@ -78,6 +78,7 @@ const (
 	HtFnName            = "function"
 	HtFnWeight          = "weight"
 	HtFilter            = HtFnName
+	HtPrefix            = "prefix"
 
 	TtName   = resourceName
 	TtCron   = "cron"

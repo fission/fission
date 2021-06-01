@@ -648,7 +648,15 @@ type (
 		Host string `json:"host"`
 
 		// RelativeURL is the exposed URL for external client to access a function with.
+		// +optional
 		RelativeURL string `json:"relativeurl"`
+
+		// Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL.
+		// Prefix takes precendence over RelativeURL
+		// Note that it does not treat slashes specially ("/foobar/" will be matched by
+		// the prefix "/foo") so you may want to use a trailing slash here.
+		// +optional
+		Prefix *string `json:"prefix,omitempty"`
 
 		// HTTP method to access a function.
 		// +optional
