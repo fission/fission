@@ -1,6 +1,5 @@
 #!/bin/bash
-#set -e
-
+set -e
 
 getVersion() {
     echo $(git rev-parse HEAD)
@@ -36,7 +35,6 @@ install_stable_release () {
 
     mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
     sleep 30
-    kubectl get pods -A # For testing purpose
 }
 
 create_fission_objects () {
@@ -59,7 +57,7 @@ test_fission_objects () {
       then
       echo "Success, function response received !!!"
       else
-      echo "Failure, did not get a success reponse from function"
+      echo "Test failed"
     fi
 }
 
@@ -79,28 +77,23 @@ kind_image_load () {
     sleep 5
     echo "checking image load status..."
     docker exec -t kind-control-plane crictl images
+}
 
+install_fission_cli() {
+    go build -ldflags \
+    "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) \
+    -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) \
+    -X github.com/fission/fission/pkg/info.Version=$(getVersion)" \
+    -o fission ./cmd/fission-cli/main.go
+    chmod +x fission && sudo mv fission /usr/local/bin/
+    fission version
 }
 
 install_current_release () {
-    set -x
-    echo "List existing Helm charts..."
-    helm list -A
-    echo "Updating helm dependencies..."
     helm dependency update $ROOT/charts/fission-all
-    sleep 2
-    echo "Replacing CRDs..."
     kubectl replace -k crds/v1
     sleep 30
-
-    IMAGE=fission-bundle
-    FETCHER_IMAGE=fetcher
-    BUILDER_IMAGE=builder
-    #TAG=latest
-    #helmVars=analytics=false,pruneInterval=60,routerServiceType=LoadBalancer,repository=$REPO,imageTag=latest,image=fission-bundle,fetcher.imageTag=latest,fetcher.image=fetcher 
-    helm upgrade --namespace $ns --set helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter  fission $ROOT/charts/fission-all
-    sleep 30
-    echo "Fetch failed container log.."
-    failed_fission_id=$(kubectl get pods -A | grep "fission-fission-all" | awk {'print $2'})
-    kubectl logs $failed_fission_id -n $ns
+    HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter" 
+    
+    helm upgrade --namespace $ns --set $helmVars=$HELM_VARS fission $ROOT/charts/fission-all
 }
