@@ -40,7 +40,7 @@ build:
 	go build -o cmd/reporter/reporter ./cmd/reporter/
 
 # install CLI binary to $PATH
-install: build
+install-cli: build
 	mv cmd/fission-cli/fission $(GOPATH)/bin
 
 # build images (environment images are not included)
@@ -58,8 +58,18 @@ image-multiarch:
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/preupgradechecks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
 
-manifests:
+generate-crds:
 	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  paths=./pkg/apis/core/v1  output:crd:artifacts:config=crds/v1
+
+create-crds:
+	@kubectl create -k crds/v1
+
+update-crds:
+	@kubectl replace -k crds/v1
+
+delete-crds:
+	@./hack/delete-crds.sh
+
 clean:
 	@rm -f cmd/fission-bundle/fission-bundle
 	@rm -f cmd/fission-cli/fission
