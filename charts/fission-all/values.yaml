@@ -11,16 +11,16 @@ routerServiceType: LoadBalancer
 
 ## Image base repository
 ## Leave it empty for using existing local image
-repository: docker.io/library
+repository: index.docker.io
 
 ## Fission image repository
-image: fission-bundle
+image: fission/fission-bundle
 
 ## Image pull policy
 pullPolicy: IfNotPresent
 
 ## Fission image version
-imageTag: latest
+imageTag: 1.12.0
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
@@ -48,9 +48,9 @@ enableIstio: false
 
 fetcher:
   ## Fetcher repository
-  image: docker.io/library/fetcher
+  image: fission/fetcher
   ## Fetcher image version
-  imageTag: latest
+  imageTag: 1.12.0
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -265,7 +265,7 @@ persistence:
 
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
-analytics: false
+analytics: true
 
 ## Internally used for generating an analytics job for non-helm installs
 analyticsNonHelmInstall: false
@@ -293,7 +293,7 @@ pruneInterval: 60
 preUpgradeChecksImage: fission/pre-upgrade-checks
 
 ## Fission ppost-install/post-upgrade reporting live in this image
-postInstallReportImage: reporter
+postInstallReportImage: fission/reporter
 
 ## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
 ## summary is returned as part of http response
