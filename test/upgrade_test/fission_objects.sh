@@ -28,6 +28,7 @@ dump_system_info() {
 install_stable_release () {
     echo "Creating namespace $ns"
     kubectl create ns $ns
+    echo "Installing Fission $STABLE_VERSION"
     helm install \
     --namespace $ns \
     --name-template fission \
@@ -38,6 +39,7 @@ install_stable_release () {
 }
 
 create_fission_objects () {
+    echo "Creating Fission objects"
     fission env create --name nodejs --image fission/node-env:latest
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     fission function create --name hello --env nodejs --code hello.js
@@ -52,6 +54,7 @@ create_fission_objects () {
  }
 
 test_fission_objects () {
+    echo "Testing Fission objects"
     fission function test --name hello
     if [ $? == 0 ]
       then
@@ -62,6 +65,7 @@ test_fission_objects () {
 }
 
 build_docker_images () {
+    echo "Building new docker images"
     docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
     docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
     docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
@@ -74,22 +78,20 @@ kind_image_load () {
     kind load docker-image fetcher --name kind
     kind load docker-image builder --name kind
     kind load docker-image reporter --name kind
-    sleep 5
-    echo "checking image load status..."
-    docker exec -t kind-control-plane crictl images
-}
+ }
 
 install_fission_cli () {
+    echo "Installing new Fission cli"
     go build -ldflags \
     "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) \
     -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) \
     -X github.com/fission/fission/pkg/info.Version=$(getVersion)" \
     -o fission ./cmd/fission-cli/main.go
     chmod +x fission && sudo mv fission /usr/local/bin/
-    fission version
 }
 
 install_current_release () {
+    echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
     sleep 30
