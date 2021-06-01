@@ -79,7 +79,7 @@ kind_image_load () {
     docker exec -t kind-control-plane crictl images
 }
 
-install_fission_cli() {
+install_fission_cli () {
     go build -ldflags \
     "-X github.com/fission/fission/pkg/info.GitCommit=$(getGitCommit) \
     -X github.com/fission/fission/pkg/info.BuildDate=$(getDate) \
