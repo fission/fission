@@ -2,7 +2,7 @@ name: Upgrade functionality test
 
 on: 
   push:
-    branches: [ upgrade-testingA ]
+    branches: [ upgrade-testing ]
 
 jobs:
   
@@ -21,7 +21,7 @@ jobs:
     - name: Setup go
       uses: actions/setup-go@v2.1.3
       with:
-        go-version: '1.14.15'
+        go-version: '1.15.12'
 
     - name: Setup Helm
       uses: Azure/setup-helm@v1
@@ -48,7 +48,7 @@ jobs:
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
         sudo apt-get install -y apache2-utils
-           
+
     - name: Configure fission and run upgrade test
       run: |
         /bin/bash ./test/upgrade_test/run_tests.sh
