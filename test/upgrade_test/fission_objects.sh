@@ -18,11 +18,11 @@ getVersion() {
     echo $(git rev-parse HEAD)
 }
 
-getDate() {
+getDate () {
     echo $(date -u +'%Y-%m-%dT%H:%M:%SZ')
 }
 
-getGitCommit() {
+getGitCommit () {
     echo $(git rev-parse HEAD)
 }
 
