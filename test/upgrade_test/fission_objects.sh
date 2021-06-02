@@ -48,6 +48,7 @@ install_stable_release () {
 create_fission_objects () {
     echo "Creating Fission objects"
     fission env create --name nodejs --image fission/node-env:latest
+    sleep 5
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
