@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+#set -e
 
 getVersion() {
     echo $(git rev-parse HEAD)
@@ -68,6 +68,7 @@ build_docker_images () {
     docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
     docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
     docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
+    docker build -t preupgradechecks -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
 }
 
 kind_image_load () {
@@ -76,6 +77,7 @@ kind_image_load () {
     kind load docker-image fetcher --name kind
     kind load docker-image builder --name kind
     kind load docker-image reporter --name kind
+    kind load docker-image preupgradechecks --name kind
  }
 
 install_fission_cli () {
@@ -93,4 +95,6 @@ install_current_release () {
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
     helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
+    sleep 15
+    kubectl get pods -A
 }
