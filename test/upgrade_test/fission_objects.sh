@@ -26,7 +26,7 @@ getGitCommit() {
     echo $(git rev-parse HEAD)
 }
 
-generate_test_id() {
+generate_test_id () {
     echo $(((10000 + $RANDOM) % 99999))
 }
 
