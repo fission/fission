@@ -88,6 +88,7 @@ install_fission_cli () {
     -X github.com/fission/fission/pkg/info.Version=$(getVersion)" \
     -o fission ./cmd/fission-cli/main.go
     chmod +x fission && sudo mv fission /usr/local/bin/
+    fission version
 }
 
 install_current_release () {
@@ -95,6 +96,6 @@ install_current_release () {
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
     helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
-    sleep 15
+    sleep 45
     kubectl get pods -A
 }

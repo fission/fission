@@ -20,5 +20,8 @@ create_fission_objects
 test_fission_objects
 build_docker_images
 kind_image_load
-install_fission_cli
 install_current_release
+install_fission_cli
+create_fission_objects
+test_fission_objects
+
