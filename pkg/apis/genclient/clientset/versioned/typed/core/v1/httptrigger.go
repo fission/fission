@@ -19,6 +19,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -37,14 +38,14 @@ type HTTPTriggersGetter interface {
 
 // HTTPTriggerInterface has methods to work with HTTPTrigger resources.
 type HTTPTriggerInterface interface {
-	Create(*v1.HTTPTrigger) (*v1.HTTPTrigger, error)
-	Update(*v1.HTTPTrigger) (*v1.HTTPTrigger, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.HTTPTrigger, error)
-	List(opts metav1.ListOptions) (*v1.HTTPTriggerList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.HTTPTrigger, err error)
+	Create(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.CreateOptions) (*v1.HTTPTrigger, error)
+	Update(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.UpdateOptions) (*v1.HTTPTrigger, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.HTTPTrigger, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.HTTPTriggerList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.HTTPTrigger, err error)
 	HTTPTriggerExpansion
 }
 
@@ -63,20 +64,20 @@ func newHTTPTriggers(c *CoreV1Client, namespace string) *hTTPTriggers {
 }
 
 // Get takes name of the _hTTPTrigger, and returns the corresponding hTTPTrigger object, and an error if there is any.
-func (c *hTTPTriggers) Get(name string, options metav1.GetOptions) (result *v1.HTTPTrigger, err error) {
+func (c *hTTPTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.HTTPTrigger, err error) {
 	result = &v1.HTTPTrigger{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("httptriggers").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of HTTPTriggers that match those selectors.
-func (c *hTTPTriggers) List(opts metav1.ListOptions) (result *v1.HTTPTriggerList, err error) {
+func (c *hTTPTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.HTTPTriggerList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -87,13 +88,13 @@ func (c *hTTPTriggers) List(opts metav1.ListOptions) (result *v1.HTTPTriggerList
 		Resource("httptriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested hTTPTriggers.
-func (c *hTTPTriggers) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *hTTPTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -104,71 +105,74 @@ func (c *hTTPTriggers) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 		Resource("httptriggers").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a _hTTPTrigger and creates it.  Returns the server's representation of the hTTPTrigger, and an error, if there is any.
-func (c *hTTPTriggers) Create(_hTTPTrigger *v1.HTTPTrigger) (result *v1.HTTPTrigger, err error) {
+func (c *hTTPTriggers) Create(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.CreateOptions) (result *v1.HTTPTrigger, err error) {
 	result = &v1.HTTPTrigger{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("httptriggers").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_hTTPTrigger).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a _hTTPTrigger and updates it. Returns the server's representation of the hTTPTrigger, and an error, if there is any.
-func (c *hTTPTriggers) Update(_hTTPTrigger *v1.HTTPTrigger) (result *v1.HTTPTrigger, err error) {
+func (c *hTTPTriggers) Update(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.UpdateOptions) (result *v1.HTTPTrigger, err error) {
 	result = &v1.HTTPTrigger{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("httptriggers").
 		Name(_hTTPTrigger.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_hTTPTrigger).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the _hTTPTrigger and deletes it. Returns an error if one occurs.
-func (c *hTTPTriggers) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *hTTPTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("httptriggers").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *hTTPTriggers) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *hTTPTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("httptriggers").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched hTTPTrigger.
-func (c *hTTPTriggers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.HTTPTrigger, err error) {
+func (c *hTTPTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.HTTPTrigger, err error) {
 	result = &v1.HTTPTrigger{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("httptriggers").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }

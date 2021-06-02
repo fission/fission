@@ -17,6 +17,7 @@ limitations under the License.
 package crd
 
 import (
+	"context"
 	"errors"
 	"os"
 	"time"
@@ -34,12 +35,13 @@ import (
 )
 
 type (
+	// FissionClient exports the client interface to be used
 	FissionClient struct {
 		genClientset.Interface
 	}
 )
 
-// Get a kubernetes client using the kubeconfig file at the
+// GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
 // environment var $KUBECONFIG, or an in-cluster config if that's
 // undefined.
 func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
@@ -95,11 +97,12 @@ func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsc
 	return fc, kubeClient, apiExtClient, metricsClient, nil
 }
 
+// WaitForCRDs does a timeout to check if CRDs have been installed
 func (fc *FissionClient) WaitForCRDs() error {
 	start := time.Now()
 	for {
 		fi := fc.CoreV1().Functions(metav1.NamespaceDefault)
-		_, err := fi.List(metav1.ListOptions{})
+		_, err := fi.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {

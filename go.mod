@@ -1,6 +1,6 @@
 module github.com/fission/fission
 
-go 1.14
+go 1.15
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
@@ -25,6 +25,7 @@ require (
 	github.com/emicklei/go-restful-openapi v1.2.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/go-openapi/spec v0.19.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
@@ -32,7 +33,7 @@ require (
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/imdario/mergo v0.3.5
+	github.com/imdario/mergo v0.3.9
 	github.com/influxdata/influxdb v1.2.0
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v1.1.0 // indirect
@@ -60,10 +61,10 @@ require (
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	k8s.io/api v0.17.2
-	k8s.io/apiextensions-apiserver v0.17.2
-	k8s.io/apimachinery v0.17.2
-	k8s.io/client-go v0.17.2
+	k8s.io/api v0.19.2
+	k8s.io/apiextensions-apiserver v0.19.2
+	k8s.io/apimachinery v0.19.2
+	k8s.io/client-go v0.19.2
 	k8s.io/klog v1.0.0
-	k8s.io/metrics v0.17.2
+	k8s.io/metrics v0.19.2
 )

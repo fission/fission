@@ -26,8 +26,10 @@ import (
 )
 
 // HTTPTriggerLister helps list HTTPTriggers.
+// All objects returned here must be treated as read-only.
 type HTTPTriggerLister interface {
 	// List lists all HTTPTriggers in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error)
 	// HTTPTriggers returns an object that can list and get HTTPTriggers.
 	HTTPTriggers(namespace string) HTTPTriggerNamespaceLister
@@ -58,10 +60,13 @@ func (s *_hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespace
 }
 
 // HTTPTriggerNamespaceLister helps list and get HTTPTriggers.
+// All objects returned here must be treated as read-only.
 type HTTPTriggerNamespaceLister interface {
 	// List lists all HTTPTriggers in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error)
 	// Get retrieves the HTTPTrigger from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.HTTPTrigger, error)
 	HTTPTriggerNamespaceListerExpansion
 }

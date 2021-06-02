@@ -19,6 +19,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -37,14 +38,14 @@ type EnvironmentsGetter interface {
 
 // EnvironmentInterface has methods to work with Environment resources.
 type EnvironmentInterface interface {
-	Create(*v1.Environment) (*v1.Environment, error)
-	Update(*v1.Environment) (*v1.Environment, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.Environment, error)
-	List(opts metav1.ListOptions) (*v1.EnvironmentList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.Environment, err error)
+	Create(ctx context.Context, _environment *v1.Environment, opts metav1.CreateOptions) (*v1.Environment, error)
+	Update(ctx context.Context, _environment *v1.Environment, opts metav1.UpdateOptions) (*v1.Environment, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Environment, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.EnvironmentList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Environment, err error)
 	EnvironmentExpansion
 }
 
@@ -63,20 +64,20 @@ func newEnvironments(c *CoreV1Client, namespace string) *environments {
 }
 
 // Get takes name of the _environment, and returns the corresponding environment object, and an error if there is any.
-func (c *environments) Get(name string, options metav1.GetOptions) (result *v1.Environment, err error) {
+func (c *environments) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Environment, err error) {
 	result = &v1.Environment{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("environments").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of Environments that match those selectors.
-func (c *environments) List(opts metav1.ListOptions) (result *v1.EnvironmentList, err error) {
+func (c *environments) List(ctx context.Context, opts metav1.ListOptions) (result *v1.EnvironmentList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -87,13 +88,13 @@ func (c *environments) List(opts metav1.ListOptions) (result *v1.EnvironmentList
 		Resource("environments").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested environments.
-func (c *environments) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *environments) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -104,71 +105,74 @@ func (c *environments) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 		Resource("environments").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a _environment and creates it.  Returns the server's representation of the environment, and an error, if there is any.
-func (c *environments) Create(_environment *v1.Environment) (result *v1.Environment, err error) {
+func (c *environments) Create(ctx context.Context, _environment *v1.Environment, opts metav1.CreateOptions) (result *v1.Environment, err error) {
 	result = &v1.Environment{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("environments").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_environment).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a _environment and updates it. Returns the server's representation of the environment, and an error, if there is any.
-func (c *environments) Update(_environment *v1.Environment) (result *v1.Environment, err error) {
+func (c *environments) Update(ctx context.Context, _environment *v1.Environment, opts metav1.UpdateOptions) (result *v1.Environment, err error) {
 	result = &v1.Environment{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("environments").
 		Name(_environment.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(_environment).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the _environment and deletes it. Returns an error if one occurs.
-func (c *environments) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *environments) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("environments").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *environments) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *environments) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("environments").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched environment.
-func (c *environments) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.Environment, err error) {
+func (c *environments) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Environment, err error) {
 	result = &v1.Environment{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("environments").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }

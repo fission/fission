@@ -5,16 +5,13 @@ metadata:
   name: nodep
   namespace: default
 spec:
-  TerminationGracePeriod: 360
+  terminationGracePeriod: 360
   builder: {}
   keeparchive: false
   poolsize: 3
   resources: {}
   runtime:
-    functionendpointport: 0
     image: fission/node-env
-    loadendpointpath: ""
-    loadendpointport: 0
     container:
       name: nodep
       volumeMounts:
@@ -24,7 +21,7 @@ spec:
     podspec:
       hostname: foo-bar
       # A container which will be merged with for pool manager
-      Containers:
+      containers:
       - name: nodep
         image: fission/node-env
         volumeMounts:

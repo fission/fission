@@ -212,7 +212,6 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(kafka.authKeys["caCert"])
 	tlsConfig.RootCAs = caCertPool
-	tlsConfig.BuildNameToCertificate()
 
 	return &tlsConfig, nil
 }

@@ -26,8 +26,10 @@ import (
 )
 
 // MessageQueueTriggerLister helps list MessageQueueTriggers.
+// All objects returned here must be treated as read-only.
 type MessageQueueTriggerLister interface {
 	// List lists all MessageQueueTriggers in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error)
 	// MessageQueueTriggers returns an object that can list and get MessageQueueTriggers.
 	MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister
@@ -58,10 +60,13 @@ func (s *_messageQueueTriggerLister) MessageQueueTriggers(namespace string) Mess
 }
 
 // MessageQueueTriggerNamespaceLister helps list and get MessageQueueTriggers.
+// All objects returned here must be treated as read-only.
 type MessageQueueTriggerNamespaceLister interface {
 	// List lists all MessageQueueTriggers in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error)
 	// Get retrieves the MessageQueueTrigger from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.MessageQueueTrigger, error)
 	MessageQueueTriggerNamespaceListerExpansion
 }

@@ -19,6 +19,8 @@ limitations under the License.
 package fake
 
 import (
+	"context"
+
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -39,7 +41,7 @@ var packagesResource = schema.GroupVersionResource{Group: "fission.io", Version:
 var packagesKind = schema.GroupVersionKind{Group: "fission.io", Version: "v1", Kind: "Package"}
 
 // Get takes name of the _package, and returns the corresponding package object, and an error if there is any.
-func (c *FakePackages) Get(name string, options v1.GetOptions) (result *corev1.Package, err error) {
+func (c *FakePackages) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.Package, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewGetAction(packagesResource, c.ns, name), &corev1.Package{})
 
@@ -50,7 +52,7 @@ func (c *FakePackages) Get(name string, options v1.GetOptions) (result *corev1.P
 }
 
 // List takes label and field selectors, and returns the list of Packages that match those selectors.
-func (c *FakePackages) List(opts v1.ListOptions) (result *corev1.PackageList, err error) {
+func (c *FakePackages) List(ctx context.Context, opts v1.ListOptions) (result *corev1.PackageList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewListAction(packagesResource, packagesKind, c.ns, opts), &corev1.PackageList{})
 
@@ -72,14 +74,14 @@ func (c *FakePackages) List(opts v1.ListOptions) (result *corev1.PackageList, er
 }
 
 // Watch returns a watch.Interface that watches the requested packages.
-func (c *FakePackages) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakePackages) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(packagesResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _package and creates it.  Returns the server's representation of the package, and an error, if there is any.
-func (c *FakePackages) Create(_package *corev1.Package) (result *corev1.Package, err error) {
+func (c *FakePackages) Create(ctx context.Context, _package *corev1.Package, opts v1.CreateOptions) (result *corev1.Package, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewCreateAction(packagesResource, c.ns, _package), &corev1.Package{})
 
@@ -90,7 +92,7 @@ func (c *FakePackages) Create(_package *corev1.Package) (result *corev1.Package,
 }
 
 // Update takes the representation of a _package and updates it. Returns the server's representation of the package, and an error, if there is any.
-func (c *FakePackages) Update(_package *corev1.Package) (result *corev1.Package, err error) {
+func (c *FakePackages) Update(ctx context.Context, _package *corev1.Package, opts v1.UpdateOptions) (result *corev1.Package, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateAction(packagesResource, c.ns, _package), &corev1.Package{})
 
@@ -102,7 +104,7 @@ func (c *FakePackages) Update(_package *corev1.Package) (result *corev1.Package,
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakePackages) UpdateStatus(_package *corev1.Package) (*corev1.Package, error) {
+func (c *FakePackages) UpdateStatus(ctx context.Context, _package *corev1.Package, opts v1.UpdateOptions) (*corev1.Package, error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateSubresourceAction(packagesResource, "status", c.ns, _package), &corev1.Package{})
 
@@ -113,7 +115,7 @@ func (c *FakePackages) UpdateStatus(_package *corev1.Package) (*corev1.Package, 
 }
 
 // Delete takes name of the _package and deletes it. Returns an error if one occurs.
-func (c *FakePackages) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakePackages) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewDeleteAction(packagesResource, c.ns, name), &corev1.Package{})
 
@@ -121,15 +123,15 @@ func (c *FakePackages) Delete(name string, options *v1.DeleteOptions) error {
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakePackages) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(packagesResource, c.ns, listOptions)
+func (c *FakePackages) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewDeleteCollectionAction(packagesResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &corev1.PackageList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched package.
-func (c *FakePackages) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *corev1.Package, err error) {
+func (c *FakePackages) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.Package, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewPatchSubresourceAction(packagesResource, c.ns, name, pt, data, subresources...), &corev1.Package{})
 
