@@ -30,7 +30,7 @@ generate_test_id() {
     echo $(((10000 + $RANDOM) % 99999))
 }
 
-dump_system_info() {
+dump_system_info () {
     echo "System Info"
     go version
     docker version
@@ -112,3 +112,5 @@ install_current_release () {
     sleep 45
     kubectl get pods -A
 }
+
+"$@"
