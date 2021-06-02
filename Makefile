@@ -15,7 +15,7 @@
 .DEFAULT_GOAL := check
 
 # Platforms to build in multi-architecture images.
-PLATFORMS ?= linux/amd64,linux/arm64,linux/arm
+PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
 # Repository prefix and tag to push multi-architecture images to.
 REPO ?= fission
@@ -43,6 +43,9 @@ build:
 install-cli: build
 	mv cmd/fission-cli/fission $(GOPATH)/bin
 
+verify-builder:
+	@./hack/buildx.sh
+
 # build images (environment images are not included)
 image:
 	docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
@@ -51,26 +54,26 @@ image:
 	docker build -t reporter -f cmd/builder/Dockerfile.reporter .
 
 # build multi-architecture images for release.
-image-multiarch:
+image-multiarch: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) --push -f cmd/fission-bundle/Dockerfile.fission-bundle .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/preupgradechecks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
 
-multiarch-bundle:
+multiarch-bundle: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) --push -f cmd/fission-bundle/Dockerfile.fission-bundle .
 
-multiarch-fetcher:
+multiarch-fetcher: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
 
-multiarch-builder:
+multiarch-builder: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
 
-multiarch-preupgrade:
+multiarch-preupgrade: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/pre-upgrade-checks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks . 
 
-multiarch-reporter:
+multiarch-reporter: verify-builder
 	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
 
 generate-crds:
