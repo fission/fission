@@ -53,7 +53,7 @@ create_fission_objects () {
  }
 
 test_fission_objects () {
-    echo "Testing Fission objects"
+    echo "Testing Fission objects....."
     if fission function test --name hello
       then
       echo "Test success"
