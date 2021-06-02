@@ -8,7 +8,7 @@ HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy
 
 #source $ROOT/test/upgrade_test/fission_objects.sh
 
-id=$(generate_test_id)
+id=$RANDOM
 ns=f-$id
 fns=f-func-$id
 
@@ -23,10 +23,6 @@ getDate () {
 
 getGitCommit () {
     echo $(git rev-parse HEAD)
-}
-
-generate_test_id () {
-    echo $(((10000 + $RANDOM) % 99999))
 }
 
 dump_system_info () {
