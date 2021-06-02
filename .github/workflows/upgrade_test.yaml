@@ -36,7 +36,7 @@ jobs:
         curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
         sudo install skaffold /usr/local/bin/
         skaffold version
-        FISSION_VERSION=1111111 >> $GITHUB_ENV
+        "FISSION_VERSION=1111111" >> $GITHUB_ENV
 
     - name: Setup Kind Clutser
       uses: engineerd/setup-kind@v0.5.0
