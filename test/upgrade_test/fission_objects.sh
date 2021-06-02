@@ -13,8 +13,7 @@ ns=f-$id
 fns=f-func-$id
 
 
-
-getVersion() {
+getVersion () {
     echo $(git rev-parse HEAD)
 }
 
