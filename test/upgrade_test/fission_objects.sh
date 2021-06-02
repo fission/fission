@@ -10,7 +10,6 @@ HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy
 
 id=$RANDOM
 ns=f-$id
-fns=f-func-$id
 
 
 getVersion () {
