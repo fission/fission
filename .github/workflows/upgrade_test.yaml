@@ -58,3 +58,14 @@ jobs:
         source ./test/upgrade_test/fission_objects.sh install_stable_release \
         && create_fission_objects \
         && test_fission_objects
+
+    - name: Upgrade fission to latest
+      run: |
+        source ./test/upgrade_test/fission_objects.sh build_docker_images \
+        && kind_image_load \
+        && install_fission_cli \
+        && install_current_release
+
+    - name: Test old fission objects compatability with new release
+      run: |
+        source ./test/upgrade_test/fission_objects.sh test_fission_objects
