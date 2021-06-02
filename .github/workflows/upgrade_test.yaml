@@ -49,7 +49,7 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
         
-    - name: Fetch systm information
+    - name: Dump system info
       run: |
         source ./test/upgrade_test/fission_objects.sh dump_system_info
 
@@ -66,6 +66,6 @@ jobs:
         && install_fission_cli \
         && install_current_release
 
-    - name: Test old fission objects compatability with new release
+    - name: Test previously created fission objects with new release
       run: |
         source ./test/upgrade_test/fission_objects.sh test_fission_objects
