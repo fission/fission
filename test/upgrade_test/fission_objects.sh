@@ -41,8 +41,8 @@ install_stable_release () {
     --namespace $ns \
     --name-template fission \
     https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-all-${STABLE_VERSION}.tgz
-
     mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
+    sleep 5
  }
 
 create_fission_objects () {
