@@ -9,8 +9,7 @@ HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy
 #source $ROOT/test/upgrade_test/fission_objects.sh
 
 id=$RANDOM
-echo "ns=f-$id" >> $GITHUB_ENV
-
+readonly ns=f-$id
 
 getVersion () {
     echo $(git rev-parse HEAD)
@@ -99,6 +98,8 @@ install_fission_cli () {
 }
 
 install_current_release () {
+    echo "printing ns value"
+    echo "$ns"
     set -x
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all

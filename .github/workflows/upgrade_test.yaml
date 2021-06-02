@@ -36,8 +36,7 @@ jobs:
         curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
         sudo install skaffold /usr/local/bin/
         skaffold version
-        echo "FISSION_VERSION=1111111" >> $GITHUB_ENV
-
+       
     - name: Setup Kind Clutser
       uses: engineerd/setup-kind@v0.5.0
       with:
@@ -49,8 +48,7 @@ jobs:
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
         sudo apt-get install -y apache2-utils
-        echo $FISSION_VERSION
-
+        
     - name: Fetch systm information
       run: |
         source ./test/upgrade_test/fission_objects.sh dump_system_info
