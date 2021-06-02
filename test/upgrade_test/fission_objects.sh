@@ -69,6 +69,8 @@ test_fission_objects () {
 }
 
 build_docker_images () {
+    echo "printing ns value"
+    echo "$ns"
     echo "Building new docker images"
     docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
     docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
@@ -98,8 +100,6 @@ install_fission_cli () {
 }
 
 install_current_release () {
-    echo "printing ns value"
-    echo "$ns"
     set -x
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
