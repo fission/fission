@@ -70,6 +70,36 @@ push_all() {
     push_pre_upgrade_checks_image latest
 }
 
+
+
+# Build and push fission-bundle image
+push_multiarch_fission_bundle_image() {
+    TAG=$1 make multiarch-bundle
+}
+
+push_multiarch_fetcher_image() {
+    TAG=$1 make multiarch-fetcher
+}
+
+
+push_builder_image() {
+    TAG=$1 make multiarch-builder
+}
+
+# Push pre-upgrade-checks image
+push_pre_upgrade_checks_image() {
+    TAG=$1 make multiarch-preupgrade
+}
+
+push_builder_image() {
+    TAG=$1 make multiarch-reporter
+}
+
+push_multiarch_all() {
+    TAG=$version  make image-multiarch
+    TAG=latest make image-multiarch
+}
+
 tag_and_release() {
     local version=$1
     local gittag=$version
@@ -285,7 +315,7 @@ release_environment_check $version $chartsrepo
 docker run --rm -it -v $FISSION_HOME:/go/src/github.com/fission -v /var/run/docker.sock:/var/run/docker.sock \
     -e VERSION=$version -w "/go/src/github.com/fission/fission/hack" fission-release-builder sh -c "./release-build.sh"
 
-push_all $version
+push_multiarch_all $version
 
 tag_and_release $version
 attach_github_release_cli $version
