@@ -100,6 +100,7 @@ install_fission_cli () {
 }
 
 install_current_release () {
+    set -x
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
