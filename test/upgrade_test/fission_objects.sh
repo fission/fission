@@ -1,6 +1,19 @@
 #!/bin/bash
 #set -e
 
+ROOT=$(pwd)
+REPO="docker.io/library"
+STABLE_VERSION=1.12.0
+HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
+
+source $ROOT/test/upgrade_test/fission_objects.sh
+
+id=$(generate_test_id)
+ns=f-$id
+fns=f-func-$id
+
+
+
 getVersion() {
     echo $(git rev-parse HEAD)
 }

@@ -49,6 +49,9 @@ jobs:
         kubectl get nodes
         sudo apt-get install -y apache2-utils
 
-    - name: Configure fission and run upgrade test
+    - name: Fetch systm information
       run: |
-        /bin/bash ./test/upgrade_test/run_tests.sh
+        source ./test/upgrade_test/fission_objects.sh dump_system_info
+#    - name: Configure fission and run upgrade test
+#      run: |
+#        /bin/bash ./test/upgrade_test/run_tests.sh
