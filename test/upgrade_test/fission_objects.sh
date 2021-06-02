@@ -62,9 +62,13 @@ test_fission_objects () {
     echo "Testing Fission objects."
     if fission function test --name hello
       then
-      echo "Test success"
+      echo "----------------------**********************-------------------------"
+      echo "                           Test success"
+      echo "----------------------**********************-------------------------"
       else
-      echo "Test failed"
+      echo "----------------------**********************-------------------------"
+      echo "                            Test failed"
+      echo "----------------------**********************-------------------------"
     fi
 }
 
