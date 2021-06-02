@@ -1,6 +1,7 @@
 #!/bin/bash
 #set -e
 
+ns="f-ns"
 ROOT=$(pwd)
 REPO="docker.io/library"
 STABLE_VERSION=1.12.0
@@ -8,8 +9,7 @@ HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy
 
 #source $ROOT/test/upgrade_test/fission_objects.sh
 
-id=$RANDOM
-readonly ns=f-$id
+
 
 getVersion () {
     echo $(git rev-parse HEAD)
@@ -21,6 +21,10 @@ getDate () {
 
 getGitCommit () {
     echo $(git rev-parse HEAD)
+}
+
+getNameSpace () {
+    ns = $(cat ./namespace.txt)
 }
 
 dump_system_info () {
@@ -69,8 +73,6 @@ test_fission_objects () {
 }
 
 build_docker_images () {
-    echo "printing ns value"
-    echo "$ns"
     echo "Building new docker images"
     docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
     docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
