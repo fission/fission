@@ -52,7 +52,7 @@ jobs:
       run: ./hack/runtests.sh
     
     - name: Helm update
-      run: helm repo add helm https://charts.helm.sh/stable 
+      run: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
       
     - name: Install Skaffold 
       run: |
