@@ -8,7 +8,7 @@ HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy
 
 #source $ROOT/test/upgrade_test/fission_objects.sh
 
-id=$RANDOM
+echo "id=$RANDOM" >> $GITHUB_ENV
 ns=f-$id
 
 
