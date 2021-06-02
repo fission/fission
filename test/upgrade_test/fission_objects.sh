@@ -103,6 +103,8 @@ install_current_release () {
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
+    sleep 5
+    helm list -A
     helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
     sleep 45
     kubectl get pods -A
