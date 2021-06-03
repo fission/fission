@@ -36,8 +36,6 @@ fi
 log "Creating nodejs env"
 fission env create --name $env --image $NODE_RUNTIME_IMAGE
 
-
-
 for f in $f1 $f2
 do
     echo "module.exports = function(context, callback) { callback(200, \"$f\n\"); }" > $tmp_dir/$f.js
