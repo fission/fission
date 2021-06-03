@@ -13,7 +13,7 @@ spec:
   runtime:
     image: fission/node-env
     container:
-      name: nodehellond
+      name: nodend
       volumeMounts:
         - name: cvol
           mountPath: /etc/cvoldata
@@ -22,7 +22,7 @@ spec:
       hostname: foo-bar
       # A container which will be merged with for pool manager
       containers:
-      - name: nodehellond
+      - name: nodend
         image: fission/node-env
         volumeMounts:
           - name: funcvol
