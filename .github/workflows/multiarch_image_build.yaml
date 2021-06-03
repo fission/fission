@@ -1,4 +1,4 @@
-name: Multi_Arch Images series build
+name: Fission Images build for different architectures
 on: 
   push:
     branches:
