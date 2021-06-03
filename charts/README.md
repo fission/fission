@@ -68,6 +68,7 @@ Parameter | Description | Default
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 `executor.adoptExistingResources` | If true, executor will try to adopt existing resources created by the old executor instance. | `false`
 `router.deployAsDaemonSet` | Deploy router as DaemonSet instead of Deployment | `false`
+`router.extraCoreComponentPodConfig` | Extend the container specs for the router fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. Overrides the generic `extraCoreComponentPodConfig`| None
 `router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
 `router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
 `router.svcAnnotations` | Annotations for router service | None
