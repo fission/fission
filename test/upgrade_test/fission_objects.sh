@@ -40,13 +40,13 @@ install_stable_release () {
     --name-template fission \
     https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-all-${STABLE_VERSION}.tgz
     mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
-    sleep 5
+    sleep 10
  }
 
 create_fission_objects () {
     echo "Creating Fission objects"
     fission env create --name nodejs --image fission/node-env:latest
-    sleep 3
+    sleep 5
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
