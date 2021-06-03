@@ -1,0 +1,177 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
+  creationTimestamp: null
+  name: functions.fission.io
+spec:
+  group: fission.io
+  names:
+    kind: Function
+    listKind: FunctionList
+    plural: functions
+    shortNames:
+    - fn
+    singular: function
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Function is function runs within environment runtime with given package and secrets/configmaps.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: FunctionSpec describes the contents of the function.
+            properties:
+              InvokeStrategy:
+                description: InvokeStrategy is a set of controls which affect how function executes
+                properties:
+                  ExecutionStrategy:
+                    description: ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.
+                    properties:
+                      ExecutorType:
+                        description: "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\". \n Available value:  - poolmgr  - newdeploy"
+                        type: string
+                      MaxScale:
+                        description: This is only for newdeploy to set up maximum replicas of deployment.
+                        type: integer
+                      MinScale:
+                        description: This is only for newdeploy to set up minimum replicas of deployment.
+                        type: integer
+                      SpecializationTimeout:
+                        description: This is the timeout setting for executor to wait for pod specialization.
+                        type: integer
+                      TargetCPUPercent:
+                        description: This is only for newdeploy to set up target CPU utilization of HPA.
+                        type: integer
+                    type: object
+                  StrategyType:
+                    description: StrategyType is the strategy type of a function. Now it only supports 'execution'.
+                    type: string
+                type: object
+              concurrency:
+                description: Maximum number of pods to be specialized which will serve requests This is optional. If not specified default value will be taken as 500
+                type: integer
+              configmaps:
+                description: Reference to a list of configmaps.
+                items:
+                  description: ConfigMapReference is a reference to a kubernetes configmap.
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                nullable: true
+                type: array
+              environment:
+                description: Environment is the build and runtime environment that this function is associated with. An Environment with this name should exist, otherwise the function cannot be invoked.
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+              functionTimeout:
+                description: FunctionTimeout provides a maximum amount of duration within which a request for a particular function execution should be complete. This is optional. If not specified default value will be taken as 60s
+                type: integer
+              idletimeout:
+                description: IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.
+                type: integer
+              onceOnly:
+                description: OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request This is optional. If not specified default value will be taken as false
+                type: boolean
+              package:
+                description: Reference to a package containing deployment and optionally the source.
+                properties:
+                  functionName:
+                    description: "FunctionName specifies a specific function within the package. This allows functions to share packages, by having different functions within the same package. \n Fission itself does not interpret this path. It is passed verbatim to build and runtime environments. \n This is optional: if unspecified, the environment has a default name."
+                    type: string
+                  packageref:
+                    description: Package reference
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      resourceversion:
+                        description: Including resource version in the reference forces the function to be updated on package update, making it possible to cache the function based on its metadata.
+                        type: string
+                    type: object
+                type: object
+              requestsPerPod:
+                description: RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod This is optional. If not specified default value will be taken as 1
+                type: integer
+              resources:
+                description: cpu and memory resources as per K8S standards This is only for newdeploy to set up resource limitation when creating deployment for a function.
+                properties:
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: 'Limits describes the maximum amount of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                    type: object
+                type: object
+              secrets:
+                description: Reference to a list of secrets.
+                items:
+                  description: SecretReference is a reference to a kubernetes secret.
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                nullable: true
+                type: array
+            required:
+            - InvokeStrategy
+            - environment
+            - package
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

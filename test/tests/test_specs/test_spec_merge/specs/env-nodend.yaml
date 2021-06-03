@@ -5,18 +5,15 @@ metadata:
   name: nodend
   namespace: default
 spec:
-  TerminationGracePeriod: 360
+  terminationGracePeriod: 360
   builder: {}
   keeparchive: false
   poolsize: 0
   resources: {}
   runtime:
-    functionendpointport: 0
     image: fission/node-env
-    loadendpointpath: ""
-    loadendpointport: 0
     container:
-      name: nodehellond
+      name: nodend
       volumeMounts:
         - name: cvol
           mountPath: /etc/cvoldata
@@ -24,8 +21,8 @@ spec:
     podspec:
       hostname: foo-bar
       # A container which will be merged with for pool manager
-      Containers:
-      - name: nodehellond
+      containers:
+      - name: nodend
         image: fission/node-env
         volumeMounts:
           - name: funcvol

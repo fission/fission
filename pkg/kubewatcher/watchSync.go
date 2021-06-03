@@ -17,6 +17,7 @@ limitations under the License.
 package kubewatcher
 
 import (
+	"context"
 	"time"
 
 	"go.uber.org/zap"
@@ -46,12 +47,15 @@ func MakeWatchSync(logger *zap.Logger, client *crd.FissionClient, kubeWatcher *K
 func (ws *WatchSync) syncSvc() {
 	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(metav1.ListOptions{})
+		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err))
 		}
 
-		ws.kubeWatcher.Sync(watches.Items)
+		err = ws.kubeWatcher.Sync(watches.Items)
+		if err != nil {
+			ws.logger.Fatal("failed to sync watches", zap.Error(err))
+		}
 		time.Sleep(3 * time.Second)
 	}
 }

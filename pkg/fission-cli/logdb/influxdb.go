@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -129,6 +130,8 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 			}
 		}
 	}
+
+	sort.Sort(ByTimestamp(logEntries, filter.Reverse))
 
 	return logEntries, nil
 }

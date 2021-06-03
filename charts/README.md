@@ -43,10 +43,10 @@ Parameter | Description | Default
 `routerServiceType` | Type of Fission Router service to use. For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP. | `LoadBalancer`
 `repository` | Image base repository | `index.docker.io`
 `image` | Fission image repository | `fission/fission-bundle`
-`imageTag` | Fission image tag | `1.11.2`
+`imageTag` | Fission image tag | `1.12.0`
 `pullPolicy` | Image pull policy | `IfNotPresent`
 `fetcher.image` | Fission fetcher repository | `fission/fetcher`
-`fetcher.imageTag` | Fission fetcher image tag | `1.11.2`
+`fetcher.imageTag` | Fission fetcher image tag | `1.12.0`
 `controllerPort` | Fission Controller service port | `31313`
 `routerPort` | Fission Router service port | ` 31314`
 `functionNamespace` | Namespace in which to run fission functions (this is different from the release namespace) | `fission-function`
@@ -68,6 +68,7 @@ Parameter | Description | Default
 `extraCoreComponentPodConfig` | Extend the container specs for the core fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. | None
 `executor.adoptExistingResources` | If true, executor will try to adopt existing resources created by the old executor instance. | `false`
 `router.deployAsDaemonSet` | Deploy router as DaemonSet instead of Deployment | `false`
+`router.extraCoreComponentPodConfig` | Extend the container specs for the router fission pods. Can be used to add things like affinty/tolerations/nodeSelectors/etc. Overrides the generic `extraCoreComponentPodConfig`| None
 `router.svcAddressMaxRetries` | Max retries times for router to retry on a certain service URL returns from cache/executor | `5`
 `router.svcAddressUpdateTimeout` | The length of update lock expiry time for router to get a service URL returns from executor | `30`
 `router.svcAnnotations` | Annotations for router service | None

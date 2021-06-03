@@ -18,6 +18,7 @@ package kubewatcher
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,13 +112,13 @@ func (kw *KubeWatcher) svc() {
 			// Remove old watches
 			for uid, ws := range kw.watches {
 				if _, ok := newWatchUids[uid]; !ok {
-					kw.removeWatch(&ws.watch)
+					kw.removeWatch(&ws.watch) //nolint: errCheck
 				}
 			}
 			// Add new watches
 			for _, w := range req.watches {
 				if _, ok := kw.watches[w.ObjectMeta.UID]; !ok {
-					kw.addWatch(&w)
+					kw.addWatch(&w) //nolint: errCheck
 				}
 			}
 			req.responseChannel <- &kubeWatcherResponse{error: nil}
@@ -162,13 +163,13 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fv1.KubernetesWa
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.Spec.Type) {
 	case "POD":
-		wi, err = kubeClient.CoreV1().Pods(w.Spec.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().Pods(w.Spec.Namespace).Watch(context.TODO(), listOptions)
 	case "SERVICE":
-		wi, err = kubeClient.CoreV1().Services(w.Spec.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().Services(w.Spec.Namespace).Watch(context.TODO(), listOptions)
 	case "REPLICATIONCONTROLLER":
-		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Spec.Namespace).Watch(listOptions)
+		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Spec.Namespace).Watch(context.TODO(), listOptions)
 	case "JOB":
-		wi, err = kubeClient.BatchV1().Jobs(w.Spec.Namespace).Watch(listOptions)
+		wi, err = kubeClient.BatchV1().Jobs(w.Spec.Namespace).Watch(context.TODO(), listOptions)
 	default:
 		err = errors.NewBadRequest(fmt.Sprintf("Error: unknown obj type '%v'", w.Spec.Type))
 	}

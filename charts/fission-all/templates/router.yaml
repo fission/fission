@@ -65,13 +65,6 @@ spec:
             value: {{ .Values.debugEnv | quote }}
           - name: DISPLAY_ACCESS_LOG
             value: {{ .Values.router.displayAccessLog | default false | quote }}
-{{- if .Values.analytics }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.io/metrics"
-{{- else if .Values.analyticsNonHelmInstall }}
-          - name: ANALYTICS_URL
-            value: "https://g.fission.io/metrics"
-{{- end }}
         resources:
           {{- toYaml .Values.router.resources | indent 10 }}
         readinessProbe:
@@ -93,6 +86,10 @@ spec:
         - containerPort: 8888
           name: http
       serviceAccountName: fission-svc
+{{- if .Values.router.extraCoreComponentPodConfig }}
+{{ toYaml .Values.router.extraCoreComponentPodConfig | indent 6 -}}
+{{- else }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
 {{- end }}

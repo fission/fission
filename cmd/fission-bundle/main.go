@@ -256,7 +256,7 @@ Options:
 	defer logger.Sync()
 
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
-	arguments, err := docopt.Parse(usage, nil, true, version, false)
+	arguments, err := docopt.ParseArgs(usage, nil, version)
 	if err != nil {
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}

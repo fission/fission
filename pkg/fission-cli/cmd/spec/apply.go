@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-git/go-git/v5"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,6 +71,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 	deleteResources := input.Bool(flagkey.SpecDelete)
 	watchResources := input.Bool(flagkey.SpecWatch)
 	waitForBuild := input.Bool(flagkey.SpecWait)
+	validateSpecs := util.GetValidationFlag(input)
 
 	var watcher *fsnotify.Watcher
 	var pbw *packageBuildWatcher
@@ -115,9 +117,16 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, "error reading specs")
 		}
 
-		err = Validate(input)
+		if validateSpecs {
+			err = Validate(input)
+			if err != nil {
+				return errors.Wrap(err, "abort applying resources")
+			}
+		}
+
+		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
 		if err != nil {
-			return errors.Wrap(err, "abort applying resources")
+			console.Warn(err.Error())
 		}
 
 		// make changes to the cluster based on the specs
@@ -177,6 +186,30 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 				}
 			}
 		}
+	}
+
+	return nil
+}
+
+func warnIfDirtyWorkTree(path string) error {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		console.Info("Spec doesn't belong to Git Tree.")
+		return nil
+	}
+
+	workTree, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	status, err := workTree.Status()
+	if err != nil {
+		return err
+	}
+
+	if !status.IsClean() {
+		console.Warn("Worktree is not clean, please ensure you have committed the changes to git.")
 	}
 
 	return nil

@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -116,7 +117,7 @@ func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	funcs, err := a.fissionClient.CoreV1().Functions(ns).List(metav1.ListOptions{})
+	funcs, err := a.fissionClient.CoreV1().Functions(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -152,7 +153,7 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Create(&f)
+	fnew, err := a.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Create(context.TODO(), &f, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -176,7 +177,7 @@ func (a *API) FunctionApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	f, err := a.fissionClient.CoreV1().Functions(ns).Get(name, metav1.GetOptions{})
+	f, err := a.fissionClient.CoreV1().Functions(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -213,7 +214,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fnew, err := a.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Update(&f)
+	fnew, err := a.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Update(context.TODO(), &f, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -235,7 +236,7 @@ func (a *API) FunctionApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().Functions(ns).Delete(name, &metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().Functions(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -298,7 +299,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		podNs = ns
 	}
 
-	f, err := a.fissionClient.CoreV1().Functions(ns).Get(fnName, metav1.GetOptions{})
+	f, err := a.fissionClient.CoreV1().Functions(ns).Get(context.TODO(), fnName, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -310,7 +311,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 	}
-	podList, err := a.kubernetesClient.CoreV1().Pods(podNs).List(metav1.ListOptions{
+	podList, err := a.kubernetesClient.CoreV1().Pods(podNs).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
@@ -346,14 +347,17 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 		podLogOpts := apiv1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
 		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
 
-		podLogs, err := podLogsReq.Stream()
+		podLogs, err := podLogsReq.Stream(context.Background())
 		if err != nil {
 			return errors.Wrapf(err, "error streaming pod log")
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
 			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
-		w.Write([]byte(msg))
+		_, err = w.Write([]byte(msg))
+		if err != nil {
+			return errors.Wrap(err, "error writing response")
+		}
 
 		_, err = io.Copy(w, podLogs)
 		if err != nil {

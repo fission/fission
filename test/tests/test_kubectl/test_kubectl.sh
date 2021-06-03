@@ -14,6 +14,7 @@ ROOT=$(dirname $0)/../../..
 cd $ROOT/test/tests/test_kubectl
 
 cleanup() {
+    log "Cleaning up..."
     kubectl delete -f spec-yaml -R || true
 }
 
