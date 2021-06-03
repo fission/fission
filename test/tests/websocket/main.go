@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,10 +14,6 @@ func main() {
 		log.Fatal("FISSION_ROUTER variable is not set")
 	}
 	funcURL := "ws://" + router + "/fission-function/bs"
-	fmt.Println(funcURL)
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
 
 	conn, _, err := websocket.DefaultDialer.Dial(funcURL, nil)
 	if err != nil {
@@ -43,6 +37,7 @@ func main() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
+	stop := time.After(10 * time.Second)
 	for i := 0; i < 30; i++ {
 
 		select {
@@ -51,18 +46,16 @@ func main() {
 		case t := <-ticker.C:
 			err := conn.WriteMessage(websocket.TextMessage, []byte(t.String()))
 			if err != nil {
-				log.Println("write:", err)
-				return
+				log.Fatal("write:", err)
 			}
-		case <-interrupt:
-			log.Println("interrupt")
+		case <-stop:
+			log.Println("Closing")
 
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
-				log.Println("write close:", err)
-				return
+				log.Fatal("write close:", err)
 			}
 			select {
 			case <-done:
