@@ -4,7 +4,7 @@ set -eu
 ns="f-ns"
 ROOT=$(pwd)
 REPO="docker.io/library"
-PREV_PREV_STABLE_VERSION=1.12.0
+PREV_STABLE_VERSION=1.12.0
 HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
 
 getVersion () {
