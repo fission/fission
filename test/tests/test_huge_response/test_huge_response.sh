@@ -11,6 +11,7 @@ ROOT=$(dirname $0)/../../..
 pushd $ROOT/test/tests/test_huge_response
 
 cleanup() {
+    log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf response.json
     popd
