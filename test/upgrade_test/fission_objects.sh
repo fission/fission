@@ -36,7 +36,7 @@ install_stable_release () {
     --name-template fission \
     https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-all-${PREV_STABLE_VERSION}.tgz
     mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
-    sleep 10 #This sleep is required here to become all pods active. 
+    sleep 10 # This sleep is required here to become all pods active. 
  }
 
 create_fission_objects () {
