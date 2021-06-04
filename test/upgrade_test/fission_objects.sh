@@ -46,8 +46,7 @@ create_fission_objects () {
     echo "Creating function environment."
      if fission env create --name nodejs --image fission/node-env:latest
        then
-       echo "Function environemnt successfully created"
-       #sleep 5 
+       echo "Successfully created function environment"
        else
        echo "Environemnt creation failed"
     fi
@@ -56,8 +55,7 @@ create_fission_objects () {
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
-      echo "Function successfully created"
-      sleep 5
+      echo "Successfully created function"
       else
       echo "Function creation failed"
       exit
