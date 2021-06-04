@@ -40,18 +40,27 @@ install_stable_release () {
  }
 
 create_fission_objects () {
-    echo "Creating Fission objects"
-    fission env create --name nodejs --image fission/node-env:latest
-    sleep 5
+    echo "-----------------#########################################--------------------"
+    echo "                   Preparing for fission object creation"
+    echo "-----------------#########################################--------------------"
+    echo "Creating function environment."
+     if fission env create --name nodejs --image fission/node-env:latest
+       then
+       echo "Function environemnt successfully created"
+       sleep 5
+       else
+       echo "Function creation failed"
+    fi
+    
+    echo "Creating function"
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
-      echo "Success, function created successfully"
       else
       echo "Function creation failed"
       exit
     fi
-    sleep 2
+    sleep 5
  }
 
 test_fission_objects () {
