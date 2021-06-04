@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -220,19 +221,18 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			req.URL.Scheme = roundTripper.serviceURL.Scheme
 			req.URL.Host = roundTripper.serviceURL.Host
 
-			req.URL.Path = "/"
-			// if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil {
-			// 	functionNamespacedURL := "/" + fnMeta.Namespace + "/" + fnMeta.Name
-			// 	defaultNamespacedURL := "/fission-function/" + fnMeta.Name
-			// 	if strings.HasPrefix(req.URL.Path, functionNamespacedURL) || strings.HasPrefix(req.URL.Path, defaultNamespacedURL) {
-			// 		req.URL.Path = "/"
-			// 	} else {
-			// 		roundTripper.logger.Debug("Prefix is %v", zap.String("Prefix:", *roundTripper.funcHandler.httpTrigger.Spec.Prefix))
-			// 		req.URL.Path = strings.TrimPrefix(req.URL.Path, *roundTripper.funcHandler.httpTrigger.Spec.Prefix)
-			// 	}
-			// } else {
-			// 	req.URL.Path = "/"
-			// }
+			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil {
+				functionNamespacedURL := "/" + fnMeta.Namespace + "/" + fnMeta.Name
+				defaultNamespacedURL := "/fission-function/" + fnMeta.Name
+				if strings.HasPrefix(req.URL.Path, functionNamespacedURL) || strings.HasPrefix(req.URL.Path, defaultNamespacedURL) {
+					req.URL.Path = "/"
+				} else {
+					roundTripper.logger.Debug("Prefix is %v", zap.String("Prefix:", *roundTripper.funcHandler.httpTrigger.Spec.Prefix))
+					req.URL.Path = strings.TrimPrefix(req.URL.Path, *roundTripper.funcHandler.httpTrigger.Spec.Prefix)
+				}
+			} else {
+				req.URL.Path = "/"
+			}
 
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
