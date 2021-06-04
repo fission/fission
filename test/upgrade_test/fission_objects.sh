@@ -1,10 +1,10 @@
 #!/bin/bash
-set -e
+set -eu
 
 ns="f-ns"
 ROOT=$(pwd)
 REPO="docker.io/library"
-STABLE_VERSION=1.12.0
+PREV_PREV_STABLE_VERSION=1.12.0
 HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
 
 getVersion () {
@@ -19,10 +19,6 @@ getGitCommit () {
     echo $(git rev-parse HEAD)
 }
 
-getNameSpace () {
-    ns = $(cat ./namespace.txt)
-}
-
 dump_system_info () {
     echo "System Info"
     go version
@@ -34,12 +30,12 @@ dump_system_info () {
 install_stable_release () {
     echo "Creating namespace $ns"
     kubectl create ns $ns
-    echo "Installing Fission $STABLE_VERSION"
+    echo "Installing Fission $PREV_STABLE_VERSION"
     helm install \
     --namespace $ns \
     --name-template fission \
-    https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-all-${STABLE_VERSION}.tgz
-    mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
+    https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-all-${PREV_STABLE_VERSION}.tgz
+    mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
     sleep 10
  }
 
@@ -59,6 +55,8 @@ create_fission_objects () {
  }
 
 test_fission_objects () {
+    echo "list running fission functions"
+    fission fn list
     echo "Testing Fission objects."
     helm list -A
     kubectl get pods -A
