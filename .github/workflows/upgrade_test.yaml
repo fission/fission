@@ -37,7 +37,7 @@ jobs:
       run: |
         source ./test/upgrade_test/fission_objects.sh dump_system_info
 
-    - name: Install and configure old fission
+    - name: Install and configure previous stable fission
       run: |
         source ./test/upgrade_test/fission_objects.sh install_stable_release \
         && create_fission_objects \
