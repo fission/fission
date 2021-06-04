@@ -36,7 +36,7 @@ install_stable_release () {
     --name-template fission \
     https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-all-${PREV_STABLE_VERSION}.tgz
     mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
-    sleep 10
+    sleep 10 #This sleep is required here to become all pods active. 
  }
 
 create_fission_objects () {
@@ -47,9 +47,9 @@ create_fission_objects () {
      if fission env create --name nodejs --image fission/node-env:latest
        then
        echo "Function environemnt successfully created"
-       sleep 5
+       #sleep 5 
        else
-       echo "Function creation failed"
+       echo "Environemnt creation failed"
     fi
     
     echo "Creating function"
