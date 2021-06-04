@@ -60,6 +60,8 @@ create_fission_objects () {
 
 test_fission_objects () {
     echo "Testing Fission objects."
+    helm list -A
+    kubectl get pods -A
     if fission function test --name hello
       then
       echo "----------------------**********************-------------------------"
