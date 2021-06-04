@@ -1,11 +1,11 @@
 #!/bin/bash
-set -e
+set -eu
 
 ns="f-ns"
 ROOT=$(pwd)
 REPO="docker.io/library"
-STABLE_VERSION=1.12.0
-HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
+PREV_STABLE_VERSION=1.12.0
+HELM_VARS_LATEST_RELEASE="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
 
 getVersion () {
     echo $(git rev-parse HEAD)
@@ -19,10 +19,6 @@ getGitCommit () {
     echo $(git rev-parse HEAD)
 }
 
-getNameSpace () {
-    ns = $(cat ./namespace.txt)
-}
-
 dump_system_info () {
     echo "System Info"
     go version
@@ -34,32 +30,42 @@ dump_system_info () {
 install_stable_release () {
     echo "Creating namespace $ns"
     kubectl create ns $ns
-    echo "Installing Fission $STABLE_VERSION"
+    echo "Installing Fission $PREV_STABLE_VERSION"
     helm install \
     --namespace $ns \
     --name-template fission \
-    https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-all-${STABLE_VERSION}.tgz
-    mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
-    sleep 10
+    https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-all-${PREV_STABLE_VERSION}.tgz
+    mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
+    sleep 10 # This sleep is required here to become all pods active. 
  }
 
 create_fission_objects () {
-    echo "Creating Fission objects"
-    fission env create --name nodejs --image fission/node-env:latest
-    sleep 5
+    echo "-----------------#########################################--------------------"
+    echo "                   Preparing for fission object creation"
+    echo "-----------------#########################################--------------------"
+    echo "Creating function environment."
+     if fission env create --name nodejs --image fission/node-env:latest
+       then
+       echo "Successfully created function environment"
+       else
+       echo "Environemnt creation failed"
+    fi
+    
+    echo "Creating function"
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
-      echo "Success, function created successfully"
+      echo "Successfully created function"
       else
       echo "Function creation failed"
       exit
     fi
-    sleep 2
- }
+}
 
 test_fission_objects () {
-    echo "Testing Fission objects."
+    echo "-----------------###############################--------------------"
+    echo "                   Running fission object tests"
+    echo "-----------------###############################--------------------"
     if fission function test --name hello
       then
       echo "----------------------**********************-------------------------"
@@ -104,8 +110,7 @@ install_current_release () {
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
-    helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
-    sleep 10
+    helm upgrade --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission $ROOT/charts/fission-all
 }
 
 "$@"
