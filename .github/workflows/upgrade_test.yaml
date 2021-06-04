@@ -21,9 +21,6 @@ jobs:
       uses: Azure/setup-helm@v1
       with:
         version: v3.3.4
-    
-    - name: Update helm
-      run: helm repo add helm https://charts.helm.sh/stable 
 
     - name: Setup Skaffold 
       run: |
