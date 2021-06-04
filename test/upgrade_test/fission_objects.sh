@@ -5,7 +5,7 @@ ns="f-ns"
 ROOT=$(pwd)
 REPO="docker.io/library"
 PREV_STABLE_VERSION=1.12.0
-HELM_VARS="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
+HELM_VARS_LATEST_RELEASE="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks" 
 
 getVersion () {
     echo $(git rev-parse HEAD)
@@ -55,11 +55,9 @@ create_fission_objects () {
  }
 
 test_fission_objects () {
-    echo "list running fission functions"
-    fission fn list
-    echo "Testing Fission objects."
-    helm list -A
-    kubectl get pods -A
+    echo "-----------------###############################--------------------"
+    echo "                   Running fission object tests"
+    echo "-----------------###############################--------------------"
     if fission function test --name hello
       then
       echo "----------------------**********************-------------------------"
@@ -104,7 +102,7 @@ install_current_release () {
     echo "Running Fission upgrade"
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
-    helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
+    helm upgrade --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission $ROOT/charts/fission-all
     sleep 30
 }
 
