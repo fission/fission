@@ -56,12 +56,13 @@ create_fission_objects () {
     curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js
       then
+      echo "Function successfully created"
+      sleep 5
       else
       echo "Function creation failed"
       exit
     fi
-    sleep 5
- }
+}
 
 test_fission_objects () {
     echo "-----------------###############################--------------------"
