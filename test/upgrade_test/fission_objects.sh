@@ -105,7 +105,7 @@ install_current_release () {
     helm dependency update $ROOT/charts/fission-all
     kubectl replace -k crds/v1
     helm upgrade --namespace $ns --set $HELM_VARS fission $ROOT/charts/fission-all
-    sleep 30
+    sleep 5
 }
 
 "$@"
