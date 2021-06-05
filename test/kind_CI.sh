@@ -57,11 +57,11 @@ main() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     source $ROOT/test/run_test.sh \
-    #    $ROOT/test/tests/test_canary.sh \
+        $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
         $ROOT/test/tests/test_annotations.sh \
-    #    $ROOT/test/tests/test_archive_pruner.sh \
+        $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_buildermgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
@@ -72,7 +72,7 @@ main() {
         $ROOT/test/tests/test_internal_routes.sh \
         $ROOT/test/tests/test_logging/test_function_logs.sh \
         $ROOT/test/tests/test_node_hello_http.sh \
-    #    $ROOT/test/tests/test_package_command.sh \
+        $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
         $ROOT/test/tests/test_pass.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
@@ -86,21 +86,21 @@ main() {
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
 
-    # export JOBS=3
-    # source $ROOT/test/run_test.sh \
-    #     $ROOT/test/tests/test_backend_newdeploy.sh \
-    #     $ROOT/test/tests/test_fn_update/test_scale_change.sh \
-    #     $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
-    #     $ROOT/test/tests/test_environments/test_java_builder.sh \
-    #     $ROOT/test/tests/test_environments/test_java_env.sh \
-    #     $ROOT/test/tests/test_environments/test_nodejs_env.sh \
-    #     $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
-    #     $ROOT/test/tests/test_fn_update/test_env_update.sh \
-    #     $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
-    #     $ROOT/test/tests/test_fn_update/test_resource_change.sh \
-    #     $ROOT/test/tests/test_fn_update/test_secret_update.sh \
-    #     $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
-    #     $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh  
+    export JOBS=3
+    source $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_backend_newdeploy.sh \
+        $ROOT/test/tests/test_fn_update/test_scale_change.sh \
+        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
+        $ROOT/test/tests/test_environments/test_java_builder.sh \
+        $ROOT/test/tests/test_environments/test_java_env.sh \
+        $ROOT/test/tests/test_environments/test_nodejs_env.sh \
+        $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
+        $ROOT/test/tests/test_fn_update/test_env_update.sh \
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
+        $ROOT/test/tests/test_fn_update/test_resource_change.sh \
+        $ROOT/test/tests/test_fn_update/test_secret_update.sh \
+        $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
+        $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh  
 
     set -e
 
