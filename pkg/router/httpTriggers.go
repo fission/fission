@@ -168,7 +168,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		}
 		var ht *mux.Route
 
-		if trigger.Spec.Prefix != nil {
+		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).HandlerFunc(fh.handler)
 		} else {
 			ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
