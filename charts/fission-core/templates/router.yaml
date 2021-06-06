@@ -65,6 +65,8 @@ spec:
             value: {{ .Values.debugEnv | quote }}
           - name: DISPLAY_ACCESS_LOG
             value: {{ .Values.router.displayAccessLog | default false | quote }}
+        resources:
+          {{- toYaml .Values.router.resources | indent 10 }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
