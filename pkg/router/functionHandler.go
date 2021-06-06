@@ -221,19 +221,12 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			req.URL.Scheme = roundTripper.serviceURL.Scheme
 			req.URL.Host = roundTripper.serviceURL.Host
 
-			// if roundTripper.funcHandler.httpTrigger != nil {
-			// 	roundTripper.logger.Info("httpTrigger fieds",
-			// 		zap.Any("httpTrigger", roundTripper.funcHandler.httpTrigger),
-			// 	)
-			// }
-
 			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil && *roundTripper.funcHandler.httpTrigger.Spec.Prefix != "" {
 				defaultNamespacedURL := "/fission-function/" + fnMeta.Name
 				functionNamespacedURL := "/" + fnMeta.Namespace + "/" + fnMeta.Name
 				if strings.HasPrefix(req.URL.Path, defaultNamespacedURL) || strings.HasPrefix(req.URL.Path, functionNamespacedURL) {
 					req.URL.Path = "/"
 				} else {
-					// roundTripper.logger.Info("Prefix", zap.String("prefix", *roundTripper.funcHandler.httpTrigger.Spec.Prefix))
 					req.URL.Path = strings.TrimPrefix(req.URL.Path, *roundTripper.funcHandler.httpTrigger.Spec.Prefix)
 					if !strings.HasPrefix(req.URL.Path, "/") {
 						req.URL.Path = "/" + req.URL.Path
@@ -242,7 +235,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			} else {
 				req.URL.Path = "/"
 			}
-			// roundTripper.logger.Info("url finalized", zap.String("urlPath", req.URL.Path))
 
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
