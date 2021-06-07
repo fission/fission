@@ -113,6 +113,7 @@ var (
 	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests", DefaultValue: 500}
 	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod", DefaultValue: 1}
 	FnOnceOnly              = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime"}
+	FnSubUrl                = Flag{Type: String, Name: flagkey.FnSubUrl, Usage: "Sub URL to check if function internally support routing"}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: String, Name: flagkey.HtMethod, Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD", DefaultValue: http.MethodGet}
