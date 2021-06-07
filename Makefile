@@ -23,25 +23,27 @@ TAG ?= dev
 
 check: test-run build clean
 
-# run basic check scripts
-test-run:
+code-checks:
 	hack/verify-gofmt.sh
 	hack/verify-govet.sh
 	hack/verify-staticcheck.sh
+
+# run basic check scripts
+test-run: code-checks
 	hack/runtests.sh
 	@rm -f coverage.txt
 
 # ensure the changes are buildable
-build:
-	go build -o cmd/fission-bundle/fission-bundle ./cmd/fission-bundle/
-	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
+build: build-cli
 	go build -o cmd/fetcher/fetcher ./cmd/fetcher/
 	go build -o cmd/fetcher/builder ./cmd/builder/
 	go build -o cmd/reporter/reporter ./cmd/reporter/
 
-# install CLI binary to $PATH
-install-cli: build
-	mv cmd/fission-cli/fission $(GOPATH)/bin
+build-cli:
+	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
+
+install-cli: build-cli
+	mv cmd/fission-cli/fission /usr/local/bin
 
 verify-builder:
 	@./hack/buildx.sh
