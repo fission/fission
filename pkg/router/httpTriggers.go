@@ -207,7 +207,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			functionTimeoutMap:     fnTimeoutMap,
 			unTapServiceTimeout:    ts.unTapServiceTimeout,
 		}
-		muxRouter.HandleFunc(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace), fh.handler)
+		muxRouter.PathPrefix(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)).HandlerFunc(fh.handler)
 	}
 
 	// Healthz endpoint for the router.
