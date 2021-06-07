@@ -59,10 +59,14 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error getting HTTP trigger")
 	}
 
-	// TODO: add prefix support here
+	if input.IsSet(flagkey.HtUrl) && input.IsSet(flagkey.HtPrefix) {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
+	}
+
 	if input.IsSet(flagkey.HtUrl) {
 		ht.Spec.RelativeURL = input.String(flagkey.HtUrl)
 	}
+
 	if input.IsSet(flagkey.HtPrefix) {
 		prefix := input.String(flagkey.HtPrefix)
 		ht.Spec.Prefix = &prefix

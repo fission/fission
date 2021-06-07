@@ -221,16 +221,26 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			req.URL.Scheme = roundTripper.serviceURL.Scheme
 			req.URL.Host = roundTripper.serviceURL.Host
 
+			// With addition of routing support from functions if function supports routing,
+			// 1. we trim prefix url and forward request
+			// 2. otherwise we just keep default request to root path
+			// We leave the query string intact (req.URL.RawQuery) where as we manipuate
+			// req.URL.Path according to httpTrigger specification.
 			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil && *roundTripper.funcHandler.httpTrigger.Spec.Prefix != "" {
+				// If user is caling function with fission function test, we need to strip URL accordingly
 				defaultNamespacedURL := "/fission-function/" + fnMeta.Name
 				functionNamespacedURL := "/" + fnMeta.Namespace + "/" + fnMeta.Name
-				if strings.HasPrefix(req.URL.Path, defaultNamespacedURL) || strings.HasPrefix(req.URL.Path, functionNamespacedURL) {
-					req.URL.Path = "/"
+				prefixTrim := ""
+				if strings.HasPrefix(req.URL.Path, defaultNamespacedURL) {
+					prefixTrim = defaultNamespacedURL
+				} else if strings.HasPrefix(req.URL.Path, functionNamespacedURL) {
+					prefixTrim = functionNamespacedURL
 				} else {
-					req.URL.Path = strings.TrimPrefix(req.URL.Path, *roundTripper.funcHandler.httpTrigger.Spec.Prefix)
-					if !strings.HasPrefix(req.URL.Path, "/") {
-						req.URL.Path = "/" + req.URL.Path
-					}
+					prefixTrim = *roundTripper.funcHandler.httpTrigger.Spec.Prefix
+				}
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
+				if !strings.HasPrefix(req.URL.Path, "/") {
+					req.URL.Path = "/" + req.URL.Path
 				}
 			} else {
 				req.URL.Path = "/"

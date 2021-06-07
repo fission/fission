@@ -26,8 +26,10 @@ import (
 
 func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress {
 	// TODO: remove backward compatibility
-	// todo: consider prefix support
 	host, path := trigger.Spec.Host, trigger.Spec.RelativeURL
+	if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+		path = *trigger.Spec.Prefix
+	}
 	if len(trigger.Spec.IngressConfig.Host) > 0 && len(trigger.Spec.IngressConfig.Path) > 0 {
 		host, path = trigger.Spec.IngressConfig.Host, trigger.Spec.IngressConfig.Path
 	}

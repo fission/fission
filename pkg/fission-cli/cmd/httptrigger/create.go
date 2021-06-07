@@ -87,6 +87,15 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 	}
 
+	if !input.IsSet(flagkey.HtUrl) || !input.IsSet(flagkey.HtPrefix) {
+		console.Error("You need to supply either Prefix or URL/RelativeURL")
+		os.Exit(1)
+	}
+
+	if input.IsSet(flagkey.HtUrl) && input.IsSet(flagkey.HtPrefix) {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
+	}
+
 	triggerUrl := input.String(flagkey.HtUrl)
 	if triggerUrl == "/" {
 		return errors.New("url with only root path is not allowed")
@@ -95,13 +104,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	prefix := input.String(flagkey.HtPrefix)
-	if len(prefix) != 0 && len(triggerUrl) > 2 {
-		console.Warn("Prefix will take precedence over URL/RelativeURL")
-	}
-
-	if len(prefix) == 0 && len(triggerUrl) < 2 {
-		console.Error("You need to supply either Prefix or URL/RelativeURL")
-		os.Exit(1)
+	if prefix == "/" {
+		return errors.New("url with only root path is not allowed")
+	} else if !strings.HasPrefix(prefix, "/") {
+		triggerUrl = fmt.Sprintf("/%s", prefix)
 	}
 
 	method, err := GetMethod(input.String(flagkey.HtMethod))
