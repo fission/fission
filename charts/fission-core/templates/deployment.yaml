@@ -501,3 +501,31 @@ spec:
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
 {{- end }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ .Values.functionNamespace }}
+  name: event-fetcher
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["events"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-fetcher-pod-reader
+  namespace: {{ .Values.functionNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: event-fetcher
+subjects:
+- kind: ServiceAccount
+  name: fission-fetcher
+  namespace: {{ .Values.functionNamespace }}

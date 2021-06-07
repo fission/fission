@@ -571,6 +571,13 @@ func (e *Environment) Validate() error {
 		validateMetadata("Environment", e.ObjectMeta),
 		e.Spec.Validate())
 
+	if e.Spec.Runtime.PodSpec != nil {
+		for _, container := range e.Spec.Runtime.PodSpec.Containers {
+			if container.Command == nil && container.Image == e.Spec.Runtime.Image && container.Name != e.ObjectMeta.Name {
+				multierror.Append(result, fmt.Errorf("container with image same as runtime image in podspec, must have name same as environment name"))
+			}
+		}
+	}
 	return result.ErrorOrNil()
 }
 

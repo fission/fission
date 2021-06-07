@@ -239,7 +239,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
-		Name:                   fn.ObjectMeta.Name,
+		Name:                   env.ObjectMeta.Name,
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
@@ -312,7 +312,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
 	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
-		fn.ObjectMeta.Name,
+		env.ObjectMeta.Name,
 		fn,
 		env,
 	)
