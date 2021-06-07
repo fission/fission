@@ -18,7 +18,6 @@ package function
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -339,13 +338,13 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	// Allow the user to specify an HTTP trigger while creating a function.
 	triggerUrl := input.String(flagkey.HtUrl)
-	if len(triggerUrl) == 0 {
+	prefix := input.String(flagkey.HtPrefix)
+	if len(triggerUrl) == 0 && len(prefix) == 0 {
 		return nil
 	}
-	if !strings.HasPrefix(triggerUrl, "/") {
-		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
+	if len(prefix) != 0 && len(triggerUrl) > 0 {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
 	}
-
 	method, err := httptrigger.GetMethod(input.String(flagkey.HtMethod))
 	if err != nil {
 		return errors.Wrap(err, "error getting HTTP trigger method")
@@ -360,6 +359,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		// TODO: Add prefix support
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
+			Prefix:      &prefix,
 			Method:      method,
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,

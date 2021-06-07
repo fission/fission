@@ -63,6 +63,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.HtUrl) {
 		ht.Spec.RelativeURL = input.String(flagkey.HtUrl)
 	}
+	if input.IsSet(flagkey.HtPrefix) {
+		prefix := input.String(flagkey.HtPrefix)
+		ht.Spec.Prefix = &prefix
+	}
 
 	if input.IsSet(flagkey.HtMethod) {
 		ht.Spec.Method = input.String(flagkey.HtMethod)
@@ -99,10 +103,15 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if input.IsSet(flagkey.HtIngressRule) || input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
-		// TODO: add prefix support here
+		fallbackURL := ""
+		if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
+			fallbackURL = *ht.Spec.Prefix
+		} else {
+			fallbackURL = ht.Spec.RelativeURL
+		}
 		ingress, err := GetIngressConfig(
 			input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
-			input.String(flagkey.HtIngressTLS), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+			input.String(flagkey.HtIngressTLS), fallbackURL, &ht.Spec.IngressConfig)
 		if err != nil {
 			return errors.Wrap(err, "error parsing ingress configuration")
 		}

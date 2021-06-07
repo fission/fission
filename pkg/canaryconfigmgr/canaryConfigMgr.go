@@ -304,7 +304,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 		if failurePercent == -1 {
 			// this means there were no requests triggered to this url during this window. return here and check back
 			// during next iteration
-			canaryCfgMgr.logger.Info("total requests received for url is 0", zap.String("url", triggerObj.Spec.RelativeURL))
+			canaryCfgMgr.logger.Info("total requests received for url is 0", zap.String("url", urlPath))
 			return
 		}
 

@@ -417,6 +417,12 @@ func (spec HTTPTriggerSpec) Validate() error {
 		}
 	}
 
+	if spec.Prefix != nil && *spec.Prefix != "" && !strings.HasPrefix(*spec.Prefix, "/") {
+		result = multierror.Append(result, fmt.Errorf("leading / missing in HTTPTriggerSpec.Prefix"))
+	}
+	if spec.RelativeURL != "" && !strings.HasPrefix(spec.RelativeURL, "/") {
+		result = multierror.Append(result, fmt.Errorf("leading / missing in HTTPTriggerSpec.RelativeURL"))
+	}
 	result = multierror.Append(result, spec.IngressConfig.Validate())
 
 	return result.ErrorOrNil()

@@ -43,7 +43,7 @@ func Commands() *cobra.Command {
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,
 			flag.FnBuildCmd,
 
-			flag.HtUrl, flag.HtMethod,
+			flag.HtUrl, flag.HtPrefix, flag.HtMethod,
 
 			// flag for newdeploy to use.
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
