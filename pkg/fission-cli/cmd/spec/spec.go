@@ -567,6 +567,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		}
 
 		// TODO move to validator
+		// TODO add prefix support
 		if !strings.HasPrefix(v.Spec.RelativeURL, "/") {
 			v.Spec.RelativeURL = fmt.Sprintf("/%s", v.Spec.RelativeURL)
 		}

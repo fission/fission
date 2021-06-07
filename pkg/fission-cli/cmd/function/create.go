@@ -357,6 +357,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			Name:      triggerName,
 			Namespace: opts.function.ObjectMeta.Namespace,
 		},
+		// TODO: Add prefix support
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
 			Method:      method,

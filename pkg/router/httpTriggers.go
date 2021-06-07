@@ -177,7 +177,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		if trigger.Spec.Host != "" {
 			ht.Host(trigger.Spec.Host)
 		}
-		if trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
+		if trigger.Spec.Prefix == nil && trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
 			homeHandled = true
 		}
 	}

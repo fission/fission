@@ -59,6 +59,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error getting HTTP trigger")
 	}
 
+	// TODO: add prefix support here
 	if input.IsSet(flagkey.HtUrl) {
 		ht.Spec.RelativeURL = input.String(flagkey.HtUrl)
 	}
@@ -98,6 +99,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if input.IsSet(flagkey.HtIngressRule) || input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
+		// TODO: add prefix support here
 		ingress, err := GetIngressConfig(
 			input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
 			input.String(flagkey.HtIngressTLS), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)

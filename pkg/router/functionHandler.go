@@ -617,7 +617,11 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	}
 	if fh.httpTrigger != nil {
 		httpMetricLabels.host = fh.httpTrigger.Spec.Host
-		httpMetricLabels.path = fh.httpTrigger.Spec.RelativeURL
+		if fh.httpTrigger.Spec.Prefix != nil && *fh.httpTrigger.Spec.Prefix != "" {
+			httpMetricLabels.path = *fh.httpTrigger.Spec.Prefix
+		} else {
+			httpMetricLabels.path = fh.httpTrigger.Spec.RelativeURL
+		}
 	}
 
 	// Track metrics
