@@ -1,6 +1,7 @@
 name: Upgrade functionality test
 
-on: workflow_dispatch
+on: 
+ workflow_dispatch:
 
 jobs:
   
