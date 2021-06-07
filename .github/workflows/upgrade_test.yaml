@@ -1,10 +1,6 @@
 name: Upgrade functionality test
 
-on: 
-  push:
-    branches:
-      - master
-  workflow_dispatch:
+on: [workflow_dispatch]
 
 jobs:
   
