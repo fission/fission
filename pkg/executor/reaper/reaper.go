@@ -187,7 +187,7 @@ func CleanupRoleBindings(logger *zap.Logger, client *kubernetes.Clientset, fissi
 
 		logger.Debug("starting cleanupRoleBindings cycle")
 		// get all rolebindings ( just to be efficient, one call to kubernetes )
-		rbList, err := client.RbacV1beta1().RoleBindings(meta_v1.NamespaceAll).List(context.TODO(), meta_v1.ListOptions{})
+		rbList, err := client.RbacV1().RoleBindings(meta_v1.NamespaceAll).List(context.TODO(), meta_v1.ListOptions{})
 		if err != nil {
 			// something wrong, but next iteration hopefully succeeds
 			logger.Error("error listing role bindings in all namespaces", zap.Error(err))
