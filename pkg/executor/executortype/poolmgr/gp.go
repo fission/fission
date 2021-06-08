@@ -473,6 +473,17 @@ func (gp *GenericPool) createPool() error {
 
 	pod.Spec = *(util.ApplyImagePullSecret(gp.env.Spec.ImagePullSecret, pod.Spec))
 
+	var maxUnavailable, maxSurge intstr.IntOrString
+
+	if gp.env.Spec.RollingUpdate == nil {
+		// Defaults are same as upstream defaults so they match the OpenAPI description
+		maxUnavailable = intstr.FromString("25%")
+		maxSurge = intstr.FromString("25%")
+	} else {
+		maxSurge = intstr.FromString(gp.env.Spec.RollingUpdate.MaxSurge.String())
+		maxUnavailable = intstr.FromString(gp.env.Spec.RollingUpdate.MaxUnavailable.String())
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        gp.getPoolName(),
@@ -485,6 +496,13 @@ func (gp *GenericPool) createPool() error {
 				MatchLabels: deployLabels,
 			},
 			Template: pod,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
+				},
+			},
 		},
 	}
 

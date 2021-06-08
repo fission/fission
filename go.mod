@@ -18,6 +18,7 @@ require (
 	github.com/dchest/uniuri v0.0.0-20160212164326-8902c56451e9
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-units v0.4.0 // indirect
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.0
@@ -27,13 +28,16 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-ini/ini v1.62.0 // indirect
+	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/go-openapi/spec v0.19.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/googleapis/gnostic v0.5.1 // indirect
 	github.com/gorilla/mux v1.7.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/imdario/mergo v0.3.9
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
+	github.com/imdario/mergo v0.3.10
 	github.com/influxdata/influxdb v1.2.0
 	github.com/life1347/color v1.7.0
 	github.com/marstr/guid v1.1.0 // indirect
@@ -43,6 +47,8 @@ require (
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.6.0
 	github.com/nwaples/rardecode v1.1.0 // indirect
+	github.com/onsi/ginkgo v1.14.1 // indirect
+	github.com/onsi/gomega v1.10.2 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
@@ -57,14 +63,14 @@ require (
 	github.com/ulikunitz/xz v0.5.9 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.22.4
-	go.uber.org/zap v1.10.0
+	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
-	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	k8s.io/api v0.19.2
-	k8s.io/apiextensions-apiserver v0.19.2
-	k8s.io/apimachinery v0.19.2
-	k8s.io/client-go v0.19.2
+	k8s.io/api v0.20.2
+	k8s.io/apiextensions-apiserver v0.20.1
+	k8s.io/apimachinery v0.20.2
+	k8s.io/client-go v0.20.2
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.19.2
+	k8s.io/utils v0.0.0-20210111153108-fddb29f9d009 // indirect
 )

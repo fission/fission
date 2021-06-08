@@ -31,6 +31,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
@@ -39,6 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 	k8scache "k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -83,6 +85,9 @@ type (
 		pkgStore       k8sCache.Store
 		pkgController  k8sCache.Controller
 		podInformer    k8sCache.SharedIndexInformer
+
+		envStore      k8sCache.Store
+		envController k8sCache.Controller
 
 		defaultIdlePodReapTime time.Duration
 	}
@@ -142,7 +147,87 @@ func MakeGenericPoolManager(
 	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(kubernetesClient, 0, k8sInformers.WithNamespace(gpm.namespace))
 	gpm.podInformer = informerFactory.Core().V1().Pods().Informer()
 
+	gpm.envStore, gpm.envController = gpm.makeEnvController(gpm.fissionClient)
 	return gpm
+}
+
+func (gpm *GenericPoolManager) makeEnvController(fc *crd.FissionClient) (k8sCache.Store, k8sCache.Controller) {
+	resyncPeriod := 30 * time.Second
+	listWatch := k8sCache.NewListWatchFromClient(fc.CoreV1().RESTClient(), "environments", metav1.NamespaceAll, fields.Everything())
+	store, controller := k8sCache.NewInformer(listWatch, &fv1.Environment{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {},
+		DeleteFunc: func(obj interface{}) {
+
+			env := obj.(*fv1.Environment)
+
+			key := crd.CacheKey(&env.ObjectMeta)
+			klog.Info(key)
+			delete(gpm.pools, key)
+
+			nameLabel := "environmentName=" + env.Name
+			executortypeLabel := "executorType=" + string(fv1.ExecutorTypePoolmgr)
+			poolLabels := nameLabel + "," + executortypeLabel
+
+			dList, err := gpm.kubernetesClient.AppsV1().Deployments(apiv1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: poolLabels,
+			})
+			if err != nil {
+				klog.Error(err)
+			}
+
+			for _, d := range dList.Items {
+
+				deletePropagation := metav1.DeletePropagationBackground
+
+				err := gpm.kubernetesClient.AppsV1().Deployments(apiv1.NamespaceAll).Delete(context.TODO(), d.Name, metav1.DeleteOptions{
+					PropagationPolicy: &deletePropagation,
+				})
+
+				if err != nil {
+					gpm.logger.Error("error destroying deployment",
+						zap.Error(err),
+						zap.String("deployment_name", d.ObjectMeta.Name),
+						zap.String("deployment_namespace", d.Namespace))
+				}
+			}
+
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			newEnv := newObj.(*fv1.Environment)
+			oldEnv := oldObj.(*fv1.Environment)
+
+			nameLabel := "environmentName=" + newEnv.Name
+			executortypeLabel := "executorType=" + string(fv1.ExecutorTypePoolmgr)
+
+			poolLabels := nameLabel + "," + executortypeLabel
+			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
+			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
+				dList, err := gpm.kubernetesClient.AppsV1().Deployments(apiv1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+					LabelSelector: poolLabels,
+				})
+				if err != nil {
+					klog.Error(err)
+				}
+
+				for _, d := range dList.Items {
+
+					for _, containers := range d.Spec.Template.Spec.Containers {
+						if containers.Name == newEnv.Name {
+							containers.Image = newEnv.Spec.Runtime.Image
+						}
+					}
+					newD, err := gpm.kubernetesClient.AppsV1().Deployments(d.Namespace).Update(context.TODO(), &d, metav1.UpdateOptions{})
+					if err != nil {
+						klog.Error(err)
+					}
+					klog.Info(newD)
+				}
+
+			}
+		},
+	})
+
+	return store, controller
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
@@ -152,6 +237,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.funcController.Run(ctx.Done())
 	go gpm.pkgController.Run(ctx.Done())
 	go gpm.podInformer.Run(ctx.Done())
+	go gpm.envController.Run(ctx.Done())
 	go gpm.idleObjectReaper()
 }
 
@@ -477,19 +563,23 @@ func (gpm *GenericPoolManager) service() {
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
 				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(gpm.getEnvPoolsize(&env))
+				klog.Info(env.GetObjectMeta())
+				klog.Info("**************************************************************************")
+				klog.Info(latestEnvPoolsize)
 			}
-			for key, pool := range gpm.pools {
-				poolsize, ok := latestEnvPoolsize[key]
-				if !ok || poolsize == 0 {
-					// Env no longer exists or pool size changed to zero
+			// for key, pool := range gpm.pools {
+			// 	klog.Info(key)
+			// poolsize, _ := latestEnvPoolsize[key]
+			// if poolsize == 0 {
+			// 	// Env no longer exists or pool size changed to zero
 
-					gpm.logger.Info("destroying generic pool", zap.Any("environment", pool.env.ObjectMeta))
-					delete(gpm.pools, key)
+			// 	gpm.logger.Info("destroying generic pool", zap.Any("environment", pool.env.ObjectMeta))
+			// 	delete(gpm.pools, key)
 
-					// and delete the pool asynchronously.
-					go pool.destroy() //nolint errcheck
-				}
-			}
+			// 	// and delete the pool asynchronously.
+			// 	go pool.destroy() //nolint errcheck
+			// }
+			// }
 			// no response, caller doesn't wait
 		}
 	}
