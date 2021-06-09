@@ -19,7 +19,7 @@ else
 fi
 
 log "Creating websocket setup.."
-fission spec apply 
+fission spec apply --specdir=./test/tests/websocket/specs
 
 log "Testing websocket connection"
 go run main.go
