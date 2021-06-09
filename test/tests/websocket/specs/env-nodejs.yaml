@@ -17,7 +17,7 @@ spec:
       cpu: 10m
       memory: 80Mi
   runtime:
-    image: harshthakur/node-websocket:1    
+    image: fission/node-env:latest    
     podspec:
       containers:
         - name: nodejs
