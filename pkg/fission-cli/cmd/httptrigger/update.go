@@ -71,10 +71,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.New("url with only root path is not allowed")
 	}
 	if triggerUrl != "" && !strings.HasPrefix(triggerUrl, "/") {
-		return errors.New("leading / missing in url")
+		triggerUrl = "/" + triggerUrl
 	}
 	if prefix != "" && !strings.HasPrefix(prefix, "/") {
-		return errors.New("leading / missing in prefix url")
+		prefix = "/" + prefix
 	}
 
 	ht.Spec.RelativeURL = triggerUrl

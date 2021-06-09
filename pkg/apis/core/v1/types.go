@@ -651,10 +651,10 @@ type (
 		// +optional
 		RelativeURL string `json:"relativeurl"`
 
-		// Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL.
-		// Prefix takes precendence over RelativeURL
+		// Prefix with which functions are exposed.
+		// NOTE: Prefix takes precedence over URL/RelativeURL.
 		// Note that it does not treat slashes specially ("/foobar/" will be matched by
-		// the prefix "/foo") so you may want to use a trailing slash here.
+		// the prefix "/foobar").
 		// +optional
 		Prefix *string `json:"prefix,omitempty"`
 
