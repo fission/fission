@@ -9,7 +9,7 @@ source $(dirname $0)/../../utils.sh
 
 cleanup() {
     log "Deleting websocket setup"
-    fission spec destroy
+    fission spec destroy 
 }
 
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
@@ -22,4 +22,4 @@ log "Creating websocket setup.."
 fission spec apply --specdir=./test/tests/websocket/specs
 
 log "Testing websocket connection"
-go run main.go
+cd ./test/tests/websocket/ && go run main.go
