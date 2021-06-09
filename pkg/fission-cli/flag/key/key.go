@@ -66,7 +66,7 @@ const (
 	FnConcurrency           = "concurrency"
 	FnRequestsPerPod        = "requestsperpod"
 	FnOnceOnly              = "onceonly"
-	FnSubUrl                = "suburl"
+	FnSubPath               = "subpath"
 
 	HtName              = resourceName
 	HtMethod            = "method"

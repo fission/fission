@@ -62,12 +62,12 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		return err
 	}
 	fnURL := "http://127.0.0.1:" + localRouterPort + util.UrlForFunction(m.Name, m.Namespace)
-	if input.IsSet(flagkey.FnSubUrl) {
-		subUrl := input.String(flagkey.FnSubUrl)
-		if !strings.HasPrefix(subUrl, "/") {
-			fnURL = fnURL + "/" + subUrl
+	if input.IsSet(flagkey.FnSubPath) {
+		subPath := input.String(flagkey.FnSubPath)
+		if !strings.HasPrefix(subPath, "/") {
+			fnURL = fnURL + "/" + subPath
 		} else {
-			fnURL = fnURL + subUrl
+			fnURL = fnURL + subPath
 		}
 	}
 
