@@ -30,7 +30,6 @@ type requestType int
 const (
 	getValue requestType = iota
 	listAvailableValue
-	getTotalAvailable
 	setValue
 	markAvailable
 	deleteValue

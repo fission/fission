@@ -257,15 +257,21 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
-	gpm := poolmgr.MakeGenericPoolManager(
+	gpm, err := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID)
+	if err != nil {
+		return errors.Wrap(err, "pool manager creation faied")
+	}
 
-	ndm := newdeploy.MakeNewDeploy(
+	ndm, err := newdeploy.MakeNewDeploy(
 		logger,
 		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
 		functionNamespace, fetcherConfig, executorInstanceID)
+	if err != nil {
+		return errors.Wrap(err, "new deploy manager creation faied")
+	}
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName()] = gpm

@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -92,7 +91,7 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-) executortype.ExecutorType {
+) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -131,11 +130,13 @@ func MakeNewDeploy(
 		nd.envController = envController
 	}
 
-	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(kubernetesClient, 0, k8sInformers.WithNamespace(namespace))
+	informerFactory, err := utils.GetInformerFacoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
+	if err != nil {
+		return nil, err
+	}
 	nd.serviceInformer = informerFactory.Core().V1().Services().Informer()
 	nd.deploymentInformer = informerFactory.Apps().V1().Deployments().Informer()
-
-	return nd
+	return nd, nil
 }
 
 // Run start the function and environment controller along with an object reaper.
@@ -210,7 +211,7 @@ func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Servi
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
 		return service, err
 	}
 
@@ -227,7 +228,7 @@ func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.D
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		deployment, err := deploy.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(obj.Name, metav1.GetOptions{})
+		deployment, err := deploy.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
 		return deployment, err
 	}
 
