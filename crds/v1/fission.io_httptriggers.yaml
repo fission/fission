@@ -79,12 +79,14 @@ spec:
               method:
                 description: HTTP method to access a function.
                 type: string
+              prefix:
+                description: 'Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL. Note that it does not treat slashes specially ("/foobar/" will be matched by the prefix "/foobar").'
+                type: string
               relativeurl:
                 description: RelativeURL is the exposed URL for external client to access a function with.
                 type: string
             required:
             - functionref
-            - relativeurl
             type: object
         required:
         - metadata

@@ -317,10 +317,12 @@ func ShowHTTPTriggers(hts []fv1.HTTPTrigger) {
 				host = trigger.Spec.IngressConfig.Host
 			}
 			path := trigger.Spec.RelativeURL
+			if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+				path = *trigger.Spec.Prefix
+			}
 			if len(trigger.Spec.IngressConfig.Path) > 0 {
 				path = trigger.Spec.IngressConfig.Path
 			}
-
 			var msg []string
 			for k, v := range trigger.Spec.IngressConfig.Annotations {
 				msg = append(msg, fmt.Sprintf("%v: %v", k, v))

@@ -276,7 +276,13 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 
 	if triggerObj.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionWeights &&
 		triggerObj.Spec.FunctionReference.FunctionWeights[canaryConfig.Spec.NewFunction] != 0 {
-		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(triggerObj.Spec.RelativeURL, triggerObj.Spec.Method,
+		var urlPath string
+		if triggerObj.Spec.Prefix != nil && *triggerObj.Spec.Prefix != "" {
+			urlPath = *triggerObj.Spec.Prefix
+		} else {
+			urlPath = triggerObj.Spec.RelativeURL
+		}
+		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(urlPath, triggerObj.Spec.Method,
 			canaryConfig.Spec.NewFunction, canaryConfig.ObjectMeta.Namespace, canaryConfig.Spec.WeightIncrementDuration)
 
 		if err != nil {
@@ -298,7 +304,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 		if failurePercent == -1 {
 			// this means there were no requests triggered to this url during this window. return here and check back
 			// during next iteration
-			canaryCfgMgr.logger.Info("total requests received for url is 0", zap.String("url", triggerObj.Spec.RelativeURL))
+			canaryCfgMgr.logger.Info("total requests received for url is 0", zap.String("url", urlPath))
 			return
 		}
 
