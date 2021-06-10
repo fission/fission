@@ -540,6 +540,7 @@ run_all_tests() {
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
+        $ROOT/test/tests/websocket/test_ws.sh
     FAILURES=$?
 
     export JOBS=3

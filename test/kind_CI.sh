@@ -85,6 +85,7 @@ main() {
         $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh
+        $ROOT/test/tests/websocket/test_ws.sh
 
     export JOBS=3
     source $ROOT/test/run_test.sh \
