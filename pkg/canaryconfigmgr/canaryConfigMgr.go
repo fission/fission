@@ -282,9 +282,21 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 		} else {
 			urlPath = triggerObj.Spec.RelativeURL
 		}
-		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(urlPath, triggerObj.Spec.Method,
+		methods := triggerObj.Spec.Methods
+		if len(triggerObj.Spec.Method) > 0 {
+			present := false
+			for _, m := range triggerObj.Spec.Methods {
+				if m == triggerObj.Spec.Method {
+					present = true
+					break
+				}
+			}
+			if !present {
+				methods = append(methods, triggerObj.Spec.Method)
+			}
+		}
+		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(urlPath, methods,
 			canaryConfig.Spec.NewFunction, canaryConfig.ObjectMeta.Namespace, canaryConfig.Spec.WeightIncrementDuration)
-
 		if err != nil {
 			// silently ignore. wait for next window to increment weight
 			canaryCfgMgr.logger.Error("error calculating failure percentage",

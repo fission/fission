@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 
 	"github.com/emicklei/go-restful"
 	restfulspec "github.com/emicklei/go-restful-openapi"
@@ -136,7 +137,18 @@ func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger) error {
 		if ht.Spec.RelativeURL == t.Spec.RelativeURL || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
 			urlMatch = true
 		}
-		if urlMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
+		methodMatch := false
+		if ht.Spec.Method == t.Spec.Method && len(ht.Spec.Methods) == len(t.Spec.Methods) {
+			methodMatch = true
+			sort.Strings(ht.Spec.Methods)
+			sort.Strings(t.Spec.Methods)
+			for i, m1 := range ht.Spec.Methods {
+				if m1 != t.Spec.Methods[i] {
+					methodMatch = false
+				}
+			}
+		}
+		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return ferror.MakeError(ferror.ErrorNameExists,
 				fmt.Sprintf("HTTPTrigger with same Host, URL & method already exists (%v)",
 					ht.ObjectMeta.Name))

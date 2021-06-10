@@ -658,9 +658,14 @@ type (
 		// +optional
 		Prefix *string `json:"prefix,omitempty"`
 
+		// Deprecated: Use Methods instead of Method.
 		// HTTP method to access a function.
 		// +optional
 		Method string `json:"method"`
+
+		// HTTP methods to access a function
+		// +optional
+		Methods []string `json:"methods"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`

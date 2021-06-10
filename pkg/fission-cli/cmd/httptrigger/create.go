@@ -109,9 +109,16 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		prefix = "/" + prefix
 	}
 
-	method, err := GetMethod(input.String(flagkey.HtMethod))
-	if err != nil {
-		return err
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP methods not mentioned")
+	}
+
+	for _, method := range methods {
+		_, err := GetMethod(method)
+		if err != nil {
+			return err
+		}
 	}
 
 	// For Specs, the spec validate checks for function reference
@@ -161,7 +168,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		Spec: fv1.HTTPTriggerSpec{
 			Host:              host,
 			RelativeURL:       triggerUrl,
-			Method:            method,
+			Methods:           methods,
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
@@ -220,7 +227,7 @@ func GetMethod(method string) (string, error) {
 	case http.MethodTrace:
 		return http.MethodTrace, nil
 	default:
-		return "", fmt.Errorf("invalid or unsupported HTTP Method %v", method)
+		return "", fmt.Errorf("invalid or unsupported HTTP Method '%v'", method)
 	}
 }
 

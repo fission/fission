@@ -109,9 +109,19 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		defer closeCtx()
 	}
 
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP method not mentioned")
+	} else if len(methods) > 1 {
+		return errors.New("More than one HTTP method not supported")
+	}
+	method, err := httptrigger.GetMethod(methods[0])
+	if err != nil {
+		return err
+	}
 	resp, err := doHTTPRequest(ctx, functionUrl.String(),
 		input.StringSlice(flagkey.FnTestHeader),
-		input.String(flagkey.HtMethod),
+		method,
 		input.String(flagkey.FnTestBody))
 	if err != nil {
 		return err
