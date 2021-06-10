@@ -132,7 +132,11 @@ func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger) error {
 			// Same resource. No need to check.
 			continue
 		}
-		if ht.Spec.RelativeURL == t.Spec.RelativeURL && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
+		urlMatch := false
+		if ht.Spec.RelativeURL == t.Spec.RelativeURL || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
+			urlMatch = true
+		}
+		if urlMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return ferror.MakeError(ferror.ErrorNameExists,
 				fmt.Sprintf("HTTPTrigger with same Host, URL & method already exists (%v)",
 					ht.ObjectMeta.Name))
