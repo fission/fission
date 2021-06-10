@@ -1108,7 +1108,7 @@ spec:
         - name: STAN_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.nats_steaming.image }}:{{ .Values.mqt_keda.connector_images.nats_steaming.tag }}"
         - name: GCP-PUBSUB_IMAGE
-          value: "{{ .Values.mqt_keda.connector_images.gcp-pub-sub.image }}:{{ .Values.mqt_keda.connector_images.gcp-pub-sub.tag }}"
+          value: "{{ .Values.mqt_keda.connector_images.gcp_pub_sub.image }}:{{ .Values.mqt_keda.connector_images.gcp-pub-sub.tag }}"
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
