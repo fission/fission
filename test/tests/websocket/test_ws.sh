@@ -12,6 +12,8 @@ cleanup() {
     fission spec destroy 
 }
 
+DIR=$(dirname $0)
+
 if [ -z "${TEST_NOCLEANUP:-}" ]; then
     trap cleanup EXIT
 else
@@ -19,7 +21,7 @@ else
 fi
 
 log "Creating websocket setup.."
-fission spec apply --specdir=./test/tests/websocket/specs
+fission spec apply --specdir=$DIR/specs
 
 log "Testing websocket connection"
-cd ./test/tests/websocket/ && go run main.go
+cd $DIR && go run main.go
