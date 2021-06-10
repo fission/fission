@@ -1102,11 +1102,13 @@ spec:
         - name: RABBITMQ_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.rabbitmq.image }}:{{ .Values.mqt_keda.connector_images.rabbitmq.tag }}"
         - name: AWS-KINESIS-STREAM_IMAGE
-          value: "{{ .Values.mqt_keda.connector_images.awskinesis.image }}:{{ .Values.mqt_keda.connector_images.awskinesis.tag }}"           
+          value: "{{ .Values.mqt_keda.connector_images.awskinesis.image }}:{{ .Values.mqt_keda.connector_images.awskinesis.tag }}"
         - name: AWS-SQS-QUEUE_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.aws_sqs.image }}:{{ .Values.mqt_keda.connector_images.aws_sqs.tag }}"
         - name: STAN_IMAGE
-          value: "{{ .Values.mqt_keda.connector_images.nats_steaming.image }}:{{ .Values.mqt_keda.connector_images.nats_steaming.tag }}"          
+          value: "{{ .Values.mqt_keda.connector_images.nats_steaming.image }}:{{ .Values.mqt_keda.connector_images.nats_steaming.tag }}"
+        - name: GCP-PUBSUB_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.gcp-pub-sub.image }}:{{ .Values.mqt_keda.connector_images.gcp-pub-sub.tag }}"
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
