@@ -15,12 +15,8 @@ check_platform() {
     fi
 }
 
+PLATFORMS=($(echo "$@" | tr ',' '\n'))
 create_docker_builder
-PLATFORMS=(
-    linux/amd64
-    linux/arm6455
-    linux/arm/v7
-)
 for platform in "${PLATFORMS[@]}"; do
     check_platform $platform
 done

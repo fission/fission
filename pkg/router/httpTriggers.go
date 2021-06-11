@@ -166,13 +166,18 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				fh.function = fn
 			}
 		}
+		var ht *mux.Route
 
-		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+			ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).HandlerFunc(fh.handler)
+		} else {
+			ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+		}
 		ht.Methods(trigger.Spec.Method)
 		if trigger.Spec.Host != "" {
 			ht.Host(trigger.Spec.Host)
 		}
-		if trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
+		if trigger.Spec.Prefix == nil && trigger.Spec.RelativeURL == "/" && trigger.Spec.Method == "GET" {
 			homeHandled = true
 		}
 	}
@@ -202,7 +207,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			functionTimeoutMap:     fnTimeoutMap,
 			unTapServiceTimeout:    ts.unTapServiceTimeout,
 		}
-		muxRouter.HandleFunc(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace), fh.handler)
+		muxRouter.PathPrefix(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)).HandlerFunc(fh.handler)
 	}
 
 	// Healthz endpoint for the router.

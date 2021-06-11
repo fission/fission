@@ -342,3 +342,11 @@ func UpdateMapFromStringSlice(dataMap *map[string]string, params []string) bool 
 	}
 	return updated
 }
+
+func UrlForFunction(name, namespace string) string {
+	prefix := "/fission-function"
+	if namespace != metav1.NamespaceDefault {
+		prefix = fmt.Sprintf("/fission-function/%s", namespace)
+	}
+	return fmt.Sprintf("%v/%v", prefix, name)
+}

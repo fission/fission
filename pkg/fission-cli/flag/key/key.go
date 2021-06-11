@@ -66,6 +66,7 @@ const (
 	FnConcurrency           = "concurrency"
 	FnRequestsPerPod        = "requestsperpod"
 	FnOnceOnly              = "onceonly"
+	FnSubPath               = "subpath"
 
 	HtName              = resourceName
 	HtMethod            = "method"
@@ -78,6 +79,7 @@ const (
 	HtFnName            = "function"
 	HtFnWeight          = "weight"
 	HtFilter            = HtFnName
+	HtPrefix            = "prefix"
 
 	TtName   = resourceName
 	TtCron   = "cron"

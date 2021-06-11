@@ -19,6 +19,7 @@ package httptrigger
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -87,10 +88,25 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)
-	if triggerUrl == "/" {
+	prefix := input.String(flagkey.HtPrefix)
+
+	if triggerUrl == "" && prefix == "" {
+		console.Error("You need to supply either Prefix or URL/RelativeURL")
+		os.Exit(1)
+	}
+
+	if triggerUrl != "" && prefix != "" {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
+	}
+
+	if triggerUrl == "/" || prefix == "/" {
 		return errors.New("url with only root path is not allowed")
-	} else if !strings.HasPrefix(triggerUrl, "/") {
-		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
+	}
+	if triggerUrl != "" && !strings.HasPrefix(triggerUrl, "/") {
+		triggerUrl = "/" + triggerUrl
+	}
+	if prefix != "" && !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
 	}
 
 	method, err := GetMethod(input.String(flagkey.HtMethod))
@@ -149,6 +165,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
+			Prefix:            &prefix,
 		},
 	}
 

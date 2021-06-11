@@ -566,11 +566,6 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 
-		// TODO move to validator
-		if !strings.HasPrefix(v.Spec.RelativeURL, "/") {
-			v.Spec.RelativeURL = fmt.Sprintf("/%s", v.Spec.RelativeURL)
-		}
-
 		m = &v.ObjectMeta
 		fr.HttpTriggers = append(fr.HttpTriggers, v)
 	case "KubernetesWatchTrigger":
