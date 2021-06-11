@@ -36,7 +36,6 @@ import (
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -174,7 +173,7 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 
 func (gp *GenericPool) updateCPUUtilizationSvc() {
 	for {
-		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.TODO(), v1.ListOptions{
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: "managed=false",
 		})
 
