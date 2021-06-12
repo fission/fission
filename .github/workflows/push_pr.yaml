@@ -41,7 +41,7 @@ jobs:
 
   integration-test:
     name: Integration test
-    needs: ci-checks
+    needs: unit-tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
