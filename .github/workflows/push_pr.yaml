@@ -30,15 +30,6 @@ jobs:
       - name: Run unit tests
         run: ./hack/runtests.sh
 
-      - name: Helm installation
-        uses: Azure/setup-helm@v1
-        with:
-          version: v3.3.4
-
-      - name: Lint charts
-        run: |
-          helm lint charts/fission-all/ charts/fission-core/
-
   integration-test:
     name: Integration test
     runs-on: ubuntu-latest
@@ -57,11 +48,10 @@ jobs:
         with:
           go-version: "1.15.12"
 
-      - name: Build and Install Fission CLI
+      - name: Install Fission CLI
         run: |
           go build -o fission cmd/fission-cli/main.go
           sudo mv fission /usr/local/bin
-          fission version
 
       - name: Kind Clutser
         uses: engineerd/setup-kind@v0.5.0
@@ -80,6 +70,10 @@ jobs:
         with:
           version: v3.3.4
 
+      - name: Lint charts
+        run: |
+          helm lint charts/fission-all/ charts/fission-core/
+
       - name: Helm update
         run: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
@@ -94,6 +88,10 @@ jobs:
           kubectl create ns fission
           kubectl create -k crds/v1
           skaffold run -p kind-ci
+
+      - name: Fission version
+        run: |
+          fission version
 
       - name: Port-forward fission components
         run: |

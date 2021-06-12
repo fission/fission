@@ -35,16 +35,16 @@ echo "Pulling env and builder images"
 parallel \
     --retries 8 \
     --joblog - \
-    --jobs 3 \
+    --jobs 4 \
     --timeout 600 \
-    'docker pull -q {} &&  kind load docker-image {}' \
+    'docker pull -q {} &&  kind load docker-image {} && docker rmi {}' \
     ::: $NODE_BUILDER_IMAGE $PYTHON_RUNTIME_IMAGE $PYTHON_BUILDER_IMAGE $JVM_RUNTIME_IMAGE \
     $JVM_BUILDER_IMAGE $JVM_JERSEY_RUNTIME_IMAGE $JVM_JERSEY_BUILDER_IMAGE \
     $GO_RUNTIME_IMAGE  $GO_BUILDER_IMAGE $TS_RUNTIME_IMAGE
 
 docker system prune -a -f
 echo "Successfully pull env and builder images"
-
+exit 0
 # run tests without newdeploy in parallel.
 
 export FAILURES=0
