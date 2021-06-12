@@ -44,7 +44,7 @@ parallel \
 
 docker system prune -a -f
 echo "Successfully pull env and builder images"
-exit 0
+
 # run tests without newdeploy in parallel.
 
 export FAILURES=0
