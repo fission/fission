@@ -665,7 +665,7 @@ type (
 
 		// HTTP methods to access a function
 		// +optional
-		Methods []string `json:"methods"`
+		Methods []string `json:"methods,omitempty"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`
