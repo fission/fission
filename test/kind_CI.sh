@@ -35,9 +35,9 @@ echo "Pulling env and builder images"
 parallel \
     --retries 8 \
     --joblog - \
-    --jobs 4 \
+    --jobs 3 \
     --timeout 600 \
-    'docker pull {} &&  kind load docker-image {}' \
+    'docker pull -q {} &&  kind load docker-image {}' \
     ::: $NODE_BUILDER_IMAGE $PYTHON_RUNTIME_IMAGE $PYTHON_BUILDER_IMAGE $JVM_RUNTIME_IMAGE \
     $JVM_BUILDER_IMAGE $JVM_JERSEY_RUNTIME_IMAGE $JVM_JERSEY_BUILDER_IMAGE \
     $GO_RUNTIME_IMAGE  $GO_BUILDER_IMAGE $TS_RUNTIME_IMAGE
