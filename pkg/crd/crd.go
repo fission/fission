@@ -19,7 +19,6 @@ package crd
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
@@ -43,12 +42,10 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 	for _, crdName := range crdsExpected {
 		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err != nil {
-			errs := multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
-			log.Fatal(errs)
+			errs = multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
 		}
 		if crd == nil {
-			errs := multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
-			log.Fatal(errs)
+			errs = multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
 		}
 	}
 	return errs.ErrorOrNil()
