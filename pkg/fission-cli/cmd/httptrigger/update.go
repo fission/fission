@@ -18,6 +18,7 @@ package httptrigger
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,12 +60,35 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error getting HTTP trigger")
 	}
 
-	if input.IsSet(flagkey.HtUrl) {
-		ht.Spec.RelativeURL = input.String(flagkey.HtUrl)
+	triggerUrl := input.String(flagkey.HtUrl)
+	prefix := input.String(flagkey.HtPrefix)
+
+	if triggerUrl != "" && prefix != "" {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
 	}
 
-	if input.IsSet(flagkey.HtMethod) {
-		ht.Spec.Method = input.String(flagkey.HtMethod)
+	if triggerUrl == "/" || prefix == "/" {
+		return errors.New("url with only root path is not allowed")
+	}
+	if triggerUrl != "" && !strings.HasPrefix(triggerUrl, "/") {
+		triggerUrl = "/" + triggerUrl
+	}
+	if prefix != "" && !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+
+	ht.Spec.RelativeURL = triggerUrl
+	ht.Spec.Prefix = &prefix
+
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) > 0 {
+		for _, method := range methods {
+			_, err := GetMethod(method)
+			if err != nil {
+				return err
+			}
+		}
+		ht.Spec.Methods = methods
 	}
 
 	if input.IsSet(flagkey.HtFnName) {
@@ -98,9 +122,15 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if input.IsSet(flagkey.HtIngressRule) || input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
+		fallbackURL := ""
+		if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
+			fallbackURL = *ht.Spec.Prefix
+		} else {
+			fallbackURL = ht.Spec.RelativeURL
+		}
 		ingress, err := GetIngressConfig(
 			input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
-			input.String(flagkey.HtIngressTLS), ht.Spec.RelativeURL, &ht.Spec.IngressConfig)
+			input.String(flagkey.HtIngressTLS), fallbackURL, &ht.Spec.IngressConfig)
 		if err != nil {
 			return errors.Wrap(err, "error parsing ingress configuration")
 		}

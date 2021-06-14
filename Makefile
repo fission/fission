@@ -20,6 +20,7 @@ PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 # Repository prefix and tag to push multi-architecture images to.
 REPO ?= fission
 TAG ?= dev
+DOCKER_FLAGS ?= --push --progress plain
 
 check: test-run build clean
 
@@ -46,7 +47,7 @@ install-cli: build-cli
 	mv cmd/fission-cli/fission /usr/local/bin
 
 verify-builder:
-	@./hack/buildx.sh
+	@./hack/buildx.sh $(PLATFORMS)
 
 # build images (environment images are not included)
 image:
@@ -56,27 +57,22 @@ image:
 	docker build -t reporter -f cmd/builder/Dockerfile.reporter .
 
 # build multi-architecture images for release.
-image-multiarch: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) --push -f cmd/fission-bundle/Dockerfile.fission-bundle .
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/preupgradechecks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
+image-multiarch: verify-builder multiarch-bundle multiarch-fetcher multiarch-builder multiarch-preupgrade multiarch-reporter
 
 multiarch-bundle: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) --push -f cmd/fission-bundle/Dockerfile.fission-bundle .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) $(DOCKER_FLAGS) -f cmd/fission-bundle/Dockerfile.fission-bundle .
 
 multiarch-fetcher: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) --push -f cmd/fetcher/Dockerfile.fission-fetcher .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) $(DOCKER_FLAGS) -f cmd/fetcher/Dockerfile.fission-fetcher .
 
 multiarch-builder: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) --push -f cmd/builder/Dockerfile.fission-builder .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) $(DOCKER_FLAGS) -f cmd/builder/Dockerfile.fission-builder .
 
 multiarch-preupgrade: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/pre-upgrade-checks:$(TAG) --push -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks . 
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/pre-upgrade-checks:$(TAG) $(DOCKER_FLAGS) -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
 
 multiarch-reporter: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) --push -f cmd/reporter/Dockerfile.reporter .
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) $(DOCKER_FLAGS)  -f cmd/reporter/Dockerfile.reporter .
 
 generate-crds:
 	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  paths=./pkg/apis/core/v1  output:crd:artifacts:config=crds/v1

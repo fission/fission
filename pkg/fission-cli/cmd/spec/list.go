@@ -317,18 +317,28 @@ func ShowHTTPTriggers(hts []fv1.HTTPTrigger) {
 				host = trigger.Spec.IngressConfig.Host
 			}
 			path := trigger.Spec.RelativeURL
+			if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+				path = *trigger.Spec.Prefix
+			}
 			if len(trigger.Spec.IngressConfig.Path) > 0 {
 				path = trigger.Spec.IngressConfig.Path
 			}
-
 			var msg []string
 			for k, v := range trigger.Spec.IngressConfig.Annotations {
 				msg = append(msg, fmt.Sprintf("%v: %v", k, v))
 			}
 			ann := strings.Join(msg, ", ")
 
+			methods := []string{}
+			if len(trigger.Spec.Method) > 0 {
+				methods = append(methods, trigger.Spec.Method)
+			}
+			if len(trigger.Spec.Methods) > 0 {
+				methods = trigger.Spec.Methods
+			}
+
 			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				trigger.ObjectMeta.Name, trigger.Spec.Method, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
+				trigger.ObjectMeta.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()

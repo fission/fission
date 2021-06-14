@@ -35,10 +35,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
-	k8scache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -105,7 +103,7 @@ func MakeGenericPoolManager(
 	metricsClient *metricsclient.Clientset,
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
-	instanceID string) executortype.ExecutorType {
+	instanceID string) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
 
@@ -139,10 +137,12 @@ func MakeGenericPoolManager(
 
 	gpm.pkgStore, gpm.pkgController = gpm.makePkgController(gpm.fissionClient, gpm.kubernetesClient, gpm.namespace)
 
-	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(kubernetesClient, 0, k8sInformers.WithNamespace(gpm.namespace))
+	informerFactory, err := utils.GetInformerFacoryByExecutor(gpm.kubernetesClient, fv1.ExecutorTypePoolmgr)
+	if err != nil {
+		return nil, err
+	}
 	gpm.podInformer = informerFactory.Core().V1().Pods().Informer()
-
-	return gpm
+	return gpm, nil
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
@@ -210,7 +210,7 @@ func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod
 		item, exists, err = store.GetByKey(fmt.Sprintf("%s/%s", obj.Namespace, obj.Name))
 	}
 
-	if !exists {
+	if err != nil || !exists {
 		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performace issues for your function.")
 		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
 		return pod, err
@@ -701,8 +701,8 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
 func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes.Clientset) {
 
-	informer := k8scache.NewSharedInformer(
-		&k8scache.ListWatch{
+	informer := k8sCache.NewSharedInformer(
+		&k8sCache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
@@ -718,7 +718,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 
 	stopper := make(chan struct{})
 	defer close(stopper)
-	informer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+	informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			mObj := obj.(metav1.Object)
 			gpm.logger.Info("Websocket event detected for pod",
@@ -737,8 +737,8 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
 func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubernetes.Clientset) {
 
-	informer := k8scache.NewSharedInformer(
-		&k8scache.ListWatch{
+	informer := k8sCache.NewSharedInformer(
+		&k8sCache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
 				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
@@ -754,7 +754,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 
 	stopper := make(chan struct{})
 	defer close(stopper)
-	informer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+	informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			mObj := obj.(metav1.Object)
 			gpm.logger.Info("Inactive event detected for pod",

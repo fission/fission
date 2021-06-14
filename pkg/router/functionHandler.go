@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -40,6 +41,7 @@ import (
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -231,12 +233,26 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			req.URL.Scheme = roundTripper.serviceURL.Scheme
 			req.URL.Host = roundTripper.serviceURL.Host
 
-			// To keep the function run container simple, it
-			// doesn't do any routing.  In the future if we have
-			// multiple functions per container, we could use the
-			// function metadata here.
-			// leave the query string intact (req.URL.RawQuery)
-			req.URL.Path = "/"
+			// With addition of routing support from functions if function supports routing,
+			// 1. we trim prefix url and forward request
+			// 2. otherwise we just keep default request to root path
+			// We leave the query string intact (req.URL.RawQuery) where as we manipuate
+			// req.URL.Path according to httpTrigger specification.
+			prefixTrim := ""
+			functionURL := utils.UrlForFunction(fnMeta.Name, fnMeta.Namespace)
+			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil && *roundTripper.funcHandler.httpTrigger.Spec.Prefix != "" {
+				prefixTrim = *roundTripper.funcHandler.httpTrigger.Spec.Prefix
+			} else if strings.HasPrefix(req.URL.Path, functionURL) {
+				prefixTrim = functionURL
+			}
+			if prefixTrim != "" {
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
+				if !strings.HasPrefix(req.URL.Path, "/") {
+					req.URL.Path = "/" + req.URL.Path
+				}
+			} else {
+				req.URL.Path = "/"
+			}
 
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
@@ -695,7 +711,11 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	}
 	if fh.httpTrigger != nil {
 		httpMetricLabels.host = fh.httpTrigger.Spec.Host
-		httpMetricLabels.path = fh.httpTrigger.Spec.RelativeURL
+		if fh.httpTrigger.Spec.Prefix != nil && *fh.httpTrigger.Spec.Prefix != "" {
+			httpMetricLabels.path = *fh.httpTrigger.Spec.Prefix
+		} else {
+			httpMetricLabels.path = fh.httpTrigger.Spec.RelativeURL
+		}
 	}
 
 	// Track metrics

@@ -18,7 +18,6 @@ package function
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -62,14 +61,17 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	routerURL = "127.0.0.1:" + localRouterPort
-
-	fnUri := m.Name
-	if m.Namespace != metav1.NamespaceDefault {
-		fnUri = fmt.Sprintf("%v/%v", m.Namespace, m.Name)
+	fnURL := "http://127.0.0.1:" + localRouterPort + util.UrlForFunction(m.Name, m.Namespace)
+	if input.IsSet(flagkey.FnSubPath) {
+		subPath := input.String(flagkey.FnSubPath)
+		if !strings.HasPrefix(subPath, "/") {
+			fnURL = fnURL + "/" + subPath
+		} else {
+			fnURL = fnURL + subPath
+		}
 	}
 
-	functionUrl, err := url.Parse(fmt.Sprintf("http://%s/fission-function/%s", routerURL, fnUri))
+	functionUrl, err := url.Parse(fnURL)
 	if err != nil {
 		return err
 	}
@@ -107,9 +109,19 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		defer closeCtx()
 	}
 
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP method not mentioned")
+	} else if len(methods) > 1 {
+		return errors.New("More than one HTTP method not supported")
+	}
+	method, err := httptrigger.GetMethod(methods[0])
+	if err != nil {
+		return err
+	}
 	resp, err := doHTTPRequest(ctx, functionUrl.String(),
 		input.StringSlice(flagkey.FnTestHeader),
-		input.String(flagkey.HtMethod),
+		method,
 		input.String(flagkey.FnTestBody))
 	if err != nil {
 		return err

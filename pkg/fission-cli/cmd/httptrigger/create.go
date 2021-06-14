@@ -19,6 +19,7 @@ package httptrigger
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -87,15 +88,43 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)
-	if triggerUrl == "/" {
-		return errors.New("url with only root path is not allowed")
-	} else if !strings.HasPrefix(triggerUrl, "/") {
-		triggerUrl = fmt.Sprintf("/%s", triggerUrl)
+	prefix := input.String(flagkey.HtPrefix)
+	fallbackURL := ""
+
+	if triggerUrl == "" && prefix == "" {
+		console.Error("You need to supply either Prefix or URL/RelativeURL")
+		os.Exit(1)
 	}
 
-	method, err := GetMethod(input.String(flagkey.HtMethod))
-	if err != nil {
-		return err
+	if triggerUrl != "" && prefix != "" {
+		console.Warn("Prefix will take precedence over URL/RelativeURL")
+	}
+
+	if triggerUrl == "/" || prefix == "/" {
+		return errors.New("url with only root path is not allowed")
+	}
+	if triggerUrl != "" && !strings.HasPrefix(triggerUrl, "/") {
+		triggerUrl = "/" + triggerUrl
+	}
+	if prefix != "" && !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	if prefix != "" {
+		fallbackURL = prefix
+	} else {
+		fallbackURL = triggerUrl
+	}
+
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP methods not mentioned")
+	}
+
+	for _, method := range methods {
+		_, err := GetMethod(method)
+		if err != nil {
+			return err
+		}
 	}
 
 	// For Specs, the spec validate checks for function reference
@@ -130,7 +159,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	createIngress := input.Bool(flagkey.HtIngress)
 	ingressConfig, err := GetIngressConfig(
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
-		input.String(flagkey.HtIngressTLS), triggerUrl, nil)
+		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
 	if err != nil {
 		return errors.Wrap(err, "error parsing ingress configuration")
 	}
@@ -145,10 +174,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		Spec: fv1.HTTPTriggerSpec{
 			Host:              host,
 			RelativeURL:       triggerUrl,
-			Method:            method,
+			Methods:           methods,
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
+			Prefix:            &prefix,
 		},
 	}
 
@@ -203,7 +233,7 @@ func GetMethod(method string) (string, error) {
 	case http.MethodTrace:
 		return http.MethodTrace, nil
 	default:
-		return "", fmt.Errorf("invalid or unsupported HTTP Method %v", method)
+		return "", fmt.Errorf("invalid or unsupported HTTP Method '%v'", method)
 	}
 }
 
