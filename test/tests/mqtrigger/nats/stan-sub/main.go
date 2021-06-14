@@ -175,7 +175,10 @@ func main() {
 			fmt.Printf("\nReceived signal %s, unsubscribing and closing connection...\n\n", sig.String())
 			// Do not unsubscribe a durable on exit, except if asked to.
 			if durable == "" || unsubscribe {
-				sub.Unsubscribe()
+				err := sub.Unsubscribe()
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 			sc.Close()
 			cleanupDone <- true

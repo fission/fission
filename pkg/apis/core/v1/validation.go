@@ -18,6 +18,7 @@ package v1
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -585,7 +586,10 @@ func (e *Environment) Validate() error {
 	if e.Spec.Runtime.PodSpec != nil {
 		for _, container := range e.Spec.Runtime.PodSpec.Containers {
 			if container.Command == nil && container.Image == e.Spec.Runtime.Image && container.Name != e.ObjectMeta.Name {
-				multierror.Append(result, fmt.Errorf("container with image same as runtime image in podspec, must have name same as environment name"))
+				err := multierror.Append(result, fmt.Errorf("container with image same as runtime image in podspec, must have name same as environment name"))
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 	}

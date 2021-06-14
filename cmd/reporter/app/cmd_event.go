@@ -16,6 +16,8 @@ limitations under the License.
 package app
 
 import (
+	"log"
+
 	"github.com/fission/fission/pkg/tracker"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +51,7 @@ func eventCommandHandler(cmd *cobra.Command, args []string) error {
 	return tracker.Tracker.SendEvent(event)
 }
 
+//EventCommand reports an event to analytics
 func EventCommand() *cobra.Command {
 	eventCmd := &cobra.Command{
 		Use:   "event",
@@ -61,7 +64,13 @@ func EventCommand() *cobra.Command {
 	persistentFlags.StringP("action", "a", "", "event action")
 	persistentFlags.StringP("label", "l", "", "event label")
 	persistentFlags.StringP("value", "v", "", "event value")
-	eventCmd.MarkPersistentFlagRequired("category")
-	eventCmd.MarkPersistentFlagRequired("action")
+	err := eventCmd.MarkPersistentFlagRequired("category")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = eventCmd.MarkPersistentFlagRequired("action")
+	if err != nil {
+		log.Fatal(err)
+	}
 	return eventCmd
 }

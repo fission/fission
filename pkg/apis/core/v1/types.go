@@ -658,7 +658,7 @@ type (
 		// +optional
 		Prefix *string `json:"prefix,omitempty"`
 
-		// Deprecated: Use Methods instead of Method.
+		// Use Methods instead of Method. This filed is going to be deprecated in a future release
 		// HTTP method to access a function.
 		// +optional
 		Method string `json:"method"`

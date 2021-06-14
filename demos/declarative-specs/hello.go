@@ -1,12 +1,15 @@
 package main
 
 import (
+	"log"
 	"net/http"
 )
 
 // Handler is the entry point for this fission function
-
-func Handler(w http.ResponseWriter, r *http.Request) {
+func Handler(w http.ResponseWriter, r *http.Request) { //nolint: deadcode
 	msg := "Hello, CNCF Webinar!\n"
-	w.Write([]byte(msg))
+	_, err := w.Write([]byte(msg))
+	if err != nil {
+		log.Fatal(err)
+	}
 }

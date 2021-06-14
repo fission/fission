@@ -17,9 +17,14 @@ limitations under the License.
 package main
 
 import (
+	"log"
+
 	"github.com/fission/fission/cmd/reporter/app"
 )
 
 func main() {
-	app.App().Execute()
+	err := app.App().Execute()
+	if err != nil {
+		log.Fatal(err)
+	}
 }

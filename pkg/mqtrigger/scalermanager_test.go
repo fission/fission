@@ -369,59 +369,6 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 	}
 }
 
-func newUnstructured(apiVersion, kind, namespace, name, resourceVersion string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": apiVersion,
-			"kind":       kind,
-			"metadata": map[string]interface{}{
-				"namespace":       namespace,
-				"name":            name,
-				"resourceVersion": resourceVersion,
-			},
-		},
-	}
-}
-
-// commented because this fails with k8s.io/client-go v0.17.2
-// func Test_getResourceVersion(t *testing.T) {
-// 	scheme := runtime.NewScheme()
-// 	fakeDynamicClient := &dynfake.FakeDynamicClient
-// 	client := dynfake.NewSimpleDynamicClient(scheme, newUnstructured(apiVersion, "ScaledObject", "default", "test-1", "12345"))
-// 	dynamicResourceClient := client.Resource(schema.GroupVersionResource{
-// 		Group:    Group,
-// 		Version:  Version,
-// 		Resource: "scaledobjects",
-// 	})
-// 	fmt.Println(dynamicResourceClient.List(metav1.ListOptions{}))
-// 	fmt.Println(dynamicResourceClient.Get("test-1", metav1.GetOptions{}))
-// 	type args struct {
-// 		scaledObjectName string
-// 		kedaClient       dynamic.ResourceInterface
-// 	}
-// 	tests := []struct {
-// 		name        string
-// 		args        args
-// 		wantVersion string
-// 		wantErr     bool
-// 	}{
-// 		{"Valid Resource", args{"test-1", dynamicResourceClient}, "12345", false},
-// 		{"Invalid Resource", args{"test-2", dynamicResourceClient}, "", true},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			gotVersion, err := getResourceVersion(tt.args.scaledObjectName, tt.args.kedaClient)
-// 			if (err != nil) != tt.wantErr {
-// 				t.Errorf("getResourceVersion() error = %v, wantErr %v", err, tt.wantErr)
-// 				return
-// 			}
-// 			if gotVersion != tt.wantVersion {
-// 				t.Errorf("getResourceVersion() = %v, want %v", gotVersion, tt.wantVersion)
-// 			}
-// 		})
-// 	}
-// }
-
 func Test_getAuthTriggerSpec(t *testing.T) {
 
 	// Valid - with Secret

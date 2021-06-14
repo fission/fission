@@ -39,7 +39,7 @@ func TestPoolCache(t *testing.T) {
 
 	checkErr(c.DeleteValue("func", "ip"))
 
-	_, active, err = c.GetValue("func", 5)
+	_, _, err = c.GetValue("func", 5)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
