@@ -28,6 +28,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
@@ -72,8 +73,10 @@ type (
 		funcStore      k8sCache.Store
 		funcController k8sCache.Controller
 
-		envStore      k8sCache.Store
-		envController k8sCache.Controller
+		envStore           k8sCache.Store
+		envController      k8sCache.Controller
+		serviceInformer    k8sCache.SharedIndexInformer
+		deploymentInformer k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
 	}
@@ -88,7 +91,7 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-) executortype.ExecutorType {
+) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -127,13 +130,21 @@ func MakeNewDeploy(
 		nd.envController = envController
 	}
 
-	return nd
+	informerFactory, err := utils.GetInformerFacoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
+	if err != nil {
+		return nil, err
+	}
+	nd.serviceInformer = informerFactory.Core().V1().Services().Informer()
+	nd.deploymentInformer = informerFactory.Apps().V1().Deployments().Informer()
+	return nd, nil
 }
 
 // Run start the function and environment controller along with an object reaper.
 func (deploy *NewDeploy) Run(ctx context.Context) {
 	go deploy.funcController.Run(ctx.Done())
 	go deploy.envController.Run(ctx.Done())
+	go deploy.serviceInformer.Run(ctx.Done())
+	go deploy.deploymentInformer.Run(ctx.Done())
 	go deploy.idleObjectReaper()
 }
 
@@ -180,41 +191,86 @@ func (deploy *NewDeploy) TapService(svcHost string) error {
 	return nil
 }
 
+func getCachedItem(obj apiv1.ObjectReference, informer k8sCache.SharedIndexInformer) (item interface{}, exists bool, err error) {
+	store := informer.GetStore()
+
+	item, exists, err = store.Get(obj)
+	if err != nil || !exists {
+		item, exists, err = store.GetByKey(fmt.Sprintf("%s/%s", obj.Namespace, obj.Name))
+	}
+
+	return item, exists, err
+}
+
+func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service, error) {
+	item, exists, err := getCachedItem(obj, deploy.serviceInformer)
+
+	if err != nil || !exists {
+		deploy.logger.Debug(
+			"Falling back to getting service info from k8s API -- this may cause performace issues for your function.",
+			zap.Bool("exists", exists),
+			zap.Error(err),
+		)
+		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		return service, err
+	}
+
+	service := item.(*apiv1.Service)
+	return service, nil
+}
+
+func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
+	item, exists, err := getCachedItem(obj, deploy.deploymentInformer)
+
+	if err != nil || !exists {
+		deploy.logger.Debug(
+			"Falling back to getting deployment info from k8s API -- this may cause performace issues for your function.",
+			zap.Bool("exists", exists),
+			zap.Error(err),
+		)
+		deployment, err := deploy.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		return deployment, err
+	}
+
+	deployment := item.(*appsv1.Deployment)
+	return deployment, nil
+}
+
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
 func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
-	service := strings.Split(fsvc.Address, ".")
-	if len(service) == 0 {
+	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		return false
 	}
 
-	_, err := deploy.kubernetesClient.CoreV1().Services(service[1]).Get(context.TODO(), service[0], metav1.GetOptions{})
-	if err != nil {
-		if !k8sErrs.IsNotFound(err) {
-			deploy.logger.Error("error validating function service address", zap.String("function", fsvc.Function.Name), zap.Error(err))
+	for _, obj := range fsvc.KubernetesObjects {
+		if strings.ToLower(obj.Kind) == "service" {
+			_, err := deploy.getServiceInfo(obj)
+			if err != nil {
+				if !k8sErrs.IsNotFound(err) {
+					deploy.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
+				}
+				return false
+			}
+
 		}
-		return false
 	}
 
-	deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-	if deployObj == nil {
-		deploy.logger.Error("deployment obj for function does not exist", zap.String("function", fsvc.Function.Name))
-		return false
-	}
-
-	currentDeploy, err := deploy.kubernetesClient.AppsV1().
-		Deployments(deployObj.Namespace).Get(context.TODO(), deployObj.Name, metav1.GetOptions{})
-	if err != nil {
-		if !k8sErrs.IsNotFound(err) {
-			deploy.logger.Error("error validating function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+	for _, obj := range fsvc.KubernetesObjects {
+		if strings.ToLower(obj.Kind) == "deployment" {
+			currentDeploy, err := deploy.getDeploymentInfo(obj)
+			if err != nil {
+				if !k8sErrs.IsNotFound(err) {
+					deploy.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
+				}
+				return false
+			}
+			// return directly when available replicas > 0
+			if currentDeploy.Status.AvailableReplicas > 0 {
+				return true
+			}
 		}
-		return false
-	}
-
-	// return directly when available replicas > 0
-	if currentDeploy.Status.AvailableReplicas > 0 {
-		return true
 	}
 
 	return false

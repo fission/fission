@@ -400,12 +400,23 @@ func (spec EnvironmentSpec) Validate() error {
 
 func (spec HTTPTriggerSpec) Validate() error {
 	result := &multierror.Error{}
+	checkMethod := func(method string, result *multierror.Error) *multierror.Error {
+		switch method {
+		case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace: // no op
+		default:
+			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
+		}
+		return result
+	}
+	if len(spec.Methods) > 0 {
+		for _, method := range spec.Methods {
+			result = checkMethod(method, result)
+		}
+	}
 
-	switch spec.Method {
-	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
-		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace: // no op
-	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
+	if len(spec.Method) > 0 {
+		result = checkMethod(spec.Method, result)
 	}
 
 	result = multierror.Append(result, spec.FunctionReference.Validate())
