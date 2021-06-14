@@ -235,20 +235,23 @@ canaryDeployment:
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 mqt_keda:
-  enabled: false
+  enabled: true
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: v0.5
+      tag: v0.6
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: v0.5
+      tag: v0.6
     awskinesis:
-      image: fission/keda-awskinesis-http-connector
-      tag: v0.5
+      image: fission/keda-aws-kinesis-http-connector
+      tag: v0.6
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: v0.5
+      tag: v0.6
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: v0.5
+      tag: v0.6
+    gcp_pub_sub:
+      image: fission/keda-gcp-pubsub-http-connector
+      tag: v0.1
