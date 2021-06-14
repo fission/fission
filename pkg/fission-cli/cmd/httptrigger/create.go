@@ -89,6 +89,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	triggerUrl := input.String(flagkey.HtUrl)
 	prefix := input.String(flagkey.HtPrefix)
+	fallbackURL := ""
 
 	if triggerUrl == "" && prefix == "" {
 		console.Error("You need to supply either Prefix or URL/RelativeURL")
@@ -107,6 +108,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	if prefix != "" && !strings.HasPrefix(prefix, "/") {
 		prefix = "/" + prefix
+	}
+	if prefix != "" {
+		fallbackURL = prefix
+	} else {
+		fallbackURL = triggerUrl
 	}
 
 	methods := input.StringSlice(flagkey.HtMethod)
@@ -153,7 +159,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	createIngress := input.Bool(flagkey.HtIngress)
 	ingressConfig, err := GetIngressConfig(
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
-		input.String(flagkey.HtIngressTLS), triggerUrl, nil)
+		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
 	if err != nil {
 		return errors.Wrap(err, "error parsing ingress configuration")
 	}
