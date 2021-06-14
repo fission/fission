@@ -89,6 +89,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	triggerUrl := input.String(flagkey.HtUrl)
 	prefix := input.String(flagkey.HtPrefix)
+	fallbackURL := ""
 
 	if triggerUrl == "" && prefix == "" {
 		console.Error("You need to supply either Prefix or URL/RelativeURL")
@@ -108,10 +109,22 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if prefix != "" && !strings.HasPrefix(prefix, "/") {
 		prefix = "/" + prefix
 	}
+	if prefix != "" {
+		fallbackURL = prefix
+	} else {
+		fallbackURL = triggerUrl
+	}
 
-	method, err := GetMethod(input.String(flagkey.HtMethod))
-	if err != nil {
-		return err
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP methods not mentioned")
+	}
+
+	for _, method := range methods {
+		_, err := GetMethod(method)
+		if err != nil {
+			return err
+		}
 	}
 
 	// For Specs, the spec validate checks for function reference
@@ -146,7 +159,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	createIngress := input.Bool(flagkey.HtIngress)
 	ingressConfig, err := GetIngressConfig(
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
-		input.String(flagkey.HtIngressTLS), triggerUrl, nil)
+		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
 	if err != nil {
 		return errors.Wrap(err, "error parsing ingress configuration")
 	}
@@ -161,7 +174,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		Spec: fv1.HTTPTriggerSpec{
 			Host:              host,
 			RelativeURL:       triggerUrl,
-			Method:            method,
+			Methods:           methods,
 			FunctionReference: *functionRef,
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
@@ -220,7 +233,7 @@ func GetMethod(method string) (string, error) {
 	case http.MethodTrace:
 		return http.MethodTrace, nil
 	default:
-		return "", fmt.Errorf("invalid or unsupported HTTP Method %v", method)
+		return "", fmt.Errorf("invalid or unsupported HTTP Method '%v'", method)
 	}
 }
 

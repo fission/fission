@@ -345,9 +345,17 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if len(prefix) != 0 && len(triggerUrl) > 0 {
 		console.Warn("Prefix will take precedence over URL/RelativeURL")
 	}
-	method, err := httptrigger.GetMethod(input.String(flagkey.HtMethod))
-	if err != nil {
-		return errors.Wrap(err, "error getting HTTP trigger method")
+
+	methods := input.StringSlice(flagkey.HtMethod)
+	if len(methods) == 0 {
+		return errors.New("HTTP methods not mentioned")
+	}
+
+	for _, method := range methods {
+		_, err := httptrigger.GetMethod(method)
+		if err != nil {
+			return err
+		}
 	}
 
 	triggerName := uuid.NewV4().String()
@@ -359,7 +367,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
 			Prefix:      &prefix,
-			Method:      method,
+			Methods:     methods,
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
 				Name: opts.function.ObjectMeta.Name,
@@ -371,7 +379,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}
 
-	fmt.Printf("route created: %v %v -> %v\n", method, triggerUrl, opts.function.ObjectMeta.Name)
+	fmt.Printf("route created: %v %v -> %v\n", methods, triggerUrl, opts.function.ObjectMeta.Name)
 	return nil
 }
 

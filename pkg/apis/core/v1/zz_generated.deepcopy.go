@@ -512,6 +512,11 @@ func (in *HTTPTriggerSpec) DeepCopyInto(out *HTTPTriggerSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Methods != nil {
+		in, out := &in.Methods, &out.Methods
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	in.FunctionReference.DeepCopyInto(&out.FunctionReference)
 	in.IngressConfig.DeepCopyInto(&out.IngressConfig)
 	return

@@ -443,6 +443,9 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 		if len(t.Spec.Host) > 0 {
 			warnings = append(warnings, "Host in HTTPTrigger spec.Host is now marked as deprecated, see 'help' for details")
 		}
+		if len(t.Spec.Method) > 0 {
+			warnings = append(warnings, "Method in HTTTPTrigger spec.Method is deprecated, use spec.Methods instead")
+		}
 		result = multierror.Append(result, t.Validate())
 	}
 	for _, t := range fr.KubernetesWatchTriggers {

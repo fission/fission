@@ -51,21 +51,28 @@ func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*Prometheus
 	}, nil
 }
 
-func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path, method, funcName, funcNs string, window string) (float64, error) {
+func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path string, methods []string, funcName, funcNs string, window string) (float64, error) {
+	var reqs, failedReqs float64
 	// first get a total count of requests to this url in a time window
-	reqs, err := promApiClient.GetRequestsToFuncInWindow(path, method, funcName, funcNs, window)
-	if err != nil {
-		return 0, err
+	for _, method := range methods {
+		mreqs, err := promApiClient.GetRequestsToFuncInWindow(path, method, funcName, funcNs, window)
+		if err != nil {
+			return 0, err
+		}
+		reqs += mreqs
 	}
 
 	if reqs <= 0 {
-		return -1, fmt.Errorf("no requests to this url %v and method %v in the window: %v", path, method, window)
+		return -1, fmt.Errorf("no requests to this url %v and method %v in the window: %v", path, methods, window)
 	}
 
 	// next, get a total count of errored out requests to this function in the same window
-	failedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(funcName, funcNs, path, method, window)
-	if err != nil {
-		return 0, err
+	for _, method := range methods {
+		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(funcName, funcNs, path, method, window)
+		if err != nil {
+			return 0, err
+		}
+		failedReqs += mfailedReqs
 	}
 
 	// calculate the failure percentage of the function
