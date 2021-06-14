@@ -365,4 +365,4 @@ mqt_keda:
       tag: v0.6
     gcp_pub_sub:
       image: fission/keda-gcp-pubsub-http-connector
-      tag: v0.6
+      tag: v0.1
