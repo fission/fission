@@ -77,3 +77,8 @@ func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceURL *url.URL
 		// ignore error
 	}
 }
+
+func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) error {
+	mk := keyFromMetadata(f)
+	return fmap.cache.Delete(*mk)
+}
