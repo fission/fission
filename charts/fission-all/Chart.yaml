@@ -5,12 +5,12 @@ description: Fission is a fast serverless framework for Kubernetes.
 keywords:
 - fission
 - serverless
-home: http://fission.io/
+home: https://fission.io/
 maintainers:
-  - name: Soam Vasani
-    email: soamvasani+1@gmail.com
-  - name: Ta Ching Chen
-    email: hello@tachingchen.com
+  - name: Vishal Biyani
+    email: vishal@infracloud.io
+  - name: Sanket Sudake
+    email: sanket@infracloud.io
 engine: gotpl
 appVersion: 1.13.0
 type: application
