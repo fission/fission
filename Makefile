@@ -22,7 +22,27 @@ REPO ?= fission
 TAG ?= dev
 DOCKER_FLAGS ?= --push --progress plain
 
-check: test-run build clean
+VERSION ?= master
+TIMESTAMP ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+COMMITSHA ?= $(shell git rev-parse HEAD)
+
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
+
+FISSION-CLI := fission
+ifeq ($(GOOS), windows)
+	FISSION-CLI := $(FISSION-CLI).exe
+endif
+
+GO ?= go
+GO_LDFLAGS := -X github.com/fission/fission/pkg/info.GitCommit=$(COMMITSHA) $(GO_LDFLAGS)
+GO_LDFLAGS := -X github.com/fission/fission/pkg/info.BuildDate=$(TIMESTAMP)  $(GO_LDFLAGS)
+GO_LDFLAGS := -X github.com/fission/fission/pkg/info.Version=$(VERSION) $(GO_LDFLAGS)
+GCFLAGS ?= all=-trimpath=$(CURDIR)
+ASMFLAGS ?= all=-trimpath=$(CURDIR)
+
+### Static checks
+check: test-run build-fission-cli clean
 
 code-checks:
 	hack/verify-gofmt.sh
@@ -34,48 +54,59 @@ test-run: code-checks
 	hack/runtests.sh
 	@rm -f coverage.txt
 
-# ensure the changes are buildable
-build: build-cli
-	go build -o cmd/fetcher/fetcher ./cmd/fetcher/
-	go build -o cmd/fetcher/builder ./cmd/builder/
-	go build -o cmd/reporter/reporter ./cmd/reporter/
+### Binaries
+fission-cli:
+	@mkdir -p build/$(GOOS)/$(GOARCH)/$(VERSION)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build \
+	-gcflags '$(GCFLAGS)' \
+	-asmflags '$(ASMFLAGS)' \
+	-ldflags "$(GO_LDFLAGS)" \
+	-o build/$(GOOS)/$(GOARCH)/$(VERSION)/$(FISSION-CLI) ./cmd/fission-cli
 
-build-cli:
-	go build -o cmd/fission-cli/fission ./cmd/fission-cli/
+all-fission-cli:
+	$(MAKE) fission-cli GOOS=windows GOARCH=amd64
+	$(MAKE) fission-cli GOOS=linux GOARCH=amd64
+	$(MAKE) fission-cli GOOS=linux GOARCH=arm
+	$(MAKE) fission-cli GOOS=linux GOARCH=arm64
+	$(MAKE) fission-cli GOOS=darwin GOARCH=amd64
 
-install-cli: build-cli
-	mv cmd/fission-cli/fission /usr/local/bin
+install-fission-cli: fission-cli
+	mv build/$(GOOS)/$(GOARCH)/$(VERSION)/$(FISSION-CLI) /usr/local/bin/
+
+### Container images
+FISSION_IMGS := fission-bundle-multiarch-img \
+	fetcher-multiarch-img \
+	builder-multiarch-img\
+	pre-upgrade-checks-multiarch-img \
+	reporter-multiarch-img
 
 verify-builder:
 	@./hack/buildx.sh $(PLATFORMS)
 
-# build images (environment images are not included)
-image:
-	docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
-	docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
-	docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
-	docker build -t reporter -f cmd/builder/Dockerfile.reporter .
+local-images:
+	PLATFORMS=linux/amd64 $(MAKE) all-images
 
-# build multi-architecture images for release.
-image-multiarch: verify-builder multiarch-bundle multiarch-fetcher multiarch-builder multiarch-preupgrade multiarch-reporter
+all-images: verify-builder $(FISSION_IMGS)
 
-multiarch-bundle: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fission-bundle:$(TAG) $(DOCKER_FLAGS) -f cmd/fission-bundle/Dockerfile.fission-bundle .
+fission-bundle-multiarch-img: cmd/fission-bundle/Dockerfile.fission-bundle
+fetcher-multiarch-img: cmd/fetcher/Dockerfile.fission-fetcher
+builder-multiarch-img: cmd/builder/Dockerfile.fission-builder
+pre-upgrade-checks-multiarch-img: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+reporter-multiarch-img: cmd/reporter/Dockerfile.reporter
 
-multiarch-fetcher: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/fetcher:$(TAG) $(DOCKER_FLAGS) -f cmd/fetcher/Dockerfile.fission-fetcher .
+%-multiarch-img:
+	@echo === Building image $(REPO)/$(subst -multiarch-img,,$@):$(TAG) using context $(CURDIR) and dockerfile $<
+	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/$(subst -multiarch-img,,$@):$(TAG) \
+		--build-arg GITCOMMIT=$(COMMITSHA) \
+    	--build-arg BUILDDATE=$(TIMESTAMP) \
+		--build-arg BUILDVERSION=$(VERSION) \
+	 	$(DOCKER_FLAGS) -f $< .
 
-multiarch-builder: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/builder:$(TAG) $(DOCKER_FLAGS) -f cmd/builder/Dockerfile.fission-builder .
-
-multiarch-preupgrade: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/pre-upgrade-checks:$(TAG) $(DOCKER_FLAGS) -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
-
-multiarch-reporter: verify-builder
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/reporter:$(TAG) $(DOCKER_FLAGS)  -f cmd/reporter/Dockerfile.reporter .
-
+### CRDs
 generate-crds:
-	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  paths=./pkg/apis/core/v1  output:crd:artifacts:config=crds/v1
+	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  \
+	paths=./pkg/apis/core/v1  \
+	output:crd:artifacts:config=crds/v1
 
 create-crds:
 	@kubectl create -k crds/v1
@@ -84,11 +115,17 @@ update-crds:
 	@kubectl replace -k crds/v1
 
 delete-crds:
-	@./hack/delete-crds.sh
+	@kubectl delete -k crds/v1
 
+### Cleanup
 clean:
 	@rm -f cmd/fission-bundle/fission-bundle
 	@rm -f cmd/fission-cli/fission
 	@rm -f cmd/fetcher/fetcher
 	@rm -f cmd/fetcher/builder
 	@rm -f cmd/reporter/reporter
+	@rm -f pkg/apis/core/v1/types_swagger_doc_generated.go
+
+### Misc
+generate-swagger-doc:
+	@cd pkg/apis/core/v1/tool && ./update-generated-swagger-docs.sh
