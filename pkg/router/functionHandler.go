@@ -169,7 +169,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// close req body
 	defer func() {
 		if req.Body != nil {
-			req.Body.(*fakeCloseReadCloser).RealClose()
+			err := req.Body.(*fakeCloseReadCloser).RealClose()
+			if err != nil {
+				roundTripper.logger.Error("Error closing body", zap.Error(err))
+			}
 		}
 	}()
 
@@ -670,10 +673,10 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			fh.logger.Debug(msg, zap.Any("function", fh.function), zap.Any("request_header", req.Header))
 		case context.DeadlineExceeded:
 			status = http.StatusGatewayTimeout
-			msg = "function not responses before the timeout"
+			msg := "function not responses before the timeout"
 			fh.logger.Error(msg, zap.Any("function", fh.function), zap.Any("request_header", req.Header))
 		default:
-			code, msg := ferror.GetHTTPError(err)
+			code, _ := ferror.GetHTTPError(err)
 			status = code
 			msg = "error sending request to function"
 			fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function), zap.Any("request_header", req.Header), zap.Any("code", code))

@@ -176,12 +176,15 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 }
 
 func main() {
+	var err error
+
 	// From https://github.com/containous/traefik/pull/1817/files
 	// Tell glog to log into STDERR. Otherwise, we risk
 	// certain kinds of API errors getting logged into a directory not
 	// available in a `FROM scratch` Docker container, causing glog to abort
 	// hard with an exit code > 0.
-	flag.Set("logtostderr", "true")
+	// TODO: fix the lint error. Error checking here is causing all components to crash with error "logtostderr not found"
+	flag.Set("logtostderr", "true") //nolint: errcheck
 
 	usage := `fission-bundle: Package of all fission microservices: controller, router, executor.
 
@@ -236,7 +239,6 @@ Options:
 `
 
 	var logger *zap.Logger
-	var err error
 	var config zap.Config
 
 	isDebugEnv, _ := strconv.ParseBool(os.Getenv("DEBUG_ENV"))
@@ -253,8 +255,12 @@ Options:
 	if err != nil {
 		log.Fatalf("I can't initialize zap logger: %v", err)
 	}
-	defer logger.Sync()
-
+	defer func() {
+		err := logger.Sync()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
 	if err != nil {

@@ -42,10 +42,10 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Client
 	for _, crdName := range crdsExpected {
 		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err != nil {
-			multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
+			errs = multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
 		}
 		if crd == nil {
-			multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
+			errs = multierror.Append(errs, fmt.Errorf("CRD %s not found", crdName))
 		}
 	}
 	return errs.ErrorOrNil()

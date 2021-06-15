@@ -154,15 +154,15 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.AutomountServiceAccountToken = targetPodSpec.AutomountServiceAccountToken
 	}
 
-	if targetPodSpec.HostNetwork != false {
+	if targetPodSpec.HostNetwork {
 		srcPodSpec.HostNetwork = targetPodSpec.HostNetwork
 	}
 
-	if targetPodSpec.HostPID != false {
+	if targetPodSpec.HostPID {
 		srcPodSpec.HostPID = targetPodSpec.HostPID
 	}
 
-	if targetPodSpec.HostIPC != false {
+	if targetPodSpec.HostIPC {
 		srcPodSpec.HostIPC = targetPodSpec.HostIPC
 	}
 

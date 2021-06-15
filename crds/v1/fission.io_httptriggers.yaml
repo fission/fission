@@ -77,7 +77,7 @@ spec:
                     type: string
                 type: object
               method:
-                description: 'Deprecated: Use Methods instead of Method. HTTP method to access a function.'
+                description: Use Methods instead of Method. This field is going to be deprecated in a future release HTTP method to access a function.
                 type: string
               methods:
                 description: HTTP methods to access a function
