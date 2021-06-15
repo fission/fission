@@ -1,18 +1,18 @@
 apiVersion: v2
 name: fission-core
-version: 1.12.0
+version: 1.13.0
 description: Fission is a fast serverless framework for Kubernetes.
 keywords:
 - fission
 - serverless
-home: http://fission.io/
+home: https://fission.io/
 maintainers:
-  - name: Soam Vasani
-    email: soamvasani+1@gmail.com
-  - name: Ta Ching Chen
-    email: hello@tachingchen.com
+  - name: Vishal Biyani
+    email: vishal@infracloud.io
+  - name: Sanket Sudake
+    email: sanket@infracloud.io
 engine: gotpl
-appVersion: 1.12.0
+appVersion: 1.13.0
 type: application
 dependencies:
   - name: prometheus
