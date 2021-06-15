@@ -183,10 +183,8 @@ func main() {
 	// certain kinds of API errors getting logged into a directory not
 	// available in a `FROM scratch` Docker container, causing glog to abort
 	// hard with an exit code > 0.
-	err = flag.Set("logtostderr", "true")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// TODO: fix the lint error. Error checking here is causing all components to crash with error "logtostderr not found"
+	flag.Set("logtostderr", "true") //nolint: errcheck
 
 	usage := `fission-bundle: Package of all fission microservices: controller, router, executor.
 
