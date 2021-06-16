@@ -29,9 +29,10 @@ COMMITSHA ?= $(shell git rev-parse HEAD)
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-FISSION-CLI := fission
+BINDIR ?= build/bin
+FISSION-CLI-SUFFIX :=
 ifeq ($(GOOS), windows)
-	FISSION-CLI := $(FISSION-CLI).exe
+	FISSION-CLI-SUFFIX := .exe
 endif
 
 GO ?= go
@@ -56,12 +57,12 @@ test-run: code-checks
 
 ### Binaries
 fission-cli:
-	@mkdir -p build/$(GOOS)/$(GOARCH)/$(VERSION)
+	@mkdir -p $(BINDIR)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build \
 	-gcflags '$(GCFLAGS)' \
 	-asmflags '$(ASMFLAGS)' \
 	-ldflags "$(GO_LDFLAGS)" \
-	-o build/$(GOOS)/$(GOARCH)/$(VERSION)/$(FISSION-CLI) ./cmd/fission-cli
+	-o $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) ./cmd/fission-cli
 
 all-fission-cli:
 	$(MAKE) fission-cli GOOS=windows GOARCH=amd64
@@ -71,7 +72,7 @@ all-fission-cli:
 	$(MAKE) fission-cli GOOS=darwin GOARCH=amd64
 
 install-fission-cli: fission-cli
-	mv build/$(GOOS)/$(GOARCH)/$(VERSION)/$(FISSION-CLI) /usr/local/bin/
+	mv $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/
 
 ### Container images
 FISSION_IMGS := fission-bundle-multiarch-img \
@@ -129,3 +130,7 @@ clean:
 ### Misc
 generate-swagger-doc:
 	@cd pkg/apis/core/v1/tool && ./update-generated-swagger-docs.sh
+
+make release:
+	@./hack/release.sh $(VERSION)
+	@./hack/releas-tag.sh $(VERSION)
