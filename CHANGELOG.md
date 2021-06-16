@@ -23,7 +23,7 @@ filename | sha256 hash
 
 ## [v1.13.0](https://github.com/fission/fission/tree/v1.13.0) (2021-06-16)
 
-[Full Changelog](https://github.com/fission/fission/compare/v1.12.0...1.13.0)
+[Full Changelog](https://github.com/fission/fission/compare/v1.12.0...v1.13.0)
 
 ## [1.13.0](https://github.com/fission/fission/tree/1.13.0) (2021-06-16)
 
