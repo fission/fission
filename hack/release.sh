@@ -9,6 +9,11 @@ BUILDDIR=$(realpath $DIR)/build
 artifacts=()
 source $(realpath ${DIR}/test/init_tools.sh)
 
+doit() {
+    echo "! $*"
+    "$@"
+}
+
 # Ensure we're on the master branch
 check_branch() {
     local version=$1
@@ -30,23 +35,23 @@ check_clean() {
 attach_github_release_cli() {
     # cli
     echo "Artifact for osx amd64 cli"
-    artifacts+=("$BUILDDIR/darwin/amd64/$version/fission#fission-cli-osx")
+    artifacts+=("$BUILDDIR/bin/fission-$version-darwin-amd64")
     echo "Artifact for windows amd64 cli"
-    artifacts+=("$BUILDDIR/windows/amd64/$version/fission.exe#fission-cli-windows.exe")
+    artifacts+=("$BUILDDIR/bin/fission-$version-windows-amd64.exe")
     echo "Artifact for linux amd64 cli"
-    artifacts+=("$BUILDDIR/linux/amd64/$version/fission#fission-cli-linux")
+    artifacts+=("$BUILDDIR/bin/fission-$version-linux-amd64")
     echo "Artifact for linux arm cli"
-    artifacts+=("$BUILDDIR/linux/arm/$version/fission#fission-cli-linux-arm")
+    artifacts+=("$BUILDDIR/bin/fission-$version-linux-arm")
     echo "Artifact for linux arm64 cli"
-    artifacts+=("$BUILDDIR/linux/arm64/$version/fission#fission-cli-linux-arm64")
+    artifacts+=("$BUILDDIR/bin/fission-$version-linux-arm64")
 }
 
 attach_github_release_charts() {
     local version=$1
     echo "fission-all chart"
-    artifacts+=("$BUILDDIR/charts/fission-all-$version.tgz#fission-all-$version.tgz")
+    artifacts+=("$BUILDDIR/charts/fission-all-$version.tgz")
     echo "Fission-core chart"
-    artifacts+=("$BUILDDIR/charts/fission-core-$version.tgz#fission-core-$version.tgz")
+    artifacts+=("$BUILDDIR/charts/fission-core-$version.tgz")
 }
 
 attach_github_release_yamls() {
@@ -54,9 +59,9 @@ attach_github_release_yamls() {
 
     for c in fission-all fission-core; do
         # YAML
-        artifacts+=("$BUILDDIR/yamls/${c}-${version}-minikube.yaml#${c}-${version}-minikube.yaml")
-        artifacts+=("$BUILDDIR/yamls/${c}-${version}.yaml#${c}-${version}.yaml")
-        artifacts+=("$BUILDDIR/yamls/${c}-${version}-openshift.yaml#${c}-${version}-openshift.yaml")
+        artifacts+=("$BUILDDIR/yamls/${c}-${version}-minikube.yaml")
+        artifacts+=("$BUILDDIR/yamls/${c}-${version}.yaml")
+        artifacts+=("$BUILDDIR/yamls/${c}-${version}-openshift.yaml")
     done
 }
 
@@ -82,18 +87,19 @@ tag_and_release() {
     fi
 
     # tag the release
-    git tag $gittag
-    git tag -a $gopkgtag -m "Fission $gopkgtag"
+    doit git tag $gittag
+    doit git tag -a $gopkgtag -m "Fission $gopkgtag"
 
     # push tag
-    git push origin $gittag
-    git push origin $gopkgtag
+    doit git push origin $gittag
+    doit git push origin $gopkgtag
 
-    relnotes="
-Install Guide: https://docs.fission.io/installation/
-Full Changelog: https://github.com/fission/fission/blob/master/CHANGELOG.md    
-"
-    gh release create $gittag --prerelease  --title $gittag --notes $relnotes --target $gitcommit ${artifacts[@]}
+    RELFILES=""
+    for relfile in ${artifacts[@]}; do
+        RELFILES+="\"${relfile}\" "
+    done
+
+    doit gh release create $gittag --draft --prerelease --title $gittag --notes-file $(realpath ${DIR}/hack/notes.md) --target $gitcommit ${RELFILES}
 }
 
 generate_changelog() {
@@ -124,15 +130,12 @@ create_downloads_table() {
     echo "## Downloads for ${version}"
     echo
 
-    local files=$(find build -name '*' -type f)
-
     echo
     echo "filename | sha256 hash"
     echo "-------- | -----------"
     for file in ${artifacts[@]}; do
-        filepath=$(echo $file | cut -d'#' -f 1)
-        filename=$(echo $file | cut -d'#' -f 2)
-        echo "[${filename}]($url_prefix/$release_tag/${filename}) | \`$(shasum -a 256 ${filepath} | cut -d' ' -f 1)\`"
+        filename=${file##*/}
+        echo "[${filename}]($url_prefix/$release_tag/${filename}) | \`$(shasum -a 256 ${file} | cut -d' ' -f 1)\`"
     done
     echo
 }
@@ -167,7 +170,7 @@ build_charts() {
     pushd $DIR/charts
     find . -iname *.~?~ | xargs -r rm
     for c in fission-all fission-core; do
-        helm package -u $c/
+        doit helm package -u $c/
         mv *.tgz $BUILDDIR/charts/
     done
     popd
@@ -185,15 +188,15 @@ build_yamls() {
     for c in fission-all fission-core; do
         # fetch dependencies
         pushd ${c}
-        helm dependency update
+        doit helm dependency update
         popd
 
         # for minikube and other environments that don't support LoadBalancer
-        helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort >${c}-${version}-minikube.yaml
+        doit helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true,serviceType=NodePort,routerServiceType=NodePort >${c}-${version}-minikube.yaml
         # for environments that support LoadBalancer
-        helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true >${c}-${version}.yaml
+        doit helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true >${c}-${version}.yaml
         # for OpenShift
-        helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true,logger.enableSecurityContext=true,prometheus.enabled=false >${c}-${version}-openshift.yaml
+        doit helm template ${c} -n ${releaseName} --namespace fission --set analytics=false,analyticsNonHelmInstall=true,logger.enableSecurityContext=true,prometheus.enabled=false >${c}-${version}-openshift.yaml
 
         # copy yaml files to build directory
         mv *.yaml ${BUILDDIR}/yamls/
@@ -219,7 +222,7 @@ build_all() {
 
     local gitcommit=$3
 
-    if [ -z "gitcommit" ]; then
+    if [ -z "$gitcommit" ]; then
         echo "Git commit unspecified"
         exit 1
     fi
@@ -258,8 +261,8 @@ build_images() {
     fi
 
     # Build and push all images
-    VERSION=$version TAG=$version TIMESTAMP=$date COMMITSHA=$gitcommit make all-images
-    VERSION=$version TAG=latest TIMESTAMP=$date COMMITSHA=$gitcommit make all-images
+    REPO=fission VERSION=$version TAG=latest TIMESTAMP=$date COMMITSHA=$gitcommit make all-images
+    REPO=fission VERSION=$version TAG=$version TIMESTAMP=$date COMMITSHA=$gitcommit make all-images
 }
 
 check_commands() {
@@ -287,7 +290,7 @@ fi
 check_commands
 release_environment_check $version $chartsrepo
 build_all $version $date $gitcommit
-# build_images $version $date $gitcommit
+build_images $version $date $gitcommit
 build_charts $version
 build_yamls $version
 
