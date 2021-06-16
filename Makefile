@@ -130,3 +130,7 @@ clean:
 ### Misc
 generate-swagger-doc:
 	@cd pkg/apis/core/v1/tool && ./update-generated-swagger-docs.sh
+
+make release:
+	@./hack/release.sh $(VERSION)
+	@./hack/releas-tag.sh $(VERSION)

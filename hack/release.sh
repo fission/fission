@@ -76,30 +76,15 @@ update_github_charts_repo() {
     popd
 }
 
-tag_and_release() {
+gh_release() {
     local version=$1
-    local gittag=$version
-    local prefix="v"
-    local gopkgtag=${version/#/${prefix}}
-
-    if [[ ${version} == v* ]]; then # if version starts with "v", don't append prefix.
-        gopkgtag=${version}
-    fi
-
-    # tag the release
-    doit git tag $gittag
-    doit git tag -a $gopkgtag -m "Fission $gopkgtag"
-
-    # push tag
-    doit git push origin $gittag
-    doit git push origin $gopkgtag
 
     RELFILES=""
     for relfile in ${artifacts[@]}; do
         RELFILES+="\"${relfile}\" "
     done
 
-    doit gh release create $gittag --draft --prerelease --title $gittag --notes-file $(realpath ${DIR}/hack/notes.md) --target $gitcommit ${RELFILES}
+    doit gh release create $version --draft --prerelease --title $version --notes-file $(realpath ${DIR}/hack/notes.md) --target $gitcommit ${RELFILES}
 }
 
 generate_changelog() {
@@ -299,9 +284,10 @@ attach_github_release_charts $version
 attach_github_release_yamls $version
 update_github_charts_repo $version $chartsrepo
 generate_changelog $version
-tag_and_release $version
+gh_release $version
 
 echo "############ DONE #############"
 echo "Congratulation, ${version} is ready to ship !!"
+echo "Run ./hack/release-tag.sh and publish release."
 echo "Don't forget to push chart repo changes & update CHANGELOG.md"
 echo "##############################"
