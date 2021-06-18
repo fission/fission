@@ -574,13 +574,16 @@ func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err e
 }
 
 // addServiceEntryToCache add service url entry to cache
-func (fn functionHandler) addServiceEntryToCache(serviceUrl *url.URL) {
-	fn.fmap.assign(&fn.function.ObjectMeta, serviceUrl)
+func (fh functionHandler) addServiceEntryToCache(serviceURL *url.URL) {
+	fh.fmap.assign(&fh.function.ObjectMeta, serviceURL)
 }
 
 // removeServiceEntryFromCache removes service url entry from cache
-func (fn functionHandler) removeServiceEntryFromCache() {
-	fn.fmap.remove(&fn.function.ObjectMeta)
+func (fh functionHandler) removeServiceEntryFromCache() {
+	err := fh.fmap.remove(&fh.function.ObjectMeta)
+	if err != nil {
+		fh.logger.Error("Error removing key:", zap.Error(err))
+	}
 }
 
 func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, err error) {
