@@ -3,8 +3,7 @@ name: Fission CI
 on:
   push:
     branches:
-      - master
-      - feature-k8s-support-ci      
+      - master   
   pull_request:
     branches:
       - master
