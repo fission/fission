@@ -4,12 +4,11 @@ on:
   push:
     branches:
       - master
+      - feature-k8s-support-ci      
   pull_request:
     branches:
       - master
-      - feature-k8s-support-ci
   workflow_dispatch:
-
 jobs:
   # Job to run change detection
   integration-test:
