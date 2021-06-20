@@ -2,7 +2,6 @@
 [Documentation](https://docs.fission.io/)
 ## Downloads for 1.13.0
 
-
 filename | sha256 hash
 -------- | -----------
 [fission-1.13.0-darwin-amd64](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-darwin-amd64) | `47d47196e15455a60ec15b80141f3de7435bb524e4a9b373f059cb89e63e68ff`
@@ -12,12 +11,12 @@ filename | sha256 hash
 [fission-1.13.0-linux-arm64](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-linux-arm64) | `faa8a3b23e88bc6867051ada7c1f272270f2a231e1f1b2d2d97c57ebd47b632a`
 [fission-all-1.13.0.tgz](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0.tgz) | `b1faaa96e4d71cff5bce960c185f7dc423b3251430734d1d65034991bb0b736d`
 [fission-core-1.13.0.tgz](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0.tgz) | `191ef5d320e3bd8a5c0877b187ebb0189c91c4dfd15f2131de2319bd61c51d8c`
-[fission-all-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-minikube.yaml) | `6032092352ac323b2b87d3a9c4c22ebb24584a3058a312ee84f3915f71ee6930`
-[fission-all-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0.yaml) | `23c8d6ef9ae41184b46a65dde993375795cfed103d97bfdd535cb6dfd2057377`
-[fission-all-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-openshift.yaml) | `0d84aaa170cb6e01453bb6d4aeb31435dbd6e8706747013b38b5de19b56d5df4`
-[fission-core-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-minikube.yaml) | `c471bff6244641e57eea64051d9d2b16ef21c1fbb9c6c3ab8e7536992fdd1602`
-[fission-core-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0.yaml) | `19d66b709a96ad6cc4a413ac7f0a7bb45fab4ff02de35276e9abd25eaacba1d5`
-[fission-core-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-openshift.yaml) | `acb232f347751d1f87b9f7a2ed1ce546e1def31ed0ff05ed19f8a08cad724336`
+[fission-all-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-minikube.yaml) | `7019cd21d8994ef659c03c2167412a7063c897c7d7acbdabcb9ba4d8ddd20bcd`
+[fission-all-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0.yaml) | `d21686dbbf7540876dcbc19e6f0bf3b6948f6e0169350d5ee9d4a25f75bfc00b`
+[fission-all-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-openshift.yaml) | `8f53c7e1c8c582bc1d7c1ba548ba38d386b4b1c71c6d28fd79e6fada7cbcc72e`
+[fission-core-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-minikube.yaml) | `3191e7ee5de1b7eaef647a4ff6b4a94035ab7759e4fe3f19411f42683695e97f`
+[fission-core-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0.yaml) | `075ebe033fa3d9c4519f1d650153e3a5346892a12e03fdf6594e66cf2cf80a40`
+[fission-core-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-openshift.yaml) | `c42add1ec77444f31e7d0e30fd086f10dd00c345c6340c5748767668effecfe6`
 
 # Changelog
 
