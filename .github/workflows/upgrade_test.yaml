@@ -1,10 +1,16 @@
-name: Upgrade functionality test
+name: Fission CI upgrade
 
-on: [workflow_dispatch]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
-  
-  upgrade-functionality-test:
+  upgrade-test:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout action sources
@@ -24,13 +30,13 @@ jobs:
       uses: engineerd/setup-kind@v0.5.0
       with:
         config: kind.yaml
-        
+
     - name: Setup kubectl & fetch node information
       run: |
         kubectl cluster-info --context kind-kind
         kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
-        
+
     - name: Dump system info
       run: |
         source ./test/upgrade_test/fission_objects.sh dump_system_info

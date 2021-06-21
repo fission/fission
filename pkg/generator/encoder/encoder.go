@@ -18,6 +18,7 @@ package encoder
 
 import (
 	"encoding/json"
+
 	"github.com/ghodss/yaml"
 )
 
