@@ -41,7 +41,7 @@ jobs:
         uses: engineerd/setup-kind@v0.5.0
         with:
           image:  ${{ matrix.kindimage }}
-          version:  v0.11.1
+          version:  v0.11.0
 
       - name: Configuring and testing the Installation
         run: |
