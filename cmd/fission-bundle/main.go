@@ -255,12 +255,7 @@ Options:
 	if err != nil {
 		log.Fatalf("I can't initialize zap logger: %v", err)
 	}
-	defer func() {
-		err := logger.Sync()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
+	defer logger.Sync()
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
 	if err != nil {

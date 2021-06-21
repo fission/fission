@@ -18,8 +18,9 @@ package timetrigger
 
 import (
 	"fmt"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"time"
+
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 
 	"github.com/pkg/errors"
 	"github.com/robfig/cron"

@@ -33,11 +33,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
-	defer func() {
-		err := logger.Sync()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
+	defer logger.Sync()
 	app.Run(logger)
 }
