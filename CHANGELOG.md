@@ -1,5 +1,21 @@
 # Changelog
 
+## [v1.13.1](https://github.com/fission/fission/tree/v1.13.1) (2021-06-21)
+
+[Full Changelog](https://github.com/fission/fission/compare/1.13.1...v1.13.1)
+
+## [1.13.1](https://github.com/fission/fission/tree/1.13.1) (2021-06-21)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.13.0...1.13.1)
+
+**Merged pull requests:**
+
+- Changes for 1.13.1 release [\#2087](https://github.com/fission/fission/pull/2087) ([sanketsudake](https://github.com/sanketsudake))
+- Ignore errors from zap logger Sync [\#2086](https://github.com/fission/fission/pull/2086) ([sanketsudake](https://github.com/sanketsudake))
+- Correct release name in release script for non helm install [\#2084](https://github.com/fission/fission/pull/2084) ([sanketsudake](https://github.com/sanketsudake))
+- Use codeql for code scanning [\#2078](https://github.com/fission/fission/pull/2078) ([sanketsudake](https://github.com/sanketsudake))
+- Lint fix [\#2074](https://github.com/fission/fission/pull/2074) ([RealHarshThakur](https://github.com/RealHarshThakur))
+
 ## [v1.13.0](https://github.com/fission/fission/tree/v1.13.0) (2021-06-16)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.12.0...v1.13.0)
