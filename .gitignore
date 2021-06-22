@@ -29,9 +29,5 @@ environments/php7/vendor/
 .DS_Store
 vendor/
 local/
-environments/dotnet20/Builder/.vs/
-environments/dotnet20/.vs/
-environments/dotnet20/obj/
-environments/dotnet20/bin/
 
 build/

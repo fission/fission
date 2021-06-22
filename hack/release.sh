@@ -78,7 +78,9 @@ update_github_charts_repo() {
 
 gh_release() {
     local version=$1
-    doit gh release create "$version" --draft --prerelease --title "$version" --notes-file $(realpath "${DIR}"/hack/notes.md) --target "$gitcommit" "${artifacts[@]}"
+    cp "${DIR}"/hack/notes.md relnotes.md
+    create_downloads_table ${version} >> relnotes.md
+    doit gh release create "$version" --draft --prerelease --title "$version" --notes-file $(realpath "${DIR}"/relnotes.md) --target "$gitcommit" "${artifacts[@]}"
 }
 
 generate_changelog() {
@@ -88,8 +90,6 @@ generate_changelog() {
     echo
     echo "[Documentation](https://docs.fission.io/)" >>new_CHANGELOG.md
     echo
-
-    create_downloads_table ${version} >>new_CHANGELOG.md
 
     # generate changelog from github
     github_changelog_generator -u fission -p fission -t "${GITHUB_TOKEN}" --future-release "${version}" --no-issues -o tmp_CHANGELOG.md
@@ -106,7 +106,9 @@ create_downloads_table() {
     local release_tag=$1
     local url_prefix="https://github.com/fission/fission/releases/download"
 
-    echo "## Downloads for ${version}"
+    echo
+    echo
+    echo "#### Downloads for ${version}"
     echo
 
     echo
@@ -134,11 +136,6 @@ release_environment_check() {
 
     if [ ! -d "$chartsrepo" ]; then
         echo "Error finding chart repo at $chartsrepo"
-        exit 1
-    fi
-
-    if [ ! -d "$FISSION_HOME" ]; then
-        echo "The FISSION_HOME variable should be set to directory where Fission and fission-charts are checked out"
         exit 1
     fi
 }
@@ -280,7 +277,6 @@ fi
 check_commands
 release_environment_check "$version" "$chartsrepo"
 build_all "$version" "$date" "$gitcommit"
-build_images "$version" "$date" "$gitcommit"
 build_charts "$version"
 build_yamls "$version"
 
@@ -288,8 +284,11 @@ attach_github_release_cli "$version"
 attach_github_release_charts "$version"
 attach_github_release_yamls "$version"
 update_github_charts_repo "$version" "$chartsrepo"
-generate_changelog "$version"
 gh_release "$version"
+
+generate_changelog "$version"
+
+build_images "$version" "$date" "$gitcommit"
 
 echo "############ DONE #############"
 echo "Congratulation, ${version} is ready to ship !!"
