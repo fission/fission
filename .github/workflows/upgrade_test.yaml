@@ -8,6 +8,8 @@ on:
       - '**.go'
       - 'charts/**'
       - 'test/**'
+      - go.mod
+      - go.sum
   pull_request:
     branches:
       - master
@@ -15,6 +17,8 @@ on:
       - '**.go'
       - 'charts/**'
       - 'test/**'
+      - go.mod
+      - go.sum
   workflow_dispatch:
 
 jobs:
