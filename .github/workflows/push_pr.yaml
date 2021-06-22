@@ -12,7 +12,7 @@ on:
     branches:
       - master
     paths:
-      - '.github/workflows/**'    
+      - '.github/workflows/*' 
       - '**.go'
       - 'charts/**'
       - 'test/**'
