@@ -25,8 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ] 
         kindimage : [ 'kindest/node:v1.19.11','kindest/node:v1.20.7',  'kindest/node:v1.21.1' ]
+        os: [ ubuntu-latest ] 
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2.3.4
