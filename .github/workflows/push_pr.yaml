@@ -12,6 +12,7 @@ on:
     branches:
       - master
     paths:
+      - '.github/workflows/*' 
       - '**.go'
       - 'charts/**'
       - 'test/**'
@@ -20,7 +21,12 @@ on:
 jobs:
   # Job to run change detection
   integration-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kindimage : [ 'kindest/node:v1.19.11','kindest/node:v1.20.7',  'kindest/node:v1.21.1' ]
+        os: [ ubuntu-latest ] 
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2.3.4
@@ -44,12 +50,12 @@ jobs:
       - name: Kind Clutser
         uses: engineerd/setup-kind@v0.5.0
         with:
-          config: kind.yaml
+          image:  ${{ matrix.kindimage }}
+          version:  v0.11.0
 
       - name: Configuring and testing the Installation
         run: |
           kubectl cluster-info --context kind-kind
-          kind get kubeconfig --internal >$HOME/.kube/config
           kubectl get nodes
           sudo apt-get install -y apache2-utils
 
