@@ -15,6 +15,7 @@ on:
       - '**.go'
       - 'charts/**'
       - 'test/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
