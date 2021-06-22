@@ -12,10 +12,10 @@ on:
     branches:
       - master
     paths:
+      - '.github/workflows/**'    
       - '**.go'
       - 'charts/**'
       - 'test/**'
-      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
