@@ -2,9 +2,18 @@ name: Code Scanning
 
 on:
   push:
+    branches:
+      - master
+    paths:
+      - '**.go'
   pull_request:
+    branches:
+      - master
+    paths:
+      - '**.go'
   schedule:
     - cron: "0 0 * * 0"
+  workflow_dispatch:
 
 jobs:
   CodeQL-Build:

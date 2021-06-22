@@ -1,25 +1,20 @@
-# 1.13.0
-[Documentation](https://docs.fission.io/)
-## Downloads for 1.13.0
-
-
-filename | sha256 hash
--------- | -----------
-[fission-1.13.0-darwin-amd64](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-darwin-amd64) | `47d47196e15455a60ec15b80141f3de7435bb524e4a9b373f059cb89e63e68ff`
-[fission-1.13.0-windows-amd64.exe](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-windows-amd64.exe) | `755d5b0316a11f2357cf1880ba10daa2309a3906201d5d89e2a66311c888f2e0`
-[fission-1.13.0-linux-amd64](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-linux-amd64) | `641fd6f8bb7508d1a88209cd1111decde91ad33a20066b2951d4eb3df0fed083`
-[fission-1.13.0-linux-arm](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-linux-arm) | `dcebedcec612b7850a0780662b1d8d7597bbdd53ad6cda1db6458b51e04aa809`
-[fission-1.13.0-linux-arm64](https://github.com/fission/fission/releases/download/1.13.0/fission-1.13.0-linux-arm64) | `faa8a3b23e88bc6867051ada7c1f272270f2a231e1f1b2d2d97c57ebd47b632a`
-[fission-all-1.13.0.tgz](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0.tgz) | `b1faaa96e4d71cff5bce960c185f7dc423b3251430734d1d65034991bb0b736d`
-[fission-core-1.13.0.tgz](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0.tgz) | `191ef5d320e3bd8a5c0877b187ebb0189c91c4dfd15f2131de2319bd61c51d8c`
-[fission-all-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-minikube.yaml) | `6032092352ac323b2b87d3a9c4c22ebb24584a3058a312ee84f3915f71ee6930`
-[fission-all-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0.yaml) | `23c8d6ef9ae41184b46a65dde993375795cfed103d97bfdd535cb6dfd2057377`
-[fission-all-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-all-1.13.0-openshift.yaml) | `0d84aaa170cb6e01453bb6d4aeb31435dbd6e8706747013b38b5de19b56d5df4`
-[fission-core-1.13.0-minikube.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-minikube.yaml) | `c471bff6244641e57eea64051d9d2b16ef21c1fbb9c6c3ab8e7536992fdd1602`
-[fission-core-1.13.0.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0.yaml) | `19d66b709a96ad6cc4a413ac7f0a7bb45fab4ff02de35276e9abd25eaacba1d5`
-[fission-core-1.13.0-openshift.yaml](https://github.com/fission/fission/releases/download/1.13.0/fission-core-1.13.0-openshift.yaml) | `acb232f347751d1f87b9f7a2ed1ce546e1def31ed0ff05ed19f8a08cad724336`
-
 # Changelog
+
+## [v1.13.1](https://github.com/fission/fission/tree/v1.13.1) (2021-06-21)
+
+[Full Changelog](https://github.com/fission/fission/compare/1.13.1...v1.13.1)
+
+## [1.13.1](https://github.com/fission/fission/tree/1.13.1) (2021-06-21)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.13.0...1.13.1)
+
+**Merged pull requests:**
+
+- Changes for 1.13.1 release [\#2087](https://github.com/fission/fission/pull/2087) ([sanketsudake](https://github.com/sanketsudake))
+- Ignore errors from zap logger Sync [\#2086](https://github.com/fission/fission/pull/2086) ([sanketsudake](https://github.com/sanketsudake))
+- Correct release name in release script for non helm install [\#2084](https://github.com/fission/fission/pull/2084) ([sanketsudake](https://github.com/sanketsudake))
+- Use codeql for code scanning [\#2078](https://github.com/fission/fission/pull/2078) ([sanketsudake](https://github.com/sanketsudake))
+- Lint fix [\#2074](https://github.com/fission/fission/pull/2074) ([RealHarshThakur](https://github.com/RealHarshThakur))
 
 ## [v1.13.0](https://github.com/fission/fission/tree/v1.13.0) (2021-06-16)
 

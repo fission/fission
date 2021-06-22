@@ -4,9 +4,17 @@ on:
   push:
     branches:
       - master
+    paths:
+      - '**.go'
+      - 'charts/**'
+      - 'test/**'
   pull_request:
     branches:
       - master
+    paths:
+      - '**.go'
+      - 'charts/**'
+      - 'test/**'
   workflow_dispatch:
 
 jobs:
