@@ -8,6 +8,8 @@ on:
       - '**.go'
       - 'charts/**'
       - 'test/**'
+      - go.mod
+      - go.sum
   pull_request:
     branches:
       - master
@@ -16,6 +18,8 @@ on:
       - '**.go'
       - 'charts/**'
       - 'test/**'
+      - go.mod
+      - go.sum
   workflow_dispatch:
 
 jobs:
@@ -59,14 +63,9 @@ jobs:
           kubectl get nodes
           sudo apt-get install -y apache2-utils
 
-      - name: Static code analysis
+      - name: Helm chart lint
         run: |
-          ./hack/verify-gofmt.sh
-          ./hack/verify-govet.sh
           helm lint charts/fission-all/ charts/fission-core/
-
-      - name: Run unit tests
-        run: ./hack/runtests.sh
 
       - name: Helm update
         run: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
