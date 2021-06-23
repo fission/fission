@@ -17,6 +17,7 @@ limitations under the License.
 package container
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 		return nil, err
 	}
 
-	existingDepl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
+	existingDepl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
 	if err == nil {
 		// Try to adopt orphan deployment created by the old executor.
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
@@ -74,7 +75,7 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
-			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(existingDepl)
+			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(context.TODO(), existingDepl, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting cn", zap.Error(err),
 					zap.String("cn", deployName), zap.String("ns", deployNamespace))
@@ -97,10 +98,10 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
-		depl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(deployment)
+		depl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
+				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
 			}
 			if err != nil {
 				cn.logger.Error("error while creating function deployment",
@@ -120,7 +121,7 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 }
 
 func (cn *Container) updateDeployment(deployment *appsv1.Deployment, ns string) error {
-	_, err := cn.kubernetesClient.AppsV1().Deployments(ns).Update(deployment)
+	_, err := cn.kubernetesClient.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
 	return err
 }
 
@@ -128,7 +129,7 @@ func (cn *Container) deleteDeployment(ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it marks for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(name, &metav1.DeleteOptions{
+	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
 }
@@ -333,14 +334,14 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 		},
 	}
 
-	existingHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
+	existingHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(context.TODO(), hpaName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
 			existingHpa.Spec = hpa.Spec
-			existingHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(existingHpa)
+			existingHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(context.TODO(), existingHpa, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
@@ -349,10 +350,10 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 		}
 		return existingHpa, err
 	} else if k8s_err.IsNotFound(err) {
-		cHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(hpa)
+		cHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(context.TODO(), hpa, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				cHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
+				cHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(context.TODO(), hpaName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -364,16 +365,16 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 }
 
 func (cn *Container) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
-	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(name, metav1.GetOptions{})
+	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 func (cn *Container) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(hpa)
+	_, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(context.TODO(), hpa, metav1.UpdateOptions{})
 	return err
 }
 
 func (cn *Container) deleteHpa(ns string, name string) error {
-	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(name, &metav1.DeleteOptions{})
+	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
@@ -396,7 +397,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 		},
 	}
 
-	existingSvc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
+	existingSvc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
@@ -405,7 +406,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type
-			existingSvc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Update(existingSvc)
+			existingSvc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Update(context.TODO(), existingSvc, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
@@ -414,10 +415,10 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 		}
 		return existingSvc, err
 	} else if k8s_err.IsNotFound(err) {
-		svc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Create(service)
+		svc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Create(context.TODO(), service, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				svc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
+				svc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -429,7 +430,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 }
 
 func (cn *Container) deleteSvc(ns string, name string) error {
-	return cn.kubernetesClient.CoreV1().Services(ns).Delete(name, &metav1.DeleteOptions{})
+	return cn.kubernetesClient.CoreV1().Services(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (*appsv1.Deployment, error) {
@@ -439,7 +440,7 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err := cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
+		latestDepl, err := cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(context.TODO(), depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -503,7 +504,7 @@ func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, se
 	rvCount := 0
 
 	if len(secrets) > 0 {
-		list, err := client.CoreV1().Secrets(namespace).List(metav1.ListOptions{})
+		list, err := client.CoreV1().Secrets(namespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}
@@ -523,7 +524,7 @@ func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, se
 	}
 
 	if len(cfgmaps) > 0 {
-		list, err := client.CoreV1().ConfigMaps(namespace).List(metav1.ListOptions{})
+		list, err := client.CoreV1().ConfigMaps(namespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}

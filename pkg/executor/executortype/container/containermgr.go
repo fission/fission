@@ -44,7 +44,6 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
-	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -60,7 +59,7 @@ type (
 		fissionClient    *crd.FissionClient
 		crdClient        rest.Interface
 		instanceID       string
-		fetcherConfig    *fetcherConfig.Config
+		// fetcherConfig    *fetcherConfig.Config
 
 		runtimeImagePullPolicy apiv1.PullPolicy
 		namespace              string
@@ -158,6 +157,12 @@ func (caaf *Container) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
 	caaf.fsCache.DeleteEntry(fsvc)
 }
 
+// GetFuncSvcFromPoolCache has not been implemented for Container Functions
+func (caaf *Container) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
+	return nil, 0, nil
+}
+
 // TapService makes a TouchByAddress request to the cache.
 func (caaf *Container) TapService(svcHost string) error {
 	err := caaf.fsCache.TouchByAddress(svcHost)
@@ -176,7 +181,7 @@ func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
 		return false
 	}
 
-	_, err := caaf.kubernetesClient.CoreV1().Services(service[1]).Get(service[0], metav1.GetOptions{})
+	_, err := caaf.kubernetesClient.CoreV1().Services(service[1]).Get(context.TODO(), service[0], metav1.GetOptions{})
 	if err != nil {
 		if !k8sErrs.IsNotFound(err) {
 			caaf.logger.Error("error validating function service address", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -190,8 +195,7 @@ func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
 		return false
 	}
 
-	currentDeploy, err := caaf.kubernetesClient.AppsV1().
-		Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+	currentDeploy, err := caaf.kubernetesClient.AppsV1().Deployments(deployObj.Namespace).Get(context.TODO(), deployObj.Name, metav1.GetOptions{})
 	if err != nil {
 		if !k8sErrs.IsNotFound(err) {
 			caaf.logger.Error("error validating function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -212,7 +216,7 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
-	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
+	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 	if err != nil {
@@ -229,9 +233,9 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
 			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
 
-		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(deployment.ObjectMeta.Name,
+		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(context.TODO(), deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,
-			[]byte(patch))
+			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
 			return err
 		}
@@ -241,7 +245,7 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (caaf *Container) AdoptExistingResources() {
-	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		caaf.logger.Error("error getting function list", zap.Error(err))
 		return
@@ -632,7 +636,7 @@ func (caaf *Container) updateFuncDeployment(fn *fv1.Function) error {
 		ns = fn.ObjectMeta.Namespace
 	}
 
-	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(fnObjName, metav1.GetOptions{})
+	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(context.TODO(), fnObjName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -675,7 +679,7 @@ func (caaf *Container) fnDelete(fn *fv1.Function) error {
 	_, err = caaf.fsCache.DeleteOld(fsvc, time.Second*0)
 	if err != nil {
 		multierr = multierror.Append(multierr,
-			errors.Wrap(err, fmt.Sprintf("error deleting the function from cache")))
+			errors.Wrapf(err, "error deleting the function from cache"))
 	}
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
@@ -740,7 +744,7 @@ func (caaf *Container) idleObjectReaper() {
 				continue
 			}
 
-			fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(fsvc.Function.Name, metav1.GetOptions{})
+			fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(context.TODO(), fsvc.Function.Name, metav1.GetOptions{})
 			if err != nil {
 				// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
 				// so we ignore the not found error for functions with CaaF executor type here.
@@ -768,7 +772,7 @@ func (caaf *Container) idleObjectReaper() {
 				}
 
 				currentDeploy, err := caaf.kubernetesClient.AppsV1().
-					Deployments(deployObj.Namespace).Get(deployObj.Name, metav1.GetOptions{})
+					Deployments(deployObj.Namespace).Get(context.TODO(), deployObj.Name, metav1.GetOptions{})
 				if err != nil {
 					caaf.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 					return
@@ -805,7 +809,7 @@ func (caaf *Container) scaleDeployment(deplNS string, deplName string, replicas 
 		zap.String("deployment", deplName),
 		zap.String("namespace", deplNS),
 		zap.Int32("replicas", replicas))
-	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(deplName, &autoscalingv1.Scale{
+	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(context.TODO(), deplName, &autoscalingv1.Scale{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deplName,
 			Namespace: deplNS,
@@ -813,6 +817,6 @@ func (caaf *Container) scaleDeployment(deplNS string, deplName string, replicas 
 		Spec: autoscalingv1.ScaleSpec{
 			Replicas: replicas,
 		},
-	})
+	}, metav1.UpdateOptions{})
 	return err
 }

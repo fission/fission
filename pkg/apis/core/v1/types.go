@@ -410,14 +410,21 @@ type (
 		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
 
-		// Image for containing the language runtime.
-		Image string `json:"image"`
-		// Port where the application is running
-		Port int `json:"port"`
-		// Command to be run on the container
-		Command string `json:"command"`
-		// Args to be passed to the container
-		Args string `json:"args"`
+		// Image specifics image to to use for executor type container based functions
+		// +optional
+		Image string `json:"image,omitempty"`
+
+		// Port specifics port to to use for executor type container based functions
+		// +optional
+		Port int `json:"port,omitempty"`
+
+		// Command specifics command to run on the container for executor type container based functions
+		// +optional
+		Command string `json:"command,omitempty"`
+
+		// Args specifics args to to use for executor type container based functions
+		// +optional
+		Args string `json:"args,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

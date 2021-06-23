@@ -60,6 +60,12 @@ spec:
                     description: StrategyType is the strategy type of a function. Now it only supports 'execution'.
                     type: string
                 type: object
+              args:
+                description: Args specifics args to to use for executor type container based functions
+                type: string
+              command:
+                description: Command specifics command to to use for executor type container based functions
+                type: string
               concurrency:
                 description: Maximum number of pods to be specialized which will serve requests This is optional. If not specified default value will be taken as 500
                 type: integer
@@ -95,6 +101,9 @@ spec:
               idletimeout:
                 description: IdleTimeout specifies the length of time that a function is idle before the function pod(s) are eligible for deletion. If no traffic to the function is detected within the idle timeout, the executor will then recycle the function pod(s) to release resources.
                 type: integer
+              image:
+                description: Image specifics image to to use for executor type container based functions
+                type: string
               onceOnly:
                 description: OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request This is optional. If not specified default value will be taken as false
                 type: boolean
@@ -116,6 +125,9 @@ spec:
                         type: string
                     type: object
                 type: object
+              port:
+                description: Port specifics port to to use for executor type container based functions
+                type: integer
               requestsPerPod:
                 description: RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod This is optional. If not specified default value will be taken as 1
                 type: integer
