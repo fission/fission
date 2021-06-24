@@ -103,6 +103,10 @@ reporter-multiarch-img: cmd/reporter/Dockerfile.reporter
 		--build-arg BUILDVERSION=$(VERSION) \
 	 	$(DOCKER_FLAGS) -f $< .
 
+### Codegen
+codegen:
+	@./hack/codegen.sh
+
 ### CRDs
 generate-crds:
 	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  \
@@ -131,6 +135,8 @@ clean:
 generate-swagger-doc:
 	@cd pkg/apis/core/v1/tool && ./update-generated-swagger-docs.sh
 
-make release:
+all-generators: codegen generate-crds generate-swagger-doc
+
+release:
 	@./hack/release.sh $(VERSION)
-	@./hack/releas-tag.sh $(VERSION)
+	@./hack/release-tag.sh $(VERSION)

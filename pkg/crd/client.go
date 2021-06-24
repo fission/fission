@@ -31,7 +31,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
-	genClientset "github.com/fission/fission/pkg/apis/genclient/clientset/versioned"
+	genClientset "github.com/fission/fission/pkg/client/clientset/versioned"
 )
 
 type (
