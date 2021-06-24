@@ -32,10 +32,6 @@ func (ls localStorage) getStorageType() StorageType {
 	return ls.storageType
 }
 
-func (ls localStorage) SetLocalPath(path string) {
-	ls.localPath = path
-}
-
 func (ls localStorage) getUploadFileName() string {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
