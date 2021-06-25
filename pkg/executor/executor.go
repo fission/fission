@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -41,6 +42,7 @@ import (
 	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
 type (
@@ -69,8 +71,9 @@ type (
 )
 
 // MakeExecutor returns an Executor for given ExecutorType(s).
-func MakeExecutor(logger *zap.Logger, cms *cms.ConfigSecretController,
-	fissionClient *crd.FissionClient, types map[fv1.ExecutorType]executortype.ExecutorType) (*Executor, error) {
+func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecretController,
+	fissionClient *crd.FissionClient, types map[fv1.ExecutorType]executortype.ExecutorType,
+	informers []k8sCache.SharedIndexInformer) (*Executor, error) {
 	executor := &Executor{
 		logger:        logger.Named("executor"),
 		cms:           cms,
@@ -82,10 +85,13 @@ func MakeExecutor(logger *zap.Logger, cms *cms.ConfigSecretController,
 	}
 	for _, et := range types {
 		go func(et executortype.ExecutorType) {
-			et.Run(context.Background())
+			et.Run(ctx)
 		}(et)
 	}
-	go cms.Run(context.Background())
+	for _, informer := range informers {
+		go informer.Run(ctx.Done())
+	}
+	go cms.Run(ctx)
 	go executor.serveCreateFuncServices()
 
 	return executor, nil
@@ -257,10 +263,17 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
+	funcInformer := informerFactory.Core().V1().Functions().Informer()
+	pkgInformer := informerFactory.Core().V1().Packages().Informer()
+	envInformer := informerFactory.Core().V1().Environments().Informer()
+
 	gpm, err := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
-		functionNamespace, fetcherConfig, executorInstanceID)
+		functionNamespace, fetcherConfig, executorInstanceID,
+		&funcInformer, &pkgInformer,
+	)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation faied")
 	}
@@ -268,7 +281,9 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	ndm, err := newdeploy.MakeNewDeploy(
 		logger,
 		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
-		functionNamespace, fetcherConfig, executorInstanceID)
+		functionNamespace, fetcherConfig, executorInstanceID,
+		&funcInformer, &envInformer,
+	)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
@@ -296,7 +311,10 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
 
-	api, err := MakeExecutor(logger, cms, fissionClient, executorTypes)
+	ctx := context.Background()
+	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes, []k8sCache.SharedIndexInformer{
+		funcInformer, pkgInformer, envInformer,
+	})
 	if err != nil {
 		return err
 	}
