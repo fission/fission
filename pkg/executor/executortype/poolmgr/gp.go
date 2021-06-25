@@ -71,8 +71,7 @@ type (
 		fissionClient            *crd.FissionClient
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
-		readyPodController       cache.Controller
-		readyPodIndexer          cache.Indexer
+		readyPodInformer         cache.SharedIndexInformer
 		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
@@ -249,7 +248,7 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 		key = item.(string)
 		gp.logger.Debug("got key from the queue", zap.String("key", key))
 
-		obj, exists, err := gp.readyPodIndexer.GetByKey(key)
+		obj, exists, err := gp.readyPodInformer.GetIndexer().GetByKey(key)
 		if err != nil {
 			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
 			return "", nil, err
