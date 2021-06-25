@@ -144,7 +144,6 @@ func MakeGenericPoolManager(
 		return nil, err
 	}
 	gpm.podInformer = kubeInformerFactory.Core().V1().Pods().Informer()
-
 	return gpm, nil
 }
 
