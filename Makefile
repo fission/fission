@@ -56,13 +56,22 @@ test-run: code-checks
 	@rm -f coverage.txt
 
 ### Binaries
-fission-cli:
+%-cli:
 	@mkdir -p $(BINDIR)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build \
 	-gcflags '$(GCFLAGS)' \
 	-asmflags '$(ASMFLAGS)' \
 	-ldflags "$(GO_LDFLAGS)" \
-	-o $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) ./cmd/fission-cli
+	-o $(BINDIR)/$(subst -cli,,$@)-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) ./$<
+
+fission-cli: cmd/fission-cli
+fission-bundle-cli: cmd/fission-bundle
+fetcher-cli: cmd/fetcher
+builder-cli: cmd/builder
+preupgradechecks-cli: cmd/preupgradechecks
+reporter-cli: cmd/reporter
+
+local-bins: fission-cli fission-bundle-cli fetcher-cli builder-cli preupgradechecks-cli reporter-cli
 
 all-fission-cli:
 	$(MAKE) fission-cli GOOS=windows GOARCH=amd64
@@ -72,7 +81,7 @@ all-fission-cli:
 	$(MAKE) fission-cli GOOS=darwin GOARCH=amd64
 
 install-fission-cli: fission-cli
-	mv $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/
+	mv $(BINDIR)/-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/
 
 ### Container images
 FISSION_IMGS := fission-bundle-multiarch-img \

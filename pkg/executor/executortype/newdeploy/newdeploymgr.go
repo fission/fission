@@ -33,7 +33,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -69,12 +68,11 @@ type (
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
 
-		throttler      *throttler.Throttler
-		funcStore      k8sCache.Store
-		funcController k8sCache.Controller
+		throttler *throttler.Throttler
 
-		envStore           k8sCache.Store
-		envController      k8sCache.Controller
+		funcInformer *k8sCache.SharedIndexInformer
+		envInformer  *k8sCache.SharedIndexInformer
+
 		serviceInformer    k8sCache.SharedIndexInformer
 		deploymentInformer k8sCache.SharedIndexInformer
 
@@ -91,6 +89,8 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
+	funcInformer *k8sCache.SharedIndexInformer,
+	envInformer *k8sCache.SharedIndexInformer,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -118,19 +118,16 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		defaultIdlePodReapTime: 2 * time.Minute,
+		funcInformer:           funcInformer,
+		envInformer:            envInformer,
 	}
 
 	if nd.crdClient != nil {
-		fnStore, fnController := nd.initFuncController()
-		nd.funcStore = fnStore
-		nd.funcController = fnController
-
-		envStore, envController := nd.initEnvController()
-		nd.envStore = envStore
-		nd.envController = envController
+		(*nd.funcInformer).AddEventHandler(nd.FunctionEventHandlers())
+		(*nd.envInformer).AddEventHandler(nd.EnvEventHandlers())
 	}
 
-	informerFactory, err := utils.GetInformerFacoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
+	informerFactory, err := utils.GetInformerFactoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +138,6 @@ func MakeNewDeploy(
 
 // Run start the function and environment controller along with an object reaper.
 func (deploy *NewDeploy) Run(ctx context.Context) {
-	go deploy.funcController.Run(ctx.Done())
-	go deploy.envController.Run(ctx.Done())
 	go deploy.serviceInformer.Run(ctx.Done())
 	go deploy.deploymentInformer.Run(ctx.Done())
 	go deploy.idleObjectReaper()
@@ -191,19 +186,8 @@ func (deploy *NewDeploy) TapService(svcHost string) error {
 	return nil
 }
 
-func getCachedItem(obj apiv1.ObjectReference, informer k8sCache.SharedIndexInformer) (item interface{}, exists bool, err error) {
-	store := informer.GetStore()
-
-	item, exists, err = store.Get(obj)
-	if err != nil || !exists {
-		item, exists, err = store.GetByKey(fmt.Sprintf("%s/%s", obj.Namespace, obj.Name))
-	}
-
-	return item, exists, err
-}
-
 func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service, error) {
-	item, exists, err := getCachedItem(obj, deploy.serviceInformer)
+	item, exists, err := utils.GetCachedItem(obj, deploy.serviceInformer)
 
 	if err != nil || !exists {
 		deploy.logger.Debug(
@@ -220,7 +204,7 @@ func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Servi
 }
 
 func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
-	item, exists, err := getCachedItem(obj, deploy.deploymentInformer)
+	item, exists, err := utils.GetCachedItem(obj, deploy.deploymentInformer)
 
 	if err != nil || !exists {
 		deploy.logger.Debug(
@@ -376,85 +360,6 @@ func (deploy *NewDeploy) CleanupOldExecutorObjects() {
 		// TODO retry reaper; logged and ignored for now
 		deploy.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
 	}
-}
-
-func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
-	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
-	store, controller := k8sCache.NewInformer(listWatch, &fv1.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
-			// and worker pattern to process items instead of moving process to another goroutine.
-			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
-			go func() {
-				fn := obj.(*fv1.Function)
-				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-				_, err := deploy.createFunction(fn)
-				if err != nil {
-					deploy.logger.Error("error eager creating function",
-						zap.Error(err),
-						zap.Any("function", fn))
-				}
-				deploy.logger.Debug("end create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-			}()
-		},
-		DeleteFunc: func(obj interface{}) {
-			fn := obj.(*fv1.Function)
-			go func() {
-				err := deploy.deleteFunction(fn)
-				if err != nil {
-					deploy.logger.Error("error deleting function",
-						zap.Error(err),
-						zap.Any("function", fn))
-				}
-			}()
-		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			oldFn := oldObj.(*fv1.Function)
-			newFn := newObj.(*fv1.Function)
-			go func() {
-				err := deploy.updateFunction(oldFn, newFn)
-				if err != nil {
-					deploy.logger.Error("error updating function",
-						zap.Error(err),
-						zap.Any("old_function", oldFn),
-						zap.Any("new_function", newFn))
-				}
-			}()
-		},
-	})
-	return store, controller
-}
-
-func (deploy *NewDeploy) initEnvController() (k8sCache.Store, k8sCache.Controller) {
-	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "environments", metav1.NamespaceAll, fields.Everything())
-	store, controller := k8sCache.NewInformer(listWatch, &fv1.Environment{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
-		DeleteFunc: func(obj interface{}) {},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			newEnv := newObj.(*fv1.Environment)
-			oldEnv := oldObj.(*fv1.Environment)
-			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
-			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
-				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
-				funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
-				for _, f := range funcs {
-					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(context.TODO(), f.ObjectMeta.Name, metav1.GetOptions{})
-					if err != nil {
-						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
-						continue
-					}
-					err = deploy.updateFuncDeployment(function, newEnv)
-					if err != nil {
-						deploy.logger.Error("Error updating function", zap.Error(err), zap.Any("function", function))
-						continue
-					}
-				}
-			}
-		},
-	})
-	return store, controller
 }
 
 func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
