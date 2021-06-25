@@ -236,7 +236,7 @@ func Start(logger *zap.Logger, port int, executorURL string) {
 			zap.Bool("default", displayAccessLog))
 	}
 
-	triggers, _, fnStore := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, fissionClient.CoreV1().RESTClient(), &tsRoundTripperParams{
+	triggers := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, fissionClient.CoreV1().RESTClient(), &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,
@@ -245,7 +245,7 @@ func Start(logger *zap.Logger, port int, executorURL string) {
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
-	resolver := makeFunctionReferenceResolver(fnStore)
+	resolver := makeFunctionReferenceResolver(triggers.funcInformer.GetStore())
 
 	go serveMetric(logger)
 
