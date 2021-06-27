@@ -1,12 +1,14 @@
 package utils
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	metricsapi "k8s.io/metrics/pkg/apis/metrics"
+
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func GetInformerFacoryByExecutor(client *kubernetes.Clientset, executorType v1.ExecutorType) (k8sInformers.SharedInformerFactory, error) {
@@ -21,4 +23,23 @@ func GetInformerFacoryByExecutor(client *kubernetes.Clientset, executorType v1.E
 			options.LabelSelector = labelSelector.String()
 		}))
 	return informerFactory, nil
+}
+
+func SupportedMetricsAPIVersionAvailable(discoveredAPIGroups *metav1.APIGroupList) bool {
+	var supportedMetricsAPIVersions = []string{
+		"v1beta1",
+	}
+	for _, discoveredAPIGroup := range discoveredAPIGroups.Groups {
+		if discoveredAPIGroup.Name != metricsapi.GroupName {
+			continue
+		}
+		for _, version := range discoveredAPIGroup.Versions {
+			for _, supportedVersion := range supportedMetricsAPIVersions {
+				if version.Version == supportedVersion {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

@@ -171,32 +171,58 @@ func (gp *GenericPool) getDeployAnnotations() map[string]string {
 	}
 }
 
+func (gp *GenericPool) checkMetricsApi() bool {
+	apiGroups, err := gp.metricsClient.DiscoveryClient.ServerGroups()
+	if err != nil {
+		gp.logger.Error("faied to discover API groups", zap.Error(err))
+		return false
+	}
+	return utils.SupportedMetricsAPIVersionAvailable(apiGroups)
+}
+
 func (gp *GenericPool) updateCPUUtilizationSvc() {
-	for {
+	var metricsApiAvailabe bool
+	checkDuration := 30
+
+	if !gp.checkMetricsApi() {
+		checkDuration = 180
+		gp.logger.Error("Metrics API not available")
+	}
+
+	serviceFunc := func() {
 		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: "managed=false",
 		})
-
 		if err != nil {
 			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
-		} else {
-			gp.logger.Debug("pods found", zap.Any("length", len(podMetricsList.Items)))
-			for _, val := range podMetricsList.Items {
-				p, _ := resource.ParseQuantity("0m")
-				for _, container := range val.Containers {
-					p.Add(container.Usage["cpu"])
-				}
-				if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
-					if valArray, ok1 := value.([]interface{}); ok1 {
-						function, address := valArray[0], valArray[1]
-						gp.fsCache.SetCPUUtilizaton(function.(string), address.(string), p)
-						gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
-					}
+			return
+		}
+		gp.logger.Debug("pods found", zap.Any("length", len(podMetricsList.Items)))
+		for _, val := range podMetricsList.Items {
+			p, _ := resource.ParseQuantity("0m")
+			for _, container := range val.Containers {
+				p.Add(container.Usage["cpu"])
+			}
+			if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
+				if valArray, ok1 := value.([]interface{}); ok1 {
+					function, address := valArray[0], valArray[1]
+					gp.fsCache.SetCPUUtilizaton(function.(string), address.(string), p)
+					gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
 				}
 			}
 		}
+	}
 
-		time.Sleep(30 * time.Second)
+	for {
+		if metricsApiAvailabe {
+			serviceFunc()
+		} else {
+			if gp.checkMetricsApi() {
+				metricsApiAvailabe = true
+				checkDuration = 30
+			}
+		}
+		time.Sleep(time.Duration(checkDuration) * time.Second)
 	}
 }
 
