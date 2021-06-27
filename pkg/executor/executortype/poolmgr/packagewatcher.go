@@ -19,7 +19,6 @@ package poolmgr
 import (
 	"time"
 
-	"github.com/fission/fission/pkg/utils"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -28,6 +27,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // TODO : It may make sense to make each of add, update, delete funcs run as separate go routines.

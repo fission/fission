@@ -28,12 +28,13 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/minio/minio-go"
 	"github.com/ory/dockertest"
 	dc "github.com/ory/dockertest/docker"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/fission/fission/pkg/storagesvc"
 )
 
 const (
@@ -153,7 +154,7 @@ func TestS3StorageService(t *testing.T) {
 
 	time.Sleep(10 * time.Second)
 
-	// Retrive file through minioClient
+	// Retrieve file through minioClient
 	reader, err := minioClient.GetObject(bucketName, fileID, minio.GetObjectOptions{})
 	panicIf(err)
 	defer reader.Close()
