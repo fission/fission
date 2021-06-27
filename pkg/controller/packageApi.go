@@ -189,7 +189,7 @@ func (a *API) PackageApiGet(w http.ResponseWriter, r *http.Request) {
 
 	var resp []byte
 	if raw != "" {
-		resp = []byte(f.Spec.Deployment.Literal)
+		resp = f.Spec.Deployment.Literal
 	} else {
 		resp, err = json.Marshal(f)
 		if err != nil {

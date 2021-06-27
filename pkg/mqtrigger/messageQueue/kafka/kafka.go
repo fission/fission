@@ -315,7 +315,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		zap.String("body", string(body)))
 
 	if err != nil {
-		errorString := string("request body error: " + string(body))
+		errorString := "request body error: " + string(body)
 		errorHeaders := generateErrorHeaders(errorString)
 		errorHandler(kafka.logger, trigger, producer, url,
 			errors.Wrapf(err, errorString), errorHeaders)
