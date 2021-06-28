@@ -534,7 +534,7 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
 func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
-	fh.logger.Info("UnTapService Called")
+	fh.logger.Debug("UnTapService Called")
 	ctx, cancel := context.WithTimeout(context.Background(), fh.unTapServiceTimeout)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)

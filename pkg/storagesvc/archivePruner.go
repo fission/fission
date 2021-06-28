@@ -76,7 +76,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 // and not the archives that are referenced by them, leaving the archives as orphans.
 // getOrphanArchives reaps the orphaned archives.
 func (pruner *ArchivePruner) getOrphanArchives() {
-	pruner.logger.Info("getting orphan archives")
+	pruner.logger.Debug("getting orphan archives")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 

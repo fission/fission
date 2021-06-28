@@ -21,8 +21,9 @@ package poolcache
 import (
 	"fmt"
 
-	ferror "github.com/fission/fission/pkg/error"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	ferror "github.com/fission/fission/pkg/error"
 )
 
 type requestType int

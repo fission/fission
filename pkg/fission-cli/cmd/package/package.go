@@ -28,6 +28,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
@@ -39,7 +40,6 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
-	uuid "github.com/satori/go.uuid"
 )
 
 // CreateArchive returns a fv1.Archive made from an archive .  If specFile, then

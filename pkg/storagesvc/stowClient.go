@@ -114,7 +114,7 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	uploadName := client.config.storage.getUploadFileName()
 
 	// save the file to the storage backend
-	item, err := client.container.Put(uploadName, file, int64(fileSize), nil)
+	item, err := client.container.Put(uploadName, file, fileSize, nil)
 	if err != nil {
 		client.logger.Error("error writing file on storage",
 			zap.Error(err),

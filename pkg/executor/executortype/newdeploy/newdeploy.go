@@ -48,7 +48,7 @@ const (
 func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
 	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
-	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
+	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
 	// Always scale to at least one pod when createOrGetDeployment

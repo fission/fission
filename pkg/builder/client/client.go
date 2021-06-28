@@ -82,7 +82,7 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
-	err = json.Unmarshal([]byte(rBody), &pkgBuildResp)
+	err = json.Unmarshal(rBody, &pkgBuildResp)
 	if err != nil {
 		c.logger.Error("error parsing resp body", zap.Error(err))
 		return nil, err

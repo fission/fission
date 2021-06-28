@@ -207,7 +207,7 @@ func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Servi
 
 	if err != nil || !exists {
 		deploy.logger.Debug(
-			"Falling back to getting service info from k8s API -- this may cause performace issues for your function.",
+			"Falling back to getting service info from k8s API -- this may cause performance issues for your function.",
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
@@ -224,7 +224,7 @@ func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.D
 
 	if err != nil || !exists {
 		deploy.logger.Debug(
-			"Falling back to getting deployment info from k8s API -- this may cause performace issues for your function.",
+			"Falling back to getting deployment info from k8s API -- this may cause performance issues for your function.",
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)

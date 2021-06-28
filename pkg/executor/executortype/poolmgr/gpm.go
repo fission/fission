@@ -211,7 +211,7 @@ func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod
 	}
 
 	if err != nil || !exists {
-		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performace issues for your function.")
+		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performance issues for your function.")
 		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
 		return pod, err
 	}

@@ -88,7 +88,7 @@ func (fsc *FunctionServiceCache) setFuncAlive(funcname, funcuid string, isAlive 
 
 // ReapTime is the amount of time taken to reap a pod
 func (fsc *FunctionServiceCache) ReapTime(funcName, funcAddress string, time float64) {
-	funcReapTime.WithLabelValues(funcName, funcAddress).Observe(float64(time))
+	funcReapTime.WithLabelValues(funcName, funcAddress).Observe(time)
 }
 
 // IdleTime is the amount of time it took Reaper to find out the pod was idle

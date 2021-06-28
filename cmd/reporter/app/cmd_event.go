@@ -18,8 +18,9 @@ package app
 import (
 	"log"
 
-	"github.com/fission/fission/pkg/tracker"
 	"github.com/spf13/cobra"
+
+	"github.com/fission/fission/pkg/tracker"
 )
 
 func eventCommandHandler(cmd *cobra.Command, args []string) error {

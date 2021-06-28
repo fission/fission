@@ -1,7 +1,22 @@
+linters:
+  enable:
+    - deadcode
+    - gofmt
+    - goimports
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - staticcheck
+    - structcheck
+    - typecheck
+    - unconvert
+    - varcheck
 linters-settings:
   errcheck:
     ignore: go.uber.org/zap:Sync
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local-prefixes: github.com/trussworks/my-cli-tool
+    local-prefixes: github.com/fission/fission
