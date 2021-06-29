@@ -12,7 +12,6 @@ import (
 )
 
 func (gp *GenericPool) newPodInformer() cache.SharedIndexInformer {
-	// TODO: Add executorType label filter as well
 	optionsModifier := func(options *metav1.ListOptions) {
 		options.LabelSelector = labels.Set(
 			gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()

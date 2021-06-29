@@ -63,7 +63,7 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver) *mutableRouter {
+func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	var mr *mutableRouter
 
 	// see issue https://github.com/fission/fission/issues/1317
@@ -74,13 +74,13 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 		mr = newMutableRouter(logger, mux.NewRouter())
 	}
 
-	httpTriggerSet.subscribeRouter(ctx, mr, resolver)
+	httpTriggerSet.subscribeRouter(ctx, mr)
 	return mr
 }
 
 func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64,
-	httpTriggerSet *HTTPTriggerSet, resolver *functionReferenceResolver, displayAccessLog bool) {
-	mr := router(ctx, logger, httpTriggerSet, resolver)
+	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
+	mr := router(ctx, logger, httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
 
 	err := http.ListenAndServe(url, &ochttp.Handler{
@@ -245,12 +245,10 @@ func Start(logger *zap.Logger, port int, executorURL string) {
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
-	resolver := makeFunctionReferenceResolver(triggers.funcInformer.GetStore())
-
 	go serveMetric(logger)
 
 	logger.Info("starting router", zap.Int("port", port))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serve(ctx, logger, port, tracingSamplingRate, triggers, resolver, displayAccessLog)
+	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog)
 }
