@@ -33,8 +33,9 @@ type (
 	// reference into a resolveResult
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
-		refCache *cache.Cache
-		store    k8sCache.Store
+		refCache     *cache.Cache
+		funcInformer *k8sCache.SharedIndexInformer
+		// store    k8sCache.Store
 	}
 
 	resolveResultType int
@@ -68,10 +69,10 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(store k8sCache.Store) *functionReferenceResolver {
+func makeFunctionReferenceResolver(funcInformer *k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		refCache: cache.MakeCache(time.Minute, 0),
-		store:    store,
+		refCache:     cache.MakeCache(time.Minute, 0),
+		funcInformer: funcInformer,
 	}
 	return frr
 }
@@ -120,7 +121,7 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
-	obj, isExist, err := frr.store.Get(&fv1.Function{
+	obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
@@ -154,7 +155,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
-		obj, isExist, err := frr.store.Get(&fv1.Function{
+		obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      functionName,
