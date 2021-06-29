@@ -781,7 +781,7 @@ func (deploy *NewDeploy) idleObjectReaper() {
 			// For function with the environment that no longer exists, executor
 			// scales down the deployment as usual and prints log to notify user.
 			if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
-				deploy.logger.Error("function environment no longer exists",
+				deploy.logger.Warn("function environment no longer exists",
 					zap.String("environment", fsvc.Environment.ObjectMeta.Name),
 					zap.String("function", fsvc.Name))
 			}

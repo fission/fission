@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	k8sInformers "k8s.io/client-go/informers"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -83,15 +84,18 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		requestChan: make(chan *createFuncServiceRequest),
 		fsCreateWg:  make(map[string]*sync.WaitGroup),
 	}
+
+	// Run all informers
+	for _, informer := range informers {
+		go informer.Run(ctx.Done())
+	}
+
 	for _, et := range types {
 		go func(et executortype.ExecutorType) {
 			et.Run(ctx)
 		}(et)
 	}
-	for _, informer := range informers {
-		go informer.Run(ctx.Done())
-	}
-	go cms.Run(ctx)
+
 	go executor.serveCreateFuncServices()
 
 	return executor, nil
@@ -309,11 +313,15 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	// TODO: use context to control the waiting time once kubernetes client supports it.
 	util.WaitTimeout(wg, 30*time.Second)
 
-	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes)
+	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Second*30)
+	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps().Informer()
+	secretInformer := k8sInformerFactory.Core().V1().Secrets().Informer()
+
+	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes, &configmapInformer, &secretInformer)
 
 	ctx := context.Background()
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes, []k8sCache.SharedIndexInformer{
-		funcInformer, pkgInformer, envInformer,
+		funcInformer, pkgInformer, envInformer, configmapInformer, secretInformer,
 	})
 	if err != nil {
 		return err
