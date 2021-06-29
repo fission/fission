@@ -84,14 +84,18 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		requestChan: make(chan *createFuncServiceRequest),
 		fsCreateWg:  make(map[string]*sync.WaitGroup),
 	}
+
+	// Run all informers
+	for _, informer := range informers {
+		go informer.Run(ctx.Done())
+	}
+
 	for _, et := range types {
 		go func(et executortype.ExecutorType) {
 			et.Run(ctx)
 		}(et)
 	}
-	for _, informer := range informers {
-		go informer.Run(ctx.Done())
-	}
+
 	go executor.serveCreateFuncServices()
 
 	return executor, nil
