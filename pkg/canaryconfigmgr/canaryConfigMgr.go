@@ -45,7 +45,7 @@ type canaryConfigMgr struct {
 	logger                 *zap.Logger
 	fissionClient          *crd.FissionClient
 	kubeClient             *kubernetes.Clientset
-	canaryConfigInformer   k8sCache.SharedIndexInformer
+	canaryConfigInformer   *k8sCache.SharedIndexInformer
 	promClient             *PrometheusApiClient
 	crdClient              rest.Interface
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
@@ -97,13 +97,14 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, k
 	}
 
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
-	configMgr.canaryConfigInformer = informerFactory.Core().V1().CanaryConfigs().Informer()
-
+	informer := informerFactory.Core().V1().CanaryConfigs().Informer()
+	configMgr.canaryConfigInformer = &informer
+	configMgr.CanaryConfigEventHandlers()
 	return configMgr, nil
 }
 
 func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers() {
-	canaryCfgMgr.canaryConfigInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+	(*canaryCfgMgr.canaryConfigInformer).AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			canaryConfig := obj.(*fv1.CanaryConfig)
 			if canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
@@ -132,7 +133,7 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers() {
 }
 
 func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
-	go canaryCfgMgr.canaryConfigInformer.Run(ctx.Done())
+	go (*canaryCfgMgr.canaryConfigInformer).Run(ctx.Done())
 	canaryCfgMgr.logger.Info("started canary configmgr controller")
 }
 
@@ -494,7 +495,7 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(canaryConfig *fv1.CanaryConfig,
 }
 
 func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs() {
-	for _, obj := range canaryCfgMgr.canaryConfigInformer.GetStore().List() {
+	for _, obj := range (*canaryCfgMgr.canaryConfigInformer).GetStore().List() {
 		canaryConfig := obj.(*fv1.CanaryConfig)
 		_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
 		if err != nil && canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
