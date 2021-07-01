@@ -4,7 +4,7 @@ set -eu
 ns="fission"
 ROOT=$(pwd)
 PREV_STABLE_VERSION=1.13.1
-HELM_VARS_LATEST_RELEASE="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
+HELM_VARS_LATEST_RELEASE="helmVars=routerServiceType=NodePort,repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
 
 doit() {
     echo "! $*"
@@ -30,7 +30,8 @@ install_stable_release() {
     doit kubectl create -k "github.com/fission/fission/crds/v1?ref=$PREV_STABLE_VERSION"
 
     echo "Installing Fission $PREV_STABLE_VERSION"
-    doit helm install --debug --wait --version $PREV_STABLE_VERSION --namespace $ns fission fission-charts/fission-all
+    doit helm install --debug --wait --version $PREV_STABLE_VERSION \
+        --namespace $ns fission fission-charts/fission-all --set routerServiceType=NodePort
 
     echo "Download fission cli $PREV_STABLE_VERSION"
     curl -Lo fission https://github.com/fission/fission/releases/download/$PREV_STABLE_VERSION/fission-$PREV_STABLE_VERSION-linux-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
