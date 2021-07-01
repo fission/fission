@@ -4,7 +4,7 @@ set -eu
 ns="fission"
 ROOT=$(pwd)
 PREV_STABLE_VERSION=1.13.1
-HELM_VARS_LATEST_RELEASE="helmVars=routerServiceType=NodePort,repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
+HELM_VARS_LATEST_RELEASE="routerServiceType=NodePort,repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
 
 doit() {
     echo "! $*"
@@ -47,6 +47,7 @@ create_fission_objects() {
         echo "Successfully created function environment"
     else
         echo "Environemnt creation failed"
+        exit 1
     fi
 
     echo "Creating function"
@@ -55,11 +56,14 @@ create_fission_objects() {
         echo "Successfully created function"
     else
         echo "Function creation failed"
-        exit
+        exit 1
     fi
+    sleep 5
 }
 
 test_fission_objects() {
+    fission env list
+    fission function list
     echo "-----------------###############################--------------------"
     echo "                   Running fission object tests"
     echo "-----------------###############################--------------------"
@@ -71,6 +75,7 @@ test_fission_objects() {
         echo "----------------------**********************-------------------------"
         echo "                            Test failed"
         echo "----------------------**********************-------------------------"
+        exit 1
     fi
 }
 
