@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-ns="f-ns"
+ns="fission"
 ROOT=$(pwd)
 PREV_STABLE_VERSION=1.13.1
 HELM_VARS_LATEST_RELEASE="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
@@ -30,12 +30,10 @@ install_stable_release() {
     doit kubectl create -k "github.com/fission/fission/crds/v1?ref=$PREV_STABLE_VERSION"
 
     echo "Installing Fission $PREV_STABLE_VERSION"
-    doit helm install --version $PREV_STABLE_VERSION --namespace $ns fission fission-charts/fission-all
+    doit helm install --debug --wait --version $PREV_STABLE_VERSION --namespace $ns fission fission-charts/fission-all
 
     echo "Download fission cli $PREV_STABLE_VERSION"
     curl -Lo fission https://github.com/fission/fission/releases/download/$PREV_STABLE_VERSION/fission-$PREV_STABLE_VERSION-linux-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
-    sleep 10
-
     doit fission version
 }
 
@@ -102,7 +100,7 @@ install_current_release() {
     echo "Running Fission upgrade"
     doit helm dependency update "$ROOT"/charts/fission-all
     doit make update-crds
-    doit helm upgrade --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission "$ROOT"/charts/fission-all
+    doit helm upgrade --debug --wait --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission "$ROOT"/charts/fission-all
 }
 
 "$@"

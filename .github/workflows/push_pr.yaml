@@ -17,7 +17,7 @@ on:
       - '.github/workflows/*' 
       - '**.go'
       - 'charts/**'
-      - 'test/**'
+      # - 'test/**'
       - go.mod
       - go.sum
   workflow_dispatch:
