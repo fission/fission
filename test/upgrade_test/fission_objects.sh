@@ -6,18 +6,6 @@ ROOT=$(pwd)
 PREV_STABLE_VERSION=1.13.1
 HELM_VARS_LATEST_RELEASE="helmVars=repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecksImage=preupgradechecks"
 
-getVersion() {
-    echo $(git rev-parse HEAD)
-}
-
-getDate() {
-    echo $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-}
-
-getGitCommit() {
-    echo $(git rev-parse HEAD)
-}
-
 dump_system_info() {
     echo "System Info"
     go version
@@ -40,8 +28,8 @@ install_stable_release() {
     helm install --version $PREV_STABLE_VERSION--namespace $ns fission fission-charts/fission-all
 
     echo "Download fission cli $PREV_STABLE_VERSION"
-    mkdir temp && cd temp && curl -Lo fission https://github.com/fission/fission/releases/download/${PREV_STABLE_VERSION}/fission-cli-linux && chmod +x fission && sudo mv fission /usr/local/bin/ && cd .. && rm -rf temp
-    sleep 10 # This sleep is required here to become all pods active.
+    curl -Lo fission https://github.com/fission/fission/releases/download/$PREV_STABLE_VERSION/fission-$PREV_STABLE_VERSION-linux-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
+    sleep 10
 
     fission version
 }
@@ -108,7 +96,7 @@ install_fission_cli() {
 install_current_release() {
     echo "Running Fission upgrade"
     helm dependency update "$ROOT"/charts/fission-all
-    kubectl replace -k crds/v1
+    make update-crds
     helm upgrade --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission "$ROOT"/charts/fission-all
 }
 
