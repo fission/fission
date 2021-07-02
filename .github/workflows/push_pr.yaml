@@ -83,15 +83,18 @@ jobs:
 
       - name: Build and Install Fission CLI
         run: |
-          go build -o fission cmd/fission-cli/main.go
-          sudo mv fission /usr/local/bin
-          fission version
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
 
       - name: Port-forward fission components
         run: |
           kubectl port-forward svc/router 8888:80 -nfission &
           kubectl port-forward svc/controller 8889:80 -nfission &
           kubectl port-forward svc/nats-streaming 8890:4222 -nfission &
+
+      - name: Get fission version
+        run: |
+          fission version
 
       - name: Integration tests
         run: ./test/kind_CI.sh

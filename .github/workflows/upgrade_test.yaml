@@ -53,12 +53,7 @@ jobs:
       run: |
         kubectl cluster-info --context kind-kind
         kubectl get nodes
-
-    - name: Get storage details
-      run: |
-        kubectl get persistentvolumeclaims -A
         kubectl get storageclasses.storage.k8s.io
-        kubectl get persistentvolumes -A
 
     - name: Dump system info
       run: |
