@@ -72,7 +72,7 @@ all-fission-cli:
 	$(MAKE) fission-cli GOOS=darwin GOARCH=amd64
 
 install-fission-cli: fission-cli
-	mv $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/
+	mv $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Container images
 FISSION_IMGS := fission-bundle-multiarch-img \

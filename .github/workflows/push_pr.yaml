@@ -14,7 +14,6 @@ on:
     branches:
       - master
     paths:
-      - '.github/workflows/*' 
       - '**.go'
       - 'charts/**'
       - 'test/**'
@@ -55,7 +54,7 @@ jobs:
         uses: engineerd/setup-kind@v0.5.0
         with:
           image:  ${{ matrix.kindimage }}
-          version:  v0.11.0
+          version:  v0.11.1
 
       - name: Configuring and testing the Installation
         run: |
@@ -84,15 +83,18 @@ jobs:
 
       - name: Build and Install Fission CLI
         run: |
-          go build -o fission cmd/fission-cli/main.go
-          sudo mv fission /usr/local/bin
-          fission version
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
 
       - name: Port-forward fission components
         run: |
           kubectl port-forward svc/router 8888:80 -nfission &
           kubectl port-forward svc/controller 8889:80 -nfission &
           kubectl port-forward svc/nats-streaming 8890:4222 -nfission &
+
+      - name: Get fission version
+        run: |
+          fission version
 
       - name: Integration tests
         run: ./test/kind_CI.sh

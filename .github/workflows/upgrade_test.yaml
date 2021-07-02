@@ -23,7 +23,12 @@ on:
 
 jobs:
   upgrade-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kindimage : [ 'kindest/node:v1.19.11' ]
+        os: [ ubuntu-latest ]
     steps:
     - name: Checkout action sources
       uses: actions/checkout@v2.3.4
@@ -41,13 +46,14 @@ jobs:
     - name: Setup Kind Clutser
       uses: engineerd/setup-kind@v0.5.0
       with:
-        config: kind.yaml
+        image:  ${{ matrix.kindimage }}
+        version: v0.11.1
 
     - name: Setup kubectl & fetch node information
       run: |
         kubectl cluster-info --context kind-kind
-        kind get kubeconfig --internal >$HOME/.kube/config
         kubectl get nodes
+        kubectl get storageclasses.storage.k8s.io
 
     - name: Dump system info
       run: |
