@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/life1347/color"
+	"github.com/fatih/color"
 )
 
 var (
