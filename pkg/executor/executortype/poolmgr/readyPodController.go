@@ -4,12 +4,21 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 )
+
+func (gp *GenericPool) newPodInformer() cache.SharedIndexInformer {
+	optionsModifier := func(options *metav1.ListOptions) {
+		options.LabelSelector = labels.Set(
+			gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()
+		options.FieldSelector = "status.phase=Running"
+	}
+	return informers.NewFilteredPodInformer(gp.kubernetesClient, gp.namespace, 0, nil, optionsModifier)
+}
 
 func (gp *GenericPool) startReadyPodController() {
 	// create the pod watcher to filter by labels
@@ -17,14 +26,9 @@ func (gp *GenericPool) startReadyPodController() {
 	// different state than Running, for example Kubernetes sets a
 	// pod to Termination while k8s waits for the grace period of
 	// the pod, even if all the containers are in Ready state.
-	optionsModifier := func(options *metav1.ListOptions) {
-		options.LabelSelector = labels.Set(
-			gp.deployment.Spec.Selector.MatchLabels).AsSelector().String()
-		options.FieldSelector = "status.phase=Running"
-	}
-	readyPodWatcher := cache.NewFilteredListWatchFromClient(gp.kubernetesClient.CoreV1().RESTClient(), "pods", gp.namespace, optionsModifier)
 	gp.readyPodQueue = workqueue.NewDelayingQueue()
-	gp.readyPodIndexer, gp.readyPodController = cache.NewIndexerInformer(readyPodWatcher, &apiv1.Pod{}, 0, cache.ResourceEventHandlerFuncs{
+	gp.readyPodInformer = gp.newPodInformer()
+	gp.readyPodInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
@@ -39,7 +43,7 @@ func (gp *GenericPool) startReadyPodController() {
 				gp.logger.Debug("delete func called", zap.String("key", key))
 			}
 		},
-	}, cache.Indexers{})
-	go gp.readyPodController.Run(gp.stopReadyPodControllerCh)
+	})
+	go gp.readyPodInformer.Run(gp.stopReadyPodControllerCh)
 	gp.logger.Info("readyPod controller started", zap.String("env", gp.env.ObjectMeta.Name), zap.String("envID", string(gp.env.ObjectMeta.UID)))
 }

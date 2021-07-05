@@ -84,6 +84,7 @@ jobs:
         source ./test/upgrade_test/fission_objects.sh test_fission_objects
 
     - name: Collect Fission Dump
+      if: ${{ always() }}
       run: |
         command -v fission && fission support dump
 
