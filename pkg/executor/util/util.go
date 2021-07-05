@@ -22,10 +22,11 @@ import (
 	"sync"
 	"time"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.

@@ -48,7 +48,7 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
-	specializationTimeout := int(fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout)
+	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
 	// Always scale to at least one pod when createOrGetDeployment
