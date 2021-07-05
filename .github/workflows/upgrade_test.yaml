@@ -82,3 +82,15 @@ jobs:
     - name: Test previously created fission objects with new release
       run: |
         source ./test/upgrade_test/fission_objects.sh test_fission_objects
+
+    - name: Collect Fission Dump
+      run: |
+        command -v fission && fission support dump
+
+    - name: Archive fission dump
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: fission-dump
+        path: fission-dump/*.zip
+        retention-days: 5
