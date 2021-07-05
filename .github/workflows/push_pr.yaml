@@ -62,6 +62,7 @@ jobs:
         with:
           image:  ${{ matrix.kindimage }}
           version:  v0.11.1
+          config: kind.yaml
 
       - name: Configuring and testing the Installation
         run: |
@@ -107,14 +108,13 @@ jobs:
         run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
-        if: ${{ failure() }}
         run: |
-          fission support dump
+          command -v fission && fission support dump
 
       - name: Archive fission dump
         if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
-          name: fission-support-dump
+          name: fission-dump
           path: fission-dump/*.zip
           retention-days: 5
