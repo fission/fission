@@ -108,6 +108,7 @@ jobs:
         run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
+        if: ${{ always() }}
         run: |
           command -v fission && fission support dump
 
