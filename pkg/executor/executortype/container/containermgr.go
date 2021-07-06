@@ -28,11 +28,9 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -67,9 +65,9 @@ type (
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
 
-		throttler      *throttler.Throttler
-		funcStore      k8sCache.Store
-		funcController k8sCache.Controller
+		throttler *throttler.Throttler
+
+		funcInformer *k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
 	}
@@ -83,7 +81,7 @@ func MakeContainer(
 	crdClient rest.Interface,
 	namespace string,
 	instanceID string,
-) executortype.ExecutorType {
+	funcInformer *k8sCache.SharedIndexInformer) executortype.ExecutorType {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -105,6 +103,8 @@ func MakeContainer(
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
+		funcInformer: funcInformer,
+
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
@@ -112,9 +112,7 @@ func MakeContainer(
 	}
 
 	if caaf.crdClient != nil {
-		fnStore, fnController := caaf.initFuncController()
-		caaf.funcStore = fnStore
-		caaf.funcController = fnController
+		(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler())
 	}
 
 	return caaf
@@ -122,7 +120,6 @@ func MakeContainer(
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
-	go caaf.funcController.Run(ctx.Done())
 	go caaf.idleObjectReaper()
 }
 
@@ -301,69 +298,6 @@ func (caaf *Container) CleanupOldExecutorObjects() {
 		// TODO retry reaper; logged and ignored for now
 		caaf.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
 	}
-}
-
-func (caaf *Container) initFuncController() (k8sCache.Store, k8sCache.Controller) {
-	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(caaf.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
-	store, controller := k8sCache.NewInformer(listWatch, &fv1.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			fn := obj.(*fv1.Function)
-			fmt.Println("Image is", fn.Spec.Image)
-			fmt.Println("Port is ", fn.Spec.Port)
-			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypeContainer {
-				return
-			}
-			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
-			// and worker pattern to process items instead of moving process to another goroutine.
-			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
-			go func() {
-
-				caaf.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-				_, err := caaf.createFunction(fn)
-				if err != nil {
-					caaf.logger.Error("error eager creating function",
-						zap.Error(err),
-						zap.Any("function", fn))
-				}
-				caaf.logger.Debug("end create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-			}()
-		},
-		DeleteFunc: func(obj interface{}) {
-			fn := obj.(*fv1.Function)
-			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypeContainer {
-				return
-			}
-			go func() {
-				err := caaf.deleteFunction(fn)
-				if err != nil {
-					caaf.logger.Error("error deleting function",
-						zap.Error(err),
-						zap.Any("function", fn))
-				}
-			}()
-		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			oldFn := oldObj.(*fv1.Function)
-			newFn := newObj.(*fv1.Function)
-			fnExecutorType := oldFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypeContainer {
-				return
-			}
-			go func() {
-				err := caaf.updateFunction(oldFn, newFn)
-				if err != nil {
-					caaf.logger.Error("error updating function",
-						zap.Error(err),
-						zap.Any("old_function", oldFn),
-						zap.Any("new_function", newFn))
-				}
-			}()
-		},
-	})
-	return store, controller
 }
 
 func (caaf *Container) createFunction(fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -802,21 +736,4 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 		}
 	}
 	return nil
-}
-
-func (caaf *Container) scaleDeployment(deplNS string, deplName string, replicas int32) error {
-	caaf.logger.Info("scaling deployment",
-		zap.String("deployment", deplName),
-		zap.String("namespace", deplNS),
-		zap.Int32("replicas", replicas))
-	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(context.TODO(), deplName, &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deplName,
-			Namespace: deplNS,
-		},
-		Spec: autoscalingv1.ScaleSpec{
-			Replicas: replicas,
-		},
-	}, metav1.UpdateOptions{})
-	return err
 }

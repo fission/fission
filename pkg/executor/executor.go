@@ -303,7 +303,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	cn := container.MakeContainer(
 		logger,
 		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
-		functionNamespace, executorInstanceID)
+		functionNamespace, executorInstanceID, &funcInformer)
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName()] = gpm
