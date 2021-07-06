@@ -17,11 +17,15 @@ limitations under the License.
 package buildermgr
 
 import (
+	"time"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	k8sInformers "k8s.io/client-go/informers"
 
 	"github.com/fission/fission/pkg/crd"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
 // Start the buildermgr service.
@@ -46,9 +50,12 @@ func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string)
 	envWatcher := makeEnvironmentWatcher(bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
+	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Second*30)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, 60*time.Minute)
+	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
+	pkgInformer := informerFactory.Core().V1().Packages().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, envBuilderNamespace, storageSvcUrl)
-	go pkgWatcher.watchPackages()
-
-	select {}
+		kubernetesClient, envBuilderNamespace, storageSvcUrl, &podInformer, &pkgInformer)
+	pkgWatcher.Run()
+	return nil
 }

@@ -16,7 +16,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -25,6 +24,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -66,21 +66,8 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
 }
 
-// StartScalerManager watches for changes in MessageQueueTrigger and,
-// Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
-func StartScalerManager(logger *zap.Logger, routerURL string) error {
-	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
-	if err != nil {
-		return err
-	}
-	err = fissionClient.WaitForCRDs()
-	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
-	}
-	crdClient := fissionClient.CoreV1().RESTClient()
-	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(crdClient, "messagequeuetriggers", metav1.NamespaceAll, fields.Everything())
-	_, controller := k8sCache.NewInformer(listWatch, &fv1.MessageQueueTrigger{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
+func mqTriggerEventHandlers(logger *zap.Logger, kubeClient *kubernetes.Clientset, routerURL string) k8sCache.ResourceEventHandlerFuncs {
+	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
@@ -92,14 +79,14 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				authenticationRef := ""
 				if len(mqt.Spec.Secret) > 0 {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					err = createAuthTrigger(mqt, authenticationRef, kubeClient)
+					err := createAuthTrigger(mqt, authenticationRef, kubeClient)
 					if err != nil {
 						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
 						return
 					}
 				}
 
-				if err = createDeployment(mqt, routerURL, kubeClient); err != nil {
+				if err := createDeployment(mqt, routerURL, kubeClient); err != nil {
 					logger.Error("Failed to create Deployment", zap.Error(err))
 					if len(authenticationRef) > 0 {
 						err = deleteAuthTrigger(authenticationRef, mqt.ObjectMeta.Namespace)
@@ -110,7 +97,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 					return
 				}
 
-				if err = createScaledObject(mqt, authenticationRef); err != nil {
+				if err := createScaledObject(mqt, authenticationRef); err != nil {
 					logger.Error("Failed to create ScaledObject", zap.Error(err))
 					if len(authenticationRef) > 0 {
 						if err = deleteAuthTrigger(authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
@@ -139,25 +126,42 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 				authenticationRef := ""
 				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					if err = updateAuthTrigger(mqt, authenticationRef, kubeClient); err != nil {
+					if err := updateAuthTrigger(mqt, authenticationRef, kubeClient); err != nil {
 						logger.Error("Failed to update Authentication Trigger", zap.Error(err))
 						return
 					}
 				}
 
-				if err = updateDeployment(mqt, routerURL, kubeClient); err != nil {
+				if err := updateDeployment(mqt, routerURL, kubeClient); err != nil {
 					logger.Error("Failed to Update Deployment", zap.Error(err))
 					return
 				}
 
-				if err = updateScaledObject(mqt, authenticationRef); err != nil {
+				if err := updateScaledObject(mqt, authenticationRef); err != nil {
 					logger.Error("Failed to Update ScaledObject", zap.Error(err))
 					return
 				}
 			}()
 		},
-	})
-	controller.Run(context.Background().Done())
+	}
+
+}
+
+// StartScalerManager watches for changes in MessageQueueTrigger and,
+// Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
+func StartScalerManager(logger *zap.Logger, routerURL string) error {
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
+	if err != nil {
+		return err
+	}
+	err = fissionClient.WaitForCRDs()
+	if err != nil {
+		return errors.Wrap(err, "error waiting for CRDs")
+	}
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, 30*time.Second)
+	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
+	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(logger, kubeClient, routerURL))
+	mqTriggerInformer.Run(context.Background().Done())
 	return nil
 }
 
