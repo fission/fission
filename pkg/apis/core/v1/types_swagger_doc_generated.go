@@ -149,7 +149,7 @@ func (EnvironmentSpec) SwaggerDoc() map[string]string {
 
 var map_ExecutionStrategy = map[string]string{
 	"":                      "ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.\n\nMinScale affects the cold start behavior for a function. If MinScale is 0 then the deployment is created on first invocation of function and is good for requests of asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are created at the time of creation of function. This ensures faster response during first invocation at the cost of consuming resources.\n\nMaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent and resources allocated to the function pod.",
-	"ExecutorType":          "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\".\n\nAvailable value:\n - poolmgr\n - newdeploy",
+	"ExecutorType":          "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\".\n\nAvailable value:\n - poolmgr\n - newdeploy\n - container",
 	"MinScale":              "This is only for newdeploy to set up minimum replicas of deployment.",
 	"MaxScale":              "This is only for newdeploy to set up maximum replicas of deployment.",
 	"TargetCPUPercent":      "This is only for newdeploy to set up target CPU utilization of HPA.",

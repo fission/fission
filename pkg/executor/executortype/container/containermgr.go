@@ -81,7 +81,7 @@ func MakeContainer(
 	crdClient rest.Interface,
 	namespace string,
 	instanceID string,
-	funcInformer *k8sCache.SharedIndexInformer) executortype.ExecutorType {
+	funcInformer *k8sCache.SharedIndexInformer) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -115,7 +115,7 @@ func MakeContainer(
 		(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler())
 	}
 
-	return caaf
+	return caaf, nil
 }
 
 // Run start the function along with an object reaper.

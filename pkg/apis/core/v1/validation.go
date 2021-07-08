@@ -328,6 +328,10 @@ func (es ExecutionStrategy) Validate() error {
 		//}
 	}
 
+	// TODO: Add validations
+	// if es.ExecutorType == ExecutorTypeContainer {
+	// }
+
 	return result.ErrorOrNil()
 }
 

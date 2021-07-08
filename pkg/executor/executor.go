@@ -300,15 +300,18 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
 
-	cn := container.MakeContainer(
+	cnm, err := container.MakeContainer(
 		logger,
 		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
 		functionNamespace, executorInstanceID, &funcInformer)
+	if err != nil {
+		return errors.Wrap(err, "container manager creation faied")
+	}
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName()] = gpm
 	executorTypes[ndm.GetTypeName()] = ndm
-	executorTypes[cn.GetTypeName()] = cn
+	executorTypes[cnm.GetTypeName()] = cnm
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 

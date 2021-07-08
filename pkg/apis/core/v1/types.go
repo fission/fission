@@ -466,6 +466,7 @@ type (
 		// Available value:
 		//  - poolmgr
 		//  - newdeploy
+		//  - container
 		// +optional
 		ExecutorType ExecutorType `json:"ExecutorType"`
 
