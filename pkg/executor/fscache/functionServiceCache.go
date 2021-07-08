@@ -18,6 +18,7 @@ package fscache
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -68,8 +69,8 @@ type (
 		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
 		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
 		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
-		PodToFsvc         map[string]*FuncSvc
-		WebsocketFsvc     map[string]bool
+		PodToFsvc         sync.Map         // pod-name -> funcSvc: map[string]*FuncSvc
+		WebsocketFsvc     sync.Map         // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
 	}
 
@@ -111,8 +112,6 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunctionUID:     cache.MakeCache(0, 0),
 		connFunctionCache: poolcache.NewPoolCache(),
 		requestChannel:    make(chan *fscRequest),
-		PodToFsvc:         make(map[string]*FuncSvc),
-		WebsocketFsvc:     make(map[string]bool),
 	}
 	go fsc.service()
 	return fsc
