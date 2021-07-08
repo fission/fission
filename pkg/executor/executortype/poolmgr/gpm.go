@@ -644,7 +644,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 				continue
 			}
 
-			if _, ok := gpm.fsCache.WebsocketFsvc[fsvc.Name]; ok {
+			if _, ok := gpm.fsCache.WebsocketFsvc.Load(fsvc.Name); ok {
 				continue
 			}
 			// For function with the environment that no longer exists, executor
@@ -725,8 +725,13 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 				zap.String("Pod name", mObj.GetName()))
 
 			podName := strings.SplitAfter(mObj.GetName(), ".")
-			if fsvc, ok := gpm.fsCache.PodToFsvc[strings.TrimSuffix(podName[0], ".")]; ok {
-				gpm.fsCache.WebsocketFsvc[fsvc.Name] = true
+			if fsvc, ok := gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
+				fsvc, ok := fsvc.(*fscache.FuncSvc)
+				if !ok {
+					gpm.logger.Error("could not covert item from PodToFsvc")
+					return
+				}
+				gpm.fsCache.WebsocketFsvc.Store(fsvc.Name, true)
 			}
 		},
 	})
@@ -761,8 +766,12 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 				zap.String("Pod name", mObj.GetName()))
 
 			podName := strings.SplitAfter(mObj.GetName(), ".")
-			if fsvc, ok := gpm.fsCache.PodToFsvc[strings.TrimSuffix(podName[0], ".")]; ok {
-
+			if fsvc, ok := gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
+				fsvc, ok := fsvc.(*fscache.FuncSvc)
+				if !ok {
+					gpm.logger.Error("could not covert value from PodToFsvc")
+					return
+				}
 				gpm.fsCache.DeleteFunctionSvc(fsvc)
 				for i := range fsvc.KubernetesObjects {
 					gpm.logger.Info("release idle function resources due to  inactivity",

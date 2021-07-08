@@ -713,11 +713,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		Atime:             time.Now(),
 	}
 
-	if gp.fsCache.PodToFsvc == nil {
-		gp.fsCache.PodToFsvc = make(map[string]*fscache.FuncSvc)
-	}
-	gp.fsCache.PodToFsvc[pod.GetObjectMeta().GetName()] = fsvc
-
+	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
 	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
 	gp.fsCache.AddFunc(*fsvc)
 

@@ -57,7 +57,7 @@ type (
 		fissionClient *crd.FissionClient
 
 		requestChan chan *createFuncServiceRequest
-		fsCreateWg  map[string]*sync.WaitGroup
+		fsCreateWg  sync.Map
 	}
 
 	createFuncServiceRequest struct {
@@ -82,7 +82,6 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		executorTypes: types,
 
 		requestChan: make(chan *createFuncServiceRequest),
-		fsCreateWg:  make(map[string]*sync.WaitGroup),
 	}
 
 	// Run all informers
@@ -138,13 +137,13 @@ func (executor *Executor) serveCreateFuncServices() {
 		}
 
 		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg[crd.CacheKey(fnMetadata)]
+		wg, found := executor.fsCreateWg.Load(crd.CacheKey(fnMetadata))
 		if !found {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
-			executor.fsCreateWg[crd.CacheKey(fnMetadata)] = wg
+			executor.fsCreateWg.Store(crd.CacheKey(fnMetadata), wg)
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
@@ -176,7 +175,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					funcSvc: fsvc,
 					err:     err,
 				}
-				delete(executor.fsCreateWg, crd.CacheKey(fnMetadata))
+				executor.fsCreateWg.Delete(crd.CacheKey(fnMetadata))
 				wg.Done()
 			}()
 		} else {
@@ -184,6 +183,14 @@ func (executor *Executor) serveCreateFuncServices() {
 			go func() {
 				executor.logger.Debug("waiting for concurrent request for the same function",
 					zap.Any("function", fnMetadata))
+				wg, ok := wg.(*sync.WaitGroup)
+				if !ok {
+					err := fmt.Errorf("could not convert value to workgroup for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
+					req.respChan <- &createFuncServiceResponse{
+						funcSvc: nil,
+						err:     err,
+					}
+				}
 				wg.Wait()
 
 				// get the function service from the cache
