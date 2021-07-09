@@ -28,13 +28,13 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -55,7 +55,6 @@ type (
 
 		kubernetesClient *kubernetes.Clientset
 		fissionClient    *crd.FissionClient
-		crdClient        rest.Interface
 		instanceID       string
 		// fetcherConfig    *fetcherConfig.Config
 
@@ -67,7 +66,9 @@ type (
 
 		throttler *throttler.Throttler
 
-		funcInformer *k8sCache.SharedIndexInformer
+		funcInformer       *k8sCache.SharedIndexInformer
+		serviceInformer    k8sCache.SharedIndexInformer
+		deploymentInformer k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
 	}
@@ -78,7 +79,6 @@ func MakeContainer(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
-	crdClient rest.Interface,
 	namespace string,
 	instanceID string,
 	funcInformer *k8sCache.SharedIndexInformer) (executortype.ExecutorType, error) {
@@ -96,7 +96,6 @@ func MakeContainer(
 
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
-		crdClient:        crdClient,
 		instanceID:       instanceID,
 
 		namespace: namespace,
@@ -111,9 +110,14 @@ func MakeContainer(
 		defaultIdlePodReapTime: 1 * time.Minute,
 	}
 
-	if caaf.crdClient != nil {
-		(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler())
+	(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler())
+
+	informerFactory, err := utils.GetInformerFactoryByExecutor(caaf.kubernetesClient, fv1.ExecutorTypeContainer)
+	if err != nil {
+		return nil, err
 	}
+	caaf.serviceInformer = informerFactory.Core().V1().Services().Informer()
+	caaf.deploymentInformer = informerFactory.Apps().V1().Deployments().Informer()
 
 	return caaf, nil
 }
@@ -169,43 +173,76 @@ func (caaf *Container) TapService(svcHost string) error {
 	return nil
 }
 
+func (caaf *Container) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service, error) {
+	item, exists, err := utils.GetCachedItem(obj, caaf.serviceInformer)
+
+	if err != nil || !exists {
+		caaf.logger.Debug(
+			"Falling back to getting service info from k8s API -- this may cause performance issues for your function.",
+			zap.Bool("exists", exists),
+			zap.Error(err),
+		)
+		service, err := caaf.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		return service, err
+	}
+
+	service := item.(*apiv1.Service)
+	return service, nil
+}
+
+func (caaf *Container) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
+	item, exists, err := utils.GetCachedItem(obj, caaf.deploymentInformer)
+
+	if err != nil || !exists {
+		caaf.logger.Debug(
+			"Falling back to getting deployment info from k8s API -- this may cause performance issues for your function.",
+			zap.Bool("exists", exists),
+			zap.Error(err),
+		)
+		deployment, err := caaf.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		return deployment, err
+	}
+
+	deployment := item.(*appsv1.Deployment)
+	return deployment, nil
+}
+
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
 func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
-	service := strings.Split(fsvc.Address, ".")
-	if len(service) == 0 {
+	if len(strings.Split(fsvc.Address, ".")) == 0 {
+		caaf.logger.Error("address not found in function service")
 		return false
 	}
+	if len(fsvc.KubernetesObjects) == 0 {
+		caaf.logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
+		return false
+	}
+	for _, obj := range fsvc.KubernetesObjects {
+		if strings.ToLower(obj.Kind) == "service" {
+			_, err := caaf.getServiceInfo(obj)
+			if err != nil {
+				if !k8sErrs.IsNotFound(err) {
+					caaf.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
+				}
+				return false
+			}
 
-	_, err := caaf.kubernetesClient.CoreV1().Services(service[1]).Get(context.TODO(), service[0], metav1.GetOptions{})
-	if err != nil {
-		if !k8sErrs.IsNotFound(err) {
-			caaf.logger.Error("error validating function service address", zap.String("function", fsvc.Function.Name), zap.Error(err))
+		} else if strings.ToLower(obj.Kind) == "deployment" {
+			currentDeploy, err := caaf.getDeploymentInfo(obj)
+			if err != nil {
+				if !k8sErrs.IsNotFound(err) {
+					caaf.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
+				}
+				return false
+			}
+			if currentDeploy.Status.AvailableReplicas < 1 {
+				return false
+			}
 		}
-		return false
 	}
-
-	deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-	if deployObj == nil {
-		caaf.logger.Error("deployment obj for function does not exist", zap.String("function", fsvc.Function.Name))
-		return false
-	}
-
-	currentDeploy, err := caaf.kubernetesClient.AppsV1().Deployments(deployObj.Namespace).Get(context.TODO(), deployObj.Name, metav1.GetOptions{})
-	if err != nil {
-		if !k8sErrs.IsNotFound(err) {
-			caaf.logger.Error("error validating function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-		}
-		return false
-	}
-
-	// return directly when available replicas > 0
-	if currentDeploy.Status.AvailableReplicas > 0 {
-		return true
-	}
-
-	return false
+	return true
 }
 
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
@@ -340,13 +377,13 @@ func (caaf *Container) deleteFunction(fn *fv1.Function) error {
 }
 
 func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
-	// env, err := caaf.fissionClient.CoreV1().
-	// 	Environments(fn.Spec.Environment.Namespace).
-	// 	Get(fn.Spec.Environment.Name, metav1.GetOptions{})
-	// if err != nil {
-	// 	return nil, err
-	// }
-
+	cleanupFunc := func(ns string, name string) {
+		err := caaf.cleanupContainer(ns, name)
+		if err != nil {
+			caaf.logger.Error("received error while cleaning function resources",
+				zap.String("namespace", ns), zap.String("name", name))
+		}
+	}
 	objName := caaf.getObjName(fn)
 	deployLabels := caaf.getDeployLabels(fn.ObjectMeta)
 	deployAnnotations := caaf.getDeployAnnotations(fn.ObjectMeta)
@@ -366,7 +403,7 @@ func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	svc, err := caaf.createOrGetSvc(fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		caaf.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
-		go caaf.cleanupContainer(ns, objName)
+		go cleanupFunc(ns, objName)
 		return nil, errors.Wrapf(err, "error creating service %v", objName)
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
@@ -374,14 +411,14 @@ func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	depl, err := caaf.createOrGetDeployment(fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
-		go caaf.cleanupContainer(ns, objName)
+		go cleanupFunc(ns, objName)
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
 	hpa, err := caaf.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
-		go caaf.cleanupContainer(ns, objName)
+		go cleanupFunc(ns, objName)
 		return nil, errors.Wrapf(err, "error creating the HPA %v", objName)
 	}
 

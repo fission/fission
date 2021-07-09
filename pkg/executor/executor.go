@@ -292,7 +292,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	ndm, err := newdeploy.MakeNewDeploy(
 		logger,
-		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
+		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		&funcInformer, &envInformer,
 	)
@@ -302,7 +302,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	cnm, err := container.MakeContainer(
 		logger,
-		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
+		fissionClient, kubernetesClient,
 		functionNamespace, executorInstanceID, &funcInformer)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation faied")
