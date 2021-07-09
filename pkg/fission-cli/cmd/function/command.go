@@ -154,13 +154,34 @@ func Commands() *cobra.Command {
 		},
 	})
 
+	runContainerCmd := &cobra.Command{
+		Use:     "run-container",
+		Aliases: []string{"runc"},
+		Short:   "Run container image as a function",
+		RunE:    wrapper.Wrapper(RunContainer),
+	}
+	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{
+			flag.FnImageName, flag.FnCfgMap, flag.FnSecret,
+			flag.FnExecutionTimeout,
+			flag.FnIdleTimeout, flag.FnPort, flag.FnCommand, flag.FnArgs,
+
+			// flag for newdeploy to use.
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.ReplicasMin,
+			flag.ReplicasMax, flag.RunTimeTargetCPU,
+
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 
-	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd)
+	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd, runContainerCmd)
 
 	return command
 }

@@ -413,13 +413,19 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 	var es *fv1.ExecutionStrategy
 
 	if existingInvokeStrategy == nil {
-		es, err = getExecutionStrategy(input)
+		executorType, err := getExecutorType(input)
+		if err != nil {
+			return nil, err
+		}
+		es, err = getExecutionStrategy(executorType, input)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		es, err = updateExecutionStrategy(input, &existingInvokeStrategy.ExecutionStrategy)
-	}
-
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &fv1.InvokeStrategy{
@@ -428,22 +434,23 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 	}, nil
 }
 
-func getExecutionStrategy(input cli.Input) (strategy *fv1.ExecutionStrategy, err error) {
-	var fnExecutor fv1.ExecutorType
-
+func getExecutorType(input cli.Input) (executorType fv1.ExecutorType, err error) {
 	switch input.String(flagkey.FnExecutorType) {
 	case "":
 		fallthrough
 	case string(fv1.ExecutorTypePoolmgr):
-		fnExecutor = fv1.ExecutorTypePoolmgr
+		executorType = fv1.ExecutorTypePoolmgr
 	case string(fv1.ExecutorTypeNewdeploy):
-		fnExecutor = fv1.ExecutorTypeNewdeploy
+		executorType = fv1.ExecutorTypeNewdeploy
 	case string(fv1.ExecutorTypeContainer):
-		fnExecutor = fv1.ExecutorTypeContainer
+		executorType = fv1.ExecutorTypeContainer
 	default:
-		return nil, errors.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
+		err = errors.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
 	}
+	return executorType, err
+}
 
+func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strategy *fv1.ExecutionStrategy, err error) {
 	specializationTimeout := fv1.DefaultSpecializationTimeOut
 
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
