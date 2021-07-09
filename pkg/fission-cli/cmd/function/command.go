@@ -161,11 +161,12 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(RunContainer),
 	}
 	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.FnName},
+		Required: []flag.Flag{flag.FnName, flag.FnImageName},
 		Optional: []flag.Flag{
-			flag.FnImageName, flag.FnCfgMap, flag.FnSecret,
+			flag.FnPort, flag.FnCommand, flag.FnArgs,
+			flag.FnCfgMap, flag.FnSecret,
 			flag.FnExecutionTimeout,
-			flag.FnIdleTimeout, flag.FnPort, flag.FnCommand, flag.FnArgs,
+			flag.FnIdleTimeout,
 
 			// flag for newdeploy to use.
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
