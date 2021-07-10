@@ -32,7 +32,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
-			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName, flag.FnImageName,
+			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
@@ -84,7 +84,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
-			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName, flag.FnImageName,
+			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
@@ -157,7 +157,7 @@ func Commands() *cobra.Command {
 	runContainerCmd := &cobra.Command{
 		Use:     "run-container",
 		Aliases: []string{"runc"},
-		Short:   "Run container image as a function",
+		Short:   "Run a container image as a function",
 		RunE:    wrapper.Wrapper(RunContainer),
 	}
 	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
@@ -173,7 +173,30 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+		},
+	})
+
+	updateContainerCmd := &cobra.Command{
+		Use:     "update-container",
+		Aliases: []string{},
+		Short:   "Update a function running a container",
+		RunE:    wrapper.Wrapper(UpdateContainer),
+	}
+	wrapper.SetFlags(updateContainerCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{
+			flag.FnImageName, flag.FnPort,
+			flag.FnCommand, flag.FnArgs,
+			flag.FnSecret, flag.FnCfgMap,
+			flag.FnExecutionTimeout, flag.FnIdleTimeout,
+
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
+			flag.RunTimeTargetCPU,
+
+			flag.NamespaceFunction, flag.SpecSave,
+		},
 	})
 
 	command := &cobra.Command{
@@ -181,8 +204,8 @@ func Commands() *cobra.Command {
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
-
-	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd, runContainerCmd)
+	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
+		runContainerCmd, updateContainerCmd)
 
 	return command
 }

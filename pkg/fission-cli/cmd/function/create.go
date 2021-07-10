@@ -121,120 +121,106 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	var pkgMetadata *metav1.ObjectMeta
 	var envName string
-	var imageName string
-	var port int
-	var command, args string
 
-	if invokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-		imageName = input.String(flagkey.FnImageName)
-		if imageName == "" {
-			return errors.New("need --image argument")
-		}
-		port = input.Int(flagkey.FnPort)
-		command = input.String(flagkey.FnCommand)
-		args = input.String(flagkey.FnArgs)
+	if len(pkgName) > 0 {
+		var pkg *fv1.Package
 
-	} else {
-		if len(pkgName) > 0 {
-			var pkg *fv1.Package
-
-			if toSpec {
-				fr, err := spec.ReadSpecs(specDir)
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
-				}
-				obj := fr.SpecExists(&fv1.Package{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      pkgName,
-						Namespace: fnNamespace,
-					},
-				}, true, false)
-				if obj == nil {
-					return errors.Errorf("please create package %v spec file before referencing it", pkgName)
-				}
-				pkg = obj.(*fv1.Package)
-				pkgMetadata = &pkg.ObjectMeta
-			} else {
-				// use existing package
-				pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-					Namespace: fnNamespace,
-					Name:      pkgName,
-				})
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
-				}
-				pkgMetadata = &pkg.ObjectMeta
-			}
-
-			envName = pkg.Spec.Environment.Name
-			if envName != input.String(flagkey.FnEnvironmentName) {
-				console.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
-			}
-			envNamespace = pkg.Spec.Environment.Namespace
-		} else {
-			// need to specify environment for creating new package
-			envName = input.String(flagkey.FnEnvironmentName)
-			if len(envName) == 0 {
-				return errors.New("need --env argument")
-			}
-
-			if toSpec {
-				specDir := util.GetSpecDir(input)
-				fr, err := spec.ReadSpecs(specDir)
-				if err != nil {
-					return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
-				}
-				exists, err := fr.ExistsInSpecs(fv1.Environment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      envName,
-						Namespace: envNamespace,
-					},
-				})
-				if err != nil {
-					return err
-				}
-				if !exists {
-					console.Warn(fmt.Sprintf("Function '%v' references unknown Environment '%v', please create it before applying spec",
-						fnName, envName))
-				}
-			} else {
-				_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
-					Namespace: envNamespace,
-					Name:      envName,
-				})
-				if err != nil {
-					if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
-						console.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
-					} else {
-						return errors.Wrap(err, "error retrieving environment information")
-					}
-				}
-			}
-
-			srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
-			var deployArchiveFiles []string
-			noZip := false
-			code := input.String(flagkey.PkgCode)
-			if len(code) == 0 {
-				deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
-			} else {
-				deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
-				noZip = true
-			}
-			// return error when both src & deploy archive are empty
-			if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-				return errors.New("need --code or --deploy or --src argument")
-			}
-
-			buildcmd := input.String(flagkey.PkgBuildCmd)
-			pkgName := fmt.Sprintf("%v-%v", fnName, uuid.NewV4().String())
-
-			// create new package in the same namespace as the function.
-			pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
-				srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip)
+		if toSpec {
+			fr, err := spec.ReadSpecs(specDir)
 			if err != nil {
-				return errors.Wrap(err, "error creating package")
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}
+			obj := fr.SpecExists(&fv1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pkgName,
+					Namespace: fnNamespace,
+				},
+			}, true, false)
+			if obj == nil {
+				return errors.Errorf("please create package %v spec file before referencing it", pkgName)
+			}
+			pkg = obj.(*fv1.Package)
+			pkgMetadata = &pkg.ObjectMeta
+		} else {
+			// use existing package
+			pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      pkgName,
+			})
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+			}
+			pkgMetadata = &pkg.ObjectMeta
+		}
+
+		envName = pkg.Spec.Environment.Name
+		if envName != input.String(flagkey.FnEnvironmentName) {
+			console.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
+		}
+		envNamespace = pkg.Spec.Environment.Namespace
+	} else {
+		// need to specify environment for creating new package
+		envName = input.String(flagkey.FnEnvironmentName)
+		if len(envName) == 0 {
+			return errors.New("need --env argument")
+		}
+
+		if toSpec {
+			specDir := util.GetSpecDir(input)
+			fr, err := spec.ReadSpecs(specDir)
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			}
+			exists, err := fr.ExistsInSpecs(fv1.Environment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      envName,
+					Namespace: envNamespace,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				console.Warn(fmt.Sprintf("Function '%v' references unknown Environment '%v', please create it before applying spec",
+					fnName, envName))
+			}
+		} else {
+			_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
+				Namespace: envNamespace,
+				Name:      envName,
+			})
+			if err != nil {
+				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
+					console.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
+				} else {
+					return errors.Wrap(err, "error retrieving environment information")
+				}
+			}
+		}
+
+		srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
+		var deployArchiveFiles []string
+		noZip := false
+		code := input.String(flagkey.PkgCode)
+		if len(code) == 0 {
+			deployArchiveFiles = input.StringSlice(flagkey.PkgDeployArchive)
+		} else {
+			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
+			noZip = true
+		}
+		// return error when both src & deploy archive are empty
+		if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
+			return errors.New("need --code or --deploy or --src argument")
+		}
+
+		buildcmd := input.String(flagkey.PkgBuildCmd)
+		pkgName := fmt.Sprintf("%v-%v", fnName, uuid.NewV4().String())
+
+		// create new package in the same namespace as the function.
+		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip)
+		if err != nil {
+			return errors.Wrap(err, "error creating package")
 		}
 	}
 
@@ -315,24 +301,17 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	if invokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-		opts.function.Spec.Image = imageName
-		opts.function.Spec.Port = port
-		opts.function.Spec.Command = command
-		opts.function.Spec.Args = args
-	} else {
-		opts.function.Spec.Environment = fv1.EnvironmentReference{
-			Name:      envName,
-			Namespace: envNamespace,
-		}
-		opts.function.Spec.Package = fv1.FunctionPackageRef{
-			FunctionName: entrypoint,
-			PackageRef: fv1.PackageRef{
-				Namespace:       pkgMetadata.Namespace,
-				Name:            pkgMetadata.Name,
-				ResourceVersion: pkgMetadata.ResourceVersion,
-			},
-		}
+	opts.function.Spec.Environment = fv1.EnvironmentReference{
+		Name:      envName,
+		Namespace: envNamespace,
+	}
+	opts.function.Spec.Package = fv1.FunctionPackageRef{
+		FunctionName: entrypoint,
+		PackageRef: fv1.PackageRef{
+			Namespace:       pkgMetadata.Namespace,
+			Name:            pkgMetadata.Name,
+			ResourceVersion: pkgMetadata.ResourceVersion,
+		},
 	}
 
 	return nil
