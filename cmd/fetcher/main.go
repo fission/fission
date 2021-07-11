@@ -23,10 +23,13 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/cmd/fetcher/app"
+	"github.com/fission/fission/pkg/utils/profile"
 )
 
 // Usage: fetcher <shared volume path>
 func main() {
+	profile.ProfileIfEnabled()
+
 	config := zap.NewProductionConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	logger, err := config.Build()

@@ -366,3 +366,7 @@ mqt_keda:
     gcp_pub_sub:
       image: fission/keda-gcp-pubsub-http-connector
       tag: v0.2
+
+## Enable Pprof based profiling
+pprof:
+  enabled: false

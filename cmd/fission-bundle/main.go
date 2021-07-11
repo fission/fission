@@ -40,6 +40,7 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
+	"github.com/fission/fission/pkg/utils/profile"
 )
 
 func runController(logger *zap.Logger, port int) {
@@ -237,6 +238,7 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
+	profile.ProfileIfEnabled()
 
 	var logger *zap.Logger
 	var config zap.Config
