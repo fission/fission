@@ -157,7 +157,7 @@ func Commands() *cobra.Command {
 	runContainerCmd := &cobra.Command{
 		Use:     "run-container",
 		Aliases: []string{"runc"},
-		Short:   "Run a container image as a function",
+		Short:   "Alpha: Run a container image as a function",
 		RunE:    wrapper.Wrapper(RunContainer),
 	}
 	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
@@ -179,8 +179,8 @@ func Commands() *cobra.Command {
 
 	updateContainerCmd := &cobra.Command{
 		Use:     "update-container",
-		Aliases: []string{},
-		Short:   "Update a function running a container",
+		Aliases: []string{"updatec"},
+		Short:   "Alpha: Update a function running a container",
 		RunE:    wrapper.Wrapper(UpdateContainer),
 	}
 	wrapper.SetFlags(updateContainerCmd, flag.FlagSet{

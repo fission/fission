@@ -431,6 +431,11 @@ func (in *FunctionSpec) DeepCopyInto(out *FunctionSpec) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.PodSpec != nil {
+		in, out := &in.PodSpec, &out.PodSpec
+		*out = new(corev1.PodSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

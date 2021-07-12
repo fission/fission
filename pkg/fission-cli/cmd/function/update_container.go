@@ -18,8 +18,10 @@ package function
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
+	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -146,10 +148,33 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	}
 
 	function.Spec.Resources = *resReqs
-	function.Spec.Image = imageName
-	function.Spec.Port = port
-	function.Spec.Command = command
-	function.Spec.Args = args
+
+	if len(function.Spec.PodSpec.Containers) > 1 {
+		return errors.Errorf("function %s has more than one container, only one container is supported", fnName)
+	}
+	container := function.Spec.PodSpec.Containers[0]
+
+	if imageName != "" {
+		container.Image = imageName
+	}
+	if port != 0 {
+		if len(container.Ports) > 1 {
+			return errors.Errorf("function %s has more than one port, only one port is supported", fnName)
+		}
+		container.Ports = []apiv1.ContainerPort{
+			{
+				Name:          "http-env",
+				ContainerPort: int32(port),
+			},
+		}
+	}
+	if command != "" {
+		container.Command = strings.Split(command, " ")
+	}
+	if args != "" {
+		container.Args = strings.Split(args, " ")
+	}
+
 	function.Spec.Environment = fv1.EnvironmentReference{}
 	function.Spec.Package = fv1.FunctionPackageRef{}
 

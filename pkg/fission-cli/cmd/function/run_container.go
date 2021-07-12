@@ -18,6 +18,7 @@ package function
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
@@ -181,10 +182,26 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		},
 	}
 
-	opts.function.Spec.Image = imageName
-	opts.function.Spec.Port = port
-	opts.function.Spec.Command = command
-	opts.function.Spec.Args = args
+	container := &apiv1.Container{
+		Name:  fnName,
+		Image: imageName,
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http-env",
+				ContainerPort: int32(port),
+			},
+		},
+	}
+	if command != "" {
+		container.Command = strings.Split(command, " ")
+	}
+	if args != "" {
+		container.Args = strings.Split(args, " ")
+	}
+
+	opts.function.Spec.PodSpec = &apiv1.PodSpec{
+		Containers: []apiv1.Container{*container},
+	}
 
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -576,7 +577,7 @@ func (caaf *Container) updateFunction(oldFn *fv1.Function, newFn *fv1.Function) 
 		}
 	}
 
-	if oldFn.Spec.Image != newFn.Spec.Image {
+	if !reflect.DeepEqual(oldFn.Spec.PodSpec, newFn.Spec.PodSpec) {
 		deployChanged = true
 	}
 

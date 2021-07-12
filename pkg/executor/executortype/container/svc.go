@@ -18,6 +18,7 @@ package container
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -28,7 +29,24 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+func (cn *Container) getSvPort(fn *fv1.Function) (port int32, err error) {
+	if fn.Spec.PodSpec == nil {
+		return port, fmt.Errorf("podspec is empty for function %s", fn.ObjectMeta.Name)
+	}
+	if len(fn.Spec.PodSpec.Containers) != 1 {
+		return port, fmt.Errorf("podspec should have exactly one container %s", fn.ObjectMeta.Name)
+	}
+	if len(fn.Spec.PodSpec.Containers[0].Ports) != 1 {
+		return port, fmt.Errorf("container should have exactly one port %s", fn.ObjectMeta.Name)
+	}
+	return fn.Spec.PodSpec.Containers[0].Ports[0].ContainerPort, nil
+}
+
 func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+	targetPort, err := cn.getSvPort(fn)
+	if err != nil {
+		return nil, err
+	}
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
@@ -40,7 +58,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 				{
 					Name:       "http-env",
 					Port:       int32(80),
-					TargetPort: intstr.FromInt(fn.Spec.Port),
+					TargetPort: intstr.FromInt(int(targetPort)),
 				},
 			},
 			Selector: deployLabels,

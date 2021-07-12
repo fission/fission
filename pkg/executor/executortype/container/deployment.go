@@ -19,7 +19,6 @@ package container
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -152,7 +151,6 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
-	var command, args []string
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
 		replicas = *targetReplicas
@@ -202,17 +200,12 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 		return nil, err
 	}
 
-	if fn.Spec.Command != "" {
-		command = strings.Split(fn.Spec.Command, " ")
+	if fn.Spec.PodSpec == nil {
+		return nil, fmt.Errorf("podSpec is not set for function %s", fn.ObjectMeta.Name)
 	}
-	if fn.Spec.Args != "" {
-		args = strings.Split(fn.Spec.Args, " ")
-	}
+
 	container := &apiv1.Container{
 		Name:                   fn.ObjectMeta.Name,
-		Image:                  fn.Spec.Image,
-		Command:                command,
-		Args:                   args,
 		ImagePullPolicy:        cn.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Lifecycle: &apiv1.Lifecycle{
@@ -233,24 +226,21 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 		},
 		EnvFrom: envFromSources,
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
-		Ports: []apiv1.ContainerPort{
-			{
-				Name:          "http-env",
-				ContainerPort: int32(fn.Spec.Port),
-			},
-		},
 		Resources: resources,
 	}
-
+	podSpec, err := util.MergePodSpec(&apiv1.PodSpec{
+		Containers:                    []apiv1.Container{*container},
+		TerminationGracePeriodSeconds: &gracePeriodSeconds,
+	}, fn.Spec.PodSpec)
+	if err != nil {
+		return nil, err
+	}
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      podLabels,
 			Annotations: podAnnotations,
 		},
-		Spec: apiv1.PodSpec{
-			Containers:                    []apiv1.Container{*container},
-			TerminationGracePeriodSeconds: &gracePeriodSeconds,
-		},
+		Spec: *podSpec,
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))

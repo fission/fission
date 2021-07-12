@@ -410,21 +410,10 @@ type (
 		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
 
-		// Image specifics image to to use for executor type container based functions
+		// Podspec specifies podspec to use for executor type container based functions
+		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
-		Image string `json:"image,omitempty"`
-
-		// Port specifics port to to use for executor type container based functions
-		// +optional
-		Port int `json:"port,omitempty"`
-
-		// Command specifics command to run on the container for executor type container based functions
-		// +optional
-		Command string `json:"command,omitempty"`
-
-		// Args specifics args to to use for executor type container based functions
-		// +optional
-		Args string `json:"args,omitempty"`
+		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

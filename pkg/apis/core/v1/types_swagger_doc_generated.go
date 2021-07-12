@@ -210,10 +210,7 @@ var map_FunctionSpec = map[string]string{
 	"concurrency":     "Maximum number of pods to be specialized which will serve requests This is optional. If not specified default value will be taken as 500",
 	"requestsPerPod":  "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod This is optional. If not specified default value will be taken as 1",
 	"onceOnly":        "OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request This is optional. If not specified default value will be taken as false",
-	"image":           "Image specifics image to to use for executor type container based functions",
-	"port":            "Port specifics port to to use for executor type container based functions",
-	"command":         "Command specifics command to run on the container for executor type container based functions",
-	"args":            "Args specifics args to to use for executor type container based functions",
+	"podspec":         "Podspec specifies podspec to use for executor type container based functions Different arguments mentioned for container based function are populated inside a pod.",
 }
 
 func (FunctionSpec) SwaggerDoc() map[string]string {
