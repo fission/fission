@@ -19,6 +19,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -87,7 +88,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if active >= concurrency {
 			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
 			executor.logger.Error("error occurred", zap.String("error", errMsg))
-			http.Error(w, errMsg, http.StatusTooManyRequests)
+			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
 			return
 		}
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
@@ -227,7 +228,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	t := tapSvcReq.FnExecutorType
 	if t != fv1.ExecutorTypePoolmgr {
 		msg := fmt.Sprintf("Unknown executor type '%v'", t)
-		http.Error(w, msg, http.StatusBadRequest)
+		http.Error(w, html.EscapeString(msg), http.StatusBadRequest)
 		return
 	}
 

@@ -31,8 +31,7 @@ import (
 func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
 	// start the appropriate controller
 	if featureConfig.CanaryConfig.IsEnabled {
-		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(logger, fissionClient, kubeClient, fissionClient.CoreV1().RESTClient(),
-			featureConfig.CanaryConfig.PrometheusSvc)
+		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(logger, fissionClient, kubeClient, featureConfig.CanaryConfig.PrometheusSvc)
 		if err != nil {
 			featureStatus[config.CanaryFeature] = err.Error()
 			return errors.Wrap(err, "failed to start canary config manager")

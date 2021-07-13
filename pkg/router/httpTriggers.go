@@ -25,7 +25,6 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -46,7 +45,6 @@ type HTTPTriggerSet struct {
 	kubeClient                 *kubernetes.Clientset
 	executor                   *executorClient.Client
 	resolver                   *functionReferenceResolver
-	crdClient                  rest.Interface
 	triggers                   []fv1.HTTPTrigger
 	triggerInformer            k8sCache.SharedIndexInformer
 	functions                  []fv1.Function
@@ -59,7 +57,7 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, crdClient rest.Interface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+	kubeClient *kubernetes.Clientset, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -68,21 +66,19 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		fissionClient:              fissionClient,
 		kubeClient:                 kubeClient,
 		executor:                   executor,
-		crdClient:                  crdClient,
 		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
 	}
-	if httpTriggerSet.crdClient != nil {
-		informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
-		httpTriggerSet.triggerInformer = informerFactory.Core().V1().HTTPTriggers().Informer()
-		httpTriggerSet.funcInformer = informerFactory.Core().V1().Functions().Informer()
 
-		httpTriggerSet.addTriggerHandlers()
-		httpTriggerSet.addFunctionHandlers()
-	}
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
+	httpTriggerSet.triggerInformer = informerFactory.Core().V1().HTTPTriggers().Informer()
+	httpTriggerSet.funcInformer = informerFactory.Core().V1().Functions().Informer()
+
+	httpTriggerSet.addTriggerHandlers()
+	httpTriggerSet.addFunctionHandlers()
 	return httpTriggerSet
 }
 

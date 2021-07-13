@@ -152,8 +152,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	if len(function.Spec.PodSpec.Containers) > 1 {
 		return errors.Errorf("function %s has more than one container, only one container is supported", fnName)
 	}
-	container := function.Spec.PodSpec.Containers[0]
-
+	container := &function.Spec.PodSpec.Containers[0]
 	if imageName != "" {
 		container.Image = imageName
 	}
