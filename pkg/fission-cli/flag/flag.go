@@ -74,6 +74,9 @@ var (
 
 	KubeContext = Flag{Type: String, Name: flagkey.KubeContext, Usage: "Kubernetes context to be used for the execution of Fission commands", DefaultValue: ""}
 
+	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. Eg. --labels=\"environment=dev,application=analytics\""}
+	Annotation = Flag{Type: StringSlice, Name: flagkey.Annotation, Usage: "Annotation to apply to the function. To mention multiple annotations --annotation=\"abc.com/team=dev\" --annotation=\"foo=bar\""}
+
 	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", DefaultValue: metav1.NamespaceDefault}
 	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", DefaultValue: metav1.NamespaceDefault}
 	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", DefaultValue: metav1.NamespaceDefault}

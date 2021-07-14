@@ -47,6 +47,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/maps"
 )
 
 var _ executortype.ExecutorType = &NewDeploy{}
@@ -426,7 +427,7 @@ func (deploy *NewDeploy) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 
 	objName := deploy.getObjName(fn)
 	deployLabels := deploy.getDeployLabels(fn.ObjectMeta, env.ObjectMeta)
-	deployAnnotations := deploy.getDeployAnnotations(fn.ObjectMeta)
+	deployAnnotations := deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta)
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
@@ -666,7 +667,7 @@ func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environ
 	// Therefore, the deployment update will trigger a rolling update.
 	newDeployment, err := deploy.getDeploymentSpec(fn, env,
 		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
-		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta))
+		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta))
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err
@@ -724,7 +725,7 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 }
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
-	return map[string]string{
+	deployLabels := map[string]string{
 		fv1.EXECUTOR_TYPE:         string(fv1.ExecutorTypeNewdeploy),
 		fv1.ENVIRONMENT_NAME:      envMeta.Name,
 		fv1.ENVIRONMENT_NAMESPACE: envMeta.Namespace,
@@ -733,13 +734,17 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 		fv1.FUNCTION_NAMESPACE:    fnMeta.Namespace,
 		fv1.FUNCTION_UID:          string(fnMeta.UID),
 	}
+	for k, v := range envMeta.Labels {
+		deployLabels[k] = v
+	}
+	return deployLabels
 }
 
-func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta) map[string]string {
-	return map[string]string{
-		fv1.EXECUTOR_INSTANCEID_LABEL: deploy.instanceID,
-		fv1.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
-	}
+func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
+	deployAnnotations := maps.CopyStringMap(envMeta.Annotations)
+	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = deploy.instanceID
+	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
+	return deployAnnotations
 }
 
 // updateStatus is a function which updates status of update.

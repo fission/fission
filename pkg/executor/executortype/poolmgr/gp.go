@@ -50,6 +50,7 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/maps"
 )
 
 type (
@@ -155,19 +156,19 @@ func MakeGenericPool(
 }
 
 func (gp *GenericPool) getEnvironmentPoolLabels() map[string]string {
-	return map[string]string{
-		fv1.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
-		fv1.ENVIRONMENT_NAME:      gp.env.ObjectMeta.Name,
-		fv1.ENVIRONMENT_NAMESPACE: gp.env.ObjectMeta.Namespace,
-		fv1.ENVIRONMENT_UID:       string(gp.env.ObjectMeta.UID),
-		"managed":                 "true", // this allows us to easily find pods managed by the deployment
-	}
+	envLabels := maps.CopyStringMap(gp.env.ObjectMeta.Labels)
+	envLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypePoolmgr)
+	envLabels[fv1.ENVIRONMENT_NAME] = gp.env.ObjectMeta.Name
+	envLabels[fv1.ENVIRONMENT_NAMESPACE] = gp.env.ObjectMeta.Namespace
+	envLabels[fv1.ENVIRONMENT_UID] = string(gp.env.ObjectMeta.UID)
+	envLabels["managed"] = "true" // this allows us to easily find pods managed by the deployment
+	return envLabels
 }
 
 func (gp *GenericPool) getDeployAnnotations() map[string]string {
-	return map[string]string{
-		fv1.EXECUTOR_INSTANCEID_LABEL: gp.instanceID,
-	}
+	deployAnnotations := maps.CopyStringMap(gp.env.Annotations)
+	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
+	return deployAnnotations
 }
 
 func (gp *GenericPool) checkMetricsApi() bool {
