@@ -167,6 +167,7 @@ func Commands() *cobra.Command {
 			flag.FnCfgMap, flag.FnSecret,
 			flag.FnExecutionTimeout,
 			flag.FnIdleTimeout,
+			flag.Labels, flag.Annotation,
 
 			// flag for newdeploy to use.
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
@@ -190,6 +191,7 @@ func Commands() *cobra.Command {
 			flag.FnCommand, flag.FnArgs,
 			flag.FnSecret, flag.FnCfgMap,
 			flag.FnExecutionTimeout, flag.FnIdleTimeout,
+			flag.Labels, flag.Annotation,
 
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,

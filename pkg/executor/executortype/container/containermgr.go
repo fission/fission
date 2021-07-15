@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/maps"
 )
 
 var _ executortype.ExecutorType = &Container{}
@@ -675,19 +676,19 @@ func (caaf *Container) getObjName(fn *fv1.Function) string {
 }
 
 func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]string {
-	return map[string]string{
-		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypeContainer),
-		fv1.FUNCTION_NAME:      fnMeta.Name,
-		fv1.FUNCTION_NAMESPACE: fnMeta.Namespace,
-		fv1.FUNCTION_UID:       string(fnMeta.UID),
-	}
+	deployLabels := maps.CopyStringMap(fnMeta.Labels)
+	deployLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypeContainer)
+	deployLabels[fv1.FUNCTION_NAME] = fnMeta.Name
+	deployLabels[fv1.FUNCTION_NAMESPACE] = fnMeta.Namespace
+	deployLabels[fv1.FUNCTION_UID] = string(fnMeta.UID)
+	return deployLabels
 }
 
 func (caaf *Container) getDeployAnnotations(fnMeta metav1.ObjectMeta) map[string]string {
-	return map[string]string{
-		fv1.EXECUTOR_INSTANCEID_LABEL: caaf.instanceID,
-		fv1.FUNCTION_RESOURCE_VERSION: fnMeta.ResourceVersion,
-	}
+	deployAnnotations := maps.CopyStringMap(fnMeta.Annotations)
+	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = caaf.instanceID
+	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
+	return deployAnnotations
 }
 
 // updateStatus is a function which updates status of update.

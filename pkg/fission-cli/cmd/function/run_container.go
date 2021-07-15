@@ -182,6 +182,11 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		},
 	}
 
+	err = util.ApplyLabelsAndAnnotations(input, &opts.function.ObjectMeta)
+	if err != nil {
+		return err
+	}
+
 	container := &apiv1.Container{
 		Name:  fnName,
 		Image: imageName,
