@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -66,6 +67,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.env = env
+
+	err = util.ApplyLabelsAndAnnotations(input, &opts.env.ObjectMeta)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

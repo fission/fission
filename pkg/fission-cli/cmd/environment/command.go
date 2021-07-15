@@ -31,10 +31,13 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName, flag.EnvImage},
-		Optional: []flag.Flag{flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
+		Optional: []flag.Flag{
+			flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
-			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret,
-			flag.EnvExternalNetwork, flag.EnvKeepArchive, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
+			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret, flag.EnvKeepArchive,
+			flag.NamespaceEnvironment, flag.EnvExternalNetwork,
+			flag.Labels, flag.Annotation,
+			flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := &cobra.Command{
@@ -57,7 +60,9 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.EnvImage, flag.EnvPoolsize,
 			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
-			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.NamespaceEnvironment, flag.EnvExternalNetwork},
+			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive,
+			flag.NamespaceEnvironment, flag.EnvExternalNetwork,
+			flag.Labels, flag.Annotation},
 	})
 
 	deleteCmd := &cobra.Command{

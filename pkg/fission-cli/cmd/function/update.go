@@ -243,6 +243,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	opts.function = function
 
+	err = util.ApplyLabelsAndAnnotations(input, &opts.function.ObjectMeta)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

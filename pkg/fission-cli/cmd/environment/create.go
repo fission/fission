@@ -179,6 +179,10 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		},
 	}
 
+	err = util.ApplyLabelsAndAnnotations(input, &env.ObjectMeta)
+	if err != nil {
+		return nil, err
+	}
 	err = env.Validate()
 	if err != nil {
 		return nil, fv1.AggregateValidationErrors("Environment", err)

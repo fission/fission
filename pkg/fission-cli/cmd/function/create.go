@@ -309,6 +309,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		},
 	}
 
+	err = util.ApplyLabelsAndAnnotations(input, &opts.function.ObjectMeta)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

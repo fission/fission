@@ -32,6 +32,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -349,4 +350,53 @@ func UrlForFunction(name, namespace string) string {
 		prefix = fmt.Sprintf("/fission-function/%s", namespace)
 	}
 	return fmt.Sprintf("%v/%v", prefix, name)
+}
+
+func ParseAnnotations(annotations []string) (map[string]string, error) {
+	var invalidAnnotations string
+	annotationMap := make(map[string]string)
+	for _, arg := range annotations {
+		if strings.Contains(arg, "=") && arg[0] != '=' {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) == 2 {
+				annotationMap[parts[0]] = parts[1]
+			} else {
+				if invalidAnnotations != "" {
+					invalidAnnotations = fmt.Sprintf("%s,%s", invalidAnnotations, arg)
+				} else {
+					invalidAnnotations = arg
+				}
+			}
+		} else {
+			if invalidAnnotations != "" {
+				invalidAnnotations = fmt.Sprintf("%s,%s", invalidAnnotations, arg)
+			} else {
+				invalidAnnotations = arg
+			}
+		}
+	}
+	if invalidAnnotations != "" {
+		return nil, errors.Errorf("invalid annotations: %s", invalidAnnotations)
+	}
+	return annotationMap, nil
+}
+
+func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) error {
+	labelStr := input.String(flagkey.Labels)
+	if labelStr != "" {
+		set, err := labels.ConvertSelectorToLabelsMap(labelStr)
+		if err != nil {
+			return err
+		}
+		objectMeta.Labels = set
+	}
+	annotationStr := input.StringSlice(flagkey.Annotation)
+	if len(annotationStr) > 0 {
+		set, err := ParseAnnotations(annotationStr)
+		if err != nil {
+			return err
+		}
+		objectMeta.Annotations = set
+	}
+	return nil
 }

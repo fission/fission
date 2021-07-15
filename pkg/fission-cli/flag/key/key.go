@@ -26,6 +26,9 @@ const (
 	force        = "force"
 	Output       = "output"
 
+	Labels     = "labels"
+	Annotation = "annotation"
+
 	NamespaceFunction    = "fnNamespace"
 	NamespaceEnvironment = "envNamespace"
 	NamespacePackage     = "pkgNamespace"
