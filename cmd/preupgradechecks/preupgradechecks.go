@@ -99,7 +99,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 		return errors.New("Could not get the Function CRD")
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
-	if !strings.Contains(funcCRD.Spec.String(), "RequestsPerPod") || !strings.Contains(funcCRD.Spec.String(), "OnceOnly") {
+	if !strings.Contains(funcCRD.Spec.String(), "RequestsPerPod") || !strings.Contains(funcCRD.Spec.String(), "OnceOnly") || !strings.Contains(funcCRD.Spec.String(), "PodSpec") {
 		return errors.New("Apply the newer CRDs before upgrading")
 	}
 
@@ -112,6 +112,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 	if !strings.Contains(mqtCRD.Spec.String(), "PodSpec") {
 		return errors.New("Apply the newer CRDs before upgrading")
 	}
+
 	return nil
 }
 
