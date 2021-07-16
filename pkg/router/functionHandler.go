@@ -191,7 +191,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var retryCounter int
 	var err error
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
-	roundTripper.logger.Info(fnMeta.Name)
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -258,9 +257,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				req.URL.Path = "/"
 			}
 
-			roundTripper.logger.Info(req.URL.Host)
-			roundTripper.logger.Info(req.RemoteAddr)
-			req.URL.Path = utils.RemoveFuncName(req.URL.Path, fnMeta.Name)
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)

@@ -274,6 +274,10 @@ func (spec FunctionSpec) Validate() error {
 		result = multierror.Append(result, spec.InvokeStrategy.Validate())
 	}
 
+	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer && spec.PodSpec == nil {
+		result = multierror.Append(result, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
+	}
+
 	// TODO Add below validation warning
 	/*if spec.FunctionTimeout <= 0 {
 		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "FunctionTimeout value", spec.FunctionTimeout, "not a valid value. Should always be more than 0"))
@@ -327,10 +331,6 @@ func (es ExecutionStrategy) Validate() error {
 		//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
 		//}
 	}
-
-	// TODO: Add validations
-	// if es.ExecutorType == ExecutorTypeContainer {
-	// }
 
 	return result.ErrorOrNil()
 }
