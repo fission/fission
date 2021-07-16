@@ -340,6 +340,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -364,6 +366,10 @@ spec:
         ports:
           - containerPort: 8888
             name: http
+        {{- if .Values.pprof.enabled }}
+          - containerPort: 6060
+            name: pprof
+        {{- end }}
       serviceAccountName: fission-svc
       volumes:
       - name: config-volume
@@ -432,6 +438,8 @@ spec:
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -450,6 +458,10 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
+        {{- if .Values.pprof.enabled }}
+        - containerPort: 6060
+          name: pprof
+        {{- end }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -506,6 +518,8 @@ spec:
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -542,6 +556,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -615,7 +631,7 @@ metadata:
     kubernetes.io/cluster-service: 'true'
     kubernetes.io/name: heapster
 spec:
-  type: ClusterIP 
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 8082
@@ -644,7 +660,7 @@ spec:
       - name: heapster
         image: gcr.io/google_containers/heapster-amd64:v1.5.0
         imagePullPolicy: {{ .Values.pullPolicy }}
-        command: 
+        command:
         - /heapster
         - --source=kubernetes:https://kubernetes.default
       serviceAccountName: {{ .Release.Namespace }}/fission-svc
@@ -676,6 +692,8 @@ spec:
         env:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -815,6 +833,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -866,6 +886,8 @@ spec:
           value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
         # TLS authentication is TLS with authentication (2 way)
         # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview
         {{- if .Values.kafka.authentication.tls.enabled }}
@@ -878,7 +900,7 @@ spec:
         volumeMounts:
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
-        {{- end }}        
+        {{- end }}
       serviceAccountName: fission-svc
       {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:
@@ -891,7 +913,7 @@ spec:
 {{- if .Values.kafka.authentication.tls.enabled }}
 apiVersion: v1
 kind: Secret
-metadata: 
+metadata:
   name: mqtrigger-kafka-secrets
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -953,7 +975,7 @@ spec:
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
           value: "{{ .Values.traceCollectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}        
+          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
         - name: MESSAGE_QUEUE_TYPE
           value: azure-storage-queue
         - name: AZURE_STORAGE_ACCOUNT_NAME
@@ -965,6 +987,8 @@ spec:
               key: key
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -1010,6 +1034,8 @@ spec:
           value: "{{.Values.pruneInterval}}"
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
         - name: STORAGE_S3_ENDPOINT
           value: {{ .Values.persistence.s3.endPoint }}
@@ -1045,6 +1071,10 @@ spec:
         ports:
           - containerPort: 8000
             name: http
+          {{- if .Values.pprof.enabled }}
+          - containerPort: 6060
+            name: pprof
+          {{- end }}
       serviceAccountName: fission-svc
       {{- if and (.Values.persistence.enabled) (ne (.Values.persistence.storageType | default "local") "s3") }}
       volumes:

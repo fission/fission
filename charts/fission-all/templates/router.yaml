@@ -63,6 +63,8 @@ spec:
             value: {{ .Values.router.useEncodedPath | default false | quote }}
           - name: DEBUG_ENV
             value: {{ .Values.debugEnv | quote }}
+          - name: PPROF_ENABLED
+            value: {{ .Values.pprof.enabled | quote }}
           - name: DISPLAY_ACCESS_LOG
             value: {{ .Values.router.displayAccessLog | default false | quote }}
         resources:
@@ -85,6 +87,10 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
+        {{- if .Values.pprof.enabled }}
+        - containerPort: 6060
+          name: pprof
+        {{- end }}
       serviceAccountName: fission-svc
 {{- if .Values.router.extraCoreComponentPodConfig }}
 {{ toYaml .Values.router.extraCoreComponentPodConfig | indent 6 -}}
