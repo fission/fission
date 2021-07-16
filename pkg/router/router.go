@@ -236,7 +236,7 @@ func Start(logger *zap.Logger, port int, executorURL string) {
 			zap.Bool("default", displayAccessLog))
 	}
 
-	triggers := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, fissionClient.CoreV1().RESTClient(), &tsRoundTripperParams{
+	triggers := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,

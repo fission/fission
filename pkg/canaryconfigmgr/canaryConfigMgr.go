@@ -29,7 +29,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -47,11 +46,10 @@ type canaryConfigMgr struct {
 	kubeClient             *kubernetes.Clientset
 	canaryConfigInformer   *k8sCache.SharedIndexInformer
 	promClient             *PrometheusApiClient
-	crdClient              rest.Interface
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
 
-func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, crdClient rest.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
+func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
 		logger.Info("try to retrieve prometheus server information from environment variables")
 
@@ -91,7 +89,6 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, k
 		logger:                 logger.Named("canary_config_manager"),
 		fissionClient:          fissionClient,
 		kubeClient:             kubeClient,
-		crdClient:              crdClient,
 		promClient:             promClient,
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}

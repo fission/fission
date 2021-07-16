@@ -154,13 +154,60 @@ func Commands() *cobra.Command {
 		},
 	})
 
+	runContainerCmd := &cobra.Command{
+		Use:     "run-container",
+		Aliases: []string{"runc"},
+		Short:   "Alpha: Run a container image as a function",
+		RunE:    wrapper.Wrapper(RunContainer),
+	}
+	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName, flag.FnImageName},
+		Optional: []flag.Flag{
+			flag.FnPort, flag.FnCommand, flag.FnArgs,
+			flag.FnCfgMap, flag.FnSecret,
+			flag.FnExecutionTimeout,
+			flag.FnIdleTimeout,
+			flag.Labels, flag.Annotation,
+
+			// flag for newdeploy to use.
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.ReplicasMin,
+			flag.ReplicasMax, flag.RunTimeTargetCPU,
+
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+		},
+	})
+
+	updateContainerCmd := &cobra.Command{
+		Use:     "update-container",
+		Aliases: []string{"updatec"},
+		Short:   "Alpha: Update a function running a container",
+		RunE:    wrapper.Wrapper(UpdateContainer),
+	}
+	wrapper.SetFlags(updateContainerCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{
+			flag.FnImageName, flag.FnPort,
+			flag.FnCommand, flag.FnArgs,
+			flag.FnSecret, flag.FnCfgMap,
+			flag.FnExecutionTimeout, flag.FnIdleTimeout,
+			flag.Labels, flag.Annotation,
+
+			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
+			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
+			flag.RunTimeTargetCPU,
+
+			flag.NamespaceFunction, flag.SpecSave,
+		},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
-
-	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd)
+	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
+		runContainerCmd, updateContainerCmd)
 
 	return command
 }

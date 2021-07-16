@@ -1,103 +1,101 @@
 ####################################
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
-# Skaffold version v1.10.1 is used for this configuration.
+# Skaffold version v1.26.1 is used for this configuration.
 ############## Usage ##############
-# Skaffold CLI should be installed on your machine. 
+# Skaffold CLI should be installed on your machine.
 # For building & deploying to Cloud Provider
 # $ skaffold config set default-repo vishalbiyani (vishalbiyani - should be your registry/Dockerhub handle)
-# $ `skaffold run` 
+# $ `skaffold run`
 # For building & deploying to Kind cluster use Kind profile
 # $ `skaffold run -p kind`
 ####################################
-apiVersion: skaffold/v2beta4
+apiVersion: skaffold/v2beta17
 kind: Config
 build:
   artifacts:
-    - image: fission
-      context: .
-      docker:
-        dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
-    - image: fetcher
-      docker:
-        dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
-    - image: preupgradechecks
-      docker:
-        dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
-    - image: reporter
-      docker:
-        dockerfile: cmd/reporter/Dockerfile.reporter
-
+  - image: fission
+    context: .
+    docker:
+      dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+  - image: fetcher
+    docker:
+      dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+  - image: preupgradechecks
+    docker:
+      dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+  - image: reporter
+    docker:
+      dockerfile: cmd/reporter/Dockerfile.reporter
 deploy:
   helm:
-    flags:
-      upgrade:
-        ["--timeout=3m", "--install", "--force", "--debug"]
-      install:
-        ["--timeout=3m","--debug","--dependency-update"]
     releases:
-      - name: fission
-        chartPath: ./charts/fission-all
-        valuesFiles:
-          - ./charts/fission-all/values.yaml
-        namespace: "fission"
-        artifactOverrides:
-          image: "fission"
-          preUpgradeChecksImage: "preupgradechecks"
-          postInstallReportImage: "reporter"
-          fetcher.image: "fetcher"        
-        setValues:
-          namespace: fission
-          repository: "index.docker.io"
-          routerServiceType: LoadBalancer
-          pruneInterval: 60
-          fetcher.imageTag: ""
-          imageTag: ""
-          prometheus.enabled: false
-          debugEnv: false
-          analytics: false
-          pprof.enabled: false
-        wait: true
-        recreatePods: false
-        packaged: null
-        imageStrategy:
-          fqn: null
-          helm: null
-
+    - name: fission
+      chartPath: ./charts/fission-all
+      valuesFiles:
+      - ./charts/fission-all/values.yaml
+      artifactOverrides:
+        fetcher.image: fetcher
+        image: fission
+        postInstallReportImage: reporter
+        preUpgradeChecksImage: preupgradechecks
+      namespace: fission
+      setValues:
+        analytics: "false"
+        debugEnv: "false"
+        fetcher.imageTag: ""
+        imageTag: ""
+        namespace: fission
+        pprof.enabled: false
+        prometheus.enabled: "false"
+        pruneInterval: "60"
+        repository: index.docker.io
+        routerServiceType: LoadBalancer
+      wait: true
+    flags:
+      install:
+      - --timeout=3m
+      - --debug
+      - --dependency-update
+      upgrade:
+      - --timeout=3m
+      - --install
+      - --force
+      - --debug
 profiles:
-  - name: kind
-    patches:
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/repository
-        value: ""
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/routerServiceType
-        value: "NodePort"
-  - name: kind-debug
-    patches:
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/repository
-        value: ""
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/routerServiceType
-        value: "NodePort"
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/debugEnv
-        value: true
-      - op: replace
-        path: /deploy/helm/releases/0/setValues/pprof.enabled
-        value: true
-  - name: kind-ci
-    patches:
-    - op: replace
-      path: /deploy/helm/releases/0/setValues/repository
-      value: ""
-    - op: replace
-      path: /deploy/helm/releases/0/setValues/pruneInterval
-      value: 1
-    - op: replace
-      path: /deploy/helm/releases/0/setValues/routerServiceType
-      value: "NodePort"
-    - op: replace
-      path: /deploy/helm/releases/0/setValues/prometheus.enabled
-      value: true
+- name: kind
+  patches:
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/repository
+    value: ""
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/routerServiceType
+    value: NodePort
+- name: kind-debug
+  patches:
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/repository
+    value: ""
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/routerServiceType
+    value: NodePort
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/debugEnv
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/pprof.enabled
+    value: true
+- name: kind-ci
+  patches:
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/repository
+    value: ""
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/pruneInterval
+    value: 1
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/routerServiceType
+    value: NodePort
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/prometheus.enabled
+    value: true

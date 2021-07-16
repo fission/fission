@@ -409,6 +409,11 @@ type (
 		// This is optional. If not specified default value will be taken as false
 		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
+
+		// Podspec specifies podspec to use for executor type container based functions
+		// Different arguments mentioned for container based function are populated inside a pod.
+		// +optional
+		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.
@@ -450,6 +455,7 @@ type (
 		// Available value:
 		//  - poolmgr
 		//  - newdeploy
+		//  - container
 		// +optional
 		ExecutorType ExecutorType `json:"ExecutorType"`
 

@@ -186,7 +186,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 
 	if !gp.checkMetricsApi() {
 		checkDuration = 180
-		gp.logger.Error("Metrics API not available")
+		gp.logger.Warn("Metrics API not available")
 	}
 
 	serviceFunc := func() {

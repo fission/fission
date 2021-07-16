@@ -149,7 +149,7 @@ func (EnvironmentSpec) SwaggerDoc() map[string]string {
 
 var map_ExecutionStrategy = map[string]string{
 	"":                      "ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.\n\nMinScale affects the cold start behavior for a function. If MinScale is 0 then the deployment is created on first invocation of function and is good for requests of asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are created at the time of creation of function. This ensures faster response during first invocation at the cost of consuming resources.\n\nMaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent and resources allocated to the function pod.",
-	"ExecutorType":          "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\".\n\nAvailable value:\n - poolmgr\n - newdeploy",
+	"ExecutorType":          "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\".\n\nAvailable value:\n - poolmgr\n - newdeploy\n - container",
 	"MinScale":              "This is only for newdeploy to set up minimum replicas of deployment.",
 	"MaxScale":              "This is only for newdeploy to set up maximum replicas of deployment.",
 	"TargetCPUPercent":      "This is only for newdeploy to set up target CPU utilization of HPA.",
@@ -210,6 +210,7 @@ var map_FunctionSpec = map[string]string{
 	"concurrency":     "Maximum number of pods to be specialized which will serve requests This is optional. If not specified default value will be taken as 500",
 	"requestsPerPod":  "RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod This is optional. If not specified default value will be taken as 1",
 	"onceOnly":        "OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request This is optional. If not specified default value will be taken as false",
+	"podspec":         "Podspec specifies podspec to use for executor type container based functions Different arguments mentioned for container based function are populated inside a pod.",
 }
 
 func (FunctionSpec) SwaggerDoc() map[string]string {

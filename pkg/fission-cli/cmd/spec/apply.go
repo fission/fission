@@ -383,6 +383,9 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 	// of the package. This ensures that various caches can invalidate themselves
 	// when the package changes.
 	for i, f := range fr.Functions {
+		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
+			continue
+		}
 		k := mapKey(&metav1.ObjectMeta{
 			Namespace: f.Spec.Package.PackageRef.Namespace,
 			Name:      f.Spec.Package.PackageRef.Name,

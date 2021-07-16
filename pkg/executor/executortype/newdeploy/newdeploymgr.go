@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -59,7 +58,6 @@ type (
 
 		kubernetesClient *kubernetes.Clientset
 		fissionClient    *crd.FissionClient
-		crdClient        rest.Interface
 		instanceID       string
 		fetcherConfig    *fetcherConfig.Config
 
@@ -86,7 +84,6 @@ func MakeNewDeploy(
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
-	crdClient rest.Interface,
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
@@ -107,7 +104,6 @@ func MakeNewDeploy(
 
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
-		crdClient:        crdClient,
 		instanceID:       instanceID,
 
 		namespace: namespace,
@@ -123,10 +119,8 @@ func MakeNewDeploy(
 		envInformer:            envInformer,
 	}
 
-	if nd.crdClient != nil {
-		(*nd.funcInformer).AddEventHandler(nd.FunctionEventHandlers())
-		(*nd.envInformer).AddEventHandler(nd.EnvEventHandlers())
-	}
+	(*nd.funcInformer).AddEventHandler(nd.FunctionEventHandlers())
+	(*nd.envInformer).AddEventHandler(nd.EnvEventHandlers())
 
 	informerFactory, err := utils.GetInformerFactoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {
@@ -226,9 +220,13 @@ func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.D
 // Return true if no error occurs, return false otherwise.
 func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
+		deploy.logger.Error("address not found in function service")
 		return false
 	}
-
+	if len(fsvc.KubernetesObjects) == 0 {
+		deploy.logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
+		return false
+	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
 			_, err := deploy.getServiceInfo(obj)
@@ -239,11 +237,7 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 				return false
 			}
 
-		}
-	}
-
-	for _, obj := range fsvc.KubernetesObjects {
-		if strings.ToLower(obj.Kind) == "deployment" {
+		} else if strings.ToLower(obj.Kind) == "deployment" {
 			currentDeploy, err := deploy.getDeploymentInfo(obj)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
@@ -251,17 +245,15 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 				}
 				return false
 			}
-			// return directly when available replicas > 0
-			if currentDeploy.Status.AvailableReplicas > 0 {
-				return true
+			if currentDeploy.Status.AvailableReplicas < 1 {
+				return false
 			}
 		}
 	}
-
-	return false
+	return true
 }
 
-// RefreshFuncPods deleted pods related to the function so that new pods are replenished
+// RefreshFuncPods deletes pods related to the function so that new pods are replenished
 func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
 
 	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})

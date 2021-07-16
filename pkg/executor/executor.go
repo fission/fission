@@ -37,6 +37,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/cms"
 	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/executor/executortype/container"
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -291,7 +292,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	ndm, err := newdeploy.MakeNewDeploy(
 		logger,
-		fissionClient, kubernetesClient, fissionClient.CoreV1().RESTClient(),
+		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		&funcInformer, &envInformer,
 	)
@@ -299,9 +300,18 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
 
+	cnm, err := container.MakeContainer(
+		logger,
+		fissionClient, kubernetesClient,
+		functionNamespace, executorInstanceID, &funcInformer)
+	if err != nil {
+		return errors.Wrap(err, "container manager creation faied")
+	}
+
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName()] = gpm
 	executorTypes[ndm.GetTypeName()] = ndm
+	executorTypes[cnm.GetTypeName()] = cnm
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 
