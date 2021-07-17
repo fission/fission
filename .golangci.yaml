@@ -17,8 +17,8 @@ linters:
     - misspell
     - nakedret
     - unconvert
+    - bodyclose
     # Enable in future
-    # - bodyclose
     # - dogsled
     # - dupl
     # - gosec
