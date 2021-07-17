@@ -18,13 +18,13 @@ linters:
     - nakedret
     - unconvert
     - bodyclose
+    - prealloc
     # Enable in future
     # - dogsled
     # - dupl
     # - gosec
     # - ifshort
     # - nilerr
-    # - prealloc
     # - revive
     # - unparam
     # - wrapcheck
