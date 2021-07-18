@@ -672,7 +672,16 @@ func (caaf *Container) fnDelete(fn *fv1.Function) error {
 func (caaf *Container) getObjName(fn *fv1.Function) string {
 	// use meta uuid of function, this ensure we always get the same name for the same function.
 	uid := fn.ObjectMeta.UID[len(fn.ObjectMeta.UID)-17:]
-	return strings.ToLower(fmt.Sprintf("Container-%v-%v-%v", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, uid))
+	var functionMetadata string
+	if len(fn.ObjectMeta.Name)+len(fn.ObjectMeta.Namespace) < 35 {
+		functionMetadata = fn.ObjectMeta.Name + "-" + fn.ObjectMeta.Namespace
+	} else {
+		functionMetadata = fn.ObjectMeta.Name[:17] + "-" + fn.ObjectMeta.Namespace[:17]
+	}
+	// contructed name should be 63 characters long, as it is a valid k8s name
+	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
+	// with newdeploy 10 character prefix
+	return strings.ToLower(fmt.Sprintf("container-%s-%s", functionMetadata, uid))
 }
 
 func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]string {
