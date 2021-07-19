@@ -501,14 +501,16 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (*appsv1.Deployment, error) {
+func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
+	oldStatus := depl.Status
+
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err := deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(context.TODO(), depl.Name, metav1.GetOptions{})
+		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(context.TODO(), depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -520,6 +522,10 @@ func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, 
 		}
 		time.Sleep(time.Second)
 	}
+
+	deploy.logger.Error("Deployment provision failed within timeout window",
+		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
+		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 
 	// this error appears in the executor pod logs
 	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)

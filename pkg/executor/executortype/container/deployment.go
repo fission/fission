@@ -123,7 +123,9 @@ func (cn *Container) deleteDeployment(ns string, name string) error {
 	})
 }
 
-func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (*appsv1.Deployment, error) {
+func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
+	oldStatus := depl.Status
+
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
@@ -142,6 +144,10 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 		}
 		time.Sleep(time.Second)
 	}
+
+	cn.logger.Error("Deployment provision failed within timeout window",
+		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
+		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 
 	// this error appears in the executor pod logs
 	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
