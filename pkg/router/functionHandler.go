@@ -176,8 +176,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 	}()
 
-	roundTripper.logger.Debug("request headers", zap.Any("headers", req.Header))
-
 	// The reason for request failure may vary from case to case.
 	// After some investigation, found most of the failure are due to
 	// network timeout or target function is under heavy workload. In
@@ -191,6 +189,31 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var retryCounter int
 	var err error
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
+
+	logger := roundTripper.logger.With(zap.String("function", fnMeta.Name), zap.String("namespace", fnMeta.Namespace))
+
+	dumpReqFunc := func(request *http.Request) {
+		if request == nil {
+			return
+		}
+		reqMsg, err := httputil.DumpRequest(request, false)
+		if err != nil {
+			logger.Error("failed to dump request", zap.Error(err))
+		} else {
+			logger.Debug("round tripper request", zap.String("request", string(reqMsg)))
+		}
+	}
+	dumpRespFunc := func(response *http.Response) {
+		if response == nil {
+			return
+		}
+		respMsg, err := httputil.DumpResponse(response, false)
+		if err != nil {
+			logger.Error("failed to dump response", zap.Error(err))
+		} else {
+			logger.Debug("round tripper response", zap.String("response", string(respMsg)))
+		}
+	}
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -220,7 +243,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
 			}
 			if roundTripper.serviceURL == nil {
-				roundTripper.logger.Warn("serviceURL is empty for function, retrying", zap.Duration("executingTimeout", executingTimeout))
+				logger.Warn("serviceURL is empty for function, retrying", zap.Duration("executingTimeout", executingTimeout))
 				time.Sleep(executingTimeout)
 				executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 				continue
@@ -274,19 +297,29 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// will be canceled when calling setContext.
 		newReq := roundTripper.setContext(req)
 
+		if roundTripper.funcHandler.isDebugEnv {
+			dumpReqFunc(newReq)
+		}
+
 		// forward the request to the function service
 		resp, err := ocRoundTripper.RoundTrip(newReq)
 		if err == nil {
 			// return response back to user
+			if roundTripper.funcHandler.isDebugEnv {
+				dumpRespFunc(resp)
+			}
 			return resp, nil
+		}
+
+		if roundTripper.funcHandler.isDebugEnv && resp != nil {
+			dumpRespFunc(resp)
 		}
 
 		roundTripper.totalRetry++
 
 		if i >= roundTripper.funcHandler.tsRoundTripperParams.maxRetries-1 {
 			// return here if we are in the last round
-			roundTripper.logger.Error("error getting response from function",
-				zap.String("function_name", fnMeta.Name),
+			logger.Error("error getting response from function",
 				zap.Error(err))
 			return nil, err
 		}
@@ -303,7 +336,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// if transport.RoundTrip returns a non-network dial error (e.g. "context canceled"), then relay it back to user
 		if !isNetDialErr {
-			roundTripper.logger.Error("encountered non-network dial error", zap.Error(err))
+			logger.Error("encountered non-network dial error", zap.Error(err))
 			return resp, err
 		}
 
@@ -314,16 +347,15 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").
 		if isNetTimeoutErr {
-			roundTripper.logger.Debug("request errored out - backing off before retrying",
+			logger.Debug("request errored out - backing off before retrying",
 				zap.String("url", req.URL.Host),
-				zap.String("function_name", fnMeta.Name),
 				zap.Error(err))
 			retryCounter++
 		}
 
 		// If it's not a timeout error or retryCounter exceeded pre-defined threshold,
 		if retryCounter >= roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount {
-			roundTripper.logger.Debug(fmt.Sprintf(
+			logger.Debug(fmt.Sprintf(
 				"retry counter exceeded pre-defined threshold of %v",
 				roundTripper.funcHandler.tsRoundTripperParams.svcAddrRetryCount))
 			if roundTripper.urlFromCache {
@@ -332,13 +364,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			retryCounter = 0
 		}
 
-		roundTripper.logger.Debug("Backing off before retrying", zap.Any("backoff_time", executingTimeout), zap.Error(err))
+		logger.Debug("Backing off before retrying", zap.Duration("backoff_time", executingTimeout), zap.Error(err))
 		time.Sleep(executingTimeout)
 		executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 	}
 
 	e := errors.New("Unable to get service url for connection")
-	roundTripper.logger.Error(e.Error(), zap.String("function_name", fnMeta.Name))
+	logger.Error(e.Error())
 	return nil, e
 }
 
