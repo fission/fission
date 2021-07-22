@@ -114,7 +114,7 @@ reporter-multiarch-img: cmd/reporter/Dockerfile.reporter
 
 ### Codegen
 codegen:
-	@./hack/codegen.sh
+	@./hack/update-codegen.sh
 
 ### CRDs
 generate-crds:
@@ -142,7 +142,7 @@ clean:
 
 ### Misc
 generate-swagger-doc:
-	@cd pkg/apis/core/v1/tool && ./update-generated-swagger-docs.sh
+	@./hack/update-swagger-docs.sh
 
 all-generators: codegen generate-crds generate-swagger-doc
 
