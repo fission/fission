@@ -166,17 +166,19 @@ func TestAzureStorageQueueSingleMessage(t *testing.T) {
 	runAzureStorageQueueTest(t, 1, false)
 }
 
-func TestAzureStorageQueueMultipleMessages(t *testing.T) {
-	runAzureStorageQueueTest(t, 10, false)
-}
+// TODO: Enable after fixing race condition
+// func TestAzureStorageQueueMultipleMessages(t *testing.T) {
+// 	runAzureStorageQueueTest(t, 10, false)
+// }
 
 func TestAzureStorageQueueSingleOutputMessage(t *testing.T) {
 	runAzureStorageQueueTest(t, 1, true)
 }
 
-func TestAzureStorageQueueMultipleOutputMessages(t *testing.T) {
-	runAzureStorageQueueTest(t, 10, true)
-}
+// TODO: Enable after fixing race condition
+// func TestAzureStorageQueueMultipleOutputMessages(t *testing.T) {
+// 	runAzureStorageQueueTest(t, 10, true)
+// }
 
 func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	const (
