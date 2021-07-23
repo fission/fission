@@ -76,7 +76,6 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 										Service: &v1.IngressServiceBackend{
 											Name: "router",
 											Port: v1.ServiceBackendPort{
-												Name:   "http",
 												Number: 80,
 											},
 										},
