@@ -43,7 +43,7 @@ func createIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 	if !trigger.Spec.CreateIngress {
 		return
 	}
-	_, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Create(context.TODO(), util.GetIngressSpec(podNamespace, trigger), v1.CreateOptions{})
+	_, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Create(context.TODO(), util.GetIngressSpec(podNamespace, trigger), v1.CreateOptions{})
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		logger.Error("failed to create ingress", zap.Error(err))
 		return
@@ -56,13 +56,13 @@ func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 		return
 	}
 
-	ingress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(context.TODO(), trigger.ObjectMeta.Name, v1.GetOptions{})
+	ingress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(context.TODO(), trigger.ObjectMeta.Name, v1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		logger.Error("failed to get ingress when deleting trigger", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
 		return
 	}
 
-	err = kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Delete(context.TODO(), ingress.Name, v1.DeleteOptions{})
+	err = kubeClient.NetworkingV1().Ingresses(podNamespace).Delete(context.TODO(), ingress.Name, v1.DeleteOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		logger.Error("failed to delete ingress for trigger",
 			zap.Error(err),
@@ -86,7 +86,7 @@ func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrig
 		return
 	}
 
-	oldIngress, err := kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Get(context.TODO(), oldT.ObjectMeta.Name, v1.GetOptions{})
+	oldIngress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(context.TODO(), oldT.ObjectMeta.Name, v1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			createIngress(logger, newT, kubeClient)
@@ -123,7 +123,7 @@ func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrig
 	}
 
 	if changes {
-		_, err = kubeClient.ExtensionsV1beta1().Ingresses(podNamespace).Update(context.TODO(), oldIngress, v1.UpdateOptions{})
+		_, err = kubeClient.NetworkingV1().Ingresses(podNamespace).Update(context.TODO(), oldIngress, v1.UpdateOptions{})
 		if err != nil {
 			logger.Error("failed to update ingress for trigger", zap.Error(err), zap.String("trigger", oldT.ObjectMeta.Name))
 			return

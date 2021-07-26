@@ -17,14 +17,14 @@ limitations under the License.
 package util
 
 import (
-	"k8s.io/api/extensions/v1beta1"
+	v1 "k8s.io/api/networking/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress {
+func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 	// TODO: remove backward compatibility
 	host, path := trigger.Spec.Host, trigger.Spec.RelativeURL
 	if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
@@ -41,9 +41,9 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 		host = "" // wildcard Ingress host
 	}
 
-	var ingTLS []v1beta1.IngressTLS
+	var ingTLS []v1.IngressTLS
 	if len(trigger.Spec.IngressConfig.TLS) > 0 {
-		ingTLS = []v1beta1.IngressTLS{
+		ingTLS = []v1.IngressTLS{
 			{
 				Hosts: []string{
 					trigger.Spec.IngressConfig.Host,
@@ -53,7 +53,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 		}
 	}
 
-	ing := &v1beta1.Ingress{
+	ing := &v1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: GetDeployLabels(trigger),
 			Name:   trigger.ObjectMeta.Name,
@@ -63,20 +63,21 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1beta1.Ingress
 			Namespace:   namespace,
 			Annotations: trigger.Spec.IngressConfig.Annotations,
 		},
-		Spec: v1beta1.IngressSpec{
+		Spec: v1.IngressSpec{
 			TLS: ingTLS,
-			Rules: []v1beta1.IngressRule{
+			Rules: []v1.IngressRule{
 				{
 					Host: host,
-					IngressRuleValue: v1beta1.IngressRuleValue{
-						HTTP: &v1beta1.HTTPIngressRuleValue{
-							Paths: []v1beta1.HTTPIngressPath{
+					IngressRuleValue: v1.IngressRuleValue{
+						HTTP: &v1.HTTPIngressRuleValue{
+							Paths: []v1.HTTPIngressPath{
 								{
-									Backend: v1beta1.IngressBackend{
-										ServiceName: "router",
-										ServicePort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 80,
+									Backend: v1.IngressBackend{
+										Service: &v1.IngressServiceBackend{
+											Name: "router",
+											Port: v1.ServiceBackendPort{
+												Number: 80,
+											},
 										},
 									},
 									Path: path,
