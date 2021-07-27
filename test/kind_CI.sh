@@ -17,8 +17,8 @@ dump_system_info
 export FUNCTION_NAMESPACE=fission-function
 export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
-export NODE_RUNTIME_IMAGE=fission/node-env-12.16:1.11.0
-export NODE_BUILDER_IMAGE=fission/node-builder-12.16:1.11.0
+export NODE_RUNTIME_IMAGE=fission/node-env-12.16
+export NODE_BUILDER_IMAGE=fission/node-builder-12.16
 export PYTHON_RUNTIME_IMAGE=fission/python-env
 export PYTHON_BUILDER_IMAGE=fission/python-builder
 export GO_RUNTIME_IMAGE=fission/go-env-1.12
