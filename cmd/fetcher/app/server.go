@@ -24,7 +24,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/plugin/ochttp"
@@ -32,10 +31,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/fetcher"
-)
-
-var (
-	readyToServe uint32
 )
 
 func registerTraceExporter(collectorEndpoint string) error {
@@ -112,7 +107,6 @@ func Run(logger *zap.Logger) {
 				logger.Fatal("error specializing function pod", zap.Error(err))
 			}
 		}
-		atomic.StoreUint32(&readyToServe, 1)
 	}()
 
 	mux := http.NewServeMux()
@@ -123,15 +117,9 @@ func Run(logger *zap.Logger) {
 	mux.HandleFunc("/wsevent/start", f.WsStartHandler)
 	mux.HandleFunc("/wsevent/end", f.WsEndHandler)
 
-	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
-		if atomic.LoadUint32(&readyToServe) == 1 {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-	}
-
-	mux.HandleFunc("/readiness-healthz", readinessHandler)
+	mux.HandleFunc("/readiness-healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
