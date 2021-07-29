@@ -37,8 +37,9 @@ func (opts *ShowSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ShowSubCommand) run(flaginput cli.Input) error {
-	round := flaginput.Int(flagkey.TtName)
+	round := flaginput.Int(flagkey.TtRound)
 	cronSpec := flaginput.String(flagkey.TtCron)
+
 	if len(cronSpec) == 0 {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
