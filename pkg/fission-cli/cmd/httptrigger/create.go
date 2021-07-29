@@ -179,7 +179,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			CreateIngress:     createIngress,
 			IngressConfig:     *ingressConfig,
 			Prefix:            &prefix,
+			KeepPrefix:        input.Bool(flagkey.HtKeepPrefix),
 		},
+	}
+
+	if input.IsSet(flagkey.HtKeepPrefix) {
+		opts.trigger.Spec.KeepPrefix = input.Bool(flagkey.HtKeepPrefix)
 	}
 
 	return nil

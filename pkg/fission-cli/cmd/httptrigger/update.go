@@ -80,6 +80,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	ht.Spec.RelativeURL = triggerUrl
 	ht.Spec.Prefix = &prefix
 
+	if input.IsSet(flagkey.HtKeepPrefix) {
+		ht.Spec.KeepPrefix = input.Bool(flagkey.HtKeepPrefix)
+	}
+
 	methods := input.StringSlice(flagkey.HtMethod)
 	if len(methods) > 0 {
 		for _, method := range methods {

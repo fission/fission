@@ -664,6 +664,11 @@ type (
 		// +optional
 		Prefix *string `json:"prefix,omitempty"`
 
+		// When function is exposed with Prefix based path,
+		// keepPrefix decides whether to keep or trim prefix in URL while invoking function.
+		// +optional
+		KeepPrefix bool `json:"keepPrefix,omitempty"`
+
 		// Use Methods instead of Method. This field is going to be deprecated in a future release
 		// HTTP method to access a function.
 		// +optional
