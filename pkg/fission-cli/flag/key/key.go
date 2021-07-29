@@ -87,6 +87,7 @@ const (
 	HtFnWeight          = "weight"
 	HtFilter            = HtFnName
 	HtPrefix            = "prefix"
+	HtKeepPrefix        = "keepprefix"
 
 	TtName   = resourceName
 	TtCron   = "cron"

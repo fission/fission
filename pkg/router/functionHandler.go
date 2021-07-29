@@ -266,13 +266,17 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			// req.URL.Path according to httpTrigger specification.
 			prefixTrim := ""
 			functionURL := utils.UrlForFunction(fnMeta.Name, fnMeta.Namespace)
+			keepPrefix := false
 			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil && *roundTripper.funcHandler.httpTrigger.Spec.Prefix != "" {
 				prefixTrim = *roundTripper.funcHandler.httpTrigger.Spec.Prefix
+				keepPrefix = roundTripper.funcHandler.httpTrigger.Spec.KeepPrefix
 			} else if strings.HasPrefix(req.URL.Path, functionURL) {
 				prefixTrim = functionURL
 			}
 			if prefixTrim != "" {
-				req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
+				if !keepPrefix {
+					req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
+				}
 				if !strings.HasPrefix(req.URL.Path, "/") {
 					req.URL.Path = "/" + req.URL.Path
 				}
@@ -280,6 +284,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				req.URL.Path = "/"
 			}
 
+			logger.Debug("function invoke url",
+				zap.String("prefixTrim", prefixTrim),
+				zap.Bool("keepPrefix", keepPrefix),
+				zap.String("hitURL", req.URL.Path))
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)

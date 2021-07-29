@@ -236,6 +236,7 @@ var map_HTTPTriggerSpec = map[string]string{
 	"host":          "Deprecated: the original idea of this field is not for setting Ingress. Since we have IngressConfig now, remove Host after couple releases.",
 	"relativeurl":   "RelativeURL is the exposed URL for external client to access a function with.",
 	"prefix":        "Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL. Note that it does not treat slashes specially (\"/foobar/\" will be matched by the prefix \"/foobar\").",
+	"keepPrefix":    "When function is exposed with Prefix based path, keepPrefix decides whether to keep or trim prefix in URL while invoking function.",
 	"method":        "Use Methods instead of Method. This field is going to be deprecated in a future release HTTP method to access a function.",
 	"methods":       "HTTP methods to access a function",
 	"functionref":   "FunctionReference is a reference to the target function.",

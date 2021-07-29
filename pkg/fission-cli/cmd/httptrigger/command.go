@@ -33,7 +33,8 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtFnName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtName, flag.HtMethod, flag.HtIngress,
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry, flag.HtPrefix},
+			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
 	getCmd := &cobra.Command{
@@ -56,7 +57,8 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtFnName,
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
-			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger, flag.HtPrefix},
+			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger,
+			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
 	deleteCmd := &cobra.Command{
