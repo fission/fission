@@ -1,5 +1,47 @@
 # Changelog
 
+## [v1.14.0](https://github.com/fission/fission/tree/v1.14.0) (2021-08-02)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.13.1...v1.14.0)
+
+## [1.14.0](https://github.com/fission/fission/tree/1.14.0) (2021-08-02)
+
+[Full Changelog](https://github.com/fission/fission/compare/1.13.1...1.14.0)
+
+**Merged pull requests:**
+
+- Remove unused code from Fission [\#2136](https://github.com/fission/fission/pull/2136) ([sanketsudake](https://github.com/sanketsudake))
+- Reading right flag key for rounds [\#2135](https://github.com/fission/fission/pull/2135) ([gauravgahlot](https://github.com/gauravgahlot))
+- Update runc to v1.0.1 [\#2134](https://github.com/fission/fission/pull/2134) ([sanketsudake](https://github.com/sanketsudake))
+- Option to keep or remove prefix when router triggers prefix based function [\#2133](https://github.com/fission/fission/pull/2133) ([sanketsudake](https://github.com/sanketsudake))
+- Disable analytics in upgrade tests  and use latest node env in integration tests [\#2128](https://github.com/fission/fission/pull/2128) ([sanketsudake](https://github.com/sanketsudake))
+- Update chart version to 1.14.0 [\#2127](https://github.com/fission/fission/pull/2127) ([sanketsudake](https://github.com/sanketsudake))
+- Change Ingress version from v1beta1 to v1 for K8s 1.22+ compatibility [\#2124](https://github.com/fission/fission/pull/2124) ([sanketsudake](https://github.com/sanketsudake))
+- Optimize swagger doc generator for Fission CR types [\#2123](https://github.com/fission/fission/pull/2123) ([sanketsudake](https://github.com/sanketsudake))
+- Avoid dumping request headers in router [\#2122](https://github.com/fission/fission/pull/2122) ([sanketsudake](https://github.com/sanketsudake))
+- Add CRDs link for easy references [\#2121](https://github.com/fission/fission/pull/2121) ([sanketsudake](https://github.com/sanketsudake))
+- Support to dump request/response in router when debug mode enabled [\#2119](https://github.com/fission/fission/pull/2119) ([sanketsudake](https://github.com/sanketsudake))
+- Newdeploy/container function service names should fit in 63 characters  [\#2117](https://github.com/fission/fission/pull/2117) ([sanketsudake](https://github.com/sanketsudake))
+- Update keda connectors version to latest [\#2115](https://github.com/fission/fission/pull/2115) ([sanketsudake](https://github.com/sanketsudake))
+- Labels and annotation support for functions and environments [\#2113](https://github.com/fission/fission/pull/2113) ([sanketsudake](https://github.com/sanketsudake))
+- Add go pprof support across fission components [\#2112](https://github.com/fission/fission/pull/2112) ([sanketsudake](https://github.com/sanketsudake))
+- Covert maps to sync maps in executor fscache to avoid dirty reads [\#2105](https://github.com/fission/fission/pull/2105) ([sanketsudake](https://github.com/sanketsudake))
+- Replace controller with generated SharedIndexerInformers [\#2103](https://github.com/fission/fission/pull/2103) ([sanketsudake](https://github.com/sanketsudake))
+- Fix race condition in fetcher readiness check [\#2101](https://github.com/fission/fission/pull/2101) ([sanketsudake](https://github.com/sanketsudake))
+- Increase timeout for kubectl test [\#2100](https://github.com/fission/fission/pull/2100) ([sanketsudake](https://github.com/sanketsudake))
+- Updated Go dependencies and added cache in workflows [\#2099](https://github.com/fission/fission/pull/2099) ([sanketsudake](https://github.com/sanketsudake))
+- Use latest release for upgrade tests [\#2097](https://github.com/fission/fission/pull/2097) ([sanketsudake](https://github.com/sanketsudake))
+-  Retrieve pod metrics only if metrics server is running and Go lint fixes [\#2094](https://github.com/fission/fission/pull/2094) ([sanketsudake](https://github.com/sanketsudake))
+- Move informers,clientset and listers to generated package [\#2093](https://github.com/fission/fission/pull/2093) ([sanketsudake](https://github.com/sanketsudake))
+- Shared informers [\#2092](https://github.com/fission/fission/pull/2092) ([sanketsudake](https://github.com/sanketsudake))
+- Move clientset,listers,informers to pkg/client from pkg/apis [\#2090](https://github.com/fission/fission/pull/2090) ([sanketsudake](https://github.com/sanketsudake))
+- Add a separate lint and unit test flow [\#2089](https://github.com/fission/fission/pull/2089) ([sanketsudake](https://github.com/sanketsudake))
+- Update changelog [\#2088](https://github.com/fission/fission/pull/2088) ([sanketsudake](https://github.com/sanketsudake))
+- Enable race detector for unit tests [\#2085](https://github.com/fission/fission/pull/2085) ([sanketsudake](https://github.com/sanketsudake))
+- Add multi k8s version and os support in ci tests [\#2082](https://github.com/fission/fission/pull/2082) ([suramya-shah](https://github.com/suramya-shah))
+- containers as functions [\#1681](https://github.com/fission/fission/pull/1681) ([sahil-lakhwani](https://github.com/sahil-lakhwani))
+- Lint fix [\#2074](https://github.com/fission/fission/pull/2074) ([RealHarshThakur](https://github.com/RealHarshThakur))
+
 ## [v1.13.1](https://github.com/fission/fission/tree/v1.13.1) (2021-06-21)
 
 [Full Changelog](https://github.com/fission/fission/compare/1.13.1...v1.13.1)
