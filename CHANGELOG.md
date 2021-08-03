@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.14.1](https://github.com/fission/fission/tree/v1.14.1) (2021-08-03)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.14.0...v1.14.1)
+
+## [1.14.1](https://github.com/fission/fission/tree/1.14.1) (2021-08-03)
+
+[Full Changelog](https://github.com/fission/fission/compare/1.14.0...1.14.1)
+
+**Merged pull requests:**
+
+- Fixed service name generation for function name \< 17 chars [\#2142](https://github.com/fission/fission/pull/2142) ([sanketsudake](https://github.com/sanketsudake))
+
 ## [v1.14.0](https://github.com/fission/fission/tree/v1.14.0) (2021-08-02)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.13.1...v1.14.0)
