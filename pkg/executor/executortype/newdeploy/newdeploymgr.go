@@ -724,7 +724,16 @@ func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 	if len(fn.ObjectMeta.Name)+len(fn.ObjectMeta.Namespace) < 35 {
 		functionMetadata = fn.ObjectMeta.Name + "-" + fn.ObjectMeta.Namespace
 	} else {
-		functionMetadata = fn.ObjectMeta.Name[:17] + "-" + fn.ObjectMeta.Namespace[:17]
+		if len(fn.ObjectMeta.Name) > 17 {
+			functionMetadata = fn.ObjectMeta.Name[:17]
+		} else {
+			functionMetadata = fn.ObjectMeta.Name
+		}
+		if len(fn.ObjectMeta.Namespace) > 17 {
+			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace[:17]
+		} else {
+			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace
+		}
 	}
 	// contructed name should be 63 characters long, as it is a valid k8s name
 	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
