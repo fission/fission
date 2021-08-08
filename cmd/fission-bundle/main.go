@@ -43,18 +43,18 @@ import (
 	"github.com/fission/fission/pkg/utils/profile"
 )
 
-func runController(logger *zap.Logger, port int) {
-	controller.Start(logger, port, false)
+func runController(logger *zap.Logger, port int, openTracingEnabled bool) {
+	controller.Start(logger, port, false, openTracingEnabled)
 	logger.Fatal("controller exited")
 }
 
-func runRouter(logger *zap.Logger, port int, executorUrl string) {
-	router.Start(logger, port, executorUrl)
+func runRouter(logger *zap.Logger, port int, executorUrl string, openTracingEnabled bool) {
+	router.Start(logger, port, executorUrl, openTracingEnabled)
 	logger.Fatal("router exited")
 }
 
-func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string) {
-	err := executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port)
+func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string, openTracingEnabled bool) {
+	err := executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port, openTracingEnabled)
 	if err != nil {
 		logger.Fatal("error starting executor", zap.Error(err))
 	}
@@ -89,8 +89,8 @@ func runMQManager(logger *zap.Logger, routerURL string) {
 	}
 }
 
-func runStorageSvc(logger *zap.Logger, port int, storage storagesvc.Storage) {
-	err := storagesvc.Start(logger, storage, port)
+func runStorageSvc(logger *zap.Logger, port int, storage storagesvc.Storage, openTracingEnabled bool) {
+	err := storagesvc.Start(logger, storage, port, openTracingEnabled)
 	if err != nil {
 		logger.Fatal("error starting storage service", zap.Error(err))
 	}
@@ -264,9 +264,16 @@ Options:
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}
 
-	err = registerTraceExporter(logger, arguments)
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
 	if err != nil {
-		logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
+	if openTracingEnabled {
+		err = registerTraceExporter(logger, arguments)
+		if err != nil {
+			logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
+		}
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
@@ -278,17 +285,17 @@ Options:
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])
-		runController(logger, port)
+		runController(logger, port, openTracingEnabled)
 	}
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(logger, port, executorUrl)
+		runRouter(logger, port, executorUrl, openTracingEnabled)
 	}
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		runExecutor(logger, port, functionNs, envBuilderNs)
+		runExecutor(logger, port, functionNs, envBuilderNs, openTracingEnabled)
 	}
 
 	if arguments["--kubewatcher"] == true {
@@ -325,7 +332,7 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		runStorageSvc(logger, port, storage)
+		runStorageSvc(logger, port, storage, openTracingEnabled)
 	}
 
 	select {}

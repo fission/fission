@@ -18,6 +18,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"strconv"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -37,5 +39,10 @@ func main() {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
-	app.Run(logger)
+
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	if err != nil {
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+	app.Run(logger, openTracingEnabled)
 }

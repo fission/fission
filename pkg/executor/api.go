@@ -240,22 +240,29 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetHandler returns an http.Handler.
-func (executor *Executor) GetHandler() http.Handler {
+func (executor *Executor) GetHandler(openTracingEnabled bool) http.Handler {
 	r := mux.NewRouter()
-	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
-	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
-	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
+
+	if openTracingEnabled {
+		r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
+		r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
+		r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
+		r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
+	}
+
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
-	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
 	return r
 }
 
 // Serve starts an HTTP server.
-func (executor *Executor) Serve(port int) {
+func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	executor.logger.Info("starting executor API", zap.Int("port", port))
 	address := fmt.Sprintf(":%v", port)
-	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: executor.GetHandler(),
-	})
-	executor.logger.Fatal("done listening", zap.Error(err))
+
+	if openTracingEnabled {
+		err := http.ListenAndServe(address, &ochttp.Handler{
+			Handler: executor.GetHandler(openTracingEnabled),
+		})
+		executor.logger.Fatal("done listening", zap.Error(err))
+	}
 }

@@ -194,9 +194,19 @@ func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, service.Name+"."+podNamespace)
 }
 
-func (api *API) GetHandler() http.Handler {
+func (api *API) GetHandler(openTracingEnabled bool) http.Handler {
 	r := mux.NewRouter()
+	if openTracingEnabled {
+		api.registerHandlers(r)
+	}
+
 	r.HandleFunc("/healthz", api.HealthHandler).Methods("GET")
+	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
+
+	return r
+}
+
+func (api *API) registerHandlers(r *mux.Router) {
 	// Give a useful error message if an older CLI attempts to make a request
 	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)
 	r.HandleFunc("/", api.HomeHandler)
@@ -257,15 +267,14 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 	r.HandleFunc("/proxy/svcname", api.GetSvcName).Queries("application", "").Methods("GET")
-
-	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
-
-	return r
 }
 
-func (api *API) Serve(port int) {
+func (api *API) Serve(port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
-	err := http.ListenAndServe(address, api.GetHandler())
-	api.logger.Fatal("done listening", zap.Error(err))
+
+	if openTracingEnabled {
+		err := http.ListenAndServe(address, api.GetHandler(openTracingEnabled))
+		api.logger.Fatal("done listening", zap.Error(err))
+	}
 }

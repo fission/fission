@@ -61,7 +61,7 @@ func registerTraceExporter(collectorEndpoint string) error {
 	return nil
 }
 
-func Run(logger *zap.Logger) {
+func Run(logger *zap.Logger, openTracingEnabled bool) {
 	flag.Usage = fetcherUsage
 	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
@@ -85,11 +85,13 @@ func Run(logger *zap.Logger) {
 		}
 	}
 
-	go func() {
-		if err := registerTraceExporter(*collectorEndpoint); err != nil {
-			logger.Fatal("could not register trace exporter", zap.Error(err), zap.String("collector_endpoint", *collectorEndpoint))
-		}
-	}()
+	if openTracingEnabled {
+		go func() {
+			if err := registerTraceExporter(*collectorEndpoint); err != nil {
+				logger.Fatal("could not register trace exporter", zap.Error(err), zap.String("collector_endpoint", *collectorEndpoint))
+			}
+		}()
+	}
 
 	f, err := fetcher.MakeFetcher(logger, dir, *secretDir, *configDir)
 	if err != nil {
@@ -116,12 +118,15 @@ func Run(logger *zap.Logger) {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/fetch", f.FetchHandler)
-	mux.HandleFunc("/specialize", f.SpecializeHandler)
-	mux.HandleFunc("/upload", f.UploadHandler)
-	mux.HandleFunc("/version", f.VersionHandler)
-	mux.HandleFunc("/wsevent/start", f.WsStartHandler)
-	mux.HandleFunc("/wsevent/end", f.WsEndHandler)
+
+	if openTracingEnabled {
+		mux.HandleFunc("/fetch", f.FetchHandler)
+		mux.HandleFunc("/specialize", f.SpecializeHandler)
+		mux.HandleFunc("/upload", f.UploadHandler)
+		mux.HandleFunc("/version", f.VersionHandler)
+		mux.HandleFunc("/wsevent/start", f.WsStartHandler)
+		mux.HandleFunc("/wsevent/end", f.WsEndHandler)
+	}
 
 	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
 		if atomic.LoadUint32(&readyToServe) == 1 {
@@ -137,11 +142,13 @@ func Run(logger *zap.Logger) {
 	})
 
 	logger.Info("fetcher ready to receive requests")
-	err = http.ListenAndServe(":8000", &ochttp.Handler{
-		Handler: mux,
-	})
-	if err != nil {
-		log.Fatal(err)
+	if openTracingEnabled {
+		err = http.ListenAndServe(":8000", &ochttp.Handler{
+			Handler: mux,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 

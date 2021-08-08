@@ -199,24 +199,30 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 	}
 }
 
-func (ss *StorageService) Start(port int) {
+func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
-	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
-	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
+
+	if openTracingEnabled {
+		r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
+		r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
+		r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
+	}
+
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	address := fmt.Sprintf(":%v", port)
 
-	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: r,
-	})
-
+	var err error
+	if openTracingEnabled {
+		err = http.ListenAndServe(address, &ochttp.Handler{
+			Handler: r,
+		})
+	}
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
 // Start runs storage service
-func Start(logger *zap.Logger, storage Storage, port int) error {
+func Start(logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
 	enablePruner := true
 	// create a storage client
 	storageClient, err := MakeStowClient(logger, storage)
@@ -226,7 +232,7 @@ func Start(logger *zap.Logger, storage Storage, port int) error {
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go storageService.Start(port)
+	go storageService.Start(port, openTracingEnabled)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {
