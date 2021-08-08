@@ -140,10 +140,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888"]
         env:
+          - name: OPENTRACING_ENABLED
+            value: {{ .Values.openTracing.enabled | default false | quote }}
           - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-            value: "{{ .Values.traceCollectorEndpoint }}"
+            value: "{{ .Values.openTracing.collectorEndpoint }}"
           - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+            value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
           - name: FISSION_FUNCTION_NAMESPACE
             value: "{{ .Values.functionNamespace }}"
           - name: POD_NAMESPACE
@@ -215,10 +217,12 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: ADOPT_EXISTING_RESOURCES
           value: {{ .Values.executor.adoptExistingResources | default false | quote }}
         - name: POD_READY_TIMEOUT
@@ -287,10 +291,12 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}      
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}      
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
         - name: FETCHER_MINCPU
@@ -331,10 +337,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -365,10 +373,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -408,10 +418,12 @@ spec:
         env:
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
         - name: STORAGE_S3_ENDPOINT
           value: {{ .Values.persistence.s3.endPoint }}
@@ -478,10 +490,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: CONNECTOR_IMAGE_PULL_POLICY

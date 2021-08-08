@@ -55,8 +55,10 @@ spec:
             value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
           - name: ROUTER_UNTAP_SERVICE_TIMEOUT
             value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
+          - name: OPENTRACING_ENABLED
+            value: {{ .Values.openTracing.enabled | default false | quote }}
           - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-            value: "{{ .Values.traceCollectorEndpoint }}"
+            value: "{{ .Values.openTracing.collectorEndpoint }}"
           - name: TRACING_SAMPLING_RATE
             value: {{ .Values.router.traceSamplingRate | default "0.5" | quote }}
           - name: USE_ENCODED_PATH

@@ -334,10 +334,12 @@ spec:
         env:
         - name: FISSION_FUNCTION_NAMESPACE
           value: "{{ .Values.functionNamespace }}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -424,10 +426,12 @@ spec:
           value: {{ .Values.executor.podReadyTimeout | default false | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM
@@ -504,10 +508,12 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM
@@ -550,10 +556,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -827,10 +835,12 @@ spec:
         {{- else }}
           value: nats://{{ .Values.nats.hostaddress }}
         {{- end }}
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -880,10 +890,12 @@ spec:
           value: "{{.Values.kafka.brokers}}"
         - name: MESSAGE_QUEUE_KAFKA_VERSION
           value: "{{.Values.kafka.version}}"
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -972,10 +984,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: MESSAGE_QUEUE_TYPE
           value: azure-storage-queue
         - name: AZURE_STORAGE_ACCOUNT_NAME
@@ -1026,10 +1040,12 @@ spec:
         args: ["--storageServicePort", "8000", "--storageType", "local"]
         {{- end }}
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
         - name: DEBUG_ENV
@@ -1119,10 +1135,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        - name: OPENTRACING_ENABLED
+          value: {{ .Values.openTracing.enabled | default false | quote }}
         - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.traceCollectorEndpoint }}"
+          value: "{{ .Values.openTracing.collectorEndpoint }}"
         - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.traceSamplingRate | default "0.5" | quote }}
+          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: CONNECTOR_IMAGE_PULL_POLICY
