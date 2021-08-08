@@ -282,6 +282,11 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				},
 			},
 		},
+		Env: []apiv1.EnvVar{
+			{
+				Name:  "OPENTRACING_ENABLED",
+				Value: os.Getenv("OPENTRACING_ENABLED"),
+			}},
 	}
 
 	// Pod is removed from endpoints list for service when it's
