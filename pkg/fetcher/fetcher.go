@@ -25,12 +25,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
@@ -102,6 +104,18 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
 
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	if err != nil {
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
+	var hc *http.Client
+	if openTracingEnabled {
+		hc = &http.Client{Transport: &ochttp.Transport{}}
+	} else {
+		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	}
+
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,
@@ -113,9 +127,7 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 			Name:      string(name),
 			Namespace: string(namespace),
 		},
-		httpClient: &http.Client{
-			Transport: &ochttp.Transport{},
-		},
+		httpClient: hc,
 	}, nil
 }
 
@@ -149,6 +161,8 @@ func (fetcher *Fetcher) VersionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "POST" {
 		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -175,14 +189,14 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pkg, err := fetcher.getPkgInformation(req)
+	pkg, err := fetcher.getPkgInformation(ctx, req)
 	if err != nil {
 		fetcher.logger.Error("error getting package information", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	code, err := fetcher.Fetch(r.Context(), pkg, req)
+	code, err := fetcher.Fetch(ctx, pkg, req)
 	if err != nil {
 		fetcher.logger.Error("error fetching", zap.Error(err))
 		http.Error(w, err.Error(), code)
@@ -190,7 +204,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fetcher.logger.Info("checking secrets/cfgmaps")
-	code, err = fetcher.FetchSecretsAndCfgMaps(req.Secrets, req.ConfigMaps)
+	code, err = fetcher.FetchSecretsAndCfgMaps(ctx, req.Secrets, req.ConfigMaps)
 	if err != nil {
 		fetcher.logger.Error("error fetching secrets and config maps", zap.Error(err))
 		http.Error(w, err.Error(), code)
@@ -203,6 +217,8 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "POST" {
 		http.Error(w, fmt.Sprintf("only POST is supported on this endpoint, %v received", r.Method), http.StatusMethodNotAllowed)
 		return
@@ -223,7 +239,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = fetcher.SpecializePod(r.Context(), req.FetchReq, req.LoadReq)
+	err = fetcher.SpecializePod(ctx, req.FetchReq, req.LoadReq)
 	if err != nil {
 		fetcher.logger.Error("error specializing pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -353,10 +369,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 // FetchSecretsAndCfgMaps fetches secrets and configmaps specified by user
 // It returns the HTTP code and error if any
-func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
 	if len(secrets) > 0 {
 		for _, secret := range secrets {
-			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(context.TODO(), secret.Name, metav1.GetOptions{})
+			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
 
 			if err != nil {
 				e := "error getting secret from kubeapi"
@@ -400,7 +416,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cf
 
 	if len(cfgmaps) > 0 {
 		for _, config := range cfgmaps {
-			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(context.TODO(), config.Name, metav1.GetOptions{})
+			data, err := fetcher.kubeClient.CoreV1().ConfigMaps(config.Namespace).Get(ctx, config.Name, metav1.GetOptions{})
 
 			if err != nil {
 				e := "error getting configmap from kubeapi"
@@ -450,6 +466,8 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(secrets []fv1.SecretReference, cf
 }
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "POST" {
 		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -503,7 +521,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	fetcher.logger.Info("starting upload...")
 	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
 
-	fileID, err := ssClient.Upload(r.Context(), dstFilepath, nil)
+	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
 	if err != nil {
 		e := "error uploading zip file"
 		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
@@ -581,10 +599,10 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 }
 
 // getPkgInformation gets package information from k8s api server.
-func (fetcher *Fetcher) getPkgInformation(req FunctionFetchRequest) (pkg *fv1.Package, err error) {
+func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(context.TODO(), req.Package.Name, metav1.GetOptions{})
+		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			return pkg, nil
 		}
@@ -618,7 +636,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		fetcher.logger.Info("specialize request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
-	pkg, err := fetcher.getPkgInformation(fetchReq)
+	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
 	if err != nil {
 		return errors.Wrap(err, "error getting package information")
 	}
@@ -628,7 +646,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		return errors.Wrap(err, "error fetching deploy package")
 	}
 
-	_, err = fetcher.FetchSecretsAndCfgMaps(fetchReq.Secrets, fetchReq.ConfigMaps)
+	_, err = fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
 	if err != nil {
 		return errors.Wrap(err, "error fetching secrets/configs")
 	}
@@ -691,6 +709,8 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 // WsStartHandler is used to generate websocket events in Kubernetes
 func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -700,7 +720,7 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 		klog.Errorf("Error creating recorder %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(context.TODO(), metav1.ListOptions{
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
@@ -721,6 +741,8 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 
 // WsEndHandler is used to generate inactive events in Kubernetes
 func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -730,7 +752,7 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 		klog.Errorf("Error creating recorder %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(context.TODO(), metav1.ListOptions{
+	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
