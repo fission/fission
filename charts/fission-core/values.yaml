@@ -241,7 +241,7 @@ openTracing:
   #samplingRate: 0.75
 
 # Use this flag to set the collector endpoint for OpenTelemetry
-otelCollectorEndpoint: "otel-collector.observability.svc:4317"
+# otelCollectorEndpoint: "otel-collector.observability.svc:4317"
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 mqt_keda:
