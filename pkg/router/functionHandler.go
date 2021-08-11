@@ -27,11 +27,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -154,10 +157,11 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
 // if it returned an error.
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+
 	// set the timeout for transport context
 	roundTripper.addForwardedHostHeader(req)
 	transport := roundTripper.getDefaultTransport()
-	ocRoundTripper := &ochttp.Transport{Base: transport}
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
@@ -220,7 +224,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
 			// get function service url from cache or executor
-			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry()
+			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry(ctx)
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -249,9 +253,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				continue
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-				defer func(fn *fv1.Function, serviceURL *url.URL) {
-					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
-				}(roundTripper.funcHandler.function, roundTripper.serviceURL)
+				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
+					go roundTripper.funcHandler.unTapService(ctx, fn, serviceURL) //nolint errcheck
+				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
 			// modify the request to reflect the service url
@@ -309,8 +313,21 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			dumpReqFunc(newReq)
 		}
 
+		openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+		if err != nil {
+			return nil, err
+		}
+
 		// forward the request to the function service
-		resp, err := ocRoundTripper.RoundTrip(newReq)
+		var resp *http.Response
+		if openTracingEnabled {
+			ocRoundTripper := &ochttp.Transport{Base: transport}
+			resp, err = ocRoundTripper.RoundTrip(newReq)
+		} else {
+			otelRoundTripper := otelhttp.NewTransport(transport)
+			resp, err = otelRoundTripper.RoundTrip(newReq)
+		}
+
 		if err == nil {
 			// return response back to user
 			if roundTripper.funcHandler.isDebugEnv {
@@ -573,9 +590,9 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 }
 
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
-func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
+func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.Debug("UnTapService Called")
-	ctx, cancel := context.WithTimeout(context.Background(), fh.unTapServiceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, fh.unTapServiceTimeout)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 	if err != nil {
@@ -626,14 +643,14 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 	}
 }
 
-func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, err error) {
+func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
 	timeout := 30 * time.Second
 	if fh.function.Spec.FunctionTimeout > 0 {
 		timeout = time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	service, err := fh.executor.GetServiceForFunction(ctx, fh.function)
 	if err != nil {
@@ -657,9 +674,9 @@ func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, er
 }
 
 // getServiceEntryFromExecutor returns service url entry returns from executor
-func (fh functionHandler) getServiceEntry() (svcURL *url.URL, cacheHit bool, err error) {
+func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL, cacheHit bool, err error) {
 	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-		svcURL, err = fh.getServiceEntryFromExecutor()
+		svcURL, err = fh.getServiceEntryFromExecutor(ctx)
 		return svcURL, false, err
 	}
 	// Check if service URL present in cache
@@ -681,7 +698,7 @@ func (fh functionHandler) getServiceEntry() (svcURL *url.URL, cacheHit bool, err
 				}
 				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
 			}
-			svcURL, err = fh.getServiceEntryFromExecutor()
+			svcURL, err = fh.getServiceEntryFromExecutor(ctx)
 			if err != nil {
 				return nil, err
 			}

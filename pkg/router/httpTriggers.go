@@ -19,9 +19,12 @@ package router
 import (
 	"context"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -110,6 +113,11 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	if err != nil {
+		ts.logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
 	// HTTP triggers setup by the user
 	homeHandled := false
 	for i := range ts.triggers {
@@ -157,13 +165,24 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				fh.function = fn
 			}
 		}
-		var ht *mux.Route
 
+		var ht *mux.Route
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
-			ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).HandlerFunc(fh.handler)
+			if openTracingEnabled {
+				ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).HandlerFunc(fh.handler)
+			} else {
+				handler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), *trigger.Spec.Prefix)
+				ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).Handler(handler)
+			}
 		} else {
-			ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+			if openTracingEnabled {
+				ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
+			} else {
+				handler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), trigger.Spec.RelativeURL)
+				ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
+			}
 		}
+
 		methods := trigger.Spec.Methods
 		if len(trigger.Spec.Method) > 0 {
 			present := false
@@ -212,7 +231,14 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			functionTimeoutMap:     fnTimeoutMap,
 			unTapServiceTimeout:    ts.unTapServiceTimeout,
 		}
-		muxRouter.PathPrefix(utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)).HandlerFunc(fh.handler)
+
+		route := utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+		if openTracingEnabled {
+			muxRouter.PathPrefix(route).HandlerFunc(fh.handler)
+		} else {
+			otelHandler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), route)
+			muxRouter.PathPrefix(route).Handler(otelHandler)
+		}
 	}
 
 	// Healthz endpoint for the router.
