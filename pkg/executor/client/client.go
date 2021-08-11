@@ -23,11 +23,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,14 +59,24 @@ type (
 
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	if err != nil {
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
+	var hc *http.Client
+	if openTracingEnabled {
+		hc = &http.Client{Transport: &ochttp.Transport{}}
+	} else {
+		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	}
+
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
-		httpClient: &http.Client{
-			Transport: &ochttp.Transport{},
-		},
+		httpClient:  hc,
 	}
 	go c.service()
 	return c
