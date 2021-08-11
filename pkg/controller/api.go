@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -263,9 +265,21 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func (api *API) Serve(port int) {
+func (api *API) Serve(port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
-	err := http.ListenAndServe(address, api.GetHandler())
+
+	var handler http.Handler
+	if openTracingEnabled {
+		handler = &ochttp.Handler{Handler: api.GetHandler()}
+	} else {
+		handler = otelhttp.NewHandler(api.GetHandler(), "fission-controller",
+			otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
+			otelhttp.WithFilter(func(r *http.Request) bool {
+				return !(strings.Compare(r.URL.Path, "/healthz") == 0)
+			}),
+		)
+	}
+	err := http.ListenAndServe(address, handler)
 	api.logger.Fatal("done listening", zap.Error(err))
 }
