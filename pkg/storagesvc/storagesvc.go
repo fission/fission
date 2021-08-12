@@ -30,7 +30,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
-	utils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -215,7 +215,7 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 			Handler: r,
 		})
 	} else {
-		err = http.ListenAndServe(address, utils.GetHandlerWithOTEL(r, "fission-storagesvc", "/healthz"))
+		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", "/healthz"))
 	}
 	ss.logger.Fatal("done listening", zap.Error(err))
 }

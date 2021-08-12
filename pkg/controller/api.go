@@ -35,7 +35,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/info"
-	utils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 var podNamespace string
@@ -273,7 +273,7 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: api.GetHandler()}
 	} else {
-		handler = utils.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", "/healthz")
+		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", "/healthz")
 	}
 	err := http.ListenAndServe(address, handler)
 	api.logger.Fatal("done listening", zap.Error(err))

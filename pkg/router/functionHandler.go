@@ -27,8 +27,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +67,7 @@ type (
 		svcAddrUpdateThrottler   *throttler.Throttler
 		functionTimeoutMap       map[k8stypes.UID]int
 		unTapServiceTimeout      time.Duration
+		openTracingEnabled       bool
 	}
 
 	tsRoundTripperParams struct {
@@ -313,14 +312,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			dumpReqFunc(newReq)
 		}
 
-		openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-		if err != nil {
-			return nil, err
-		}
-
 		// forward the request to the function service
 		var resp *http.Response
-		if openTracingEnabled {
+		if roundTripper.funcHandler.openTracingEnabled {
 			ocRoundTripper := &ochttp.Transport{Base: transport}
 			resp, err = ocRoundTripper.RoundTrip(newReq)
 		} else {

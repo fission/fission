@@ -27,42 +27,18 @@ import (
 	"strconv"
 	"sync/atomic"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/trace"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/fetcher"
-	utils "github.com/fission/fission/pkg/utils/otel"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 var (
 	readyToServe uint32
 )
-
-func registerTraceExporter(collectorEndpoint string) error {
-	if collectorEndpoint == "" {
-		return nil
-	}
-
-	serviceName := "Fission-Fetcher"
-	exporter, err := jaeger.NewExporter(jaeger.Options{
-		CollectorEndpoint: collectorEndpoint,
-		Process: jaeger.Process{
-			ServiceName: serviceName,
-			Tags: []jaeger.Tag{
-				jaeger.BoolTag("fission", true),
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-	trace.RegisterExporter(exporter)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-	return nil
-}
 
 func Run(logger *zap.Logger) {
 	flag.Usage = fetcherUsage
@@ -93,21 +69,20 @@ func Run(logger *zap.Logger) {
 		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
 	}
 
-	var shutdown func()
 	if openTracingEnabled {
 		go func() {
-			if err := registerTraceExporter(*collectorEndpoint); err != nil {
+			if err := tracing.RegisterTraceExporter(logger, *collectorEndpoint, "Fission-Fetcher"); err != nil {
 				logger.Fatal("could not register trace exporter", zap.Error(err), zap.String("collector_endpoint", *collectorEndpoint))
 			}
 		}()
 	} else {
-		shutdown, err = utils.InitProvider(logger, "Fission-Fetcher")
+		shutdown, err := otelUtils.InitProvider(logger, "Fission-Fetcher")
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err))
 		}
-	}
-	if shutdown != nil {
-		defer shutdown()
+		if shutdown != nil {
+			defer shutdown()
+		}
 	}
 
 	tracer := otel.Tracer("fetcher")
@@ -164,7 +139,7 @@ func Run(logger *zap.Logger) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: mux}
 	} else {
-		handler = utils.GetHandlerWithOTEL(mux, "fission-fetcher", "/healthz", "/readiness-healthz")
+		handler = otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", "/healthz", "/readiness-healthz")
 	}
 	if err = http.ListenAndServe(":8000", handler); err != nil {
 		log.Fatal(err)

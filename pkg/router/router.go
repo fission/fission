@@ -59,7 +59,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
-	utils "github.com/fission/fission/pkg/utils/otel"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -110,7 +110,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 			},
 		})
 	} else {
-		err = http.ListenAndServe(url, utils.GetHandlerWithOTEL(mr, "fission-router", "/router-healthz"))
+		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", "/router-healthz"))
 	}
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))

@@ -23,10 +23,8 @@ import (
 	"os"
 	"strconv"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	docopt "github.com/docopt/docopt-go"
 
-	"go.opencensus.io/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -41,8 +39,9 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
-	utils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 func runController(logger *zap.Logger, port int, openTracingEnabled bool) {
@@ -153,37 +152,6 @@ func getServiceName(arguments map[string]interface{}) string {
 	return serviceName
 }
 
-func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{}) error {
-	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
-	if len(collectorEndpoint) == 0 {
-		logger.Info("skipping trace exporter registration")
-		return nil
-	}
-
-	serviceName := getServiceName(arguments)
-
-	exporter, err := jaeger.NewExporter(jaeger.Options{
-		CollectorEndpoint: collectorEndpoint,
-		Process: jaeger.Process{
-			ServiceName: serviceName,
-			Tags: []jaeger.Tag{
-				jaeger.BoolTag("fission", true),
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	samplingRate, err := strconv.ParseFloat(os.Getenv("TRACING_SAMPLING_RATE"), 32)
-	if err != nil {
-		return err
-	}
-	trace.RegisterExporter(exporter)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.ProbabilitySampler(samplingRate)})
-	return nil
-}
-
 func main() {
 	var err error
 
@@ -277,20 +245,19 @@ Options:
 		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
 	}
 
-	var shutdown func()
 	if openTracingEnabled {
-		err = registerTraceExporter(logger, arguments)
+		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
 		if err != nil {
 			logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
 		}
 	} else {
-		shutdown, err = utils.InitProvider(logger, getServiceName(arguments))
+		shutdown, err := otel.InitProvider(logger, getServiceName(arguments))
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
 		}
-	}
-	if shutdown != nil {
-		defer shutdown()
+		if shutdown != nil {
+			defer shutdown()
+		}
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")

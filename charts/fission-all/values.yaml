@@ -340,7 +340,7 @@ prometheus:
 canaryDeployment:
   enabled: true
 
-# Use these flags to enable OpenTracing.
+# Use the following flags to enable OpenTracing.
 # Note: OpenTracing support will be deprecated in an upcoming release.
 # Please prefer using OpenTelemetry instead.
 openTracing:
