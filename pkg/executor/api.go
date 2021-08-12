@@ -28,12 +28,12 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	utils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -260,12 +260,7 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: executor.GetHandler()}
 	} else {
-		handler = otelhttp.NewHandler(executor.GetHandler(), "fission-executor",
-			otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
-			otelhttp.WithFilter(func(r *http.Request) bool {
-				return !(strings.Compare(r.URL.Path, "/healthz") == 0)
-			}),
-		)
+		handler = utils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", "/healthz")
 	}
 
 	err := http.ListenAndServe(address, handler)

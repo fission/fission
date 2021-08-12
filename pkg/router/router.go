@@ -53,13 +53,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	utils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -110,12 +110,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 			},
 		})
 	} else {
-		err = http.ListenAndServe(url, otelhttp.NewHandler(mr, "fission-router",
-			otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
-			otelhttp.WithFilter(func(r *http.Request) bool {
-				return !(strings.Compare(r.URL.Path, "/router-healthz") == 0)
-			})),
-		)
+		err = http.ListenAndServe(url, utils.GetHandlerWithOTEL(mr, "fission-router", "/router-healthz"))
 	}
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))

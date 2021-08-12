@@ -30,17 +30,11 @@ import (
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	"github.com/fission/fission/pkg/fetcher"
+	utils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var (
@@ -68,53 +62,6 @@ func registerTraceExporter(collectorEndpoint string) error {
 	trace.RegisterExporter(exporter)
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	return nil
-}
-
-// Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
-func initProvider(logger *zap.Logger) (func(), error) {
-	collectorEndpoint := os.Getenv("OTEL_COLLECTOR_ENDPOINT")
-	if collectorEndpoint == "" {
-		logger.Info("skipping trace exporter registration")
-		return nil, nil
-	}
-	ctx := context.Background()
-	const serviceName = "Fission-Fetcher"
-
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(serviceName),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(collectorEndpoint),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
-	)
-
-	otel.SetTracerProvider(tracerProvider)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	// Shutdown will flush any remaining spans and shut down the exporter.
-	return func() {
-		err := tracerProvider.Shutdown(ctx)
-		if err != nil {
-			logger.Fatal("error shutting down trace provider", zap.Error(err))
-		}
-	}, nil
 }
 
 func Run(logger *zap.Logger) {
@@ -154,7 +101,7 @@ func Run(logger *zap.Logger) {
 			}
 		}()
 	} else {
-		shutdown, err = initProvider(logger)
+		shutdown, err = utils.InitProvider(logger, "Fission-Fetcher")
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err))
 		}
@@ -217,9 +164,7 @@ func Run(logger *zap.Logger) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: mux}
 	} else {
-		handler = otelhttp.NewHandler(mux, "fission-fetcher",
-			otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
-		)
+		handler = utils.GetHandlerWithOTEL(mux, "fission-fetcher", "/healthz", "/readiness-healthz")
 	}
 	if err = http.ListenAndServe(":8000", handler); err != nil {
 		log.Fatal(err)

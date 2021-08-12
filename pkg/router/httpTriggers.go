@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -36,6 +35,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 // HTTPTriggerSet represents an HTTP trigger set
@@ -171,14 +171,14 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			if openTracingEnabled {
 				ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).HandlerFunc(fh.handler)
 			} else {
-				handler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), *trigger.Spec.Prefix)
+				handler := otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), *trigger.Spec.Prefix)
 				ht = muxRouter.PathPrefix(*trigger.Spec.Prefix).Handler(handler)
 			}
 		} else {
 			if openTracingEnabled {
 				ht = muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
 			} else {
-				handler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), trigger.Spec.RelativeURL)
+				handler := otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), trigger.Spec.RelativeURL)
 				ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
 			}
 		}
@@ -236,7 +236,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		if openTracingEnabled {
 			muxRouter.PathPrefix(route).HandlerFunc(fh.handler)
 		} else {
-			otelHandler := otelhttp.NewHandler(http.HandlerFunc(fh.handler), route)
+			otelHandler := otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), route)
 			muxRouter.PathPrefix(route).Handler(otelHandler)
 		}
 	}

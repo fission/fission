@@ -22,15 +22,15 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+
+	utils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -215,12 +215,7 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 			Handler: r,
 		})
 	} else {
-		err = http.ListenAndServe(address, otelhttp.NewHandler(r, "fission-storagesvc",
-			otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
-			otelhttp.WithFilter(func(r *http.Request) bool {
-				return !(strings.Compare(r.URL.Path, "/healthz") == 0)
-			}),
-		))
+		err = http.ListenAndServe(address, utils.GetHandlerWithOTEL(r, "fission-storagesvc", "/healthz"))
 	}
 	ss.logger.Fatal("done listening", zap.Error(err))
 }

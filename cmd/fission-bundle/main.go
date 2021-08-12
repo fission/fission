@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -26,13 +25,6 @@ import (
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	docopt "github.com/docopt/docopt-go"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"google.golang.org/grpc"
 
 	"go.opencensus.io/trace"
 	"go.uber.org/zap"
@@ -49,6 +41,7 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
+	utils "github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 )
 
@@ -191,55 +184,6 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 	return nil
 }
 
-// Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
-func initProvider(logger *zap.Logger, arguments map[string]interface{}) (func(), error) {
-	collectorEndpoint := os.Getenv("OTEL_COLLECTOR_ENDPOINT")
-	if collectorEndpoint == "" {
-		logger.Info("skipping trace exporter registration")
-		return nil, nil
-	}
-
-	serviceName := getServiceName(arguments)
-	ctx := context.Background()
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(serviceName),
-		),
-	)
-	if err != nil {
-		logger.Error("error creating new resource", zap.Error(err))
-		return nil, err
-	}
-
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(collectorEndpoint),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
-	)
-	if err != nil {
-		logger.Error("error creating exporter", zap.Error(err))
-		return nil, err
-	}
-
-	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
-	)
-
-	otel.SetTracerProvider(tracerProvider)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	// Shutdown will flush any remaining spans and shut down the exporter.
-	return func() {
-		err := tracerProvider.Shutdown(ctx)
-		if err != nil {
-			logger.Fatal("error shutting down trace provider", zap.Error(err))
-		}
-	}, nil
-}
-
 func main() {
 	var err error
 
@@ -340,7 +284,7 @@ Options:
 			logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
 		}
 	} else {
-		shutdown, err = initProvider(logger, arguments)
+		shutdown, err = utils.InitProvider(logger, getServiceName(arguments))
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
 		}
