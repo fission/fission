@@ -340,7 +340,9 @@ prometheus:
 canaryDeployment:
   enabled: true
 
-# Use these flags to enable OpenTracing
+# Use these flags to enable OpenTracing.
+# Note: OpenTracing support will be deprecated in an upcoming release.
+# Please prefer using OpenTelemetry instead.
 openTracing:
   ## set this flag to true if you wish to enable OpenTracing
   enabled: false
@@ -351,7 +353,9 @@ openTracing:
   ## uniformly sample traces with the given probabilistic sampling rate
   #samplingRate: 0.75
 
-# Use this flag to set the collector endpoint for OpenTelemetry
+# Use this flag to set the collector endpoint for OpenTelemetry.
+# It is an alternate to OpenTracing.
+# OpenTracing should be disabled (openTracing.enabled: false) if you are using OpenTelemetry.
 # otelCollectorEndpoint: "otel-collector.observability.svc:4317"
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
