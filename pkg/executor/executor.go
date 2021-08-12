@@ -285,7 +285,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
-		funcInformer, pkgInformer,
+		funcInformer, pkgInformer, envInformer,
 	)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation faied")
@@ -345,7 +345,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	if err != nil {
 		return err
 	}
-
 	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port, openTracingEnabled)
 	go serveMetric(logger)

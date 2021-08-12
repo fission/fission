@@ -31,3 +31,10 @@ import (
 func CacheKey(metadata *metav1.ObjectMeta) string {
 	return fmt.Sprintf("%v_%v", metadata.UID, metadata.ResourceVersion)
 }
+
+// CacheKeyForUID create a key that uniquely identifies the
+// of the object. Since resourceVersion changes on every update and
+// UIDs are unique, we don't use resource version here
+func CacheKeyUID(metadata *metav1.ObjectMeta) string {
+	return fmt.Sprintf("%v", metadata.UID)
+}

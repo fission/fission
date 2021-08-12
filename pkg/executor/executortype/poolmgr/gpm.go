@@ -56,7 +56,7 @@ type requestType int
 
 const (
 	GET_POOL requestType = iota
-	CLEANUP_POOLS
+	CLEANUP_POOL
 )
 
 type (
@@ -80,11 +80,12 @@ type (
 		podInformer k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
+
+		poolPodC *PoolPodController
 	}
 	request struct {
 		requestType
 		env             *fv1.Environment
-		envList         []fv1.Environment
 		responseChannel chan *response
 	}
 	response struct {
@@ -104,6 +105,7 @@ func MakeGenericPoolManager(
 	instanceID string,
 	funcInformer finformerv1.FunctionInformer,
 	pkgInformer finformerv1.PackageInformer,
+	envInformer finformerv1.EnvironmentInformer,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -116,6 +118,9 @@ func MakeGenericPoolManager(
 		}
 		enableIstio = istio
 	}
+
+	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient, functionNamespace,
+		enableIstio, funcInformer, pkgInformer, envInformer)
 
 	gpm := &GenericPoolManager{
 		logger:                 gpmLogger,
@@ -131,12 +136,8 @@ func MakeGenericPoolManager(
 		defaultIdlePodReapTime: 2 * time.Minute,
 		fetcherConfig:          fetcherConfig,
 		enableIstio:            enableIstio,
+		poolPodC:               poolPodC,
 	}
-
-	go gpm.service()
-
-	funcInformer.Informer().AddEventHandler(FunctionEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace, gpm.enableIstio))
-	pkgInformer.Informer().AddEventHandler(PackageEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace))
 
 	kubeInformerFactory, err := utils.GetInformerFactoryByExecutor(gpm.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {
@@ -147,13 +148,13 @@ func MakeGenericPoolManager(
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
-	// eagerPoolCreator must run after CleanupOldExecutorObjects.
-	// Otherwise, the poolmanager may wrongly delete the deployment.
-	go gpm.eagerPoolCreator()
+	go gpm.service()
+	gpm.poolPodC.InjectGpm(gpm)
 	go gpm.podInformer.Run(ctx.Done())
 	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
 	go gpm.idleObjectReaper()
+	go gpm.poolPodC.Run(ctx.Done())
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -461,7 +462,7 @@ func (gpm *GenericPoolManager) service() {
 			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
 			created := false
-			pool, ok := gpm.pools[crd.CacheKey(&req.env.ObjectMeta)]
+			pool, ok := gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)]
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
@@ -477,27 +478,24 @@ func (gpm *GenericPoolManager) service() {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
-				gpm.pools[crd.CacheKey(&req.env.ObjectMeta)] = pool
+				gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)] = pool
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
-		case CLEANUP_POOLS:
-			latestEnvPoolsize := make(map[string]int)
-			for _, env := range req.envList {
-				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(getEnvPoolSize(&env))
-			}
-			for key, pool := range gpm.pools {
-				poolsize, ok := latestEnvPoolsize[key]
-				if !ok || poolsize == 0 {
-					// Env no longer exists or pool size changed to zero
+		case CLEANUP_POOL:
+			env := *req.env
+			gpm.logger.Info("destroying pool",
+				zap.String("environment", env.ObjectMeta.Name),
+				zap.String("namespace", env.ObjectMeta.Namespace))
 
-					gpm.logger.Info("destroying generic pool", zap.Any("environment", pool.env.ObjectMeta))
-					delete(gpm.pools, key)
-
-					// and delete the pool asynchronously.
-					go pool.destroy() //nolint errcheck
-				}
+			key := crd.CacheKeyUID(&req.env.ObjectMeta)
+			pool, ok := gpm.pools[key]
+			if !ok {
+				gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
+				return
 			}
+			delete(gpm.pools, key)
+			go pool.destroy() //nolint errcheck
 			// no response, caller doesn't wait
 		}
 	}
@@ -514,10 +512,10 @@ func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, bool
 	return resp.pool, resp.created, resp.error
 }
 
-func (gpm *GenericPoolManager) cleanupPools(envs []fv1.Environment) {
+func (gpm *GenericPoolManager) cleanupPool(env *fv1.Environment) {
 	gpm.requestChannel <- &request{
-		requestType: CLEANUP_POOLS,
-		envList:     envs,
+		requestType: CLEANUP_POOL,
+		env:         env,
 	}
 }
 
@@ -549,53 +547,6 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 		)
 	}
 	return env, nil
-}
-
-func (gpm *GenericPoolManager) eagerPoolCreator() {
-	pollSleep := 2 * time.Second
-	for {
-		// get list of envs from controller
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			if utils.IsNetworkError(err) {
-				gpm.logger.Error("encountered network error, retrying", zap.Error(err))
-			} else {
-				gpm.logger.Error("failed to get environment list", zap.Error(err))
-			}
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		// Create pools for all envs.  TODO: we should make this a bit less eager, only
-		// creating pools for envs that are actually used by functions.  Also we might want
-		// to keep these eagerly created pools smaller than the ones created when there are
-		// actual function calls.
-
-		wg := &sync.WaitGroup{}
-
-		for i := range envs.Items {
-			env := envs.Items[i]
-			// Create pool only if poolsize greater than zero
-			if getEnvPoolSize(&env) > 0 {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					_, created, err := gpm.getPool(&env)
-					if err != nil {
-						gpm.logger.Error("eager-create pool failed", zap.Error(err))
-					}
-					if created {
-						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
-					}
-				}()
-			}
-		}
-
-		// Clean up pools whose env was deleted
-		gpm.cleanupPools(envs.Items)
-		wg.Wait()
-		time.Sleep(pollSleep)
-	}
 }
 
 // idleObjectReaper reaps objects after certain idle time
