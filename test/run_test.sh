@@ -76,5 +76,5 @@ main() {
     FAILURES=$((FAILURES+$num_fail))
 }
 
-docker system prune -a -f
+docker system prune -a -f > /dev/null
 main "$@"
