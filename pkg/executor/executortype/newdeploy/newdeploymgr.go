@@ -362,7 +362,7 @@ func (deploy *NewDeploy) getEnvFunctions(m *metav1.ObjectMeta) []fv1.Function {
 	}
 	relatedFunctions := make([]fv1.Function, 0)
 	for _, f := range funcList.Items {
-		if (f.Spec.Environment.Name == m.Name) && (f.Spec.Environment.Namespace == m.Namespace) {
+		if (f.Spec.Environment.Name == m.Name) && (f.Spec.Environment.Namespace == m.Namespace) && f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
 			relatedFunctions = append(relatedFunctions, f)
 		}
 	}
@@ -637,7 +637,6 @@ func (deploy *NewDeploy) updateFunction(oldFn *fv1.Function, newFn *fv1.Function
 }
 
 func (deploy *NewDeploy) updateFuncDeployment(fn *fv1.Function, env *fv1.Environment) error {
-
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
 	if err != nil {
 		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", fn)
