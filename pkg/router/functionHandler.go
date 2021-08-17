@@ -253,7 +253,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
-					go roundTripper.funcHandler.unTapService(ctx, fn, serviceURL) //nolint errcheck
+					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
 				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
@@ -584,9 +584,9 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 }
 
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
-func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, serviceUrl *url.URL) error {
+func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.Debug("UnTapService Called")
-	ctx, cancel := context.WithTimeout(ctx, fh.unTapServiceTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), fh.unTapServiceTimeout)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 	if err != nil {
@@ -637,14 +637,14 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 	}
 }
 
-func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
+func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, err error) {
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
 	timeout := 30 * time.Second
 	if fh.function.Spec.FunctionTimeout > 0 {
 		timeout = time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	service, err := fh.executor.GetServiceForFunction(ctx, fh.function)
 	if err != nil {
@@ -670,7 +670,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 // getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL, cacheHit bool, err error) {
 	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-		svcURL, err = fh.getServiceEntryFromExecutor(ctx)
+		svcURL, err = fh.getServiceEntryFromExecutor()
 		return svcURL, false, err
 	}
 	// Check if service URL present in cache
@@ -692,7 +692,7 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 				}
 				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
 			}
-			svcURL, err = fh.getServiceEntryFromExecutor(ctx)
+			svcURL, err = fh.getServiceEntryFromExecutor()
 			if err != nil {
 				return nil, err
 			}
