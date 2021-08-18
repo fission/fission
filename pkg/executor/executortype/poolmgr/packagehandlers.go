@@ -26,11 +26,14 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-func (gpm *GenericPoolManager) PackageEventHandlers(kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) k8sCache.ResourceEventHandlerFuncs {
+// PackageEventHandlers provides handlers for package events.
+// Based on package create/update event, we create role binding
+// for the package which is used by fetcher component.
+func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)
-			gpm.logger.Debug("list watch for package reported a new package addition",
+			logger.Debug("list watch for package reported a new package addition",
 				zap.String("package_name", pkg.ObjectMeta.Name),
 				zap.String("package_namespace", pkg.ObjectMeta.Namespace))
 
@@ -42,9 +45,9 @@ func (gpm *GenericPoolManager) PackageEventHandlers(kubernetesClient *kubernetes
 
 			// here, we return if we hit an error during rolebinding setup. this is because this rolebinding is mandatory for
 			// every function's package to be loaded into its env. without that, there's no point to move forward.
-			err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
+			err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
 			if err != nil {
-				gpm.logger.Error("error creating rolebinding for package",
+				logger.Error("error creating rolebinding for package",
 					zap.Error(err),
 					zap.String("role_binding", fv1.PackageGetterRB),
 					zap.String("package_name", pkg.ObjectMeta.Name),
@@ -52,7 +55,7 @@ func (gpm *GenericPoolManager) PackageEventHandlers(kubernetesClient *kubernetes
 				return
 			}
 
-			gpm.logger.Debug("successfully set up rolebinding for fetcher service account",
+			logger.Debug("successfully set up rolebinding for fetcher service account",
 				zap.String("service_account", fv1.FissionFetcherSA),
 				zap.String("service_account_namespace", envNs),
 				zap.String("package_name", pkg.ObjectMeta.Name),
@@ -76,11 +79,11 @@ func (gpm *GenericPoolManager) PackageEventHandlers(kubernetesClient *kubernetes
 					envNs = newPkg.Spec.Environment.Namespace
 				}
 
-				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.PackageGetterRB,
+				err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.PackageGetterRB,
 					newPkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)
 				if err != nil {
-					gpm.logger.Error("error updating rolebinding for package",
+					logger.Error("error updating rolebinding for package",
 						zap.Error(err),
 						zap.String("role_binding", fv1.PackageGetterRB),
 						zap.String("package_name", newPkg.ObjectMeta.Name),
@@ -88,7 +91,7 @@ func (gpm *GenericPoolManager) PackageEventHandlers(kubernetesClient *kubernetes
 					return
 				}
 
-				gpm.logger.Debug("successfully updated rolebinding for fetcher service account",
+				logger.Debug("successfully updated rolebinding for fetcher service account",
 					zap.String("service_account", fv1.FissionFetcherSA),
 					zap.String("service_account_namespace", envNs),
 					zap.String("package_name", newPkg.ObjectMeta.Name),
