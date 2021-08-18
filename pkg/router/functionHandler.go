@@ -33,6 +33,8 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -504,6 +506,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		// ref: https://github.com/golang/go/issues/28239
 		rrt.closeContext()
 	}()
+
+	// add attributes to current span
+	ctx := request.Context()
+	span := trace.SpanFromContext(ctx)
+	attributes := []attribute.KeyValue{
+		{Key: "function-name", Value: attribute.StringValue(fh.function.Name)},
+		{Key: "function-namespace", Value: attribute.StringValue(fh.function.Namespace)},
+		{Key: "environment-name", Value: attribute.StringValue(fh.function.Spec.Environment.Name)},
+		{Key: "environment-namespace", Value: attribute.StringValue(fh.function.Spec.Environment.Namespace)},
+	}
+	span.SetAttributes(attributes...)
 
 	proxy.ServeHTTP(responseWriter, request)
 }
