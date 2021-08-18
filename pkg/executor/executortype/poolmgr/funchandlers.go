@@ -37,7 +37,7 @@ func getIstioServiceLabels(fnName string) map[string]string {
 	}
 }
 
-func (gpm *GenericPoolManager) FunctionEventHandlers(kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
+func FunctionEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
@@ -65,11 +65,11 @@ func (gpm *GenericPoolManager) FunctionEventHandlers(kubernetesClient *kubernete
 			// setup rolebinding is tried, if it fails, we don't return. we just log an error and move on, because :
 			// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
 			// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-			err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
+			err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
 			if err != nil {
-				gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
+				logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
 			} else {
-				gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
+				logger.Debug("successfully set up rolebinding for fetcher service account for function",
 					zap.String("service_account", fv1.FissionFetcherSA),
 					zap.String("service_account_namepsace", envNs),
 					zap.String("function_name", fn.ObjectMeta.Name),
@@ -118,7 +118,7 @@ func (gpm *GenericPoolManager) FunctionEventHandlers(kubernetesClient *kubernete
 				// create function istio service if it does not exist
 				_, err = kubernetesClient.CoreV1().Services(envNs).Create(context.TODO(), &svc, metav1.CreateOptions{})
 				if err != nil && !kerrors.IsAlreadyExists(err) {
-					gpm.logger.Error("error creating istio service for function",
+					logger.Error("error creating istio service for function",
 						zap.Error(err),
 						zap.String("service_name", svcName),
 						zap.String("function_name", fn.ObjectMeta.Name),
@@ -145,7 +145,7 @@ func (gpm *GenericPoolManager) FunctionEventHandlers(kubernetesClient *kubernete
 				// delete function istio service
 				err := kubernetesClient.CoreV1().Services(envNs).Delete(context.TODO(), svcName, metav1.DeleteOptions{})
 				if err != nil && !kerrors.IsNotFound(err) {
-					gpm.logger.Error("error deleting istio service for function",
+					logger.Error("error deleting istio service for function",
 						zap.Error(err),
 						zap.String("service_name", svcName),
 						zap.String("function_name", fn.ObjectMeta.Name))
@@ -178,14 +178,14 @@ func (gpm *GenericPoolManager) FunctionEventHandlers(kubernetesClient *kubernete
 					envNs = newFunc.Spec.Environment.Namespace
 				}
 
-				err := utils.SetupRoleBinding(gpm.logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
+				err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
 					newFunc.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)
 
 				if err != nil {
-					gpm.logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
+					logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
 				} else {
-					gpm.logger.Debug("successfully set up rolebinding for fetcher service account for function",
+					logger.Debug("successfully set up rolebinding for fetcher service account for function",
 						zap.String("service_account", fv1.FissionFetcherSA),
 						zap.String("service_account_namepsace", envNs),
 						zap.String("function_name", newFunc.ObjectMeta.Name),

@@ -91,7 +91,8 @@ type (
 	}
 	response struct {
 		error
-		pool *GenericPool
+		pool    *GenericPool
+		created bool
 	}
 )
 
@@ -109,6 +110,15 @@ func MakeGenericPoolManager(
 
 	gpmLogger := logger.Named("generic_pool_manager")
 
+	enableIstio := false
+	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
+		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
+		if err != nil {
+			gpmLogger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
+		}
+		enableIstio = istio
+	}
+
 	gpm := &GenericPoolManager{
 		logger:                 gpmLogger,
 		pools:                  make(map[string]*GenericPool),
@@ -122,22 +132,15 @@ func MakeGenericPoolManager(
 		requestChannel:         make(chan *request),
 		defaultIdlePodReapTime: 2 * time.Minute,
 		fetcherConfig:          fetcherConfig,
+		enableIstio:            enableIstio,
 		funcInformer:           funcInformer,
 		pkgInformer:            pkgInformer,
 	}
 
 	go gpm.service()
 
-	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
-		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
-		if err != nil {
-			gpmLogger.Error("failed to parse 'ENABLE_ISTIO', set to false", zap.Error(err))
-		}
-		gpm.enableIstio = istio
-	}
-
-	(*gpm.funcInformer).AddEventHandler(gpm.FunctionEventHandlers(gpm.kubernetesClient, gpm.namespace, gpm.enableIstio))
-	(*gpm.pkgInformer).AddEventHandler(gpm.PackageEventHandlers(gpm.kubernetesClient, gpm.namespace))
+	(*gpm.funcInformer).AddEventHandler(FunctionEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace, gpm.enableIstio))
+	(*gpm.pkgInformer).AddEventHandler(PackageEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace))
 
 	kubeInformerFactory, err := utils.GetInformerFactoryByExecutor(gpm.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {
@@ -152,6 +155,8 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	// Otherwise, the poolmanager may wrongly delete the deployment.
 	go gpm.eagerPoolCreator()
 	go gpm.podInformer.Run(ctx.Done())
+	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
+	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
 	go gpm.idleObjectReaper()
 }
 
@@ -167,9 +172,13 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 		return nil, err
 	}
 
-	pool, err := gpm.getPool(env)
+	pool, created, err := gpm.getPool(env)
 	if err != nil {
 		return nil, err
+	}
+
+	if created {
+		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 	}
 
 	// from GenericPool -> get one function container
@@ -253,9 +262,13 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 		return err
 	}
 
-	gp, err := gpm.getPool(env)
+	gp, created, err := gpm.getPool(env)
 	if err != nil {
 		return err
+	}
+
+	if created {
+		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 	}
 
 	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
@@ -301,13 +314,16 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 	for i := range envs.Items {
 		env := envs.Items[i]
 
-		if gpm.getEnvPoolsize(&env) > 0 {
+		if getEnvPoolsize(&env) > 0 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, err := gpm.getPool(&env)
+				_, created, err := gpm.getPool(&env)
 				if err != nil {
 					gpm.logger.Error("adopt pool failed", zap.Error(err))
+				}
+				if created {
+					gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 				}
 			}()
 		}
@@ -448,14 +464,9 @@ func (gpm *GenericPoolManager) service() {
 		case GET_POOL:
 			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
+			created := false
 			pool, ok := gpm.pools[crd.CacheKey(&req.env.ObjectMeta)]
 			if !ok {
-				poolsize := gpm.getEnvPoolsize(req.env)
-				switch req.env.Spec.AllowedFunctionsPerContainer {
-				case fv1.AllowedFunctionsPerContainerInfinite:
-					poolsize = 1
-				}
-
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
 				ns := gpm.namespace
@@ -464,19 +475,20 @@ func (gpm *GenericPoolManager) service() {
 				}
 
 				pool, err = MakeGenericPool(gpm.logger,
-					gpm.fissionClient, gpm.kubernetesClient, gpm.metricsClient, req.env, poolsize,
-					ns, gpm.namespace, gpm.fsCache, gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
+					gpm.fissionClient, gpm.kubernetesClient, gpm.metricsClient, req.env, ns,
+					gpm.namespace, gpm.fsCache, gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
 				gpm.pools[crd.CacheKey(&req.env.ObjectMeta)] = pool
+				created = true
 			}
-			req.responseChannel <- &response{pool: pool}
+			req.responseChannel <- &response{pool: pool, created: created}
 		case CLEANUP_POOLS:
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
-				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(gpm.getEnvPoolsize(&env))
+				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
 				poolsize, ok := latestEnvPoolsize[key]
@@ -495,7 +507,7 @@ func (gpm *GenericPoolManager) service() {
 	}
 }
 
-func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, error) {
+func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, bool, error) {
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
 		requestType:     GET_POOL,
@@ -503,7 +515,7 @@ func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, erro
 		responseChannel: c,
 	}
 	resp := <-c
-	return resp.pool, resp.error
+	return resp.pool, resp.created, resp.error
 }
 
 func (gpm *GenericPoolManager) cleanupPools(envs []fv1.Environment) {
@@ -568,13 +580,16 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		for i := range envs.Items {
 			env := envs.Items[i]
 			// Create pool only if poolsize greater than zero
-			if gpm.getEnvPoolsize(&env) > 0 {
+			if getEnvPoolsize(&env) > 0 {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					_, err := gpm.getPool(&env)
+					_, created, err := gpm.getPool(&env)
 					if err != nil {
 						gpm.logger.Error("eager-create pool failed", zap.Error(err))
+					}
+					if created {
+						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 					}
 				}()
 			}
@@ -587,24 +602,10 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 	}
 }
 
-func (gpm *GenericPoolManager) getEnvPoolsize(env *fv1.Environment) int32 {
-	var poolsize int32
-	if env.Spec.Version < 3 {
-		poolsize = 3
-	} else {
-		poolsize = int32(env.Spec.Poolsize)
-	}
-	return poolsize
-}
-
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper() {
 
 	pollSleep := 5 * time.Second
-
-	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
-
-	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
 
 	for {
 		time.Sleep(pollSleep)
