@@ -37,6 +37,10 @@ func getIstioServiceLabels(fnName string) map[string]string {
 	}
 }
 
+// FunctionEventHandlers provides handlers for function resource events.
+// Based on function create/update/delete event, we create role binding
+// for the secret/configmap access which is used by fetcher component.
+// If istio is enabled, we create a service for the function.
 func FunctionEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {

@@ -134,7 +134,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
-	poolsize := getEnvPoolsize(env)
+	poolsize := getEnvPoolSize(env)
 	switch env.Spec.AllowedFunctionsPerContainer {
 	case fv1.AllowedFunctionsPerContainerInfinite:
 		poolsize = 1

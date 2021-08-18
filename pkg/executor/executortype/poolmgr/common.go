@@ -18,7 +18,7 @@ package poolmgr
 
 import fv1 "github.com/fission/fission/pkg/apis/core/v1"
 
-func getEnvPoolsize(env *fv1.Environment) int32 {
+func getEnvPoolSize(env *fv1.Environment) int32 {
 	var poolsize int32
 	if env.Spec.Version < 3 {
 		poolsize = 3

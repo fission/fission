@@ -26,6 +26,9 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+// PackageEventHandlers provides handlers for package events.
+// Based on package create/update event, we create role binding
+// for the package which is used by fetcher component.
 func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, fissionfnNamespace string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {

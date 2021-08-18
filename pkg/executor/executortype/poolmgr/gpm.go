@@ -314,7 +314,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 	for i := range envs.Items {
 		env := envs.Items[i]
 
-		if getEnvPoolsize(&env) > 0 {
+		if getEnvPoolSize(&env) > 0 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -488,7 +488,7 @@ func (gpm *GenericPoolManager) service() {
 		case CLEANUP_POOLS:
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
-				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(getEnvPoolsize(&env))
+				latestEnvPoolsize[crd.CacheKey(&env.ObjectMeta)] = int(getEnvPoolSize(&env))
 			}
 			for key, pool := range gpm.pools {
 				poolsize, ok := latestEnvPoolsize[key]
@@ -580,7 +580,7 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 		for i := range envs.Items {
 			env := envs.Items[i]
 			// Create pool only if poolsize greater than zero
-			if getEnvPoolsize(&env) > 0 {
+			if getEnvPoolSize(&env) > 0 {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
