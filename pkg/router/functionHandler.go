@@ -651,16 +651,21 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 	}
 }
 
-func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, err error) {
+func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
-	timeout := 30 * time.Second
+
+	var fContext context.Context
 	if fh.function.Spec.FunctionTimeout > 0 {
-		timeout = time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
+		timeout := time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
+		f, cancel := context.WithTimeout(ctx, timeout)
+		fContext = f
+		defer cancel()
+	} else {
+		fContext = ctx
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	service, err := fh.executor.GetServiceForFunction(ctx, fh.function)
+
+	service, err := fh.executor.GetServiceForFunction(fContext, fh.function)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		fh.logger.Error("error from GetServiceForFunction",
@@ -684,7 +689,7 @@ func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, er
 // getServiceEntryFromExecutor returns service url entry returns from executor
 func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL, cacheHit bool, err error) {
 	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-		svcURL, err = fh.getServiceEntryFromExecutor()
+		svcURL, err = fh.getServiceEntryFromExecutor(ctx)
 		return svcURL, false, err
 	}
 	// Check if service URL present in cache
@@ -706,7 +711,7 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 				}
 				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
 			}
-			svcURL, err = fh.getServiceEntryFromExecutor()
+			svcURL, err = fh.getServiceEntryFromExecutor(ctx)
 			if err != nil {
 				return nil, err
 			}
