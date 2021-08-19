@@ -44,7 +44,6 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 	}
 
 	var ingTLS []v1.IngressTLS
-	var pathType v1.PathType = "ImplementationSpecific"
 	if len(trigger.Spec.IngressConfig.TLS) > 0 {
 		ingTLS = []v1.IngressTLS{
 			{
@@ -56,6 +55,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 		}
 	}
 
+	var pathType v1.PathType = v1.PathTypeImplementationSpecific
 	ing := &v1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: GetDeployLabels(trigger),
