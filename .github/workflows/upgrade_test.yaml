@@ -31,9 +31,9 @@ jobs:
         os: [ ubuntu-latest ]
     steps:
     - name: Setup go
-      uses: actions/setup-go@v2.1.3
+      uses: actions/setup-go@v2
       with:
-        go-version: '1.15.12'
+        go-version: 1.16
 
     - name: Checkout action sources
       uses: actions/checkout@v2.3.4

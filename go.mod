@@ -1,6 +1,6 @@
 module github.com/fission/fission
 
-go 1.15
+go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.1
@@ -28,7 +28,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-ini/ini v1.62.0 // indirect
-	github.com/go-openapi/spec v0.19.3
+	github.com/go-openapi/spec v0.19.5
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
@@ -64,12 +64,12 @@ require (
 	go.opentelemetry.io/otel/trace v1.0.0-RC2
 	go.uber.org/zap v1.18.1
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
-	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	google.golang.org/grpc v1.39.0
-	k8s.io/api v0.19.12
-	k8s.io/apiextensions-apiserver v0.19.12
-	k8s.io/apimachinery v0.19.12
-	k8s.io/client-go v0.19.12
+	gotest.tools v2.2.0+incompatible // indirect
+	k8s.io/api v0.21.4
+	k8s.io/apiextensions-apiserver v0.21.4
+	k8s.io/apimachinery v0.21.4
+	k8s.io/client-go v0.21.4
 	k8s.io/klog v1.0.0
-	k8s.io/metrics v0.19.12
+	k8s.io/metrics v0.21.4
 )
