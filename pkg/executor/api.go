@@ -33,6 +33,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -251,11 +252,17 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 // Serve starts an HTTP server.
-func (executor *Executor) Serve(port int) {
+func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	executor.logger.Info("starting executor API", zap.Int("port", port))
 	address := fmt.Sprintf(":%v", port)
-	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: executor.GetHandler(),
-	})
+
+	var handler http.Handler
+	if openTracingEnabled {
+		handler = &ochttp.Handler{Handler: executor.GetHandler()}
+	} else {
+		handler = otel.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otel.UrlsToIgnore("/healthz"))
+	}
+
+	err := http.ListenAndServe(address, handler)
 	executor.logger.Fatal("done listening", zap.Error(err))
 }

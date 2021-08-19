@@ -29,6 +29,8 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -132,7 +134,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.String("filename", handler.Filename),
 		)
 	}
-
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
@@ -199,7 +200,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 	}
 }
 
-func (ss *StorageService) Start(port int) {
+func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
@@ -208,15 +209,19 @@ func (ss *StorageService) Start(port int) {
 
 	address := fmt.Sprintf(":%v", port)
 
-	err := http.ListenAndServe(address, &ochttp.Handler{
-		Handler: r,
-	})
-
+	var err error
+	if openTracingEnabled {
+		err = http.ListenAndServe(address, &ochttp.Handler{
+			Handler: r,
+		})
+	} else {
+		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz")))
+	}
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
 // Start runs storage service
-func Start(logger *zap.Logger, storage Storage, port int) error {
+func Start(logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
 	enablePruner := true
 	// create a storage client
 	storageClient, err := MakeStowClient(logger, storage)
@@ -226,7 +231,7 @@ func Start(logger *zap.Logger, storage Storage, port int) error {
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go storageService.Start(port)
+	go storageService.Start(port, openTracingEnabled)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {

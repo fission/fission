@@ -53,11 +53,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -80,36 +82,38 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 }
 
 func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64,
-	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
+	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool, openTracingEnabled bool) {
 	mr := router(ctx, logger, httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
 
-	err := http.ListenAndServe(url, &ochttp.Handler{
-		Handler: mr,
-		GetStartOptions: func(r *http.Request) trace.StartOptions {
-			// do not trace router healthz endpoint
-			if strings.Compare(r.URL.Path, "/router-healthz") == 0 {
+	var err error
+	if openTracingEnabled {
+		err = http.ListenAndServe(url, &ochttp.Handler{
+			Handler: mr,
+			GetStartOptions: func(r *http.Request) trace.StartOptions {
+				// do not trace router healthz endpoint
+				if strings.Compare(r.URL.Path, "/router-healthz") == 0 {
+					return trace.StartOptions{
+						Sampler: trace.NeverSample(),
+					}
+				}
+				if displayAccessLog {
+					reqMsg, err := httputil.DumpRequest(r, false)
+					if err != nil {
+						logger.Error("error dumping request", zap.Error(err))
+					}
+					logger.Info("request dump", zap.String("request", string(reqMsg)))
+				}
 				return trace.StartOptions{
-					Sampler: trace.NeverSample(),
+					Sampler: trace.ProbabilitySampler(tracingSamplingRate),
 				}
-			}
-			if displayAccessLog {
-				reqMsg, err := httputil.DumpRequest(r, false)
-				if err != nil {
-					logger.Error("error dumping request", zap.Error(err))
-				}
-				logger.Info("request dump", zap.String("request", string(reqMsg)))
-			}
-			return trace.StartOptions{
-				Sampler: trace.ProbabilitySampler(tracingSamplingRate),
-			}
-		},
-	})
+			},
+		})
+	} else {
+		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")))
+	}
 	if err != nil {
-		logger.Error(
-			"HTTP server error",
-			zap.Error(err),
-		)
+		logger.Error("HTTP server error", zap.Error(err))
 	}
 }
 
@@ -122,7 +126,7 @@ func serveMetric(logger *zap.Logger) {
 }
 
 // Start starts a router
-func Start(logger *zap.Logger, port int, executorURL string) {
+func Start(logger *zap.Logger, port int, executorURL string, openTracingEnabled bool) {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
@@ -252,7 +256,12 @@ func Start(logger *zap.Logger, port int, executorURL string) {
 	go serveMetric(logger)
 
 	logger.Info("starting router", zap.Int("port", port))
-	ctx, cancel := context.WithCancel(context.Background())
+
+	tracer := otel.Tracer("router")
+	ctx, span := tracer.Start(context.Background(), "router/Start")
+	defer span.End()
+
+	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
-	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog)
+	serve(ctxWithCancel, logger, port, tracingSamplingRate, triggers, displayAccessLog, openTracingEnabled)
 }

@@ -32,6 +32,8 @@ import (
 
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -40,8 +42,10 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 const (
@@ -66,6 +70,7 @@ type (
 		svcAddrUpdateThrottler   *throttler.Throttler
 		functionTimeoutMap       map[k8stypes.UID]int
 		unTapServiceTimeout      time.Duration
+		openTracingEnabled       bool
 	}
 
 	tsRoundTripperParams struct {
@@ -154,10 +159,11 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
 // if it returned an error.
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+
 	// set the timeout for transport context
 	roundTripper.addForwardedHostHeader(req)
 	transport := roundTripper.getDefaultTransport()
-	ocRoundTripper := &ochttp.Transport{Base: transport}
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
 
@@ -220,7 +226,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
 			// get function service url from cache or executor
-			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry()
+			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry(ctx)
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -249,9 +255,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				continue
 			}
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-				defer func(fn *fv1.Function, serviceURL *url.URL) {
+				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
 					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
-				}(roundTripper.funcHandler.function, roundTripper.serviceURL)
+				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
 			// modify the request to reflect the service url
@@ -309,8 +315,23 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			dumpReqFunc(newReq)
 		}
 
+		// The otelhttp.NewTransport() does not work with WebSocket.
+		// This is probably because it modifies the response body.
+		// Until we find a better solution to handle websocket requests, we will continue to
+		// use ochttp.Transport(). We check if the request isWebsocketRequest() and use the
+		// ochttp.Transport() irrespective of open telemetry is enabled or not.
+		// Related issue: https://github.com/open-telemetry/opentelemetry-js-contrib/issues/12
+
 		// forward the request to the function service
-		resp, err := ocRoundTripper.RoundTrip(newReq)
+		var resp *http.Response
+		if roundTripper.funcHandler.openTracingEnabled || util.IsWebsocketRequest(newReq) {
+			ocRoundTripper := &ochttp.Transport{Base: transport}
+			resp, err = ocRoundTripper.RoundTrip(newReq)
+		} else {
+			otelRoundTripper := otelhttp.NewTransport(transport)
+			resp, err = otelRoundTripper.RoundTrip(newReq)
+		}
+
 		if err == nil {
 			// return response back to user
 			if roundTripper.funcHandler.isDebugEnv {
@@ -494,6 +515,10 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		rrt.closeContext()
 	}()
 
+	// add attributes to current span
+	span := trace.SpanFromContext(request.Context())
+	span.SetAttributes(otelUtils.GetAttributesForFunction(fh.function)...)
+
 	proxy.ServeHTTP(responseWriter, request)
 }
 
@@ -657,7 +682,7 @@ func (fh functionHandler) getServiceEntryFromExecutor() (serviceUrl *url.URL, er
 }
 
 // getServiceEntryFromExecutor returns service url entry returns from executor
-func (fh functionHandler) getServiceEntry() (svcURL *url.URL, cacheHit bool, err error) {
+func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL, cacheHit bool, err error) {
 	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 		svcURL, err = fh.getServiceEntryFromExecutor()
 		return svcURL, false, err

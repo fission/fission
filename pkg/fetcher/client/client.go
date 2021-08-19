@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
@@ -27,12 +30,22 @@ type (
 )
 
 func MakeClient(logger *zap.Logger, fetcherUrl string) *Client {
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	if err != nil {
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
+	var hc *http.Client
+	if openTracingEnabled {
+		hc = &http.Client{Transport: &ochttp.Transport{}}
+	} else {
+		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	}
+
 	return &Client{
-		logger: logger.Named("fetcher_client"),
-		url:    strings.TrimSuffix(fetcherUrl, "/"),
-		httpClient: &http.Client{
-			Transport: &ochttp.Transport{},
-		},
+		logger:     logger.Named("fetcher_client"),
+		url:        strings.TrimSuffix(fetcherUrl, "/"),
+		httpClient: hc,
 	}
 }
 

@@ -79,6 +79,10 @@ Parameter | Description | Default
 `router.roundTrip.timeout` | HTTP transport request timeout | `50ms`
 `router.roundTrip.timeoutExponent` | The length of request timeout will multiply with timeoutExponent after each retry | `2` 
 `router.roundTrip.maxRetries` | Max retries times of a failed request | `10`
+`openTracing.enabled` | If true, OpenTracing is enabled | `false`
+`openTracing.collectorEndpoint` | Jaeger collector endpoint | ``
+`openTracing.samplingRate` | Probabilistic sampling rate | `0.5`
+`otelCollectorEndpoint` | OpenTelemetry collector endpoint | None
 
 ### Extra configuration for `fission-all`
 

@@ -23,9 +23,8 @@ import (
 	"os"
 	"strconv"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	docopt "github.com/docopt/docopt-go"
-	"go.opencensus.io/trace"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -40,21 +39,23 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
+	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
-func runController(logger *zap.Logger, port int) {
-	controller.Start(logger, port, false)
+func runController(logger *zap.Logger, port int, openTracingEnabled bool) {
+	controller.Start(logger, port, false, openTracingEnabled)
 	logger.Fatal("controller exited")
 }
 
-func runRouter(logger *zap.Logger, port int, executorUrl string) {
-	router.Start(logger, port, executorUrl)
+func runRouter(logger *zap.Logger, port int, executorUrl string, openTracingEnabled bool) {
+	router.Start(logger, port, executorUrl, openTracingEnabled)
 	logger.Fatal("router exited")
 }
 
-func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string) {
-	err := executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port)
+func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string, openTracingEnabled bool) {
+	err := executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port, openTracingEnabled)
 	if err != nil {
 		logger.Fatal("error starting executor", zap.Error(err))
 	}
@@ -89,8 +90,8 @@ func runMQManager(logger *zap.Logger, routerURL string) {
 	}
 }
 
-func runStorageSvc(logger *zap.Logger, port int, storage storagesvc.Storage) {
-	err := storagesvc.Start(logger, storage, port)
+func runStorageSvc(logger *zap.Logger, port int, storage storagesvc.Storage, openTracingEnabled bool) {
+	err := storagesvc.Start(logger, storage, port, openTracingEnabled)
 	if err != nil {
 		logger.Fatal("error starting storage service", zap.Error(err))
 	}
@@ -125,13 +126,7 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 	}
 }
 
-func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{}) error {
-	collectorEndpoint := os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT")
-	if len(collectorEndpoint) == 0 {
-		logger.Info("skipping trace exporter registration")
-		return nil
-	}
-
+func getServiceName(arguments map[string]interface{}) string {
 	serviceName := "Fission-Unknown"
 
 	if arguments["--controllerPort"] != nil {
@@ -154,26 +149,7 @@ func registerTraceExporter(logger *zap.Logger, arguments map[string]interface{})
 		serviceName = "Fission-Keda-MQTrigger"
 	}
 
-	exporter, err := jaeger.NewExporter(jaeger.Options{
-		CollectorEndpoint: collectorEndpoint,
-		Process: jaeger.Process{
-			ServiceName: serviceName,
-			Tags: []jaeger.Tag{
-				jaeger.BoolTag("fission", true),
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	samplingRate, err := strconv.ParseFloat(os.Getenv("TRACING_SAMPLING_RATE"), 32)
-	if err != nil {
-		return err
-	}
-	trace.RegisterExporter(exporter)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.ProbabilitySampler(samplingRate)})
-	return nil
+	return serviceName
 }
 
 func main() {
@@ -264,9 +240,24 @@ Options:
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}
 
-	err = registerTraceExporter(logger, arguments)
+	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
 	if err != nil {
-		logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
+		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
+	}
+
+	if openTracingEnabled {
+		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
+		if err != nil {
+			logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
+		}
+	} else {
+		shutdown, err := otel.InitProvider(logger, getServiceName(arguments))
+		if err != nil {
+			logger.Fatal("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
+		}
+		if shutdown != nil {
+			defer shutdown()
+		}
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
@@ -278,17 +269,17 @@ Options:
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])
-		runController(logger, port)
+		runController(logger, port, openTracingEnabled)
 	}
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(logger, port, executorUrl)
+		runRouter(logger, port, executorUrl, openTracingEnabled)
 	}
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		runExecutor(logger, port, functionNs, envBuilderNs)
+		runExecutor(logger, port, functionNs, envBuilderNs, openTracingEnabled)
 	}
 
 	if arguments["--kubewatcher"] == true {
@@ -325,7 +316,7 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		runStorageSvc(logger, port, storage)
+		runStorageSvc(logger, port, storage, openTracingEnabled)
 	}
 
 	select {}
