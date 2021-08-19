@@ -110,7 +110,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 			},
 		})
 	} else {
-		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", "/router-healthz"))
+		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")))
 	}
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))

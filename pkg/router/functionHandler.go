@@ -43,6 +43,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -316,7 +317,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// forward the request to the function service
 		var resp *http.Response
-		if roundTripper.funcHandler.openTracingEnabled || isWebsocketRequest(newReq) {
+		if roundTripper.funcHandler.openTracingEnabled || util.IsWebsocketRequest(newReq) {
 			ocRoundTripper := &ochttp.Transport{Base: transport}
 			resp, err = ocRoundTripper.RoundTrip(newReq)
 		} else {
@@ -393,11 +394,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	e := errors.New("Unable to get service url for connection")
 	logger.Error(e.Error())
 	return nil, e
-}
-
-func isWebsocketRequest(r *http.Request) bool {
-	return r.Header.Get("Upgrade") == "websocket" &&
-		r.Header.Get("Connection") == "Upgrade"
 }
 
 // getDefaultTransport returns a pointer to new copy of http.Transport object to prevent

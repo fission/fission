@@ -273,7 +273,7 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: api.GetHandler()}
 	} else {
-		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", "/healthz")
+		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	}
 	err := http.ListenAndServe(address, handler)
 	api.logger.Fatal("done listening", zap.Error(err))

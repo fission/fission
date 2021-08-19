@@ -7,16 +7,24 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-func GetHandlerWithOTEL(h http.Handler, name string, filter ...string) http.Handler {
+func UrlsToIgnore(ignoreEndpoints ...string) func(r *http.Request) bool {
+	return func(r *http.Request) bool {
+		for _, ignore := range ignoreEndpoints {
+			if strings.HasPrefix(r.URL.Path, ignore) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func GetHandlerWithOTEL(h http.Handler, name string, filter ...otelhttp.Filter) http.Handler {
 	opts := []otelhttp.Option{
 		otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
 	}
 
 	for _, f := range filter {
-		op := otelhttp.WithFilter(func(r *http.Request) bool {
-			return !(strings.Compare(r.URL.Path, f) == 0)
-		})
-		opts = append(opts, op)
+		opts = append(opts, otelhttp.WithFilter(f))
 	}
 
 	return otelhttp.NewHandler(h, name, opts...)

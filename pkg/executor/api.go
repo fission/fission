@@ -260,7 +260,7 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: executor.GetHandler()}
 	} else {
-		handler = otel.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", "/healthz")
+		handler = otel.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otel.UrlsToIgnore("/healthz"))
 	}
 
 	err := http.ListenAndServe(address, handler)

@@ -215,7 +215,7 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 			Handler: r,
 		})
 	} else {
-		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", "/healthz"))
+		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz")))
 	}
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
