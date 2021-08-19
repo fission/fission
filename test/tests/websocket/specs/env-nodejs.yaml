@@ -17,7 +17,7 @@ spec:
       cpu: 10m
       memory: 80Mi
   runtime:
-    image: fission/node-env:latest    
+    image: fission/node-env
     podspec:
       containers:
         - name: nodejs

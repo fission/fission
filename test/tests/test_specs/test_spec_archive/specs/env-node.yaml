@@ -7,10 +7,10 @@ metadata:
 spec:
   builder:
     command: build
-    image: fission/node-builder:1.6.0
+    image: fission/node-builder
   keeparchive: false
   poolsize: 3
   runtime:
-    image: fission/node-env:1.6.0
+    image: fission/node-env
   terminationGracePeriod: 20
   version: 2
