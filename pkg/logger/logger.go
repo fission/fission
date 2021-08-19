@@ -185,7 +185,7 @@ func Start() {
 	if err != nil {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}
-	informerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, 30*time.Second)
+	informerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := informerFactory.Core().V1().Pods().Informer()
 	podInformer.AddEventHandler(podInformerHandlers(zapLogger))
 	podInformer.Run(make(chan struct{}))

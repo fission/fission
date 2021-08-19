@@ -158,7 +158,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, 30*time.Second)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
 	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(logger, kubeClient, routerURL))
 	mqTriggerInformer.Run(context.Background().Done())
