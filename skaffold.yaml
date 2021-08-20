@@ -51,6 +51,8 @@ deploy:
         pruneInterval: "60"
         repository: index.docker.io
         routerServiceType: LoadBalancer
+        openTracing.enabled: false
+        otelCollectorEndpoint: ""
       wait: true
     flags:
       install:
@@ -99,3 +101,20 @@ profiles:
   - op: replace
     path: /deploy/helm/releases/0/setValues/prometheus.enabled
     value: true
+- name: kind-opentelemetry
+  patches:
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/repository
+    value: ""
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/routerServiceType
+    value: NodePort
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/debugEnv
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/pprof.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/otelCollectorEndpoint
+    value: "otel-collector.opentelemetry-operator-system.svc:4317"
