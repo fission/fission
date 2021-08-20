@@ -275,7 +275,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	funcInformer := informerFactory.Core().V1().Functions().Informer()
 	pkgInformer := informerFactory.Core().V1().Packages().Informer()
 	envInformer := informerFactory.Core().V1().Environments().Informer()
@@ -330,7 +330,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	// TODO: use context to control the waiting time once kubernetes client supports it.
 	util.WaitTimeout(wg, 30*time.Second)
 
-	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Second*30)
+	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps().Informer()
 	secretInformer := k8sInformerFactory.Core().V1().Secrets().Informer()
 

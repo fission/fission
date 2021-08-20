@@ -50,8 +50,8 @@ func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string)
 	envWatcher := makeEnvironmentWatcher(bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace)
 	go envWatcher.watchEnvironments()
 
-	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Second*30)
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, 60*time.Minute)
+	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
 	pkgInformer := informerFactory.Core().V1().Packages().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,

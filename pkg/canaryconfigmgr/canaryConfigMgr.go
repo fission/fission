@@ -93,7 +93,7 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, k
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}
 
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	informer := informerFactory.Core().V1().CanaryConfigs().Informer()
 	configMgr.canaryConfigInformer = &informer
 	configMgr.CanaryConfigEventHandlers()

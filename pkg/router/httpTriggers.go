@@ -76,7 +76,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		unTapServiceTimeout:        unTapServiceTimeout,
 	}
 
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Second*30)
+	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	httpTriggerSet.triggerInformer = informerFactory.Core().V1().HTTPTriggers().Informer()
 	httpTriggerSet.funcInformer = informerFactory.Core().V1().Functions().Informer()
 
