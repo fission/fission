@@ -55,6 +55,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 		}
 	}
 
+	var pathType v1.PathType = v1.PathTypeImplementationSpecific
 	ing := &v1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: GetDeployLabels(trigger),
@@ -82,7 +83,8 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 											},
 										},
 									},
-									Path: path,
+									Path:     path,
+									PathType: &pathType,
 								},
 							},
 						},
