@@ -257,7 +257,7 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 
 func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
-	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -280,7 +280,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 
 	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -289,7 +289,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	for _, po := range podList.Items {
-		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(context.TODO(), po.ObjectMeta.Name, metav1.DeleteOptions{})
+		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(ctx, po.ObjectMeta.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -302,7 +302,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
 		return
@@ -337,7 +337,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(l).AsSelector().String(),
 	})
 
@@ -360,7 +360,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
 				// just log the error since it won't affect the function serving
 				gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),

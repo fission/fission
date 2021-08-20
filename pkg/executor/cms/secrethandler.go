@@ -29,8 +29,8 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype"
 )
 
-func getSecretRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClient *crd.FissionClient) ([]fv1.Function, error) {
-	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func getSecretRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient *crd.FissionClient) ([]fv1.Function, error) {
+	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient 
 						zap.String("configmap_name", newS.ObjectMeta.Name),
 						zap.String("configmap_namespace", newS.ObjectMeta.Namespace))
 				}
-				funcs, err := getSecretRelatedFuncs(logger, &newS.ObjectMeta, fissionClient)
+				funcs, err := getSecretRelatedFuncs(ctx, logger, &newS.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				}

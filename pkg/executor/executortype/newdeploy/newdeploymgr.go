@@ -190,7 +190,7 @@ func (deploy *NewDeploy) getServiceInfo(ctx context.Context, obj apiv1.ObjectRef
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
 		return service, err
 	}
 
@@ -256,7 +256,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
 func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
-	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 		UID:       env.ObjectMeta.UID,
 	})
 
-	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -285,7 +285,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
 			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
 
-		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(context.TODO(), deployment.ObjectMeta.Name,
+		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
@@ -297,7 +297,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
-	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("error getting function list", zap.Error(err))
 		return

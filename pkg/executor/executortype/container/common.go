@@ -106,11 +106,11 @@ func (cn *Container) cleanupContainer(ns string, name string) error {
 // identical way to get a value that can reflect resources changed without affecting by the time.
 // To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
 // scenario since the sum of the resource version is always the same as long as no resources changed.
-func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+func referencedResourcesRVSum(ctx context.Context, client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
 	rvCount := 0
 
 	if len(secrets) > 0 {
-		list, err := client.CoreV1().Secrets(namespace).List(context.TODO(), metav1.ListOptions{})
+		list, err := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}
@@ -130,7 +130,7 @@ func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, se
 	}
 
 	if len(cfgmaps) > 0 {
-		list, err := client.CoreV1().ConfigMaps(namespace).List(context.TODO(), metav1.ListOptions{})
+		list, err := client.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}

@@ -17,13 +17,15 @@ limitations under the License.
 package container
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func (caaf *Container) FuncInformerHandler() k8sCache.ResourceEventHandlerFuncs {
+func (caaf *Container) FuncInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
@@ -37,7 +39,7 @@ func (caaf *Container) FuncInformerHandler() k8sCache.ResourceEventHandlerFuncs 
 			go func() {
 				log := caaf.logger.With(zap.String("function_name", fn.ObjectMeta.Name), zap.String("function_namespace", fn.ObjectMeta.Namespace))
 				log.Debug("start function create handler")
-				_, err := caaf.createFunction(fn)
+				_, err := caaf.createFunction(ctx, fn)
 				if err != nil {
 					log.Error("error eager creating function", zap.Error(err))
 				}
@@ -72,7 +74,7 @@ func (caaf *Container) FuncInformerHandler() k8sCache.ResourceEventHandlerFuncs 
 					zap.String("function_namespace", newFn.ObjectMeta.Namespace),
 					zap.String("old_function_name", oldFn.ObjectMeta.Name))
 				log.Debug("start function update handler")
-				err := caaf.updateFunction(oldFn, newFn)
+				err := caaf.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
 					log.Error("error updating function",
 						zap.Error(err))
