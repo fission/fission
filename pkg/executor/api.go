@@ -146,6 +146,7 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
+		context:  ctx,
 		function: fn,
 		respChan: respChan,
 	}

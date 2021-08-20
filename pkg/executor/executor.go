@@ -62,6 +62,7 @@ type (
 	}
 
 	createFuncServiceRequest struct {
+		context  context.Context
 		function *fv1.Function
 		respChan chan *createFuncServiceResponse
 	}
@@ -96,7 +97,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		}(et)
 	}
 
-	go executor.serveCreateFuncServices(ctx)
+	go executor.serveCreateFuncServices()
 
 	return executor, nil
 }
@@ -107,7 +108,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 // get specialized. In other words, it ensures that when there's an
 // ongoing request for a certain function, all other requests wait for
 // that request to complete.
-func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
+func (executor *Executor) serveCreateFuncServices() {
 	for {
 		req := <-executor.requestChan
 		fnMetadata := &req.function.ObjectMeta
@@ -124,7 +125,7 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
+				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
@@ -195,7 +196,7 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 				wg.Wait()
 
 				// get the function service from the cache
-				fsvc, err := executor.getFunctionServiceFromCache(ctx, req.function)
+				fsvc, err := executor.getFunctionServiceFromCache(req.context, req.function)
 
 				// fsCache return error when the entry does not exist/expire.
 				// It normally happened if there are multiple requests are
@@ -300,7 +301,9 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
 
+	ctx := context.Background()
 	cnm, err := container.MakeContainer(
+		ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, executorInstanceID, &funcInformer)
@@ -308,7 +311,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "container manager creation faied")
 	}
 
-	ctx := context.Background()
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
 	executorTypes[gpm.GetTypeName(ctx)] = gpm
 	executorTypes[ndm.GetTypeName(ctx)] = ndm
