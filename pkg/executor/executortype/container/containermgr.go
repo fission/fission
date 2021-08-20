@@ -130,7 +130,7 @@ func (caaf *Container) Run(ctx context.Context) {
 }
 
 // GetTypeName returns the executor type name.
-func (caaf *Container) GetTypeName() fv1.ExecutorType {
+func (caaf *Container) GetTypeName(ctx context.Context) fv1.ExecutorType {
 	return fv1.ExecutorTypeContainer
 }
 
@@ -141,7 +141,7 @@ func (caaf *Container) GetTotalAvailable(fn *fv1.Function) int {
 }
 
 // UnTapService has not been implemented for CaaF.
-func (caaf *Container) UnTapService(key string, svcHost string) {
+func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost string) {
 	// Not Implemented for CaaF.
 }
 
@@ -151,23 +151,23 @@ func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
-func (caaf *Container) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
-func (caaf *Container) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+func (caaf *Container) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	caaf.fsCache.DeleteEntry(fsvc)
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for Container Functions
-func (caaf *Container) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
-func (caaf *Container) TapService(svcHost string) error {
+func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 	err := caaf.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func (caaf *Container) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Dep
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
-func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
+func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		caaf.logger.Error("address not found in function service")
 		return false
@@ -248,7 +248,7 @@ func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
 }
 
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
-func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
@@ -280,7 +280,7 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 }
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
-func (caaf *Container) AdoptExistingResources() {
+func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		caaf.logger.Error("error getting function list", zap.Error(err))
@@ -310,7 +310,7 @@ func (caaf *Container) AdoptExistingResources() {
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.
-func (caaf *Container) CleanupOldExecutorObjects() {
+func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
 	caaf.logger.Info("CaaF starts to clean orphaned resources", zap.String("instanceID", caaf.instanceID))
 
 	errs := &multierror.Error{}

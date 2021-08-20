@@ -30,37 +30,37 @@ type ExecutorType interface {
 	Run(context.Context)
 
 	// GetTypeName returns the name of executor type
-	GetTypeName() fv1.ExecutorType
+	GetTypeName(context.Context) fv1.ExecutorType
 
 	// GetFuncSvc specializes function pod(s) and returns a service URL for the function.
 	GetFuncSvc(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 
 	// GetFuncSvcFromCache retrieves function service from cache.
-	GetFuncSvcFromCache(*fv1.Function) (*fscache.FuncSvc, error)
+	GetFuncSvcFromCache(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 
 	// GetFuncSvcFromPoolCache retrieves function service and number of active instances after filtering on requestsPerPod and CPULimit
-	GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error)
+	GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error)
 
 	// DeleteFuncSvcFromCache deletes function service entry in cache.
-	DeleteFuncSvcFromCache(*fscache.FuncSvc)
+	DeleteFuncSvcFromCache(context.Context, *fscache.FuncSvc)
 
 	// TapService updates the access time of function service entry to
 	// avoid idle pod reaper recycles pods.
-	TapService(serviceUrl string) error
+	TapService(ctx context.Context, serviceUrl string) error
 
 	// UnTapService updates the isActive to false
-	UnTapService(key string, svcHost string)
+	UnTapService(ctx context.Context, key string, svcHost string)
 
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.
-	IsValid(*fscache.FuncSvc) bool
+	IsValid(context.Context, *fscache.FuncSvc) bool
 
 	// RefreshFuncPods refreshes function pods if the secrets/configmaps pods reference to get updated.
-	RefreshFuncPods(*zap.Logger, fv1.Function) error
+	RefreshFuncPods(context.Context, *zap.Logger, fv1.Function) error
 
 	// AdoptOrphanResources adopts existing resources created by the deleted executor.
-	AdoptExistingResources()
+	AdoptExistingResources(context.Context)
 
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
-	CleanupOldExecutorObjects()
+	CleanupOldExecutorObjects(context.Context)
 }

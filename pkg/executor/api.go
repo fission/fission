@@ -17,6 +17,7 @@ limitations under the License.
 package executor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -37,6 +38,7 @@ import (
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
@@ -67,12 +69,12 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if requestsPerpod == 0 {
 			requestsPerpod = 1
 		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(fn, requestsPerpod)
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
 		if err == nil {
 			// if a pod is already serving request then it already exists else validated
 			executor.logger.Debug("from cache", zap.Int("active", active))
-			if active > 1 || et.IsValid(fsvc) {
+			if active > 1 || et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
 				executor.logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
@@ -82,7 +84,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 				zap.String("function_name", fn.ObjectMeta.Name),
 				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(fsvc)
+			et.DeleteFuncSvcFromCache(ctx, fsvc)
 			active--
 		}
 
@@ -93,9 +95,9 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 			return
 		}
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
-		fsvc, err := et.GetFuncSvcFromCache(fn)
+		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
 		if err == nil {
-			if et.IsValid(fsvc) {
+			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
 				return
@@ -104,11 +106,11 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 				zap.String("function_name", fn.ObjectMeta.Name),
 				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(fsvc)
+			et.DeleteFuncSvcFromCache(ctx, fsvc)
 		}
 	}
 
-	serviceName, err := executor.getServiceForFunction(fn)
+	serviceName, err := executor.getServiceForFunction(ctx, fn)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		executor.logger.Error("error getting service for function",
@@ -141,7 +143,7 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 // stale addresses are not returned to the router.
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
-func (executor *Executor) getServiceForFunction(fn *fv1.Function) (string, error) {
+func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
 		function: fn,
@@ -163,6 +165,8 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 
 // find funcSvc and update its atime
 func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		executor.logger.Error("failed to read tap service request", zap.Error(err))
@@ -192,7 +196,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		err = et.TapService(svcHost)
+		err = et.TapService(ctx, svcHost)
 		if err != nil {
 			errs = multierror.Append(errs,
 				errors.Wrapf(err, "'%v' failed to tap function '%v' in '%v' with service url '%v'",
@@ -214,6 +218,8 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
@@ -235,7 +241,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 
 	et := executor.executorTypes[t]
 
-	et.UnTapService(key, tapSvcReq.ServiceURL)
+	et.UnTapService(ctx, key, tapSvcReq.ServiceURL)
 
 	w.WriteHeader(http.StatusOK)
 }

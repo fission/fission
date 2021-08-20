@@ -47,7 +47,7 @@ func getConfigmapRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionC
 	return relatedFunctions, nil
 }
 
-func ConfigMapEventHandlers(logger *zap.Logger, fissionClient *crd.FissionClient,
+func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 
 	return k8sCache.ResourceEventHandlerFuncs{
@@ -66,7 +66,7 @@ func ConfigMapEventHandlers(logger *zap.Logger, fissionClient *crd.FissionClient
 				if err != nil {
 					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				}
-				refreshPods(logger, funcs, types)
+				refreshPods(ctx, logger, funcs, types)
 			}
 		},
 	}

@@ -47,7 +47,7 @@ func getSecretRelatedFuncs(logger *zap.Logger, m *metav1.ObjectMeta, fissionClie
 	return relatedFunctions, nil
 }
 
-func SecretEventHandlers(logger *zap.Logger, fissionClient *crd.FissionClient,
+func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
@@ -65,7 +65,7 @@ func SecretEventHandlers(logger *zap.Logger, fissionClient *crd.FissionClient,
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				}
-				refreshPods(logger, funcs, types)
+				refreshPods(ctx, logger, funcs, types)
 			}
 		},
 	}

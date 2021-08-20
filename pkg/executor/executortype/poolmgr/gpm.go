@@ -160,7 +160,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.idleObjectReaper()
 }
 
-func (gpm *GenericPoolManager) GetTypeName() fv1.ExecutorType {
+func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
 	return fv1.ExecutorTypePoolmgr
 }
 
@@ -187,23 +187,23 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	return pool.getFuncSvc(ctx, fn)
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return nil, nil
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod)
 }
 
-func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	gpm.fsCache.DeleteFunctionSvc(fsvc)
 }
 
-func (gpm *GenericPoolManager) UnTapService(key string, svcHost string) {
+func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svcHost string) {
 	gpm.fsCache.MarkAvailable(key, svcHost)
 }
 
-func (gpm *GenericPoolManager) TapService(svcHost string) error {
+func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) error {
 	err := gpm.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -231,7 +231,7 @@ func (gpm *GenericPoolManager) getPodInfo(obj apiv1.ObjectReference) (*apiv1.Pod
 
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
-func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
+func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
 			pod, err := gpm.getPodInfo(obj)
@@ -255,7 +255,7 @@ func (gpm *GenericPoolManager) IsValid(fsvc *fscache.FuncSvc) bool {
 	return false
 }
 
-func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
 	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
@@ -301,7 +301,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(logger *zap.Logger, f fv1.Functio
 	return nil
 }
 
-func (gpm *GenericPoolManager) AdoptExistingResources() {
+func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("error getting environment list", zap.Error(err))
@@ -433,7 +433,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources() {
 	wg.Wait()
 }
 
-func (gpm *GenericPoolManager) CleanupOldExecutorObjects() {
+func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
 	gpm.logger.Info("Poolmanager starts to clean orphaned resources", zap.String("instanceID", gpm.instanceID))
 
 	errs := &multierror.Error{}
