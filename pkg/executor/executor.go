@@ -62,6 +62,7 @@ type (
 	}
 
 	createFuncServiceRequest struct {
+		context  context.Context
 		function *fv1.Function
 		respChan chan *createFuncServiceResponse
 	}
@@ -124,7 +125,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
+				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
@@ -195,7 +196,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				wg.Wait()
 
 				// get the function service from the cache
-				fsvc, err := executor.getFunctionServiceFromCache(req.function)
+				fsvc, err := executor.getFunctionServiceFromCache(req.context, req.function)
 
 				// fsCache return error when the entry does not exist/expire.
 				// It normally happened if there are multiple requests are
@@ -235,13 +236,13 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	return fsvc, fsvcErr
 }
 
-func (executor *Executor) getFunctionServiceFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
 		return nil, errors.Errorf("Unknown executor type '%v'", t)
 	}
-	return e.GetFuncSvcFromCache(fn)
+	return e.GetFuncSvcFromCache(ctx, fn)
 }
 
 func serveMetric(logger *zap.Logger) {
@@ -300,7 +301,9 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
 
+	ctx := context.Background()
 	cnm, err := container.MakeContainer(
+		ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, executorInstanceID, &funcInformer)
@@ -309,9 +312,9 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	}
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)
-	executorTypes[gpm.GetTypeName()] = gpm
-	executorTypes[ndm.GetTypeName()] = ndm
-	executorTypes[cnm.GetTypeName()] = cnm
+	executorTypes[gpm.GetTypeName(ctx)] = gpm
+	executorTypes[ndm.GetTypeName(ctx)] = ndm
+	executorTypes[cnm.GetTypeName(ctx)] = cnm
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 
@@ -321,9 +324,9 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		go func(et executortype.ExecutorType) {
 			defer wg.Done()
 			if adoptExistingResources {
-				et.AdoptExistingResources()
+				et.AdoptExistingResources(ctx)
 			}
-			et.CleanupOldExecutorObjects()
+			et.CleanupOldExecutorObjects(ctx)
 		}(et)
 	}
 	// set hard timeout for resource adoption
@@ -334,9 +337,8 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps().Informer()
 	secretInformer := k8sInformerFactory.Core().V1().Secrets().Informer()
 
-	cms := cms.MakeConfigSecretController(logger, fissionClient, kubernetesClient, executorTypes, &configmapInformer, &secretInformer)
+	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, &configmapInformer, &secretInformer)
 
-	ctx := context.Background()
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes, []k8sCache.SharedIndexInformer{
 		funcInformer, pkgInformer, envInformer, configmapInformer, secretInformer,
 	})

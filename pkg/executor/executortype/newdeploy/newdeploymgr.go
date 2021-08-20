@@ -139,7 +139,7 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 }
 
 // GetTypeName returns the executor type name.
-func (deploy *NewDeploy) GetTypeName() fv1.ExecutorType {
+func (deploy *NewDeploy) GetTypeName(ctx context.Context) fv1.ExecutorType {
 	return fv1.ExecutorTypeNewdeploy
 }
 
@@ -152,28 +152,28 @@ func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fsc
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
-func (deploy *NewDeploy) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (deploy *NewDeploy) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return deploy.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
-func (deploy *NewDeploy) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+func (deploy *NewDeploy) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
 // UnTapService has not been implemented for NewDeployment.
-func (deploy *NewDeploy) UnTapService(key string, svcHost string) {
+func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost string) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for NewDeployment
-func (deploy *NewDeploy) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
-func (deploy *NewDeploy) TapService(svcHost string) error {
+func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 	err := deploy.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (deploy *NewDeploy) TapService(svcHost string) error {
 	return nil
 }
 
-func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service, error) {
+func (deploy *NewDeploy) getServiceInfo(ctx context.Context, obj apiv1.ObjectReference) (*apiv1.Service, error) {
 	item, exists, err := utils.GetCachedItem(obj, deploy.serviceInformer)
 
 	if err != nil || !exists {
@@ -190,7 +190,7 @@ func (deploy *NewDeploy) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Servi
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		service, err := deploy.kubernetesClient.CoreV1().Services(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
 		return service, err
 	}
 
@@ -218,7 +218,7 @@ func (deploy *NewDeploy) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.D
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
-func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
+func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		deploy.logger.Error("address not found in function service")
 		return false
@@ -229,7 +229,7 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := deploy.getServiceInfo(obj)
+			_, err := deploy.getServiceInfo(ctx, obj)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					deploy.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -254,9 +254,9 @@ func (deploy *NewDeploy) IsValid(fsvc *fscache.FuncSvc) bool {
 }
 
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
-func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
-	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(context.TODO(), f.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 		UID:       env.ObjectMeta.UID,
 	})
 
-	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -285,7 +285,7 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
 			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
 
-		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(context.TODO(), deployment.ObjectMeta.Name,
+		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
@@ -296,8 +296,8 @@ func (deploy *NewDeploy) RefreshFuncPods(logger *zap.Logger, f fv1.Function) err
 }
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
-func (deploy *NewDeploy) AdoptExistingResources() {
-	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
+	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("error getting function list", zap.Error(err))
 		return
@@ -326,7 +326,7 @@ func (deploy *NewDeploy) AdoptExistingResources() {
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.
-func (deploy *NewDeploy) CleanupOldExecutorObjects() {
+func (deploy *NewDeploy) CleanupOldExecutorObjects(ctx context.Context) {
 	deploy.logger.Info("Newdeploy starts to clean orphaned resources", zap.String("instanceID", deploy.instanceID))
 
 	errs := &multierror.Error{}

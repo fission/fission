@@ -78,6 +78,7 @@ type (
 
 // MakeContainer initializes and returns an instance of CaaF
 func MakeContainer(
+	ctx context.Context,
 	logger *zap.Logger,
 	fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset,
@@ -112,7 +113,7 @@ func MakeContainer(
 		defaultIdlePodReapTime: 1 * time.Minute,
 	}
 
-	(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler())
+	(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler(ctx))
 
 	informerFactory, err := utils.GetInformerFactoryByExecutor(caaf.kubernetesClient, fv1.ExecutorTypeContainer)
 	if err != nil {
@@ -130,7 +131,7 @@ func (caaf *Container) Run(ctx context.Context) {
 }
 
 // GetTypeName returns the executor type name.
-func (caaf *Container) GetTypeName() fv1.ExecutorType {
+func (caaf *Container) GetTypeName(ctx context.Context) fv1.ExecutorType {
 	return fv1.ExecutorTypeContainer
 }
 
@@ -141,33 +142,33 @@ func (caaf *Container) GetTotalAvailable(fn *fv1.Function) int {
 }
 
 // UnTapService has not been implemented for CaaF.
-func (caaf *Container) UnTapService(key string, svcHost string) {
+func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost string) {
 	// Not Implemented for CaaF.
 }
 
 // GetFuncSvc returns a function service; error otherwise.
 func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	return caaf.createFunction(fn)
+	return caaf.createFunction(ctx, fn)
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
-func (caaf *Container) GetFuncSvcFromCache(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
-func (caaf *Container) DeleteFuncSvcFromCache(fsvc *fscache.FuncSvc) {
+func (caaf *Container) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	caaf.fsCache.DeleteEntry(fsvc)
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for Container Functions
-func (caaf *Container) GetFuncSvcFromPoolCache(fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
-func (caaf *Container) TapService(svcHost string) error {
+func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 	err := caaf.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -212,7 +213,7 @@ func (caaf *Container) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Dep
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
-func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
+func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		caaf.logger.Error("address not found in function service")
 		return false
@@ -248,11 +249,11 @@ func (caaf *Container) IsValid(fsvc *fscache.FuncSvc) bool {
 }
 
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
-func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error {
+func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, f fv1.Function) error {
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
-	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 	if err != nil {
@@ -261,7 +262,7 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := referencedResourcesRVSum(caaf.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := referencedResourcesRVSum(ctx, caaf.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
 		if err != nil {
 			return err
 		}
@@ -269,7 +270,7 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
 			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
 
-		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(context.TODO(), deployment.ObjectMeta.Name,
+		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
@@ -280,8 +281,8 @@ func (caaf *Container) RefreshFuncPods(logger *zap.Logger, f fv1.Function) error
 }
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
-func (caaf *Container) AdoptExistingResources() {
-	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func (caaf *Container) AdoptExistingResources(ctx context.Context) {
+	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		caaf.logger.Error("error getting function list", zap.Error(err))
 		return
@@ -296,7 +297,7 @@ func (caaf *Container) AdoptExistingResources() {
 			go func() {
 				defer wg.Done()
 
-				_, err = caaf.fnCreate(fn)
+				_, err = caaf.fnCreate(ctx, fn)
 				if err != nil {
 					caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
 					return
@@ -310,7 +311,7 @@ func (caaf *Container) AdoptExistingResources() {
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.
-func (caaf *Container) CleanupOldExecutorObjects() {
+func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
 	caaf.logger.Info("CaaF starts to clean orphaned resources", zap.String("instanceID", caaf.instanceID))
 
 	errs := &multierror.Error{}
@@ -339,14 +340,14 @@ func (caaf *Container) CleanupOldExecutorObjects() {
 	}
 }
 
-func (caaf *Container) createFunction(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 		return nil, nil
 	}
 
 	fsvcObj, err := caaf.throttler.RunOnce(string(fn.ObjectMeta.UID), func(ableToCreate bool) (interface{}, error) {
 		if ableToCreate {
-			return caaf.fnCreate(fn)
+			return caaf.fnCreate(ctx, fn)
 		}
 		return caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
 	})
@@ -378,7 +379,7 @@ func (caaf *Container) deleteFunction(fn *fv1.Function) error {
 	return err
 }
 
-func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	cleanupFunc := func(ns string, name string) {
 		err := caaf.cleanupContainer(ns, name)
 		if err != nil {
@@ -410,7 +411,7 @@ func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 
-	depl, err := caaf.createOrGetDeployment(fn, objName, deployLabels, deployAnnotations, ns)
+	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
 		go cleanupFunc(ns, objName)
@@ -471,7 +472,7 @@ func (caaf *Container) fnCreate(fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return fsvc, nil
 }
 
-func (caaf *Container) updateFunction(oldFn *fv1.Function, newFn *fv1.Function) error {
+func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, newFn *fv1.Function) error {
 
 	if oldFn.ObjectMeta.ResourceVersion == newFn.ObjectMeta.ResourceVersion {
 		return nil
@@ -498,7 +499,7 @@ func (caaf *Container) updateFunction(oldFn *fv1.Function, newFn *fv1.Function) 
 		caaf.logger.Info("function type changed to Container, creating resources",
 			zap.Any("old_function", oldFn.ObjectMeta),
 			zap.Any("new_function", newFn.ObjectMeta))
-		_, err := caaf.createFunction(newFn)
+		_, err := caaf.createFunction(ctx, newFn)
 		if err != nil {
 			caaf.updateStatus(oldFn, err, "error changing the function's type to Container")
 		}
@@ -583,13 +584,13 @@ func (caaf *Container) updateFunction(oldFn *fv1.Function, newFn *fv1.Function) 
 	}
 
 	if deployChanged {
-		return caaf.updateFuncDeployment(newFn)
+		return caaf.updateFuncDeployment(ctx, newFn)
 	}
 
 	return nil
 }
 
-func (caaf *Container) updateFuncDeployment(fn *fv1.Function) error {
+func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Function) error {
 
 	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
 	if err != nil {
@@ -609,7 +610,7 @@ func (caaf *Container) updateFuncDeployment(fn *fv1.Function) error {
 		ns = fn.ObjectMeta.Namespace
 	}
 
-	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(context.TODO(), fnObjName, metav1.GetOptions{})
+	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -617,7 +618,7 @@ func (caaf *Container) updateFuncDeployment(fn *fv1.Function) error {
 	// the resource version inside function packageRef is changed,
 	// so the content of fetchRequest in deployment cmd is different.
 	// Therefore, the deployment update will trigger a rolling update.
-	newDeployment, err := caaf.getDeploymentSpec(fn, existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
+	newDeployment, err := caaf.getDeploymentSpec(ctx, fn, existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
 		fnObjName, ns, deployLabels, caaf.getDeployAnnotations(fn.ObjectMeta))
 	if err != nil {
 		caaf.updateStatus(fn, err, "failed to get new deployment spec while updating function")

@@ -33,7 +33,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 )
 
-func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
+func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
@@ -47,12 +47,12 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 		minScale = 1
 	}
 
-	deployment, err := cn.getDeploymentSpec(fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+	deployment, err := cn.getDeploymentSpec(ctx, fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
-	existingDepl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
+	existingDepl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 	if err == nil {
 		// Try to adopt orphan deployment created by the old executor.
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
@@ -64,7 +64,7 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
-			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(context.TODO(), existingDepl, metav1.UpdateOptions{})
+			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting cn", zap.Error(err),
 					zap.String("cn", deployName), zap.String("ns", deployNamespace))
@@ -87,10 +87,10 @@ func (cn *Container) createOrGetDeployment(fn *fv1.Function, deployName string, 
 
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
-		depl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
+		depl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
+				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
 				cn.logger.Error("error while creating function deployment",
@@ -154,7 +154,7 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 	return nil, timeoutError
 }
 
-func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
+func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
@@ -201,7 +201,7 @@ func (cn *Container) getDeploymentSpec(fn *fv1.Function, targetReplicas *int32,
 		return nil, err
 	}
 
-	rvCount, err := referencedResourcesRVSum(cn.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := referencedResourcesRVSum(ctx, cn.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}

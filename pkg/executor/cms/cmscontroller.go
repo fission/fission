@@ -17,6 +17,8 @@ limitations under the License.
 package cms
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -40,7 +42,7 @@ type (
 )
 
 // MakeConfigSecretController makes a controller for configmaps and secrets which changes related functions
-func MakeConfigSecretController(logger *zap.Logger, fissionClient *crd.FissionClient,
+func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient,
 	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType,
 	configmapInformer *k8sCache.SharedIndexInformer,
 	secretInformer *k8sCache.SharedIndexInformer) *ConfigSecretController {
@@ -51,19 +53,19 @@ func MakeConfigSecretController(logger *zap.Logger, fissionClient *crd.FissionCl
 		secretInformer:    secretInformer,
 		fissionClient:     fissionClient,
 	}
-	(*configmapInformer).AddEventHandler(ConfigMapEventHandlers(logger, fissionClient, kubernetesClient, types))
-	(*secretInformer).AddEventHandler(SecretEventHandlers(logger, fissionClient, kubernetesClient, types))
+	(*configmapInformer).AddEventHandler(ConfigMapEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+	(*secretInformer).AddEventHandler(SecretEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
 
 	return cmsController
 }
 
-func refreshPods(logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
+func refreshPods(ctx context.Context, logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
 	for _, f := range funcs {
 		var err error
 
 		et, exists := types[f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 		if exists {
-			err = et.RefreshFuncPods(logger, f)
+			err = et.RefreshFuncPods(ctx, logger, f)
 		} else {
 			err = errors.Errorf("Unknown executor type '%v'", f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 		}
