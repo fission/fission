@@ -44,6 +44,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -69,9 +70,6 @@ type (
 
 		throttler *throttler.Throttler
 
-		funcInformer *k8sCache.SharedIndexInformer
-		envInformer  *k8sCache.SharedIndexInformer
-
 		serviceInformer    k8sCache.SharedIndexInformer
 		deploymentInformer k8sCache.SharedIndexInformer
 
@@ -87,8 +85,8 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer *k8sCache.SharedIndexInformer,
-	envInformer *k8sCache.SharedIndexInformer,
+	funcInformer finformerv1.FunctionInformer,
+	envInformer finformerv1.EnvironmentInformer,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -115,12 +113,10 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		defaultIdlePodReapTime: 2 * time.Minute,
-		funcInformer:           funcInformer,
-		envInformer:            envInformer,
 	}
 
-	(*nd.funcInformer).AddEventHandler(nd.FunctionEventHandlers())
-	(*nd.envInformer).AddEventHandler(nd.EnvEventHandlers())
+	funcInformer.Informer().AddEventHandler(nd.FunctionEventHandlers())
+	envInformer.Informer().AddEventHandler(nd.EnvEventHandlers())
 
 	informerFactory, err := utils.GetInformerFactoryByExecutor(nd.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {

@@ -43,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -68,7 +69,6 @@ type (
 
 		throttler *throttler.Throttler
 
-		funcInformer       *k8sCache.SharedIndexInformer
 		serviceInformer    k8sCache.SharedIndexInformer
 		deploymentInformer k8sCache.SharedIndexInformer
 
@@ -84,7 +84,7 @@ func MakeContainer(
 	kubernetesClient *kubernetes.Clientset,
 	namespace string,
 	instanceID string,
-	funcInformer *k8sCache.SharedIndexInformer) (executortype.ExecutorType, error) {
+	funcInformer finformerv1.FunctionInformer) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -105,15 +105,13 @@ func MakeContainer(
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
-		funcInformer: funcInformer,
-
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
 		defaultIdlePodReapTime: 1 * time.Minute,
 	}
 
-	(*caaf.funcInformer).AddEventHandler(caaf.FuncInformerHandler(ctx))
+	funcInformer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
 
 	informerFactory, err := utils.GetInformerFactoryByExecutor(caaf.kubernetesClient, fv1.ExecutorTypeContainer)
 	if err != nil {

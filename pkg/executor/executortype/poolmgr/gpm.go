@@ -46,6 +46,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -76,9 +77,6 @@ type (
 		enableIstio   bool
 		fetcherConfig *fetcherConfig.Config
 
-		funcInformer *k8sCache.SharedIndexInformer
-		pkgInformer  *k8sCache.SharedIndexInformer
-
 		podInformer k8sCache.SharedIndexInformer
 
 		defaultIdlePodReapTime time.Duration
@@ -104,8 +102,8 @@ func MakeGenericPoolManager(
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer *k8sCache.SharedIndexInformer,
-	pkgInformer *k8sCache.SharedIndexInformer,
+	funcInformer finformerv1.FunctionInformer,
+	pkgInformer finformerv1.PackageInformer,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -133,14 +131,12 @@ func MakeGenericPoolManager(
 		defaultIdlePodReapTime: 2 * time.Minute,
 		fetcherConfig:          fetcherConfig,
 		enableIstio:            enableIstio,
-		funcInformer:           funcInformer,
-		pkgInformer:            pkgInformer,
 	}
 
 	go gpm.service()
 
-	(*gpm.funcInformer).AddEventHandler(FunctionEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace, gpm.enableIstio))
-	(*gpm.pkgInformer).AddEventHandler(PackageEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace))
+	funcInformer.Informer().AddEventHandler(FunctionEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace, gpm.enableIstio))
+	pkgInformer.Informer().AddEventHandler(PackageEventHandlers(gpm.logger, gpm.kubernetesClient, gpm.namespace))
 
 	kubeInformerFactory, err := utils.GetInformerFactoryByExecutor(gpm.kubernetesClient, fv1.ExecutorTypePoolmgr)
 	if err != nil {

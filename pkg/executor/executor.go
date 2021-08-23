@@ -277,15 +277,15 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := informerFactory.Core().V1().Functions().Informer()
-	pkgInformer := informerFactory.Core().V1().Packages().Informer()
-	envInformer := informerFactory.Core().V1().Environments().Informer()
+	funcInformer := informerFactory.Core().V1().Functions()
+	pkgInformer := informerFactory.Core().V1().Packages()
+	envInformer := informerFactory.Core().V1().Environments()
 
 	gpm, err := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
-		&funcInformer, &pkgInformer,
+		funcInformer, pkgInformer,
 	)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation faied")
@@ -295,7 +295,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
-		&funcInformer, &envInformer,
+		funcInformer, envInformer,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation faied")
@@ -306,7 +306,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		ctx,
 		logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, executorInstanceID, &funcInformer)
+		functionNamespace, executorInstanceID, funcInformer)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation faied")
 	}
@@ -334,13 +334,13 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	util.WaitTimeout(wg, 30*time.Second)
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
-	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps().Informer()
-	secretInformer := k8sInformerFactory.Core().V1().Secrets().Informer()
+	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps()
+	secretInformer := k8sInformerFactory.Core().V1().Secrets()
 
-	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, &configmapInformer, &secretInformer)
+	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configmapInformer, secretInformer)
 
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes, []k8sCache.SharedIndexInformer{
-		funcInformer, pkgInformer, envInformer, configmapInformer, secretInformer,
+		funcInformer.Informer(), pkgInformer.Informer(), envInformer.Informer(), configmapInformer.Informer(), secretInformer.Informer(),
 	})
 	if err != nil {
 		return err
