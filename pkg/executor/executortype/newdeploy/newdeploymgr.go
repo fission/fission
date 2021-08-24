@@ -408,6 +408,7 @@ func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) e
 
 func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	cleanupFunc := func(ns string, name string) {
+		ctx := context.Background()
 		err := deploy.cleanupNewdeploy(ctx, ns, name)
 		if err != nil {
 			deploy.logger.Error("received error while cleaning function resources",
@@ -661,9 +662,10 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	// the resource version inside function packageRef is changed,
 	// so the content of fetchRequest in deployment cmd is different.
 	// Therefore, the deployment update will trigger a rolling update.
+	ownerRef := controllerutils.GetFnOwnerRef(fn)
 	newDeployment, err := deploy.getDeploymentSpec(ctx, fn, env,
 		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
-		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta), []metav1.OwnerReference{})
+		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta), []metav1.OwnerReference{*ownerRef})
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err

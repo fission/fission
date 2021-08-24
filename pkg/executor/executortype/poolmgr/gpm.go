@@ -153,7 +153,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.podInformer.Run(ctx.Done())
 	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
-	go gpm.idleObjectReaper(ctx)
+	go gpm.idleObjectReaper()
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -599,8 +599,8 @@ func (gpm *GenericPoolManager) eagerPoolCreator() {
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
-
+func (gpm *GenericPoolManager) idleObjectReaper() {
+	ctx := context.Background()
 	pollSleep := 5 * time.Second
 
 	for {

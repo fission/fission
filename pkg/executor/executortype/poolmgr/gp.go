@@ -144,7 +144,6 @@ func MakeGenericPool(
 	if err != nil {
 		return nil, err
 	}
-	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
 	go gp.startReadyPodController()
 	go gp.updateCPUUtilizationSvc()

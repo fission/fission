@@ -346,7 +346,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return err
 	}
 
-	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
+	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port, openTracingEnabled)
 	go serveMetric(logger)
 

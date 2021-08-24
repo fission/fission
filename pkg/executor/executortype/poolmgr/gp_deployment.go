@@ -201,5 +201,7 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 	}
 
 	gp.deployment = depl
+	gp.logger.Info("deployment created", zap.String("deployment", depl.Name), zap.String("ns", depl.Namespace), zap.Any("environment", env.ObjectMeta))
+
 	return nil
 }
