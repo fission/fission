@@ -33,7 +33,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 )
 
-func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
+func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
@@ -47,7 +47,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		minScale = 1
 	}
 
-	deployment, err := cn.getDeploymentSpec(ctx, fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+	deployment, err := cn.getDeploymentSpec(ctx, fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations, ownerRefs)
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +75,14 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		}
 
 		if *existingDepl.Spec.Replicas < minScale {
-			err = cn.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
+			err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
 				cn.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
 				return nil, err
 			}
 		}
 		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = cn.waitForDeploy(existingDepl, minScale, specializationTimeout)
+			existingDepl, err = cn.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
 		}
 
 		return existingDepl, err
@@ -102,28 +102,28 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 			}
 		}
 		if minScale > 0 {
-			depl, err = cn.waitForDeploy(depl, minScale, specializationTimeout)
+			depl, err = cn.waitForDeploy(ctx, depl, minScale, specializationTimeout)
 		}
 		return depl, err
 	}
 	return nil, err
 }
 
-func (cn *Container) updateDeployment(deployment *appsv1.Deployment, ns string) error {
-	_, err := cn.kubernetesClient.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+func (cn *Container) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, ns string) error {
+	_, err := cn.kubernetesClient.AppsV1().Deployments(ns).Update(ctx, deployment, metav1.UpdateOptions{})
 	return err
 }
 
-func (cn *Container) deleteDeployment(ns string, name string) error {
+func (cn *Container) deleteDeployment(ctx context.Context, ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it marks for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(context.TODO(), name, metav1.DeleteOptions{
+	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
 }
 
-func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
+func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
 
 	// if no specializationTimeout is set, use default value
@@ -132,7 +132,7 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err := cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(context.TODO(), depl.Name, metav1.GetOptions{})
+		latestDepl, err := cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +155,7 @@ func (cn *Container) waitForDeploy(depl *appsv1.Deployment, replicas int32, spec
 }
 
 func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, targetReplicas *int32,
-	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
+	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
@@ -196,7 +196,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	resources := cn.getResources(fn)
 
 	// Other executor types rely on Environments to add configmaps and secrets
-	envFromSources, err := util.ConvertConfigSecrets(fn, cn.kubernetesClient)
+	envFromSources, err := util.ConvertConfigSecrets(ctx, fn, cn.kubernetesClient)
 	if err != nil {
 		return nil, err
 	}
@@ -253,9 +253,10 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        deployName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
+			Name:            deployName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerRefs,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -277,12 +278,12 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	return deployment, nil
 }
 
-func (caaf *Container) scaleDeployment(deplNS string, deplName string, replicas int32) error {
+func (caaf *Container) scaleDeployment(ctx context.Context, deplNS string, deplName string, replicas int32) error {
 	caaf.logger.Info("scaling deployment",
 		zap.String("deployment", deplName),
 		zap.String("namespace", deplNS),
 		zap.Int32("replicas", replicas))
-	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(context.TODO(), deplName, &autoscalingv1.Scale{
+	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(ctx, deplName, &autoscalingv1.Scale{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deplName,
 			Namespace: deplNS,

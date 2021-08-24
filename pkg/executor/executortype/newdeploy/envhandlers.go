@@ -32,17 +32,18 @@ func (deploy *NewDeploy) EnvEventHandlers() k8sCache.ResourceEventHandlerFuncs {
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*fv1.Environment)
 			oldEnv := oldObj.(*fv1.Environment)
+			ctx := context.Background()
 			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
 			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
 				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))
-				funcs := deploy.getEnvFunctions(&newEnv.ObjectMeta)
+				funcs := deploy.getEnvFunctions(ctx, &newEnv.ObjectMeta)
 				for _, f := range funcs {
-					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(context.TODO(), f.ObjectMeta.Name, metav1.GetOptions{})
+					function, err := deploy.fissionClient.CoreV1().Functions(f.ObjectMeta.Namespace).Get(ctx, f.ObjectMeta.Name, metav1.GetOptions{})
 					if err != nil {
 						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
 						continue
 					}
-					err = deploy.updateFuncDeployment(function, newEnv)
+					err = deploy.updateFuncDeployment(ctx, function, newEnv)
 					if err != nil {
 						deploy.logger.Error("Error updating function", zap.Error(err), zap.Any("function", function))
 						continue

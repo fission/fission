@@ -34,8 +34,8 @@ const (
 	DeploymentVersion = "apps/v1"
 )
 
-func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
+func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
+	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*asv1.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
@@ -53,9 +53,10 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 
 	hpa := &asv1.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        hpaName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
+			Name:            hpaName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerRefs,
 		},
 		Spec: asv1.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: asv1.CrossVersionObjectReference{
@@ -69,14 +70,14 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 		},
 	}
 
-	existingHpa, err := cn.getHpa(depl.ObjectMeta.Namespace, hpaName)
+	existingHpa, err := cn.getHpa(ctx, depl.ObjectMeta.Namespace, hpaName)
 	if err == nil {
 		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
 			existingHpa.Spec = hpa.Spec
-			existingHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(context.TODO(), existingHpa, metav1.UpdateOptions{})
+			existingHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
@@ -85,10 +86,10 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 		}
 		return existingHpa, err
 	} else if k8s_err.IsNotFound(err) {
-		cHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(context.TODO(), hpa, metav1.CreateOptions{})
+		cHpa, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(ctx, hpa, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				cHpa, err = cn.getHpa(depl.ObjectMeta.Namespace, hpaName)
+				cHpa, err = cn.getHpa(ctx, depl.ObjectMeta.Namespace, hpaName)
 			}
 			if err != nil {
 				return nil, err
@@ -99,15 +100,15 @@ func (cn *Container) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionS
 	return nil, err
 }
 
-func (cn *Container) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
-	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(context.TODO(), name, metav1.GetOptions{})
+func (cn *Container) getHpa(ctx context.Context, ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
+	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (cn *Container) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(context.TODO(), hpa, metav1.UpdateOptions{})
+func (cn *Container) updateHpa(ctx context.Context, hpa *asv1.HorizontalPodAutoscaler) error {
+	_, err := cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(ctx, hpa, metav1.UpdateOptions{})
 	return err
 }
 
-func (cn *Container) deleteHpa(ns string, name string) error {
-	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+func (cn *Container) deleteHpa(ctx context.Context, ns string, name string) error {
+	return cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }

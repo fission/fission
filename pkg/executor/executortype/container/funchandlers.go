@@ -55,7 +55,7 @@ func (caaf *Container) FuncInformerHandler(ctx context.Context) k8sCache.Resourc
 			go func() {
 				log := caaf.logger.With(zap.String("function_name", fn.ObjectMeta.Name), zap.String("function_namespace", fn.ObjectMeta.Namespace))
 				log.Debug("start function delete handler")
-				err := caaf.deleteFunction(fn)
+				err := caaf.deleteFunction(ctx, fn)
 				if err != nil {
 					log.Error("error deleting function", zap.Error(err))
 				}

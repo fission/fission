@@ -57,7 +57,7 @@ func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
 }
 
 // ConvertConfigSecrets returns envFromSource which can be passed directly into the pod spec
-func ConvertConfigSecrets(fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.EnvFromSource, error) {
+func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.EnvFromSource, error) {
 
 	cmList := fn.Spec.ConfigMaps
 	secList := fn.Spec.Secrets
@@ -65,9 +65,9 @@ func ConvertConfigSecrets(fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.E
 	secEnvSources := make([]*apiv1.SecretEnvSource, 0)
 	for _, cm := range cmList {
 		if cm.Namespace != fn.Namespace {
-			return nil, errors.New("Function should not reference config map of different namespace")
+			return nil, errors.New("function should not reference config map of different namespace")
 		}
-		_, err := kc.CoreV1().ConfigMaps(cm.Namespace).Get(context.TODO(), cm.Name, metav1.GetOptions{})
+		_, err := kc.CoreV1().ConfigMaps(cm.Namespace).Get(ctx, cm.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -81,9 +81,9 @@ func ConvertConfigSecrets(fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.E
 
 	for _, sec := range secList {
 		if sec.Namespace != fn.Namespace {
-			return nil, errors.New("Function should not reference secret of different namespace")
+			return nil, errors.New("function should not reference secret of different namespace")
 		}
-		_, err := kc.CoreV1().Secrets(sec.Namespace).Get(context.TODO(), sec.Name, metav1.GetOptions{})
+		_, err := kc.CoreV1().Secrets(sec.Namespace).Get(ctx, sec.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}

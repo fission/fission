@@ -73,7 +73,7 @@ func makePackageWatcher(logger *zap.Logger, fissionClient *crd.FissionClient, k8
 // 5. Update package resource in package ref of functions that share the same package
 // 6. Update package status to succeed state
 // *. Update package status to failed state,if any one of steps above failed/time out
-func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
+func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	// Ignore duplicate build requests
 	key := fmt.Sprintf("%v-%v", srcpkg.ObjectMeta.Name, srcpkg.ObjectMeta.ResourceVersion)
 	_, err := pkgw.buildCache.Set(key, srcpkg)
@@ -95,7 +95,7 @@ func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
 		return
 	}
 
-	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(context.TODO(), pkg.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
 		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
@@ -167,7 +167,7 @@ func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
 			// Add the package getter rolebinding to builder sa
 			// we continue here if role binding was not setup successfully. this is because without this, the fetcher wont be able to fetch the source pkg into the container and
 			// the build will fail eventually
-			err := utils.SetupRoleBinding(pkgw.logger, pkgw.k8sClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionBuilderSA, builderNs)
+			err := utils.SetupRoleBinding(ctx, pkgw.logger, pkgw.k8sClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionBuilderSA, builderNs)
 			if err != nil {
 				pkgw.logger.Error("error setting up role binding for package",
 					zap.Error(err),
@@ -181,7 +181,6 @@ func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
 					zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
 			}
 
-			ctx := context.Background()
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
@@ -200,7 +199,7 @@ func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
 			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
 
 			fnList, err := pkgw.fissionClient.CoreV1().
-				Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+				Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				e := "error getting function list"
 				pkgw.logger.Error(e, zap.Error(err))
@@ -224,7 +223,7 @@ func (pkgw *packageWatcher) build(srcpkg *fv1.Package) {
 					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
 					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
 					// update CRD
-					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(context.TODO(), &fn, metav1.UpdateOptions{})
+					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 					if err != nil {
 						e := "error updating function package resource version"
 						pkgw.logger.Error(e, zap.Error(err))
@@ -296,7 +295,8 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 		}
 		// Only build pending state packages.
 		if pkg.Status.BuildStatus == fv1.BuildStatusPending {
-			go pkgw.build(pkg)
+			ctx := context.Background()
+			go pkgw.build(ctx, pkg)
 		}
 	}
 	return k8sCache.ResourceEventHandlerFuncs{
