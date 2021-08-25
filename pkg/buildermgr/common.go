@@ -47,7 +47,7 @@ import (
 func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, envBuilderNamespace string,
 	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
-	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(context.TODO(), pkg.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		e := "error getting environment CRD info"
 		logger.Error(e, zap.Error(err))

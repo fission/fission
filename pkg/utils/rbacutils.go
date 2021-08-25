@@ -266,7 +266,7 @@ func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient *kubern
 			zap.String("role_binding", roleBinding),
 			zap.String("role_binding_namespace", roleBindingNs))
 		rbObj = makeRoleBindingObj(roleBinding, roleBindingNs, role, roleKind, sa, saNamespace)
-		_, err = k8sClient.RbacV1().RoleBindings(roleBindingNs).Create(context.TODO(), rbObj, metav1.CreateOptions{})
+		_, err = k8sClient.RbacV1().RoleBindings(roleBindingNs).Create(ctx, rbObj, metav1.CreateOptions{})
 		if k8serrors.IsAlreadyExists(err) {
 			logger.Debug("rolebinding already exists in namespace - adding service account to rolebinding",
 				zap.String("service_account_name", sa),
