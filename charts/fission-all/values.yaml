@@ -140,7 +140,7 @@ router:
 
   ## Sample with a rate per time window (traces/second)
   traceSamplingRate: 0.5
-  
+
   ## Extend the container specs for the core fission pods.
   ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
   ## For example:
@@ -218,7 +218,6 @@ kafka:
       caCert: "" # path to certificate containing public key of CA authority
       userCert: "" # path to certificate containing public key of the user signed by CA authority
       userKey: "" # path to private key of the user
-
 
   # brokers: 'my-broker.kafka:9092' # or my-bootstrap-server.kafka:9092/9093
   # Sample config for authentication
@@ -349,7 +348,7 @@ openTracing:
 
   ## if enabled is true, the variable is endpoint of Jaeger collector in the format shown below
   #collectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
-  
+
   ## uniformly sample traces with the given probabilistic sampling rate
   #samplingRate: 0.75
 
@@ -380,6 +379,9 @@ mqt_keda:
     gcp_pub_sub:
       image: fission/keda-gcp-pubsub-http-connector
       tag: v0.2
+    redis:
+      image: blackfly19/keda-redislist-http-connector
+      tag: v5
 
 ## Enable Pprof based profiling
 pprof:
