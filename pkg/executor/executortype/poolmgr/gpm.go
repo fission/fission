@@ -522,6 +522,7 @@ func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment
 
 func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environment) {
 	gpm.requestChannel <- &request{
+		ctx:         ctx,
 		requestType: CLEANUP_POOL,
 		env:         env,
 	}
