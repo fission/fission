@@ -17,6 +17,8 @@ limitations under the License.
 package poolmgr
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -42,10 +44,10 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clien
 			if pkg.Spec.Environment.Namespace != metav1.NamespaceDefault {
 				envNs = pkg.Spec.Environment.Namespace
 			}
-
+			ctx := context.Background()
 			// here, we return if we hit an error during rolebinding setup. this is because this rolebinding is mandatory for
 			// every function's package to be loaded into its env. without that, there's no point to move forward.
-			err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
+			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
 			if err != nil {
 				logger.Error("error creating rolebinding for package",
 					zap.Error(err),
@@ -79,7 +81,8 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clien
 					envNs = newPkg.Spec.Environment.Namespace
 				}
 
-				err := utils.SetupRoleBinding(logger, kubernetesClient, fv1.PackageGetterRB,
+				ctx := context.Background()
+				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB,
 					newPkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)
 				if err != nil {

@@ -42,7 +42,7 @@ func (cn *Container) getSvPort(fn *fv1.Function) (port int32, err error) {
 	return fn.Spec.PodSpec.Containers[0].Ports[0].ContainerPort, nil
 }
 
-func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	targetPort, err := cn.getSvPort(fn)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 		},
 	}
 
-	existingSvc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
+	existingSvc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
@@ -75,7 +75,7 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type
-			existingSvc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Update(context.TODO(), existingSvc, metav1.UpdateOptions{})
+			existingSvc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
 			if err != nil {
 				cn.logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
@@ -84,10 +84,10 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 		}
 		return existingSvc, err
 	} else if k8s_err.IsNotFound(err) {
-		svc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Create(context.TODO(), service, metav1.CreateOptions{})
+		svc, err := cn.kubernetesClient.CoreV1().Services(svcNamespace).Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				svc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
+				svc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -98,6 +98,6 @@ func (cn *Container) createOrGetSvc(fn *fv1.Function, deployLabels map[string]st
 	return nil, err
 }
 
-func (cn *Container) deleteSvc(ns string, name string) error {
-	return cn.kubernetesClient.CoreV1().Services(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+func (cn *Container) deleteSvc(ctx context.Context, ns string, name string) error {
+	return cn.kubernetesClient.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }

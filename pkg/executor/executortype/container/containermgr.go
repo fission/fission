@@ -174,7 +174,7 @@ func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 	return nil
 }
 
-func (caaf *Container) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service, error) {
+func (caaf *Container) getServiceInfo(ctx context.Context, obj apiv1.ObjectReference) (*apiv1.Service, error) {
 	item, exists, err := utils.GetCachedItem(obj, caaf.serviceInformer)
 
 	if err != nil || !exists {
@@ -183,7 +183,7 @@ func (caaf *Container) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		service, err := caaf.kubernetesClient.CoreV1().Services(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		service, err := caaf.kubernetesClient.CoreV1().Services(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
 		return service, err
 	}
 
@@ -191,7 +191,7 @@ func (caaf *Container) getServiceInfo(obj apiv1.ObjectReference) (*apiv1.Service
 	return service, nil
 }
 
-func (caaf *Container) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
+func (caaf *Container) getDeploymentInfo(ctx context.Context, obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
 	item, exists, err := utils.GetCachedItem(obj, caaf.deploymentInformer)
 
 	if err != nil || !exists {
@@ -200,7 +200,7 @@ func (caaf *Container) getDeploymentInfo(obj apiv1.ObjectReference) (*appsv1.Dep
 			zap.Bool("exists", exists),
 			zap.Error(err),
 		)
-		deployment, err := caaf.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(context.TODO(), obj.Name, metav1.GetOptions{})
+		deployment, err := caaf.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
 		return deployment, err
 	}
 
@@ -222,7 +222,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := caaf.getServiceInfo(obj)
+			_, err := caaf.getServiceInfo(ctx, obj)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					caaf.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -231,7 +231,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 			}
 
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := caaf.getDeploymentInfo(obj)
+			currentDeploy, err := caaf.getDeploymentInfo(ctx, obj)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					caaf.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -317,17 +317,17 @@ func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
 		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer)}).AsSelector().String(),
 	}
 
-	err := reaper.CleanupHpa(caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
+	err := reaper.CleanupHpa(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
 		errs = multierror.Append(errs, err)
 	}
 
-	err = reaper.CleanupDeployments(caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
+	err = reaper.CleanupDeployments(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
 		errs = multierror.Append(errs, err)
 	}
 
-	err = reaper.CleanupServices(caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
+	err = reaper.CleanupServices(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
 		errs = multierror.Append(errs, err)
 	}
@@ -366,11 +366,11 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 	return fsvc, err
 }
 
-func (caaf *Container) deleteFunction(fn *fv1.Function) error {
+func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) error {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 		return nil
 	}
-	err := caaf.fnDelete(fn)
+	err := caaf.fnDelete(ctx, fn)
 	if err != nil {
 		err = errors.Wrapf(err, "error deleting kubernetes objects of function %v", fn.ObjectMeta)
 	}
@@ -379,7 +379,7 @@ func (caaf *Container) deleteFunction(fn *fv1.Function) error {
 
 func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	cleanupFunc := func(ns string, name string) {
-		err := caaf.cleanupContainer(ns, name)
+		err := caaf.cleanupContainer(ctx, ns, name)
 		if err != nil {
 			caaf.logger.Error("received error while cleaning function resources",
 				zap.String("namespace", ns), zap.String("name", name))
@@ -401,7 +401,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	// Since Container waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	svc, err := caaf.createOrGetSvc(fn, deployLabels, deployAnnotations, objName, ns)
+	svc, err := caaf.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		caaf.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
 		go cleanupFunc(ns, objName)
@@ -416,7 +416,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
-	hpa, err := caaf.createOrGetHpa(objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	hpa, err := caaf.createOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)
@@ -488,7 +488,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		caaf.logger.Info("function does not use new deployment executor anymore, deleting resources",
 			zap.Any("function", newFn))
 		// IMP - pass the oldFn, as the new/modified function is not in cache
-		return caaf.deleteFunction(oldFn)
+		return caaf.deleteFunction(ctx, oldFn)
 	}
 
 	// Executor type changed to Container from something else
@@ -519,7 +519,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 			return err
 		}
 
-		hpa, err := caaf.getHpa(ns, fsvc.Name)
+		hpa, err := caaf.getHpa(ctx, ns, fsvc.Name)
 		if err != nil {
 			caaf.updateStatus(oldFn, err, "error getting HPA while updating function")
 			return err
@@ -545,7 +545,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		}
 
 		if hpaChanged {
-			err := caaf.updateHpa(hpa)
+			err := caaf.updateHpa(ctx, hpa)
 			if err != nil {
 				caaf.updateStatus(oldFn, err, "error updating HPA while updating function")
 				return err
@@ -623,7 +623,7 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 		return err
 	}
 
-	err = caaf.updateDeployment(newDeployment, ns)
+	err = caaf.updateDeployment(ctx, newDeployment, ns)
 	if err != nil {
 		caaf.updateStatus(fn, err, "failed to update deployment while updating function")
 		return err
@@ -632,7 +632,7 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 	return nil
 }
 
-func (caaf *Container) fnDelete(fn *fv1.Function) error {
+func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	multierr := &multierror.Error{}
 
 	// GetByFunction uses resource version as part of cache key, however,
@@ -661,7 +661,7 @@ func (caaf *Container) fnDelete(fn *fv1.Function) error {
 		ns = fn.ObjectMeta.Namespace
 	}
 
-	err = caaf.cleanupContainer(ns, objName)
+	err = caaf.cleanupContainer(ctx, ns, objName)
 	multierr = multierror.Append(multierr, err)
 
 	return multierr.ErrorOrNil()
@@ -716,6 +716,7 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 
 // idleObjectReaper reaps objects after certain idle time
 func (caaf *Container) idleObjectReaper() {
+	ctx := context.Background()
 
 	pollSleep := 5 * time.Second
 	for {
@@ -734,7 +735,7 @@ func (caaf *Container) idleObjectReaper() {
 				continue
 			}
 
-			fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(context.TODO(), fsvc.Function.Name, metav1.GetOptions{})
+			fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
 			if err != nil {
 				// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
 				// so we ignore the not found error for functions with CaaF executor type here.
@@ -762,7 +763,7 @@ func (caaf *Container) idleObjectReaper() {
 				}
 
 				currentDeploy, err := caaf.kubernetesClient.AppsV1().
-					Deployments(deployObj.Namespace).Get(context.TODO(), deployObj.Name, metav1.GetOptions{})
+					Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
 				if err != nil {
 					caaf.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 					return
@@ -775,7 +776,7 @@ func (caaf *Container) idleObjectReaper() {
 					return
 				}
 
-				err = caaf.scaleDeployment(deployObj.Namespace, deployObj.Name, minScale)
+				err = caaf.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
 				if err != nil {
 					caaf.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}

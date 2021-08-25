@@ -65,10 +65,10 @@ func (cn *Container) getResources(fn *fv1.Function) apiv1.ResourceRequirements {
 }
 
 // cleanupContainer cleans all kubernetes objects related to function
-func (cn *Container) cleanupContainer(ns string, name string) error {
+func (cn *Container) cleanupContainer(ctx context.Context, ns string, name string) error {
 	result := &multierror.Error{}
 
-	err := cn.deleteSvc(ns, name)
+	err := cn.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		cn.logger.Error("error deleting service for Container function",
 			zap.Error(err),
@@ -77,7 +77,7 @@ func (cn *Container) cleanupContainer(ns string, name string) error {
 		result = multierror.Append(result, err)
 	}
 
-	err = cn.deleteHpa(ns, name)
+	err = cn.deleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		cn.logger.Error("error deleting HPA for Container function",
 			zap.Error(err),
@@ -86,7 +86,7 @@ func (cn *Container) cleanupContainer(ns string, name string) error {
 		result = multierror.Append(result, err)
 	}
 
-	err = cn.deleteDeployment(ns, name)
+	err = cn.deleteDeployment(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		cn.logger.Error("error deleting deployment for Container function",
 			zap.Error(err),

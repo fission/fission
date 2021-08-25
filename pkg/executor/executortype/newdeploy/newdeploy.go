@@ -45,7 +45,7 @@ const (
 	DeploymentVersion = "apps/v1"
 )
 
-func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Environment,
+func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment,
 	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
 	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
@@ -58,12 +58,12 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		minScale = 1
 	}
 
-	deployment, err := deploy.getDeploymentSpec(fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
-	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
+	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 	if err == nil {
 		// Try to adopt orphan deployment created by the old executor.
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
@@ -75,7 +75,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
-			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(context.TODO(), existingDepl, metav1.UpdateOptions{})
+			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 			if err != nil {
 				deploy.logger.Warn("error adopting deploy", zap.Error(err),
 					zap.String("deploy", deployName), zap.String("ns", deployNamespace))
@@ -86,27 +86,27 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 		}
 
 		if *existingDepl.Spec.Replicas < minScale {
-			err = deploy.scaleDeployment(existingDepl.Namespace, existingDepl.Name, minScale)
+			err = deploy.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
 				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
 				return nil, err
 			}
 		}
 		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = deploy.waitForDeploy(existingDepl, minScale, specializationTimeout)
+			existingDepl, err = deploy.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
 		}
 
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
-		err := deploy.setupRBACObjs(deployNamespace, fn)
+		err := deploy.setupRBACObjs(ctx, deployNamespace, fn)
 		if err != nil {
 			return nil, err
 		}
 
-		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
+		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				depl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(context.TODO(), deployName, metav1.GetOptions{})
+				depl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
 				deploy.logger.Error("error while creating function deployment",
@@ -118,14 +118,14 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *fv1.Function, env *fv1.Enviro
 			}
 		}
 		if minScale > 0 {
-			depl, err = deploy.waitForDeploy(depl, minScale, specializationTimeout)
+			depl, err = deploy.waitForDeploy(ctx, depl, minScale, specializationTimeout)
 		}
 		return depl, err
 	}
 	return nil, err
 }
 
-func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function) error {
+func (deploy *NewDeploy) setupRBACObjs(ctx context.Context, deployNamespace string, fn *fv1.Function) error {
 	// create fetcher SA in this ns, if not already created
 	err := deploy.fetcherConfig.SetupServiceAccount(deploy.kubernetesClient, deployNamespace, fn.ObjectMeta)
 	if err != nil {
@@ -139,7 +139,7 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	}
 
 	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
-	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
@@ -150,7 +150,7 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = utils.SetupRoleBinding(deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
@@ -166,21 +166,21 @@ func (deploy *NewDeploy) setupRBACObjs(deployNamespace string, fn *fv1.Function)
 	return nil
 }
 
-func (deploy *NewDeploy) updateDeployment(deployment *appsv1.Deployment, ns string) error {
-	_, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+func (deploy *NewDeploy) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, ns string) error {
+	_, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Update(ctx, deployment, metav1.UpdateOptions{})
 	return err
 }
 
-func (deploy *NewDeploy) deleteDeployment(ns string, name string) error {
+func (deploy *NewDeploy) deleteDeployment(ctx context.Context, ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
 	// DeletePropagationForeground not advisable; it marks for deleteion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
-	return deploy.kubernetesClient.AppsV1().Deployments(ns).Delete(context.TODO(), name, metav1.DeleteOptions{
+	return deploy.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
 }
 
-func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
+func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
@@ -233,7 +233,7 @@ func (deploy *NewDeploy) getDeploymentSpec(fn *fv1.Function, env *fv1.Environmen
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
-	rvCount, err := referencedResourcesRVSum(deploy.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +366,7 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 	return resources
 }
 
-func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.ExecutionStrategy,
+func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
 	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
@@ -401,14 +401,14 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 		},
 	}
 
-	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(context.TODO(), hpaName, metav1.GetOptions{})
+	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
 			existingHpa.Spec = hpa.Spec
-			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(context.TODO(), existingHpa, metav1.UpdateOptions{})
+			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
 				deploy.logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
@@ -417,10 +417,10 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 		}
 		return existingHpa, err
 	} else if k8s_err.IsNotFound(err) {
-		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(context.TODO(), hpa, metav1.CreateOptions{})
+		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(ctx, hpa, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				cHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(context.TODO(), hpaName, metav1.GetOptions{})
+				cHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -431,20 +431,20 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fv1.Execut
 	return nil, err
 }
 
-func (deploy *NewDeploy) getHpa(ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(context.TODO(), name, metav1.GetOptions{})
+func (deploy *NewDeploy) getHpa(ctx context.Context, ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(context.TODO(), hpa, metav1.UpdateOptions{})
+func (deploy *NewDeploy) updateHpa(ctx context.Context, hpa *asv1.HorizontalPodAutoscaler) error {
+	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(ctx, hpa, metav1.UpdateOptions{})
 	return err
 }
 
-func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+func (deploy *NewDeploy) deleteHpa(ctx context.Context, ns string, name string) error {
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
@@ -465,7 +465,7 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 		},
 	}
 
-	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
+	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
 	if err == nil {
 		// to adopt orphan service
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
@@ -474,7 +474,7 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type
-			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(context.TODO(), existingSvc, metav1.UpdateOptions{})
+			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
 			if err != nil {
 				deploy.logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
@@ -483,10 +483,10 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 		}
 		return existingSvc, err
 	} else if k8s_err.IsNotFound(err) {
-		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(context.TODO(), service, metav1.CreateOptions{})
+		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(context.TODO(), svcName, metav1.GetOptions{})
+				svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -497,11 +497,11 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, deployAn
 	return nil, err
 }
 
-func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
-	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) error {
+	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
+func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
 
 	// if no specializationTimeout is set, use default value
@@ -510,7 +510,7 @@ func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, 
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(context.TODO(), depl.Name, metav1.GetOptions{})
+		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -533,10 +533,10 @@ func (deploy *NewDeploy) waitForDeploy(depl *appsv1.Deployment, replicas int32, 
 }
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
-func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
+func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name string) error {
 	result := &multierror.Error{}
 
-	err := deploy.deleteSvc(ns, name)
+	err := deploy.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting service for newdeploy function",
 			zap.Error(err),
@@ -545,7 +545,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 		result = multierror.Append(result, err)
 	}
 
-	err = deploy.deleteHpa(ns, name)
+	err = deploy.deleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting HPA for newdeploy function",
 			zap.Error(err),
@@ -554,7 +554,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 		result = multierror.Append(result, err)
 	}
 
-	err = deploy.deleteDeployment(ns, name)
+	err = deploy.deleteDeployment(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting deployment for newdeploy function",
 			zap.Error(err),
@@ -574,11 +574,11 @@ func (deploy *NewDeploy) cleanupNewdeploy(ns string, name string) error {
 // identical way to get a value that can reflect resources changed without affecting by the time.
 // To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
 // scenario since the sum of the resource version is always the same as long as no resources changed.
-func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+func referencedResourcesRVSum(ctx context.Context, client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
 	rvCount := 0
 
 	if len(secrets) > 0 {
-		list, err := client.CoreV1().Secrets(namespace).List(context.TODO(), metav1.ListOptions{})
+		list, err := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}
@@ -598,7 +598,7 @@ func referencedResourcesRVSum(client *kubernetes.Clientset, namespace string, se
 	}
 
 	if len(cfgmaps) > 0 {
-		list, err := client.CoreV1().ConfigMaps(namespace).List(context.TODO(), metav1.ListOptions{})
+		list, err := client.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return 0, err
 		}

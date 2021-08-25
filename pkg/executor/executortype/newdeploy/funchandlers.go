@@ -16,6 +16,8 @@ limitations under the License.
 package newdeploy
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -29,9 +31,10 @@ func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFu
 			// and worker pattern to process items instead of moving process to another goroutine.
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
 			go func() {
+				ctx := context.Background()
 				fn := obj.(*fv1.Function)
 				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-				_, err := deploy.createFunction(fn)
+				_, err := deploy.createFunction(ctx, fn)
 				if err != nil {
 					deploy.logger.Error("error eager creating function",
 						zap.Error(err),
@@ -43,7 +46,8 @@ func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFu
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
 			go func() {
-				err := deploy.deleteFunction(fn)
+				ctx := context.Background()
+				err := deploy.deleteFunction(ctx, fn)
 				if err != nil {
 					deploy.logger.Error("error deleting function",
 						zap.Error(err),
@@ -55,7 +59,8 @@ func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFu
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
 			go func() {
-				err := deploy.updateFunction(oldFn, newFn)
+				ctx := context.Background()
+				err := deploy.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
 					deploy.logger.Error("error updating function",
 						zap.Error(err),

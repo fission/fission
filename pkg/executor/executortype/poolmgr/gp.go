@@ -143,7 +143,6 @@ func MakeGenericPool(
 	if err != nil {
 		return nil, err
 	}
-	gpLogger.Info("deployment created", zap.Any("environment", env.ObjectMeta))
 
 	go gp.startReadyPodController()
 	go gp.updateCPUUtilizationSvc()
@@ -223,7 +222,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
 // returns the key and pod API object.
-func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Pod, error) {
+func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
 	expoDelay := 100 * time.Millisecond
 	for {
@@ -277,7 +276,7 @@ func (gp *GenericPool) choosePod(newLabels map[string]string) (string, *apiv1.Po
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
 			gp.logger.Info("relabel pod", zap.String("pod", patch))
-			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(context.TODO(), chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
 				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
 				gp.readyPodQueue.Done(key)
@@ -397,7 +396,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	return nil
 }
 
-func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.Service, error) {
+func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[string]string) (*apiv1.Service, error) {
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
@@ -415,7 +414,7 @@ func (gp *GenericPool) createSvc(name string, labels map[string]string) (*apiv1.
 			Selector: labels,
 		},
 	}
-	svc, err := gp.kubernetesClient.CoreV1().Services(gp.namespace).Create(context.TODO(), &service, metav1.CreateOptions{})
+	svc, err := gp.kubernetesClient.CoreV1().Services(gp.namespace).Create(ctx, &service, metav1.CreateOptions{})
 	return svc, err
 }
 
@@ -466,7 +465,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		}
 	}
 
-	key, pod, err := gp.choosePod(funcLabels)
+	key, pod, err := gp.choosePod(ctx, funcLabels)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +484,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 			svcName = fmt.Sprintf("%s-%v", svcName, fn.ObjectMeta.UID)
 		}
 
-		svc, err := gp.createSvc(svcName, funcLabels)
+		svc, err := gp.createSvc(ctx, svcName, funcLabels)
 		if err != nil {
 			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, err
