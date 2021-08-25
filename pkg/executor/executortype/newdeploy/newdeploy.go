@@ -46,7 +46,7 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
 	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
@@ -58,7 +58,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		minScale = 1
 	}
 
-	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations, ownerRefs)
+	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (deploy *NewDeploy) deleteDeployment(ctx context.Context, ns string, name s
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
-	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
+	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
@@ -289,10 +289,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            deployName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerRefs,
+			Name:        deployName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -368,7 +367,7 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 }
 
 func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*asv1.HorizontalPodAutoscaler, error) {
+	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
@@ -386,10 +385,9 @@ func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, exe
 
 	hpa := &asv1.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            hpaName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerRefs,
+			Name:        hpaName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: asv1.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: asv1.CrossVersionObjectReference{
@@ -446,13 +444,12 @@ func (deploy *NewDeploy) deleteHpa(ctx context.Context, ns string, name string) 
 	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string, owernRefs []metav1.OwnerReference) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            svcName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: owernRefs,
+			Name:        svcName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{

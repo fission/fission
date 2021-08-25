@@ -42,17 +42,16 @@ func (cn *Container) getSvPort(fn *fv1.Function) (port int32, err error) {
 	return fn.Spec.PodSpec.Containers[0].Ports[0].ContainerPort, nil
 }
 
-func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string, ownerRefs []metav1.OwnerReference) (*apiv1.Service, error) {
+func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	targetPort, err := cn.getSvPort(fn)
 	if err != nil {
 		return nil, err
 	}
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            svcName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerRefs,
+			Name:        svcName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{

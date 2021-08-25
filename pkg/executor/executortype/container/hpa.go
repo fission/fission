@@ -35,7 +35,7 @@ const (
 )
 
 func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*asv1.HorizontalPodAutoscaler, error) {
+	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
@@ -53,10 +53,9 @@ func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStr
 
 	hpa := &asv1.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            hpaName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerRefs,
+			Name:        hpaName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: asv1.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: asv1.CrossVersionObjectReference{

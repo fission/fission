@@ -46,7 +46,6 @@ import (
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
-	controllerutils "github.com/fission/fission/pkg/utils/controller"
 	"github.com/fission/fission/pkg/utils/maps"
 )
 
@@ -402,8 +401,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	// Since Container waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	ownerRef := controllerutils.GetFnOwnerRef(fn)
-	svc, err := caaf.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns, []metav1.OwnerReference{*ownerRef})
+	svc, err := caaf.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		caaf.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
 		go cleanupFunc(ns, objName)
@@ -411,14 +409,14 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 
-	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns, []metav1.OwnerReference{*ownerRef})
+	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
 		go cleanupFunc(ns, objName)
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
-	hpa, err := caaf.createOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations, []metav1.OwnerReference{*ownerRef})
+	hpa, err := caaf.createOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)
@@ -618,9 +616,8 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 	// the resource version inside function packageRef is changed,
 	// so the content of fetchRequest in deployment cmd is different.
 	// Therefore, the deployment update will trigger a rolling update.
-	ownerRef := controllerutils.GetFnOwnerRef(fn)
 	newDeployment, err := caaf.getDeploymentSpec(ctx, fn, existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
-		fnObjName, ns, deployLabels, caaf.getDeployAnnotations(fn.ObjectMeta), []metav1.OwnerReference{*ownerRef})
+		fnObjName, ns, deployLabels, caaf.getDeployAnnotations(fn.ObjectMeta))
 	if err != nil {
 		caaf.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err

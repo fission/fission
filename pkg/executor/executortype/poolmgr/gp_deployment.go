@@ -29,7 +29,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	controllerutils "github.com/fission/fission/pkg/utils/controller"
 )
 
 // getPoolName returns a unique name of an environment
@@ -42,10 +41,9 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	deployAnnotations := gp.getDeployAnnotations(env)
 	return metav1.ObjectMeta{
-		Name:            gp.getPoolName(env),
-		Labels:          deployLabels,
-		Annotations:     deployAnnotations,
-		OwnerReferences: []metav1.OwnerReference{*controllerutils.GetEnvOwnerRef(env)},
+		Name:        gp.getPoolName(env),
+		Labels:      deployLabels,
+		Annotations: deployAnnotations,
 	}
 }
 

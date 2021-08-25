@@ -48,7 +48,6 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
-	controllerutils "github.com/fission/fission/pkg/utils/controller"
 	"github.com/fission/fission/pkg/utils/maps"
 )
 
@@ -397,12 +396,11 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	return nil
 }
 
-func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[string]string, ownerRefs []metav1.OwnerReference) (*apiv1.Service, error) {
+func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[string]string) (*apiv1.Service, error) {
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Labels:          labels,
-			OwnerReferences: ownerRefs,
+			Name:   name,
+			Labels: labels,
 		},
 		Spec: apiv1.ServiceSpec{
 			Type: apiv1.ServiceTypeClusterIP,
@@ -486,8 +484,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 			svcName = fmt.Sprintf("%s-%v", svcName, fn.ObjectMeta.UID)
 		}
 
-		ownerRef := controllerutils.GetFnOwnerRef(fn)
-		svc, err := gp.createSvc(ctx, svcName, funcLabels, []metav1.OwnerReference{*ownerRef})
+		svc, err := gp.createSvc(ctx, svcName, funcLabels)
 		if err != nil {
 			gp.scheduleDeletePod(pod.ObjectMeta.Name)
 			return nil, err

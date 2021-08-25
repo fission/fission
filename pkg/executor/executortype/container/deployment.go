@@ -33,7 +33,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 )
 
-func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
+func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
@@ -47,7 +47,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		minScale = 1
 	}
 
-	deployment, err := cn.getDeploymentSpec(ctx, fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations, ownerRefs)
+	deployment, err := cn.getDeploymentSpec(ctx, fn, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 }
 
 func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, targetReplicas *int32,
-	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string, ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
+	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
@@ -253,10 +253,9 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            deployName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerRefs,
+			Name:        deployName,
+			Labels:      deployLabels,
+			Annotations: deployAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
