@@ -27,7 +27,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
@@ -45,7 +44,7 @@ type (
 		enableIstio      bool
 
 		envLister       flisterv1.EnvironmentLister
-		envListerSynced cache.InformerSynced
+		envListerSynced k8sCache.InformerSynced
 
 		envCreateUpdateQueue workqueue.RateLimitingInterface
 		envDeleteQueue       workqueue.RateLimitingInterface
@@ -139,10 +138,10 @@ func (p *PoolPodController) Run(stopCh <-chan struct{}) {
 func (p *PoolPodController) runEnvCreateUpdateWorker() {
 	p.logger.Debug("Starting runEnvCreateUpdateWorker worker")
 	maxRetries := 3
-	handleEnv := func(env *fv1.Environment) error {
+	handleEnv := func(ctx context.Context, env *fv1.Environment) error {
 		log := p.logger.With(zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
 		log.Debug("env reconsile request processing")
-		pool, created, err := p.gpm.getPool(env)
+		pool, created, err := p.gpm.getPool(ctx, env)
 		if err != nil {
 			log.Error("error getting pool", zap.Error(err))
 			return err
@@ -154,15 +153,15 @@ func (p *PoolPodController) runEnvCreateUpdateWorker() {
 		poolsize := getEnvPoolSize(env)
 		if poolsize == 0 {
 			log.Info("pool size is zero")
-			p.gpm.cleanupPool(env)
+			p.gpm.cleanupPool(ctx, env)
 			return nil
 		}
-		err = pool.updatePoolDeployment(context.Background(), env)
+		err = pool.updatePoolDeployment(ctx, env)
 		if err != nil {
 			log.Error("error updating pool", zap.Error(err))
 			return err
 		}
-		p.deleteSpecializedPods(env)
+		p.deleteSpecializedPods(ctx, env)
 		return nil
 	}
 	processItem := func() bool {
@@ -196,7 +195,8 @@ func (p *PoolPodController) runEnvCreateUpdateWorker() {
 			return false
 		}
 
-		err = handleEnv(env)
+		ctx := context.Background()
+		err = handleEnv(ctx, env)
 		if err != nil {
 			if p.envCreateUpdateQueue.NumRequeues(key) < maxRetries {
 				p.envCreateUpdateQueue.AddRateLimited(key)
@@ -232,9 +232,10 @@ func (p *PoolPodController) runEnvDeleteWorker() {
 			p.envDeleteQueue.Forget(obj)
 			return false
 		}
+		ctx := context.Background()
 		p.logger.Debug("env delete request processing")
-		p.gpm.cleanupPool(env)
-		p.deleteSpecializedPods(env)
+		p.gpm.cleanupPool(ctx, env)
+		p.deleteSpecializedPods(ctx, env)
 		p.envDeleteQueue.Forget(obj)
 		return false
 	}
@@ -246,14 +247,13 @@ func (p *PoolPodController) runEnvDeleteWorker() {
 	}
 }
 
-func (p *PoolPodController) deleteSpecializedPods(env *fv1.Environment) {
+func (p *PoolPodController) deleteSpecializedPods(ctx context.Context, env *fv1.Environment) {
 	log := p.logger.With(zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
 	log.Debug("environment delete")
 	selectorLabels := getSpecializedPodLabels(env)
 	listOptions := metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(selectorLabels).String(),
 	}
-	ctx := context.Background()
 	podList, err := p.kubernetesClient.CoreV1().Pods(p.namespace).List(ctx, listOptions)
 	if err != nil {
 		log.Error("failed to list pods", zap.Error(err))

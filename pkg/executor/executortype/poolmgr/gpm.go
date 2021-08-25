@@ -85,6 +85,7 @@ type (
 	}
 	request struct {
 		requestType
+		ctx             context.Context
 		env             *fv1.Environment
 		responseChannel chan *response
 	}
@@ -169,7 +170,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 		return nil, err
 	}
 
-	pool, created, err := gpm.getPool(env)
+	pool, created, err := gpm.getPool(ctx, env)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +260,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 		return err
 	}
 
-	gp, created, err := gpm.getPool(env)
+	gp, created, err := gpm.getPool(ctx, env)
 	if err != nil {
 		return err
 	}
@@ -315,7 +316,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, created, err := gpm.getPool(&env)
+				_, created, err := gpm.getPool(ctx, &env)
 				if err != nil {
 					gpm.logger.Error("adopt pool failed", zap.Error(err))
 				}
@@ -470,10 +471,10 @@ func (gpm *GenericPoolManager) service() {
 				if req.env.ObjectMeta.Namespace != metav1.NamespaceDefault {
 					ns = req.env.ObjectMeta.Namespace
 				}
-
-				pool, err = MakeGenericPool(gpm.logger,
-					gpm.fissionClient, gpm.kubernetesClient, gpm.metricsClient, req.env, ns,
-					gpm.namespace, gpm.fsCache, gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
+				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
+					gpm.metricsClient, req.env, ns, gpm.namespace, gpm.fsCache,
+					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
+				err = pool.setup(req.ctx)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
@@ -495,15 +496,22 @@ func (gpm *GenericPoolManager) service() {
 				return
 			}
 			delete(gpm.pools, key)
-			go pool.destroy() //nolint errcheck
+			err := pool.destroy(req.ctx)
+			if err != nil {
+				gpm.logger.Error("failed to destroy pool",
+					zap.String("environment", env.ObjectMeta.Name),
+					zap.String("namespace", env.ObjectMeta.Namespace),
+					zap.Error(err))
+			}
 			// no response, caller doesn't wait
 		}
 	}
 }
 
-func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, bool, error) {
+func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment) (*GenericPool, bool, error) {
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
+		ctx:             ctx,
 		requestType:     GET_POOL,
 		env:             env,
 		responseChannel: c,
@@ -512,7 +520,7 @@ func (gpm *GenericPoolManager) getPool(env *fv1.Environment) (*GenericPool, bool
 	return resp.pool, resp.created, resp.error
 }
 
-func (gpm *GenericPoolManager) cleanupPool(env *fv1.Environment) {
+func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environment) {
 	gpm.requestChannel <- &request{
 		requestType: CLEANUP_POOL,
 		env:         env,
