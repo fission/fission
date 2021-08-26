@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -281,32 +282,52 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	pkgInformer := informerFactory.Core().V1().Packages()
 	envInformer := informerFactory.Core().V1().Environments()
 
+	gpmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypePoolmgr, time.Minute*30)
+	if err != nil {
+		return err
+	}
+	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
 	gpm, err := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
+		gpmPodInformer,
 	)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation faied")
 	}
 
+	ndmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
+	if err != nil {
+		return err
+	}
+	ndmDeplInformer := ndmInformerFactory.Apps().V1().Deployments()
+	ndmSvcInformer := ndmInformerFactory.Core().V1().Services()
 	ndm, err := newdeploy.MakeNewDeploy(
 		logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
+		ndmDeplInformer, ndmSvcInformer,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
 
+	cnmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeContainer, time.Minute*30)
+	if err != nil {
+		return err
+	}
+	cnmDeplInformer := cnmInformerFactory.Apps().V1().Deployments()
+	cnmSvcInformer := cnmInformerFactory.Core().V1().Services()
 	ctx := context.Background()
 	cnm, err := container.MakeContainer(
 		ctx,
 		logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, executorInstanceID, funcInformer)
+		functionNamespace, executorInstanceID, funcInformer,
+		cnmDeplInformer, cnmSvcInformer)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation faied")
 	}
@@ -339,9 +360,19 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 
 	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configmapInformer, secretInformer)
 
-	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes, []k8sCache.SharedIndexInformer{
-		funcInformer.Informer(), pkgInformer.Informer(), envInformer.Informer(), configmapInformer.Informer(), secretInformer.Informer(),
-	})
+	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
+		[]k8sCache.SharedIndexInformer{
+			funcInformer.Informer(),
+			pkgInformer.Informer(),
+			envInformer.Informer(),
+			configmapInformer.Informer(),
+			secretInformer.Informer(),
+			gpmPodInformer.Informer(),
+			ndmDeplInformer.Informer(),
+			ndmSvcInformer.Informer(),
+			cnmDeplInformer.Informer(),
+			cnmSvcInformer.Informer(),
+		})
 	if err != nil {
 		return err
 	}

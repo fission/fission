@@ -35,7 +35,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
+
 	k8sCache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -77,7 +80,11 @@ type (
 		enableIstio   bool
 		fetcherConfig *fetcherConfig.Config
 
-		podInformer k8sCache.SharedIndexInformer
+		// podLister can list/get pods from the shared informer's store
+		podLister corelisters.PodLister
+
+		// podListerSynced returns true if the pod store has been synced at least once.
+		podListerSynced k8sCache.InformerSynced
 
 		defaultIdlePodReapTime time.Duration
 
@@ -107,6 +114,7 @@ func MakeGenericPoolManager(
 	funcInformer finformerv1.FunctionInformer,
 	pkgInformer finformerv1.PackageInformer,
 	envInformer finformerv1.EnvironmentInformer,
+	podInformer coreinformers.PodInformer,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -139,19 +147,18 @@ func MakeGenericPoolManager(
 		enableIstio:            enableIstio,
 		poolPodC:               poolPodC,
 	}
+	gpm.podLister = podInformer.Lister()
+	gpm.podListerSynced = podInformer.Informer().HasSynced
 
-	kubeInformerFactory, err := utils.GetInformerFactoryByExecutor(gpm.kubernetesClient, fv1.ExecutorTypePoolmgr)
-	if err != nil {
-		return nil, err
-	}
-	gpm.podInformer = kubeInformerFactory.Core().V1().Pods().Informer()
 	return gpm, nil
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), gpm.podListerSynced); !ok {
+		gpm.logger.Fatal("failed to wait for caches to sync")
+	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
-	go gpm.podInformer.Run(ctx.Done())
 	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
 	go gpm.idleObjectReaper()
@@ -209,30 +216,12 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 	return nil
 }
 
-func (gpm *GenericPoolManager) getPodInfo(ctx context.Context, obj apiv1.ObjectReference) (*apiv1.Pod, error) {
-	store := gpm.podInformer.GetStore()
-
-	item, exists, err := store.Get(obj)
-	if err != nil || !exists {
-		item, exists, err = store.GetByKey(fmt.Sprintf("%s/%s", obj.Namespace, obj.Name))
-	}
-
-	if err != nil || !exists {
-		gpm.logger.Debug("Falling back to getting pod info from k8s API -- this may cause performance issues for your function.")
-		pod, err := gpm.kubernetesClient.CoreV1().Pods(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
-		return pod, err
-	}
-
-	pod := item.(*apiv1.Pod)
-	return pod, nil
-}
-
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
-			pod, err := gpm.getPodInfo(ctx, obj)
+			pod, err := gpm.podLister.Pods(obj.Namespace).Get(obj.Name)
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].
