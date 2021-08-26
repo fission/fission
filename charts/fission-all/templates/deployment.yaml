@@ -85,6 +85,7 @@ rules:
   resources:
   - deployments
   - deployments/scale
+  - replicasets
   verbs:
   - '*'
 - apiGroups:

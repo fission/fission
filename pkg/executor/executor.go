@@ -287,13 +287,13 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		return err
 	}
 	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
+	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
 	gpm, err := poolmgr.MakeGenericPoolManager(
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformer,
-	)
+		gpmPodInformer, gpmRsInformer)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation faied")
 	}
@@ -309,8 +309,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
-		ndmDeplInformer, ndmSvcInformer,
-	)
+		ndmDeplInformer, ndmSvcInformer)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation faied")
 	}
@@ -323,8 +322,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	cnmSvcInformer := cnmInformerFactory.Core().V1().Services()
 	ctx := context.Background()
 	cnm, err := container.MakeContainer(
-		ctx,
-		logger,
+		ctx, logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, executorInstanceID, funcInformer,
 		cnmDeplInformer, cnmSvcInformer)
@@ -368,6 +366,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 			configmapInformer.Informer(),
 			secretInformer.Informer(),
 			gpmPodInformer.Informer(),
+			gpmRsInformer.Informer(),
 			ndmDeplInformer.Informer(),
 			ndmSvcInformer.Informer(),
 			cnmDeplInformer.Informer(),

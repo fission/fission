@@ -35,10 +35,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
-
 	k8sCache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -115,6 +115,7 @@ func MakeGenericPoolManager(
 	pkgInformer finformerv1.PackageInformer,
 	envInformer finformerv1.EnvironmentInformer,
 	podInformer coreinformers.PodInformer,
+	rsInformer appsinformers.ReplicaSetInformer,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -129,7 +130,7 @@ func MakeGenericPoolManager(
 	}
 
 	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient, functionNamespace,
-		enableIstio, funcInformer, pkgInformer, envInformer)
+		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer)
 
 	gpm := &GenericPoolManager{
 		logger:                 gpmLogger,
