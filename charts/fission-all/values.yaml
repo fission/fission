@@ -380,8 +380,8 @@ mqt_keda:
       image: fission/keda-gcp-pubsub-http-connector
       tag: v0.2
     redis:
-      image: blackfly19/keda-redislist-http-connector
-      tag: v5
+      image: fission/keda-redis-http-connector
+      tag: v0.1
 
 ## Enable Pprof based profiling
 pprof:
