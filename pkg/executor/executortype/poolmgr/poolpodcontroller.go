@@ -109,7 +109,8 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 	if *(rs.Spec.Replicas) != 0 {
 		return
 	}
-	p.logger.Debug("RS has zero replica count", zap.String("rs", rs.Name), zap.String("namespace", rs.Namespace))
+	logger := p.logger.With(zap.String("rs", rs.Name), zap.String("namespace", rs.Namespace))
+	logger.Debug("replica set has zero replica count")
 	// List all specialized pods and schedule for cleanup
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
 	if err != nil {
@@ -119,19 +120,19 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 	rsLabelMap["managed"] = "false"
 	specializedPods, err := p.gpm.podLister.Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
 	if err != nil {
-		p.logger.Error("Failed to list specialized pods", zap.Error(err))
+		logger.Error("Failed to list specialized pods", zap.Error(err))
 	}
 	if len(specializedPods) == 0 {
 		return
 	}
-	p.logger.Info("specialized pods identified for cleanup with RS", zap.Int("numPods", len(specializedPods)))
+	logger.Info("specialized pods identified for cleanup with RS", zap.Int("numPods", len(specializedPods)))
 	for _, pod := range specializedPods {
 		if !IsPodActive(pod) {
 			continue
 		}
 		key, err := k8sCache.MetaNamespaceKeyFunc(pod)
 		if err != nil {
-			p.logger.Error("Failed to get key for pod", zap.Error(err))
+			logger.Error("Failed to get key for pod", zap.Error(err))
 			continue
 		}
 		p.spCleanupPodQueue.Add(key)
@@ -331,7 +332,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc() bool {
 	specializePodLables := getSpecializedPodLabels(env)
 	specializedPods, err := p.gpm.podLister.Pods(p.gpm.namespace).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
-		p.logger.Error("Failed to list specialized pods", zap.Error(err))
+		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)
 		return false
 	}
@@ -339,7 +340,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc() bool {
 		p.envDeleteQueue.Forget(obj)
 		return false
 	}
-	p.logger.Info("specialized pods identified for cleanup after env delete", zap.Int("numPods", len(specializedPods)))
+	p.logger.Info("specialized pods identified for cleanup after env delete", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace), zap.Int("count", len(specializedPods)))
 	for _, pod := range specializedPods {
 		if !IsPodActive(pod) {
 			continue
@@ -397,12 +398,12 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 			p.gpm.fsCache.DeleteFunctionSvc(fsvc)
 			p.gpm.fsCache.DeleteEntry(fsvc)
 		} else {
-			p.logger.Error("could not covert item from PodToFsvc")
+			p.logger.Error("could not covert item from PodToFsvc", zap.String("key", key))
 		}
 	}
 	err = p.kubernetesClient.CoreV1().Pods(p.namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 	if err != nil {
-		p.logger.Error("failed to delete pod", zap.Error(err))
+		p.logger.Error("failed to delete pod", zap.Error(err), zap.String("pod", pod.ObjectMeta.Name), zap.String("pod_namespace", pod.ObjectMeta.Namespace))
 		return false
 	}
 	p.logger.Info("cleaned specialized pod as environment update/deleted",
@@ -410,5 +411,4 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 		zap.String("address", pod.Status.PodIP))
 	p.spCleanupPodQueue.Forget(key)
 	return false
-
 }

@@ -205,14 +205,15 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 }
 
 func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Environment) error {
+	logger := gp.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
 	if gp.env.ObjectMeta.ResourceVersion == env.ObjectMeta.ResourceVersion {
-		gp.logger.Debug("env resource version matching with pool env", zap.String("env", gp.env.ObjectMeta.Name))
+		logger.Debug("env resource version matching with pool env")
 		return nil
 	}
 	newDeployment := gp.deployment.DeepCopy()
 	spec, err := gp.genDeploymentSpec(env)
 	if err != nil {
-		gp.logger.Error("error generating deployment spec", zap.Error(err))
+		logger.Error("error generating deployment spec", zap.Error(err))
 		return err
 	}
 	newDeployment.Spec = *spec
@@ -229,7 +230,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 
 	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(ctx, newDeployment, metav1.UpdateOptions{})
 	if err != nil {
-		gp.logger.Error("error updating deployment in kubernetes", zap.Error(err), zap.String("deployment", gp.deployment.Name))
+		logger.Error("error updating deployment in kubernetes", zap.Error(err), zap.String("deployment", depl.Name))
 		return err
 	}
 	// possible concurrency issue here as
@@ -237,6 +238,6 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	// we can move update pool to gpm.service if required
 	gp.env = env
 	gp.deployment = depl
-	gp.logger.Info("Updated deployment for pool")
+	logger.Info("Updated deployment for pool", zap.String("deployment", depl.Name))
 	return nil
 }
