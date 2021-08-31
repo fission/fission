@@ -66,6 +66,7 @@ func NewPoolPodController(logger *zap.Logger,
 	pkgInformer finformerv1.PackageInformer,
 	envInformer finformerv1.EnvironmentInformer,
 	rsInformer appsinformers.ReplicaSetInformer) *PoolPodController {
+	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:           logger,
 		kubernetesClient: kubernetesClient,

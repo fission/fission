@@ -17,13 +17,11 @@ limitations under the License.
 package main
 
 import (
-	"log"
-
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func getStringArgWithDefault(arg interface{}, defaultValue string) string {
@@ -35,13 +33,7 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 }
 
 func main() {
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
+	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
 	usage := `Package to perform operations needed prior to fission installation

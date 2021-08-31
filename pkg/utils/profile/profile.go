@@ -25,13 +25,11 @@ package profile
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func getPprofAddr() string {
@@ -46,7 +44,7 @@ func getPprofAddr() string {
 	return fmt.Sprintf("%s:%s", pprofHost, pprofPort)
 }
 
-func ProfileIfEnabled() {
+func ProfileIfEnabled(logger *zap.Logger) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return
@@ -55,18 +53,10 @@ func ProfileIfEnabled() {
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
-	defer logger.Sync()
-
 	addr := getPprofAddr()
 	logger.Info("Running pprof server", zap.String("addr", addr))
 	go func() {
-		err = http.ListenAndServe(addr, pprofMux)
+		err := http.ListenAndServe(addr, pprofMux)
 		if err != nil {
 			logger.Fatal("pprof http server failed", zap.Error(err))
 		}
