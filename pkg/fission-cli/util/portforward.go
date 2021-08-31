@@ -178,7 +178,7 @@ func runPortForward(labelSelector string, localPort string, ns string, kubeConte
 	for _, servicePort := range service.Spec.Ports {
 		targetPort = servicePort.TargetPort.String()
 	}
-	console.Verbose(2, "Connecting to port %v on pod %v/%v", targetPort, podNameSpace, podNameSpace)
+	console.Verbose(2, "Connecting to port %v on pod %v/%v", targetPort, podNameSpace, podName)
 
 	stopChannel := make(chan struct{}, 1)
 	readyChannel := make(chan struct{})
