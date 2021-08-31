@@ -90,7 +90,7 @@ func MakeGenericPool(
 	fsCache *fscache.FunctionServiceCache,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	enableIstio bool) (*GenericPool, error) {
+	enableIstio bool) *GenericPool {
 
 	gpLogger := logger.Named("generic_pool")
 
@@ -129,24 +129,25 @@ func MakeGenericPool(
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
 
+	return gp
+}
+
+func (gp *GenericPool) setup(ctx context.Context) error {
 	// create fetcher SA in this ns, if not already created
-	err = fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
+	err := gp.fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
+		return errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
 	}
 
-	// Labels for generic deployment/RS/pods.
-	//gp.labelsForPool = gp.getDeployLabels()
-
 	// create the pool
-	err = gp.createPoolDeployment(context.Background(), env)
+	err = gp.createPoolDeployment(ctx, gp.env)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	go gp.startReadyPodController()
 	go gp.updateCPUUtilizationSvc()
-	return gp, nil
+	return nil
 }
 
 func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string]string {
@@ -575,7 +576,7 @@ func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64
 }
 
 // destroys the pool -- the deployment, replicaset and pods
-func (gp *GenericPool) destroy() error {
+func (gp *GenericPool) destroy(ctx context.Context) error {
 	close(gp.stopReadyPodControllerCh)
 
 	deletePropagation := metav1.DeletePropagationBackground
@@ -584,7 +585,7 @@ func (gp *GenericPool) destroy() error {
 	}
 
 	err := gp.kubernetesClient.AppsV1().
-		Deployments(gp.namespace).Delete(context.TODO(), gp.deployment.ObjectMeta.Name, delOpt)
+		Deployments(gp.namespace).Delete(ctx, gp.deployment.ObjectMeta.Name, delOpt)
 	if err != nil {
 		gp.logger.Error("error destroying deployment",
 			zap.Error(err),

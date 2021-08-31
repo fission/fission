@@ -29,13 +29,16 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	appsinformers "k8s.io/client-go/informers/apps/v1"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -69,10 +72,13 @@ type (
 
 		throttler *throttler.Throttler
 
-		serviceInformer    k8sCache.SharedIndexInformer
-		deploymentInformer k8sCache.SharedIndexInformer
-
 		defaultIdlePodReapTime time.Duration
+
+		deplLister appslisters.DeploymentLister
+		svcLister  corelisters.ServiceLister
+
+		deplListerSynced k8sCache.InformerSynced
+		svcListerSynced  k8sCache.InformerSynced
 	}
 )
 
@@ -84,7 +90,10 @@ func MakeContainer(
 	kubernetesClient *kubernetes.Clientset,
 	namespace string,
 	instanceID string,
-	funcInformer finformerv1.FunctionInformer) (executortype.ExecutorType, error) {
+	funcInformer finformerv1.FunctionInformer,
+	deplInformer appsinformers.DeploymentInformer,
+	svcInformer coreinformers.ServiceInformer,
+) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
 		istio, err := strconv.ParseBool(os.Getenv("ENABLE_ISTIO"))
@@ -110,21 +119,21 @@ func MakeContainer(
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
 		defaultIdlePodReapTime: 1 * time.Minute,
 	}
+	caaf.deplLister = deplInformer.Lister()
+	caaf.deplListerSynced = deplInformer.Informer().HasSynced
+
+	caaf.svcLister = svcInformer.Lister()
+	caaf.svcListerSynced = svcInformer.Informer().HasSynced
 
 	funcInformer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
-
-	informerFactory, err := utils.GetInformerFactoryByExecutor(caaf.kubernetesClient, fv1.ExecutorTypeContainer)
-	if err != nil {
-		return nil, err
-	}
-	caaf.serviceInformer = informerFactory.Core().V1().Services().Informer()
-	caaf.deploymentInformer = informerFactory.Apps().V1().Deployments().Informer()
-
 	return caaf, nil
 }
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
+		caaf.logger.Fatal("failed to wait for caches to sync")
+	}
 	go caaf.idleObjectReaper()
 }
 
@@ -174,40 +183,6 @@ func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 	return nil
 }
 
-func (caaf *Container) getServiceInfo(ctx context.Context, obj apiv1.ObjectReference) (*apiv1.Service, error) {
-	item, exists, err := utils.GetCachedItem(obj, caaf.serviceInformer)
-
-	if err != nil || !exists {
-		caaf.logger.Debug(
-			"Falling back to getting service info from k8s API -- this may cause performance issues for your function.",
-			zap.Bool("exists", exists),
-			zap.Error(err),
-		)
-		service, err := caaf.kubernetesClient.CoreV1().Services(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
-		return service, err
-	}
-
-	service := item.(*apiv1.Service)
-	return service, nil
-}
-
-func (caaf *Container) getDeploymentInfo(ctx context.Context, obj apiv1.ObjectReference) (*appsv1.Deployment, error) {
-	item, exists, err := utils.GetCachedItem(obj, caaf.deploymentInformer)
-
-	if err != nil || !exists {
-		caaf.logger.Debug(
-			"Falling back to getting deployment info from k8s API -- this may cause performance issues for your function.",
-			zap.Bool("exists", exists),
-			zap.Error(err),
-		)
-		deployment, err := caaf.kubernetesClient.AppsV1().Deployments(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
-		return deployment, err
-	}
-
-	deployment := item.(*appsv1.Deployment)
-	return deployment, nil
-}
-
 // IsValid does a get on the service address to ensure it's a valid service, then
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
@@ -222,16 +197,15 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := caaf.getServiceInfo(ctx, obj)
+			_, err := caaf.svcLister.Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					caaf.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
 				}
 				return false
 			}
-
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := caaf.getDeploymentInfo(ctx, obj)
+			currentDeploy, err := caaf.deplLister.Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					caaf.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
