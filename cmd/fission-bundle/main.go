@@ -26,7 +26,6 @@ import (
 	docopt "github.com/docopt/docopt-go"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
@@ -39,6 +38,7 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/utils/tracing"
@@ -214,26 +214,11 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
-	profile.ProfileIfEnabled()
-
-	var logger *zap.Logger
-	var config zap.Config
-
-	isDebugEnv, _ := strconv.ParseBool(os.Getenv("DEBUG_ENV"))
-	if isDebugEnv {
-		config = zap.NewDevelopmentConfig()
-		config.DisableStacktrace = true
-		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	} else {
-		config = zap.NewProductionConfig()
-		config.DisableStacktrace = true
-		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	}
-	logger, err = config.Build()
-	if err != nil {
-		log.Fatalf("I can't initialize zap logger: %v", err)
-	}
+	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
+
+	profile.ProfileIfEnabled(logger)
+
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
 	if err != nil {

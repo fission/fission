@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	k8sInformers "k8s.io/client-go/informers"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -33,6 +32,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 var nodeName = os.Getenv("NODE_NAME")
@@ -158,36 +158,25 @@ func symlinkReaper(zapLogger *zap.Logger) {
 }
 
 func Start() {
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	zapLogger, err := config.Build()
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
-
-	defer func() {
-		err := zapLogger.Sync()
-		if err != nil {
-			log.Fatalf("failed to sync zap logger: %v", err)
-		}
-	}()
+	logger := loggerfactory.GetLogger()
+	defer logger.Sync()
 
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
-		zapLogger.Info("symlink path not exist, create it",
+		logger.Info("symlink path not exist, create it",
 			zap.String("fissionSymlinkPath", fissionSymlinkPath))
 		err = os.Mkdir(fissionSymlinkPath, 0755)
 		if err != nil {
-			zapLogger.Fatal("error creating fissionSymlinkPath", zap.Error(err))
+			logger.Fatal("error creating fissionSymlinkPath", zap.Error(err))
 		}
 	}
-	go symlinkReaper(zapLogger)
+	go symlinkReaper(logger)
 	_, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}
 	informerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := informerFactory.Core().V1().Pods().Informer()
-	podInformer.AddEventHandler(podInformerHandlers(zapLogger))
+	podInformer.AddEventHandler(podInformerHandlers(logger))
 	podInformer.Run(make(chan struct{}))
-	zapLogger.Fatal("Stop watching pod changes")
+	logger.Fatal("Stop watching pod changes")
 }

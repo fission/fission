@@ -104,7 +104,7 @@ func MakeGenericPool(
 			zap.Duration("default", podReadyTimeout))
 	}
 
-	gpLogger.Info("creating pool", zap.Any("environment", env.ObjectMeta))
+	gpLogger.Info("creating pool", zap.Any("environment", env))
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.

@@ -47,8 +47,8 @@ require (
 	github.com/opencontainers/runc v1.0.1 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.7.1
-	github.com/prometheus/common v0.10.0
+	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/common v0.26.0
 	github.com/robfig/cron v0.0.0-20180505203441-b41be1df6967
 	github.com/satori/go.uuid v1.2.0
 	github.com/spf13/cobra v1.2.1
@@ -72,4 +72,5 @@ require (
 	k8s.io/client-go v0.21.4
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.21.4
+	sigs.k8s.io/controller-runtime v0.9.6
 )

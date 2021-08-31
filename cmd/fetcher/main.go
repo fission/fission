@@ -17,25 +17,17 @@ limitations under the License.
 package main
 
 import (
-	"log"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/fission/fission/cmd/fetcher/app"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
 )
 
 // Usage: fetcher <shared volume path>
 func main() {
-	profile.ProfileIfEnabled()
-
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
+	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
+
+	profile.ProfileIfEnabled(logger)
+
 	app.Run(logger)
 }
