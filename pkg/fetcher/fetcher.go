@@ -51,6 +51,8 @@ import (
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -104,13 +106,8 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
 
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
-
 	var hc *http.Client
-	if openTracingEnabled {
+	if tracing.TracingEnabled(logger) {
 		hc = &http.Client{Transport: &ochttp.Transport{}}
 	} else {
 		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -265,6 +262,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		fetcher.logger.Info("requested file already exists at shared volume - skipping fetch",
 			zap.String("requested_file", req.Filename),
 			zap.String("shared_volume_path", fetcher.sharedVolumePath))
+		otelUtils.SpanTrackEvent(ctx, "packageAlreadyExists", otelUtils.GetAttributesForPackage(pkg)...)
 		return http.StatusOK, nil
 	}
 
@@ -272,6 +270,11 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
 	if req.FetchType == fv1.FETCH_URL {
+		otelUtils.SpanTrackEvent(ctx, "fetch_url", otelUtils.MapToAttributes(map[string]string{
+			"package-name":      pkg.Name,
+			"package-namespace": pkg.Namespace,
+			"fetch-url":         req.Url,
+		})...)
 		// fetch the file and save it to the tmp path
 		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
 		if err != nil {
@@ -310,8 +313,14 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				fetcher.logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
 				return http.StatusInternalServerError, errors.Wrapf(err, "%s %s", e, tmpPath)
 			}
+			otelUtils.SpanTrackEvent(ctx, "archiveLiteral", otelUtils.GetAttributesForPackage(pkg)...)
 		} else {
 			// download and verify
+			otelUtils.SpanTrackEvent(ctx, "dowloadArchieveLiteral", otelUtils.MapToAttributes(map[string]string{
+				"package-name":      pkg.Name,
+				"package-namespace": pkg.Namespace,
+				"archive-url":       archive.URL,
+			})...)
 			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url"
@@ -363,6 +372,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		return http.StatusInternalServerError, err
 	}
 
+	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
 	fetcher.logger.Info("successfully placed", zap.String("location", renamePath))
 	return http.StatusOK, nil
 }
@@ -411,6 +421,10 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					zap.String("secret_namespace", secret.Namespace))
 				return http.StatusInternalServerError, err
 			}
+			otelUtils.SpanTrackEvent(ctx, "storedSecret", otelUtils.MapToAttributes(map[string]string{
+				"secret-name":      secret.Name,
+				"secret-namespace": secret.Namespace,
+			})...)
 		}
 	}
 
@@ -459,6 +473,10 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					zap.String("config_map_namespace", config.Namespace))
 				return http.StatusInternalServerError, err
 			}
+			otelUtils.SpanTrackEvent(ctx, "storedConfigmap", otelUtils.MapToAttributes(map[string]string{
+				"configmap-name":      config.Name,
+				"configmap-namespace": config.Namespace,
+			})...)
 		}
 	}
 
@@ -602,6 +620,11 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
+		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
+			"package_name":      req.Package.Name,
+			"package_namespace": req.Package.Namespace,
+			"retry_count":       strconv.Itoa(i),
+		})...)
 		// TODO: pass resource version in the GetOptions, added warning for now
 		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
 		if err == nil {
@@ -683,6 +706,9 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	}
 
 	for i := 0; i < maxRetries; i++ {
+		otelUtils.SpanTrackEvent(ctx, "specializeCall", otelUtils.MapToAttributes(map[string]string{
+			"url": specializeURL,
+		})...)
 		resp, err := http.Post(specializeURL, contentType, reader)
 		if err == nil && resp.StatusCode < 300 {
 			// Success

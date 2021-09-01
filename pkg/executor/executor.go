@@ -46,6 +46,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -214,6 +215,7 @@ func (executor *Executor) serveCreateFuncServices() {
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "createServiceForFunction", otelUtils.GetAttributesForFunction(fn)...)
 	executor.logger.Debug("no cached function service found, creating one",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
@@ -238,6 +240,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 }
 
 func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "getFunctionServiceFromCache", otelUtils.GetAttributesForFunction(fn)...)
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {

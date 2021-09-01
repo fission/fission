@@ -33,7 +33,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -225,6 +224,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// set service url of target service of request only when
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
+			otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace})...)
 			// get function service url from cache or executor
 			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry(ctx)
 			if err != nil {
@@ -254,6 +256,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 				continue
 			}
+			otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"service-entry":      roundTripper.serviceURL.String()})...)
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
 					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
@@ -328,6 +334,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			ocRoundTripper := &ochttp.Transport{Base: transport}
 			resp, err = ocRoundTripper.RoundTrip(newReq)
 		} else {
+			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"function-url":       newReq.URL.String(),
+				"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
 			otelRoundTripper := otelhttp.NewTransport(transport)
 			resp, err = otelRoundTripper.RoundTrip(newReq)
 		}
@@ -515,10 +526,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		rrt.closeContext()
 	}()
 
-	// add attributes to current span
-	span := trace.SpanFromContext(request.Context())
-	span.SetAttributes(otelUtils.GetAttributesForFunction(fh.function)...)
-
+	otelUtils.SpanTrackEvent(request.Context(), "functionRequestProxy", otelUtils.GetAttributesForFunction(fh.function)...)
 	proxy.ServeHTTP(responseWriter, request)
 }
 

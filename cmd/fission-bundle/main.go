@@ -225,11 +225,7 @@ Options:
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}
 
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
-
+	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
 		if err != nil {

@@ -31,6 +31,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
@@ -101,6 +102,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "deploymentCreated", otelUtils.GetAttributesForDeployment(depl)...)
 		if minScale > 0 {
 			depl, err = cn.waitForDeploy(ctx, depl, minScale, specializationTimeout)
 		}
@@ -125,7 +127,7 @@ func (cn *Container) deleteDeployment(ctx context.Context, ns string, name strin
 
 func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
-
+	otelUtils.SpanTrackEvent(ctx, "waitForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
@@ -140,13 +142,14 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
 		if latestDepl.Status.AvailableReplicas >= replicas {
+			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)
 	}
 
 	cn.logger.Error("Deployment provision failed within timeout window",
-		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
+		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
 		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 
 	// this error appears in the executor pod logs

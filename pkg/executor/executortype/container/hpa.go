@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 const (
@@ -94,6 +95,7 @@ func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStr
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "hpaCreated", otelUtils.GetAttributesForHPA(cHpa)...)
 		return cHpa, nil
 	}
 	return nil, err

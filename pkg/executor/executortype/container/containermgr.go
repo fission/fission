@@ -50,6 +50,7 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var _ executortype.ExecutorType = &Container{}
@@ -160,6 +161,7 @@ func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
 func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
 	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
@@ -187,6 +189,7 @@ func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
 func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
+	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		caaf.logger.Error("address not found in function service")
 		return false

@@ -37,6 +37,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // Deployment Constants
@@ -426,6 +427,7 @@ func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, exe
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForHPA(cHpa)...)
 		return cHpa, nil
 	}
 	return nil, err
@@ -492,6 +494,8 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForSvc(svc)...)
+
 		return svc, nil
 	}
 	return nil, err
@@ -503,7 +507,7 @@ func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) 
 
 func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
-
+	otelUtils.SpanTrackEvent(ctx, "waitingForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
@@ -518,6 +522,7 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
 		if latestDepl.Status.AvailableReplicas >= replicas {
+			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)

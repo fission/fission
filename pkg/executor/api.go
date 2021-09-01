@@ -34,7 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
-	"github.com/fission/fission/pkg/utils/otel"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +220,6 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
@@ -267,7 +266,7 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: executor.GetHandler()}
 	} else {
-		handler = otel.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otel.UrlsToIgnore("/healthz"))
+		handler = otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	}
 
 	err := http.ListenAndServe(address, handler)

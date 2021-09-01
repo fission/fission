@@ -19,8 +19,6 @@ package router
 import (
 	"context"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 // HTTPTriggerSet represents an HTTP trigger set
@@ -114,10 +113,7 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		ts.logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
+	openTracingEnabled := tracing.TracingEnabled(ts.logger)
 
 	// HTTP triggers setup by the user
 	homeHandled := false

@@ -23,8 +23,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +35,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -59,13 +58,8 @@ type (
 
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
-
 	var hc *http.Client
-	if openTracingEnabled {
+	if tracing.TracingEnabled(logger) {
 		hc = &http.Client{Transport: &ochttp.Transport{}}
 	} else {
 		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}

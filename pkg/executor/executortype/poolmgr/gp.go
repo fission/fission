@@ -49,6 +49,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -236,6 +237,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		var chosenPod *apiv1.Pod
 		var key string
 
+		otelUtils.SpanTrackEvent(ctx, "waitForPod", otelUtils.MapToAttributes(newLabels)...)
 		item, quit := gp.readyPodQueue.Get()
 		if quit {
 			gp.logger.Error("readypod controller is not running")
@@ -263,6 +265,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			continue
 		}
 		chosenPod = obj.(*apiv1.Pod).DeepCopy()
+		otelUtils.SpanTrackEvent(ctx, "foundPod", otelUtils.GetAttributesForPod(chosenPod)...)
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
 			// Relabel.  If the pod already got picked and
@@ -285,6 +288,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				expoDelay *= 2
 				continue
 			}
+			otelUtils.SpanTrackEvent(ctx, "podRelabel", otelUtils.GetAttributesForPod(chosenPod)...)
 
 			// With StrategicMergePatchType, the client-go sometimes return
 			// nil error and the labels & annotations remain the same.
@@ -393,11 +397,14 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	if err != nil {
 		return err
 	}
-
+	otelUtils.SpanTrackEvent(ctx, "specializedPod", otelUtils.GetAttributesForPod(pod)...)
 	return nil
 }
 
 func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[string]string) (*apiv1.Service, error) {
+	otelUtils.SpanTrackEvent(ctx, "createSvc", otelUtils.MapToAttributes(map[string]string{
+		"name": name,
+	})...)
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
@@ -505,6 +512,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
 	}
 
+	otelUtils.SpanTrackEvent(ctx, "addFunctionLabel", otelUtils.GetAttributesForPod(pod)...)
 	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
 	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
 		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
@@ -566,6 +574,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		zap.String("serviceHost", svcHost),
 		zap.String("podIP", pod.Status.PodIP))
 
+	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	return fsvc, nil
 }
 
