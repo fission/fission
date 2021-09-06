@@ -363,22 +363,22 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: v0.7
+      tag: v0.8
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: v0.7
+      tag: v0.8
     awskinesis:
       image: fission/keda-aws-kinesis-http-connector
-      tag: v0.7
+      tag: v0.8
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: v0.7
+      tag: v0.8
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: v0.7
+      tag: v0.8
     gcp_pub_sub:
       image: fission/keda-gcp-pubsub-http-connector
-      tag: v0.2
+      tag: v0.3
     redis:
       image: fission/keda-redis-http-connector
       tag: v0.1
