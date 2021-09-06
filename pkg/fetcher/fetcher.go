@@ -602,8 +602,12 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
+		// TODO: pass resource version in the GetOptions, added warning for now
 		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
 		if err == nil {
+			if req.Package.ResourceVersion != pkg.ResourceVersion {
+				fetcher.logger.Warn("package resource version mismatch", zap.String("pkgName", req.Package.Name), zap.String("pkgNamespace", req.Package.Namespace), zap.String("pkgResourceVersion", req.Package.ResourceVersion), zap.String("fetchedResourceVersion", pkg.ResourceVersion))
+			}
 			return pkg, nil
 		}
 		if i < maxRetries-1 {
