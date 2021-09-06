@@ -130,7 +130,7 @@ func MakeGenericPoolManager(
 	}
 
 	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient, functionNamespace,
-		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer)
+		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
 		logger:                 gpmLogger,
