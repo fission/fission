@@ -109,6 +109,7 @@ rules:
   - kuberneteswatchtriggers
   - messagequeuetriggers
   - packages
+  - packages/status
   - timetriggers
   verbs:
   - '*'

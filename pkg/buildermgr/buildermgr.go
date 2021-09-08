@@ -17,6 +17,7 @@ limitations under the License.
 package buildermgr
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -52,10 +53,13 @@ func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string)
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
-	pkgInformer := informerFactory.Core().V1().Packages().Informer()
+	podInformer := k8sInformerFactory.Core().V1().Pods()
+	pkgInformer := informerFactory.Core().V1().Packages()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, envBuilderNamespace, storageSvcUrl, &podInformer, &pkgInformer)
-	pkgWatcher.Run()
+		kubernetesClient, envBuilderNamespace, storageSvcUrl, podInformer, pkgInformer)
+	ctx := context.Background()
+	go podInformer.Informer().Run(ctx.Done())
+	go pkgWatcher.Run(ctx.Done())
+	pkgInformer.Informer().Run(ctx.Done())
 	return nil
 }
