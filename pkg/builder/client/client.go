@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -25,27 +26,40 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
 
 	builder "github.com/fission/fission/pkg/builder"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
 	Client struct {
-		logger *zap.Logger
-		url    string
+		logger     *zap.Logger
+		url        string
+		httpClient *http.Client
 	}
 )
 
 func MakeClient(logger *zap.Logger, builderUrl string) *Client {
+	var hc *http.Client
+	if tracing.TracingEnabled(logger) {
+		hc = &http.Client{Transport: &ochttp.Transport{}}
+	} else {
+		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	}
+
 	return &Client{
-		logger: logger.Named("builder_client"),
-		url:    strings.TrimSuffix(builderUrl, "/"),
+		logger:     logger.Named("builder_client"),
+		url:        strings.TrimSuffix(builderUrl, "/"),
+		httpClient: hc,
 	}
 }
 
-func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
+func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error marshaling json")
@@ -55,8 +69,7 @@ func (c *Client) Build(req *builder.PackageBuildRequest) (*builder.PackageBuildR
 	var resp *http.Response
 
 	for i := 0; i < maxRetries; i++ {
-		resp, err = http.Post(c.url, "application/json", bytes.NewReader(body))
-
+		resp, err := ctxhttp.Post(ctx, c.httpClient, c.url, "application/json", bytes.NewReader(body))
 		if err == nil {
 			if resp.StatusCode == 200 {
 				break

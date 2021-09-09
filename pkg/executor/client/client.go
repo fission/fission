@@ -150,8 +150,7 @@ func (c *Client) service() {
 					svcReqs = append(svcReqs, req)
 				}
 				c.logger.Debug("tapped services in batch", zap.Int("service_count", len(urls)))
-
-				err := c._tapService(svcReqs)
+				err := c._tapService(context.TODO(), svcReqs)
 				if err != nil {
 					c.logger.Error("error tapping function service address", zap.Error(err))
 				}
@@ -176,7 +175,7 @@ func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorT
 	}
 }
 
-func (c *Client) _tapService(tapSvcReqs []TapServiceRequest) error {
+func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest) error {
 	executorURL := c.executorURL + "/v2/tapServices"
 
 	body, err := json.Marshal(tapSvcReqs)
@@ -184,7 +183,7 @@ func (c *Client) _tapService(tapSvcReqs []TapServiceRequest) error {
 		return err
 	}
 
-	resp, err := http.Post(executorURL, "application/json", bytes.NewReader(body))
+	resp, err := ctxhttp.Post(ctx, c.httpClient, executorURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

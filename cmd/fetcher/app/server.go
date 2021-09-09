@@ -131,7 +131,7 @@ func Run(logger *zap.Logger) {
 	logger.Info("fetcher ready to receive requests")
 
 	var handler http.Handler
-	if tracing.TracingEnabled(logger) {
+	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: mux}
 	} else {
 		handler = otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))

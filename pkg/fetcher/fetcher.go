@@ -34,6 +34,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -709,7 +710,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		otelUtils.SpanTrackEvent(ctx, "specializeCall", otelUtils.MapToAttributes(map[string]string{
 			"url": specializeURL,
 		})...)
-		resp, err := http.Post(specializeURL, contentType, reader)
+		resp, err := ctxhttp.Post(ctx, fetcher.httpClient, specializeURL, contentType, reader)
 		if err == nil && resp.StatusCode < 300 {
 			// Success
 			resp.Body.Close()
