@@ -69,7 +69,7 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 	var resp *http.Response
 
 	for i := 0; i < maxRetries; i++ {
-		resp, err := ctxhttp.Post(ctx, c.httpClient, c.url, "application/json", bytes.NewReader(body))
+		resp, err = ctxhttp.Post(ctx, c.httpClient, c.url, "application/json", bytes.NewReader(body))
 		if err == nil {
 			if resp.StatusCode == 200 {
 				break
