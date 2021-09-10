@@ -160,4 +160,4 @@ skaffold-prebuild:
 	@cp -v cmd/preupgradechecks/Dockerfile.fission-preupgradechecks dist/pre-upgrade-checks_linux_amd64/Dockerfile
 
 skaffold-deploy: skaffold-prebuild
-	skaffold run -p $(SKAFFOLD_PROFILE) -v trace
+	skaffold run -p $(SKAFFOLD_PROFILE)
