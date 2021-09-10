@@ -1,17 +1,3 @@
-FROM golang:1.16-alpine as godep
-RUN apk add bash ca-certificates git gcc g++ libc-dev
-
-ARG GOPKG=github.com/fission/fission
-
-ENV GO111MODULE=on
-
-WORKDIR /go/src/${GOPKG}
-
-# To reuse build cache, copy go.mod & go.sum and download dependencies first.
-COPY go.* ./
-
-RUN go mod download
-
 FROM alpine:3.14
 RUN apk add --update ca-certificates
 COPY fetcher /

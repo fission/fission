@@ -21,6 +21,7 @@ PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 REPO ?= fission
 TAG ?= dev
 DOCKER_FLAGS ?= --push --progress plain
+SKAFFOLD_PROFILE ?= kind
 
 VERSION ?= master
 TIMESTAMP ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -149,3 +150,14 @@ all-generators: codegen generate-crds generate-swagger-doc
 release:
 	@./hack/release.sh $(VERSION)
 	@./hack/release-tag.sh $(VERSION)
+
+skaffold-prebuild:
+	@GOOS=linux GOARCH=amd64 goreleaser build --snapshot --rm-dist --single-target
+	@cp -v cmd/builder/Dockerfile.fission-builder dist/builder_linux_amd64/Dockerfile
+	@cp -v cmd/fetcher/Dockerfile.fission-fetcher dist/fetcher_linux_amd64/Dockerfile
+	@cp -v cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64/Dockerfile
+	@cp -v cmd/reporter/Dockerfile.reporter dist/reporter_linux_amd64/Dockerfile
+	@cp -v cmd/preupgradechecks/Dockerfile.fission-preupgradechecks dist/pre-upgrade-checks_linux_amd64/Dockerfile
+
+skaffold-deploy: skaffold-prebuild
+	skaffold run -p $(SKAFFOLD_PROFILE) -v trace

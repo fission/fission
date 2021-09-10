@@ -83,11 +83,16 @@ jobs:
           sudo install skaffold /usr/local/bin/
           skaffold version
 
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          install-only: true
+
       - name: Build and Install Fission
         run: |
           kubectl create ns fission
-          kubectl create -k crds/v1
-          skaffold run -p kind-ci
+          make create-crds
+          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
       - name: Build and Install Fission CLI
         run: |
