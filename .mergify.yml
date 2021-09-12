@@ -1,0 +1,13 @@
+pull_request_rules:
+  - name: Automatic merge on approval
+    conditions:
+      - base=master
+      - "#approved-reviews-by>=1"
+      - label=ready-to-merge
+      - label!=hold-off-merging
+      - status-success=build
+    actions:
+      merge:
+        method: squash
+        commit_message: title+body
+        strict: smart
