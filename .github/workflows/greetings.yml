@@ -1,0 +1,41 @@
+name: Greetings
+
+on: [pull_request, issues]
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - uses: actions/first-interaction@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-message: 'Message that will be displayed on users first issue'
+        pr-message: 'Message that will be displayed on users first pull request'
+        
+---
+name: Greetings
+
+on: [pull_request, issues]
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - uses: actions/first-interaction@v1
+      if: env.month != 'Oct'
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-message: 'Thank you for your first issue! ✨😊'
+        pr-message: 'Thank you for contributing to this project! ✨😊'
+    - uses: actions/first-interaction@v1
+      if: env.month == 'Oct'
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-message: 'Thank you for your first issue! Happy Hacktoberfest!!! ✨🎃👕✨'
+        pr-message: 'Thank you for contributing to this project. Happy Hacktoberfest!!! ✨🎃👕'
