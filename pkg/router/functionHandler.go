@@ -744,6 +744,8 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 	return func(rw http.ResponseWriter, req *http.Request, err error) {
 		var status int
 		var msg string
+		ctx := req.Context()
+		logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
 		switch err {
 		case context.Canceled:
 			// 499 CLIENT CLOSED REQUEST
@@ -752,16 +754,16 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			// Reference: https://httpstatuses.com/499
 			status = 499
 			msg = "client closes the connection"
-			fh.logger.Debug(msg, zap.Any("function", fh.function), zap.String("status", "Client Closed Request"))
+			logger.Debug(msg, zap.Any("function", fh.function), zap.String("status", "Client Closed Request"))
 		case context.DeadlineExceeded:
 			status = http.StatusGatewayTimeout
 			msg := "no response from function before timeout"
-			fh.logger.Error(msg, zap.Any("function", fh.function), zap.String("status", http.StatusText(status)))
+			logger.Error(msg, zap.Any("function", fh.function), zap.String("status", http.StatusText(status)))
 		default:
 			code, _ := ferror.GetHTTPError(err)
 			status = code
 			msg = "error sending request to function"
-			fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function),
+			logger.Error(msg, zap.Error(err), zap.Any("function", fh.function),
 				zap.Any("status", http.StatusText(status)), zap.Int("code", code))
 		}
 
@@ -774,7 +776,7 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		rw.WriteHeader(status)
 		_, err = rw.Write([]byte(msg))
 		if err != nil {
-			fh.logger.Error(
+			logger.Error(
 				"error writing HTTP response",
 				zap.Error(err),
 				zap.Any("function", fh.function),
