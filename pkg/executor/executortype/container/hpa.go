@@ -42,6 +42,7 @@ func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStr
 		return nil, errors.New("failed to create HPA, found empty deployment")
 	}
 
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 	minRepl := int32(execStrategy.MinScale)
 	if minRepl == 0 {
 		minRepl = 1
@@ -79,7 +80,7 @@ func (cn *Container) createOrGetHpa(ctx context.Context, hpaName string, execStr
 			existingHpa.Spec = hpa.Spec
 			existingHpa, err = cn.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
-				cn.logger.Warn("error adopting HPA", zap.Error(err),
+				logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
 				return nil, err
 			}

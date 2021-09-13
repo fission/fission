@@ -195,7 +195,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var err error
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
 
-	logger := roundTripper.logger.With(zap.String("function", fnMeta.Name), zap.String("namespace", fnMeta.Namespace))
+	logger := otelUtils.LoggerWithTraceID(ctx, roundTripper.logger).With(zap.String("function", fnMeta.Name), zap.String("namespace", fnMeta.Namespace))
 
 	dumpReqFunc := func(request *http.Request) {
 		if request == nil {
@@ -660,6 +660,7 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 }
 
 func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
 
@@ -676,7 +677,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 	service, err := fh.executor.GetServiceForFunction(fContext, fh.function)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
-		fh.logger.Error("error from GetServiceForFunction",
+		logger.Error("error from GetServiceForFunction",
 			zap.Error(err),
 			zap.String("error_message", errMsg),
 			zap.Any("function", fh.function),
@@ -686,7 +687,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 	// parse the address into url
 	svcURL, err := url.Parse(fmt.Sprintf("http://%v", service))
 	if err != nil {
-		fh.logger.Error("error parsing service url",
+		logger.Error("error parsing service url",
 			zap.Error(err),
 			zap.String("service_url", svcURL.String()))
 		return nil, err

@@ -215,8 +215,9 @@ func (executor *Executor) serveCreateFuncServices() {
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 	otelUtils.SpanTrackEvent(ctx, "createServiceForFunction", otelUtils.GetAttributesForFunction(fn)...)
-	executor.logger.Debug("no cached function service found, creating one",
+	logger.Debug("no cached function service found, creating one",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 
@@ -229,7 +230,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
 	if fsvcErr != nil {
 		e := "error creating service for function"
-		executor.logger.Error(e,
+		logger.Error(e,
 			zap.Error(fsvcErr),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))

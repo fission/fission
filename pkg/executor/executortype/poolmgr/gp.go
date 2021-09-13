@@ -227,10 +227,11 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
 	expoDelay := 100 * time.Millisecond
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
-			gp.logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", gp.podReadyTimeout))
+			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", gp.podReadyTimeout))
 			return "", nil, errors.New("timeout: waited too long to get a ready pod")
 		}
 
@@ -240,25 +241,25 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		otelUtils.SpanTrackEvent(ctx, "waitForPod", otelUtils.MapToAttributes(newLabels)...)
 		item, quit := gp.readyPodQueue.Get()
 		if quit {
-			gp.logger.Error("readypod controller is not running")
+			logger.Error("readypod controller is not running")
 			return "", nil, errors.New("readypod controller is not running")
 		}
 		key = item.(string)
-		gp.logger.Debug("got key from the queue", zap.String("key", key))
+		logger.Debug("got key from the queue", zap.String("key", key))
 
 		obj, exists, err := gp.readyPodInformer.GetIndexer().GetByKey(key)
 		if err != nil {
-			gp.logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+			logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
 			return "", nil, err
 		}
 
 		if !exists {
-			gp.logger.Warn("pod deleted from store", zap.String("pod", key))
+			logger.Warn("pod deleted from store", zap.String("pod", key))
 			continue
 		}
 
 		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
-			gp.logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
+			logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
 			gp.readyPodQueue.Done(key)
 			gp.readyPodQueue.AddAfter(key, expoDelay)
 			expoDelay *= 2
@@ -279,10 +280,10 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			annotationPatch, _ := json.Marshal(annotations)
 
 			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
-			gp.logger.Info("relabel pod", zap.String("pod", patch))
+			logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
-				gp.logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
+				logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
 				gp.readyPodQueue.Done(key)
 				gp.readyPodQueue.AddAfter(key, expoDelay)
 				expoDelay *= 2
@@ -307,7 +308,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			}
 		}
 
-		gp.logger.Info("chose pod", zap.Any("labels", newLabels),
+		logger.Info("chose pod", zap.Any("labels", newLabels),
 			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
 
 		return key, chosenPod, nil
@@ -372,6 +373,8 @@ func (gp *GenericPool) getFetcherURL(podIP string) string {
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
 func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
+
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
@@ -385,11 +388,11 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 
 	// tell fetcher to get the function.
 	fetcherURL := gp.getFetcherURL(podIP)
-	gp.logger.Info("calling fetcher to copy function", zap.String("function", fn.ObjectMeta.Name), zap.String("url", fetcherURL))
+	logger.Info("calling fetcher to copy function", zap.String("function", fn.ObjectMeta.Name), zap.String("url", fetcherURL))
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
 
-	gp.logger.Info("specializing pod", zap.String("function", fn.ObjectMeta.Name))
+	logger.Info("specializing pod", zap.String("function", fn.ObjectMeta.Name))
 
 	// Fetcher will download user function to share volume of pod, and
 	// invoke environment specialize api for pod specialization.
@@ -427,9 +430,10 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 }
 
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	log := gp.logger.With(zap.String("function", fn.ObjectMeta.Name), zap.String("functionNamespace", fn.ObjectMeta.Namespace),
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.ObjectMeta.Name), zap.String("functionNamespace", fn.ObjectMeta.Namespace),
 		zap.String("env", fn.Spec.Environment.Name), zap.String("envNamespace", fn.Spec.Environment.Namespace))
-	log.Info("choosing pod from pool")
+
+	logger.Info("choosing pod from pool")
 	funcLabels := gp.labelsForFunction(&fn.ObjectMeta)
 
 	if gp.useIstio {
@@ -483,7 +487,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		gp.scheduleDeletePod(pod.ObjectMeta.Name)
 		return nil, err
 	}
-	log.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("podNamespace", pod.ObjectMeta.Namespace), zap.String("podIP", pod.Status.PodIP))
+	logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("podNamespace", pod.ObjectMeta.Namespace), zap.String("podIP", pod.Status.PodIP))
 
 	var svcHost string
 	if gp.useSvc && !gp.useIstio {
@@ -519,7 +523,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
 		// just log the error since it won't affect the function serving
-		log.Warn("error patching svc-host to pod", zap.Error(err),
+		logger.Warn("error patching svc-host to pod", zap.Error(err),
 			zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
 	} else {
 		pod = p
@@ -544,10 +548,10 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// set cpuLimit to 85th percentage of the cpuUsage
 	cpuLimit, err := gp.getPercent(cpuUsage, 0.85)
 	if err != nil {
-		log.Error("failed to get 85 of CPU usage", zap.Error(err))
+		logger.Error("failed to get 85 of CPU usage", zap.Error(err))
 		cpuLimit = cpuUsage
 	}
-	log.Debug("cpuLimit set to", zap.Any("cpulimit", cpuLimit))
+	logger.Debug("cpuLimit set to", zap.Any("cpulimit", cpuLimit))
 
 	m := fn.ObjectMeta // only cache necessary part
 	fsvc := &fscache.FuncSvc{
@@ -568,7 +572,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	gp.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 
-	log.Info("added function service",
+	logger.Info("added function service",
 		zap.String("pod", pod.ObjectMeta.Name),
 		zap.String("podNamespace", pod.ObjectMeta.Namespace),
 		zap.String("serviceHost", svcHost),

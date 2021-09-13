@@ -35,6 +35,7 @@ import (
 )
 
 func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
@@ -67,7 +68,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 			// rolling update if spec is different from the one in the cluster.
 			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 			if err != nil {
-				cn.logger.Warn("error adopting cn", zap.Error(err),
+				logger.Warn("error adopting cn", zap.Error(err),
 					zap.String("cn", deployName), zap.String("ns", deployNamespace))
 				return nil, err
 			}
@@ -78,7 +79,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		if *existingDepl.Spec.Replicas < minScale {
 			err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
-				cn.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
+				logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
 				return nil, err
 			}
 		}
@@ -94,7 +95,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
-				cn.logger.Error("error while creating function deployment",
+				logger.Error("error while creating function deployment",
 					zap.Error(err),
 					zap.String("function", fn.ObjectMeta.Name),
 					zap.String("deployment_name", deployName),
@@ -148,7 +149,8 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 		time.Sleep(time.Second)
 	}
 
-	cn.logger.Error("Deployment provision failed within timeout window",
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	logger.Error("Deployment provision failed within timeout window",
 		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
 		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 

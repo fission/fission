@@ -174,8 +174,9 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	// from Func -> get Env
-	gpm.logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(ctx, fn)
 	if err != nil {
 		return nil, err
@@ -187,12 +188,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	if created {
-		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 	}
 
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
 	return pool.getFuncSvc(ctx, fn)
 }
 

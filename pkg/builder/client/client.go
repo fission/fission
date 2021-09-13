@@ -33,6 +33,7 @@ import (
 
 	builder "github.com/fission/fission/pkg/builder"
 	ferror "github.com/fission/fission/pkg/error"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/tracing"
 )
 
@@ -60,6 +61,8 @@ func MakeClient(logger *zap.Logger, builderUrl string) *Client {
 }
 
 func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error marshaling json")
@@ -79,7 +82,7 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 		if i < maxRetries-1 {
 			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
-			c.logger.Error("error building package, retrying", zap.Error(err))
+			logger.Error("error building package, retrying", zap.Error(err))
 			continue
 		}
 
@@ -90,14 +93,14 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	rBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		c.logger.Error("error reading resp body", zap.Error(err))
+		logger.Error("error reading resp body", zap.Error(err))
 		return nil, err
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
 	err = json.Unmarshal(rBody, &pkgBuildResp)
 	if err != nil {
-		c.logger.Error("error parsing resp body", zap.Error(err))
+		logger.Error("error parsing resp body", zap.Error(err))
 		return nil, err
 	}
 
