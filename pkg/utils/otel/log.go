@@ -18,13 +18,13 @@ package otel
 import (
 	"context"
 
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
 func LoggerWithTraceID(context context.Context, logger *zap.Logger) *zap.Logger {
-	if span := trace.FromContext(context); span != nil {
-		return logger.With(zap.String("trace_id", span.SpanContext().TraceID.String()))
+	if span := trace.SpanContextFromContext(context); span.TraceID().IsValid() {
+		return logger.With(zap.String("trace_id", span.TraceID().String()))
 	}
 	return logger.With(zap.String("trace_id", "unknown"))
 }
