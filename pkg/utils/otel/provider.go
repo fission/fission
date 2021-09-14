@@ -14,22 +14,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
-func InitProvider(logger *zap.Logger, serviceName string) (func(), error) {
+func getSpanProcessor(ctx context.Context, logger *zap.Logger) (*sdktrace.SpanProcessor, error) {
 	collectorEndpoint := os.Getenv("OTEL_COLLECTOR_ENDPOINT")
 	if collectorEndpoint == "" {
 		logger.Info("skipping trace exporter registration")
 		return nil, nil
-	}
-
-	ctx := context.Background()
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(serviceName),
-		),
-	)
-	if err != nil {
-		return nil, err
 	}
 
 	traceExporter, err := otlptracegrpc.New(ctx,
@@ -42,11 +31,32 @@ func InitProvider(logger *zap.Logger, serviceName string) (func(), error) {
 	}
 
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
+	return &bsp, nil
+}
+
+// Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
+func InitProvider(logger *zap.Logger, serviceName string) (func(), error) {
+	ctx := context.Background()
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
 	)
+
+	bsp, err := getSpanProcessor(ctx, logger)
+	if err != nil {
+		return nil, err
+	}
+	if bsp != nil {
+		tracerProvider.RegisterSpanProcessor(*bsp)
+	}
 
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})

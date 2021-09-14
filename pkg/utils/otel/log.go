@@ -26,5 +26,5 @@ func LoggerWithTraceID(context context.Context, logger *zap.Logger) *zap.Logger 
 	if span := trace.SpanContextFromContext(context); span.TraceID().IsValid() {
 		return logger.With(zap.String("trace_id", span.TraceID().String()))
 	}
-	return logger.With(zap.String("trace_id", "unknown"))
+	return logger
 }
