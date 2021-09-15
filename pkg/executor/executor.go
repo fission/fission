@@ -170,7 +170,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
+				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
