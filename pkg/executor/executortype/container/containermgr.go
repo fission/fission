@@ -50,6 +50,7 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var _ executortype.ExecutorType = &Container{}
@@ -160,6 +161,7 @@ func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
 func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
 	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
@@ -187,12 +189,14 @@ func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
 func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
+	logger := otelUtils.LoggerWithTraceID(ctx, caaf.logger)
+	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
-		caaf.logger.Error("address not found in function service")
+		logger.Error("address not found in function service")
 		return false
 	}
 	if len(fsvc.KubernetesObjects) == 0 {
-		caaf.logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
+		logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
 		return false
 	}
 	for _, obj := range fsvc.KubernetesObjects {
@@ -200,7 +204,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 			_, err := caaf.svcLister.Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
-					caaf.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
+					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
 				}
 				return false
 			}
@@ -208,7 +212,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 			currentDeploy, err := caaf.deplLister.Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
-					caaf.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
+					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
 				}
 				return false
 			}

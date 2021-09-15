@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (cn *Container) getSvPort(fn *fv1.Function) (port int32, err error) {
@@ -47,6 +48,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 	if err != nil {
 		return nil, err
 	}
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
@@ -77,7 +79,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 			existingSvc.Spec.Type = service.Spec.Type
 			existingSvc, err = cn.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
 			if err != nil {
-				cn.logger.Warn("error adopting service", zap.Error(err),
+				logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
 				return nil, err
 			}
@@ -93,6 +95,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "svcCreated", otelUtils.GetAttributesForSvc(svc)...)
 		return svc, nil
 	}
 	return nil, err

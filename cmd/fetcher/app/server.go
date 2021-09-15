@@ -24,7 +24,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"sync/atomic"
 
 	"go.opencensus.io/plugin/ochttp"
@@ -64,11 +63,7 @@ func Run(logger *zap.Logger) {
 		}
 	}
 
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
-
+	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		go func() {
 			if err := tracing.RegisterTraceExporter(logger, *collectorEndpoint, "Fission-Fetcher"); err != nil {

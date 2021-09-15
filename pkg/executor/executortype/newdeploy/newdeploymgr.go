@@ -51,6 +51,7 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var _ executortype.ExecutorType = &NewDeploy{}
@@ -150,19 +151,18 @@ func (deploy *NewDeploy) GetTypeName(ctx context.Context) fv1.ExecutorType {
 
 // GetFuncSvc returns a function service; error otherwise.
 func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	// TODO: client-go doesn't support to pass in context.
-	//  Once it supports context, we should change the signature of method.
-	// https://github.com/kubernetes/kubernetes/issues/46503
 	return deploy.createFunction(ctx, fn)
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
 func (deploy *NewDeploy) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache")
 	return deploy.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
 func (deploy *NewDeploy) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
+	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache")
 	deploy.fsCache.DeleteEntry(fsvc)
 }
 
@@ -179,6 +179,7 @@ func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Fu
 
 // TapService makes a TouchByAddress request to the cache.
 func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
+	otelUtils.SpanTrackEvent(ctx, "TapService")
 	err := deploy.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -190,12 +191,14 @@ func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 // scale deployment to 1 replica if there are no available replicas for function.
 // Return true if no error occurs, return false otherwise.
 func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
+	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
-		deploy.logger.Error("address not found in function service")
+		logger.Error("address not found in function service")
 		return false
 	}
 	if len(fsvc.KubernetesObjects) == 0 {
-		deploy.logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
+		logger.Error("no kubernetes object related to function", zap.String("function", fsvc.Function.Name))
 		return false
 	}
 	for _, obj := range fsvc.KubernetesObjects {
@@ -203,7 +206,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 			_, err := deploy.svcLister.Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
-					deploy.logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
+					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
 				}
 				return false
 			}
@@ -212,7 +215,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 			currentDeploy, err := deploy.deplLister.Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
-					deploy.logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
+					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))
 				}
 				return false
 			}
@@ -345,6 +348,8 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 		return nil, nil
 	}
 
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
+
 	fsvcObj, err := deploy.throttler.RunOnce(string(fn.ObjectMeta.UID), func(ableToCreate bool) (interface{}, error) {
 		if ableToCreate {
 			return deploy.fnCreate(ctx, fn)
@@ -354,7 +359,7 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 
 	if err != nil {
 		e := "error creating k8s resources for function"
-		deploy.logger.Error(e,
+		logger.Error(e,
 			zap.Error(err),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
@@ -363,8 +368,9 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 
 	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
 	if !ok {
-		deploy.logger.Panic("receive unknown object while creating function - expected pointer of function service object")
+		logger.Panic("receive unknown object while creating function - expected pointer of function service object")
 	}
+	otelUtils.SpanTrackEvent(ctx, "fnSvcResponse", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 
 	return fsvc, err
 }
@@ -844,7 +850,13 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 }
 
 func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, deplName string, replicas int32) error {
-	deploy.logger.Info("scaling deployment",
+	otelUtils.SpanTrackEvent(ctx, "scaleDeployment", otelUtils.MapToAttributes(map[string]string{
+		"deployment-name":      deplName,
+		"deployment-namespace": deplNS,
+		"replicas":             fmt.Sprintf("%d", replicas),
+	})...)
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
+	logger.Info("scaling deployment",
 		zap.String("deployment", deplName),
 		zap.String("namespace", deplNS),
 		zap.Int32("replicas", replicas))

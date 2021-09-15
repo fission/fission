@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-multierror"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -51,6 +52,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var _ executortype.ExecutorType = &GenericPoolManager{}
@@ -171,8 +173,10 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 }
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	// from Func -> get Env
-	gpm.logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(ctx, fn)
 	if err != nil {
 		return nil, err
@@ -184,12 +188,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	if created {
-		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
 	}
 
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	gpm.logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
 	return pool.getFuncSvc(ctx, fn)
 }
 
@@ -198,18 +202,25 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
 	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
+	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	gpm.fsCache.DeleteFunctionSvc(fsvc)
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svcHost string) {
+	otelUtils.SpanTrackEvent(ctx, "UnTapService",
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)},
+		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
 	gpm.fsCache.MarkAvailable(key, svcHost)
 }
 
 func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) error {
+	otelUtils.SpanTrackEvent(ctx, "UnTapService",
+		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
 	err := gpm.fsCache.TouchByAddress(svcHost)
 	if err != nil {
 		return err
@@ -220,6 +231,7 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
+	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
 			pod, err := gpm.podLister.Pods(obj.Namespace).Get(obj.Name)
@@ -499,6 +511,7 @@ func (gpm *GenericPoolManager) service() {
 }
 
 func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment) (*GenericPool, bool, error) {
+	otelUtils.SpanTrackEvent(ctx, "getPool", otelUtils.GetAttributesForEnv(env)...)
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
 		ctx:             ctx,
@@ -511,6 +524,7 @@ func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment
 }
 
 func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environment) {
+	otelUtils.SpanTrackEvent(ctx, "cleanupPool", otelUtils.GetAttributesForEnv(env)...)
 	gpm.requestChannel <- &request{
 		ctx:         ctx,
 		requestType: CLEANUP_POOL,
@@ -520,6 +534,7 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 
 func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Function) (*fv1.Environment, error) {
 	var env *fv1.Environment
+	otelUtils.SpanTrackEvent(ctx, "getFunctionEnv", otelUtils.GetAttributesForFunction(fn)...)
 
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
@@ -530,7 +545,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 	}
 
 	// Get env from controller
-	env, err = gpm.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(ctx, fn.Spec.Environment.Name, metav1.GetOptions{})
+	env, err = gpm.poolPodC.envLister.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
 	}

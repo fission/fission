@@ -88,7 +88,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 
 	logger.Info("started building with source package", zap.String("source_package", srcPkgFilename))
 	// send build request to builder
-	buildResp, err := builderC.Build(pkgBuildReq)
+	buildResp, err := builderC.Build(ctx, pkgBuildReq)
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
 		var buildLogs string

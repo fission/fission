@@ -34,7 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
-	"github.com/fission/fission/pkg/utils/otel"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -55,9 +55,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	et := executor.executorTypes[t]
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 
 	// Check function -> svc cache
-	executor.logger.Debug("checking for cached function service",
+	logger.Debug("checking for cached function service",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
@@ -73,14 +74,14 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
 		if err == nil {
 			// if a pod is already serving request then it already exists else validated
-			executor.logger.Debug("from cache", zap.Int("active", active))
+			logger.Debug("from cache", zap.Int("active", active))
 			if active > 1 || et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
-				executor.logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
 				return
 			}
-			executor.logger.Debug("deleting cache entry for invalid address",
+			logger.Debug("deleting cache entry for invalid address",
 				zap.String("function_name", fn.ObjectMeta.Name),
 				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
@@ -90,7 +91,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 
 		if active >= concurrency {
 			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			executor.logger.Error("error occurred", zap.String("error", errMsg))
+			logger.Error("error occurred", zap.String("error", errMsg))
 			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
 			return
 		}
@@ -102,7 +103,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
 				return
 			}
-			executor.logger.Debug("deleting cache entry for invalid address",
+			logger.Debug("deleting cache entry for invalid address",
 				zap.String("function_name", fn.ObjectMeta.Name),
 				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
@@ -113,7 +114,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	serviceName, err := executor.getServiceForFunction(ctx, fn)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
-		executor.logger.Error("error getting service for function",
+		logger.Error("error getting service for function",
 			zap.Error(err),
 			zap.String("function", fn.ObjectMeta.Name),
 			zap.String("fission_http_error", msg))
@@ -167,10 +168,11 @@ func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
 // find funcSvc and update its atime
 func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		executor.logger.Error("failed to read tap service request", zap.Error(err))
+		logger.Error("failed to read tap service request", zap.Error(err))
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
@@ -178,7 +180,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	tapSvcReqs := []client.TapServiceRequest{}
 	err = json.Unmarshal(body, &tapSvcReqs)
 	if err != nil {
-		executor.logger.Error("failed to decode tap service request",
+		logger.Error("failed to decode tap service request",
 			zap.Error(err),
 			zap.String("request-payload", string(body)))
 		http.Error(w, "Failed to decode tap service request", http.StatusBadRequest)
@@ -206,7 +208,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs.ErrorOrNil() != nil {
-		executor.logger.Error("error tapping function service", zap.Error(errs))
+		logger.Error("error tapping function service", zap.Error(errs))
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -220,7 +222,6 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
@@ -267,7 +268,7 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: executor.GetHandler()}
 	} else {
-		handler = otel.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otel.UrlsToIgnore("/healthz"))
+		handler = otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	}
 
 	err := http.ListenAndServe(address, handler)

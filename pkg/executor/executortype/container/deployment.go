@@ -31,9 +31,11 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
@@ -66,7 +68,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 			// rolling update if spec is different from the one in the cluster.
 			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 			if err != nil {
-				cn.logger.Warn("error adopting cn", zap.Error(err),
+				logger.Warn("error adopting cn", zap.Error(err),
 					zap.String("cn", deployName), zap.String("ns", deployNamespace))
 				return nil, err
 			}
@@ -77,7 +79,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		if *existingDepl.Spec.Replicas < minScale {
 			err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
-				cn.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
+				logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
 				return nil, err
 			}
 		}
@@ -93,7 +95,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
-				cn.logger.Error("error while creating function deployment",
+				logger.Error("error while creating function deployment",
 					zap.Error(err),
 					zap.String("function", fn.ObjectMeta.Name),
 					zap.String("deployment_name", deployName),
@@ -101,6 +103,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "deploymentCreated", otelUtils.GetAttributesForDeployment(depl)...)
 		if minScale > 0 {
 			depl, err = cn.waitForDeploy(ctx, depl, minScale, specializationTimeout)
 		}
@@ -125,7 +128,7 @@ func (cn *Container) deleteDeployment(ctx context.Context, ns string, name strin
 
 func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
-
+	otelUtils.SpanTrackEvent(ctx, "waitForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
@@ -140,13 +143,15 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
 		if latestDepl.Status.AvailableReplicas >= replicas {
+			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)
 	}
 
-	cn.logger.Error("Deployment provision failed within timeout window",
-		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	logger.Error("Deployment provision failed within timeout window",
+		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
 		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 
 	// this error appears in the executor pod logs

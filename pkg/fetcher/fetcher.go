@@ -34,6 +34,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +52,8 @@ import (
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -104,13 +107,8 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
 
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
-	if err != nil {
-		logger.Fatal("error parsing OPENTRACING_ENABLED", zap.Error(err))
-	}
-
 	var hc *http.Client
-	if openTracingEnabled {
+	if tracing.TracingEnabled(logger) {
 		hc = &http.Client{Transport: &ochttp.Transport{}}
 	} else {
 		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -168,50 +166,52 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		fetcher.logger.Info("fetch request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("fetch request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fetcher.logger.Error("error reading request body", zap.Error(err))
+		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req FunctionFetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		fetcher.logger.Error("error parsing request body", zap.Error(err))
+		logger.Error("error parsing request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	pkg, err := fetcher.getPkgInformation(ctx, req)
 	if err != nil {
-		fetcher.logger.Error("error getting package information", zap.Error(err))
+		logger.Error("error getting package information", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	code, err := fetcher.Fetch(ctx, pkg, req)
 	if err != nil {
-		fetcher.logger.Error("error fetching", zap.Error(err))
+		logger.Error("error fetching", zap.Error(err))
 		http.Error(w, err.Error(), code)
 		return
 	}
 
-	fetcher.logger.Info("checking secrets/cfgmaps")
+	logger.Info("checking secrets/cfgmaps")
 	code, err = fetcher.FetchSecretsAndCfgMaps(ctx, req.Secrets, req.ConfigMaps)
 	if err != nil {
-		fetcher.logger.Error("error fetching secrets and config maps", zap.Error(err))
+		logger.Error("error fetching secrets and config maps", zap.Error(err))
 		http.Error(w, err.Error(), code)
 		return
 	}
 
-	fetcher.logger.Info("completed fetch request")
+	logger.Info("completed fetch request")
 	// all done
 	w.WriteHeader(http.StatusOK)
 }
@@ -223,25 +223,26 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("only POST is supported on this endpoint, %v received", r.Method), http.StatusMethodNotAllowed)
 		return
 	}
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fetcher.logger.Error("error reading request body", zap.Error(err))
+		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req FunctionSpecializeRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		fetcher.logger.Error("error parsing request body", zap.Error(err))
+		logger.Error("error parsing request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = fetcher.SpecializePod(ctx, req.FetchReq, req.LoadReq)
 	if err != nil {
-		fetcher.logger.Error("error specializing pod", zap.Error(err))
+		logger.Error("error specializing pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -253,18 +254,21 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 // Fetch takes FetchRequest and makes the fetch call
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
 		e := "fetch request received for an empty file name"
-		fetcher.logger.Error(e, zap.Any("request", req))
+		logger.Error(e, zap.Any("request", req))
 		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, req))
 	}
 
 	// verify first if the file already exists.
 	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, req.Filename)); err == nil {
-		fetcher.logger.Info("requested file already exists at shared volume - skipping fetch",
+		logger.Info("requested file already exists at shared volume - skipping fetch",
 			zap.String("requested_file", req.Filename),
 			zap.String("shared_volume_path", fetcher.sharedVolumePath))
+		otelUtils.SpanTrackEvent(ctx, "packageAlreadyExists", otelUtils.GetAttributesForPackage(pkg)...)
 		return http.StatusOK, nil
 	}
 
@@ -272,11 +276,16 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
 	if req.FetchType == fv1.FETCH_URL {
+		otelUtils.SpanTrackEvent(ctx, "fetch_url", otelUtils.MapToAttributes(map[string]string{
+			"package-name":      pkg.Name,
+			"package-namespace": pkg.Namespace,
+			"fetch-url":         req.Url,
+		})...)
 		// fetch the file and save it to the tmp path
 		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
 		if err != nil {
 			e := "failed to download url"
-			fetcher.logger.Error(e, zap.Error(err), zap.String("url", req.Url))
+			logger.Error(e, zap.Error(err), zap.String("url", req.Url))
 			return http.StatusBadRequest, errors.Wrapf(err, "%s: %s", e, req.Url)
 		}
 	} else {
@@ -290,7 +299,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			// it may be useful to the user if we can send a more meaningful error in such a scenario.
 			if pkg.Status.BuildStatus != fv1.BuildStatusSucceeded && pkg.Status.BuildStatus != fv1.BuildStatusNone {
 				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", fv1.BuildStatusSucceeded)
-				fetcher.logger.Error(e,
+				logger.Error(e,
 					zap.String("package_name", pkg.ObjectMeta.Name),
 					zap.String("package_namespace", pkg.ObjectMeta.Namespace),
 					zap.Any("package_build_status", pkg.Status.BuildStatus))
@@ -307,15 +316,21 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			err := ioutil.WriteFile(tmpPath, archive.Literal, 0600)
 			if err != nil {
 				e := "failed to write file"
-				fetcher.logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
+				logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
 				return http.StatusInternalServerError, errors.Wrapf(err, "%s %s", e, tmpPath)
 			}
+			otelUtils.SpanTrackEvent(ctx, "archiveLiteral", otelUtils.GetAttributesForPackage(pkg)...)
 		} else {
 			// download and verify
+			otelUtils.SpanTrackEvent(ctx, "dowloadArchieveLiteral", otelUtils.MapToAttributes(map[string]string{
+				"package-name":      pkg.Name,
+				"package-namespace": pkg.Namespace,
+				"archive-url":       archive.URL,
+			})...)
 			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url"
-				fetcher.logger.Error(e, zap.Error(err), zap.String("url", req.Url))
+				logger.Error(e, zap.Error(err), zap.String("url", req.Url))
 				return http.StatusBadRequest, errors.Wrapf(err, "%s %s", e, req.Url)
 			}
 
@@ -324,13 +339,13 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				checksum, err := utils.GetFileChecksum(tmpPath)
 				if err != nil {
 					e := "failed to get checksum"
-					fetcher.logger.Error(e, zap.Error(err))
+					logger.Error(e, zap.Error(err))
 					return http.StatusBadRequest, errors.Wrap(err, e)
 				}
 				err = verifyChecksum(checksum, &archive.Checksum)
 				if err != nil {
 					e := "failed to verify checksum"
-					fetcher.logger.Error(e, zap.Error(err))
+					logger.Error(e, zap.Error(err))
 					return http.StatusBadRequest, errors.Wrap(err, e)
 				}
 			}
@@ -342,7 +357,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
 		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
-			fetcher.logger.Error("error unarchive",
+			logger.Error("error unarchive",
 				zap.Error(err),
 				zap.String("archive_location", tmpPath),
 				zap.String("target_location", tmpUnarchivePath))
@@ -356,20 +371,23 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	renamePath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
 	err := fetcher.rename(tmpPath, renamePath)
 	if err != nil {
-		fetcher.logger.Error("error renaming file",
+		logger.Error("error renaming file",
 			zap.Error(err),
 			zap.String("original_path", tmpPath),
 			zap.String("rename_path", renamePath))
 		return http.StatusInternalServerError, err
 	}
 
-	fetcher.logger.Info("successfully placed", zap.String("location", renamePath))
+	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
+	logger.Info("successfully placed", zap.String("location", renamePath))
 	return http.StatusOK, nil
 }
 
 // FetchSecretsAndCfgMaps fetches secrets and configmaps specified by user
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+
 	if len(secrets) > 0 {
 		for _, secret := range secrets {
 			data, err := fetcher.kubeClient.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
@@ -382,7 +400,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					httpCode = http.StatusNotFound
 					e = "secret was not found in kubeapi"
 				}
-				fetcher.logger.Error(e,
+				logger.Error(e,
 					zap.Error(err),
 					zap.String("secret_name", secret.Name),
 					zap.String("secret_namespace", secret.Namespace))
@@ -395,7 +413,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
-				fetcher.logger.Error(e,
+				logger.Error(e,
 					zap.Error(err),
 					zap.String("directory", secretDir),
 					zap.String("secret_name", secret.Name),
@@ -404,13 +422,17 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			}
 			err = writeSecretOrConfigMap(data.Data, secretDir)
 			if err != nil {
-				fetcher.logger.Error("failed to write secret to file location",
+				logger.Error("failed to write secret to file location",
 					zap.Error(err),
 					zap.String("location", secretDir),
 					zap.String("secret_name", secret.Name),
 					zap.String("secret_namespace", secret.Namespace))
 				return http.StatusInternalServerError, err
 			}
+			otelUtils.SpanTrackEvent(ctx, "storedSecret", otelUtils.MapToAttributes(map[string]string{
+				"secret-name":      secret.Name,
+				"secret-namespace": secret.Namespace,
+			})...)
 		}
 	}
 
@@ -426,7 +448,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					httpCode = http.StatusNotFound
 					e = "configmap was not found in kubeapi"
 				}
-				fetcher.logger.Error(e,
+				logger.Error(e,
 					zap.Error(err),
 					zap.String("config_map_name", config.Name),
 					zap.String("config_map_namespace", config.Namespace))
@@ -439,7 +461,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
-				fetcher.logger.Error(e,
+				logger.Error(e,
 					zap.Error(err),
 					zap.String("directory", configDir),
 					zap.String("config_map_name", config.Name),
@@ -452,13 +474,17 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			}
 			err = writeSecretOrConfigMap(configMap, configDir)
 			if err != nil {
-				fetcher.logger.Error("failed to write configmap to file location",
+				logger.Error("failed to write configmap to file location",
 					zap.Error(err),
 					zap.String("location", configDir),
 					zap.String("config_map_name", config.Name),
 					zap.String("config_map_namespace", config.Namespace))
 				return http.StatusInternalServerError, err
 			}
+			otelUtils.SpanTrackEvent(ctx, "storedConfigmap", otelUtils.MapToAttributes(map[string]string{
+				"configmap-name":      config.Name,
+				"configmap-namespace": config.Namespace,
+			})...)
 		}
 	}
 
@@ -467,6 +493,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 
 func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
 	if r.Method != "POST" {
 		http.Error(w, "only POST is supported on this endpoint", http.StatusMethodNotAllowed)
@@ -476,13 +503,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		fetcher.logger.Info("upload request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("upload request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
 	// parse request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fetcher.logger.Error("error reading request body", zap.Error(err))
+		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -490,11 +517,11 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	var req ArchiveUploadRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		fetcher.logger.Error("error parsing request body", zap.Error(err))
+		logger.Error("error parsing request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fetcher.logger.Info("fetcher received upload request", zap.Any("request", req))
+	logger.Info("fetcher received upload request", zap.Any("request", req))
 
 	zipFilename := req.Filename + ".zip"
 	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
@@ -504,7 +531,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		err = fetcher.archive(srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error archiving zip file"
-			fetcher.logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
+			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
 			http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 			return
 		}
@@ -512,19 +539,19 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		err = os.Rename(srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error renaming the archive"
-			fetcher.logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
+			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
 			http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	fetcher.logger.Info("starting upload...")
+	logger.Info("starting upload...")
 	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
 
 	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
 	if err != nil {
 		e := "error uploading zip file"
-		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
+		logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
@@ -532,7 +559,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	sum, err := utils.GetFileChecksum(dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
-		fetcher.logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
+		logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
@@ -545,18 +572,18 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := "error encoding upload response"
-		fetcher.logger.Error(e, zap.Error(err))
+		logger.Error(e, zap.Error(err))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
 
-	fetcher.logger.Info("completed upload request")
+	logger.Info("completed upload request")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(rBody)
 	if err != nil {
 		e := "error writing response"
-		fetcher.logger.Error(e, zap.Error(err))
+		logger.Error(e, zap.Error(err))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 	}
 }
@@ -600,13 +627,19 @@ func (fetcher *Fetcher) unarchive(src string, dst string) error {
 
 // getPkgInformation gets package information from k8s api server.
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
+		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
+			"package_name":      req.Package.Name,
+			"package_namespace": req.Package.Namespace,
+			"retry_count":       strconv.Itoa(i),
+		})...)
 		// TODO: pass resource version in the GetOptions, added warning for now
 		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			if req.Package.ResourceVersion != pkg.ResourceVersion {
-				fetcher.logger.Warn("package resource version mismatch", zap.String("pkgName", req.Package.Name), zap.String("pkgNamespace", req.Package.Namespace), zap.String("pkgResourceVersion", req.Package.ResourceVersion), zap.String("fetchedResourceVersion", pkg.ResourceVersion))
+				logger.Warn("package resource version mismatch", zap.String("pkgName", req.Package.Name), zap.String("pkgNamespace", req.Package.Namespace), zap.String("pkgResourceVersion", req.Package.ResourceVersion), zap.String("fetchedResourceVersion", pkg.ResourceVersion))
 			}
 			return pkg, nil
 		}
@@ -634,10 +667,11 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 }
 
 func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) error {
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		fetcher.logger.Info("specialize request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("specialize request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
 	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
@@ -674,16 +708,19 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		contentType = "application/json"
 		specializeURL = "http://127.0.0.1:8888/v2/specialize"
 		reader = bytes.NewReader(loadPayload)
-		fetcher.logger.Info("calling environment v2 specialization endpoint")
+		logger.Info("calling environment v2 specialization endpoint")
 	} else {
 		contentType = "text/plain"
 		specializeURL = "http://127.0.0.1:8888/specialize"
 		reader = bytes.NewReader([]byte{})
-		fetcher.logger.Info("calling environment v1 specialization endpoint")
+		logger.Info("calling environment v1 specialization endpoint")
 	}
 
 	for i := 0; i < maxRetries; i++ {
-		resp, err := http.Post(specializeURL, contentType, reader)
+		otelUtils.SpanTrackEvent(ctx, "specializeCall", otelUtils.MapToAttributes(map[string]string{
+			"url": specializeURL,
+		})...)
+		resp, err := ctxhttp.Post(ctx, fetcher.httpClient, specializeURL, contentType, reader)
 		if err == nil && resp.StatusCode < 300 {
 			// Success
 			resp.Body.Close()
@@ -695,7 +732,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError()) {
 			if i < maxRetries-1 {
 				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-				fetcher.logger.Error("error connecting to function environment pod for specialization request, retrying", zap.Error(netErr))
+				logger.Error("error connecting to function environment pod for specialization request, retrying", zap.Error(netErr))
 				continue
 			}
 		}
@@ -714,7 +751,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 // WsStartHandler is used to generate websocket events in Kubernetes
 func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -728,17 +765,17 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
-		fetcher.logger.Error("Failed to get the pod", zap.Error(err))
+		logger.Error("Failed to get the pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	for _, pod := range pods.Items {
 		ref, err := reference.GetReference(scheme.Scheme, &pod)
 		if err != nil {
-			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
+			logger.Error("Could not get reference for pod", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		rec.Event(ref, corev1.EventTypeNormal, "WsConnectionStarted", "Websocket connection has been formed on this pod")
-		fetcher.logger.Info("Sent websocket initiation event")
+		logger.Info("Sent websocket initiation event")
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -747,6 +784,8 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+
 	if r.Method != "GET" {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
@@ -760,19 +799,19 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 		FieldSelector: "metadata.name=" + fetcher.Info.Name,
 	})
 	if err != nil {
-		fetcher.logger.Error("Failed to get the pod", zap.Error(err))
+		logger.Error("Failed to get the pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	for _, pod := range pods.Items {
 		// There will only be one time since we've used field selector
 		ref, err := reference.GetReference(scheme.Scheme, &pod)
 		if err != nil {
-			fetcher.logger.Error("Could not get reference for pod", zap.Error(err))
+			logger.Error("Could not get reference for pod", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
 		rec.Event(ref, corev1.EventTypeNormal, "NoActiveConnections", "Connection has been inactive")
-		fetcher.logger.Info("Sent no active connections event")
+		logger.Info("Sent no active connections event")
 	}
 	w.WriteHeader(http.StatusOK)
 }

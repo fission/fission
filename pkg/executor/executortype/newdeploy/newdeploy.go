@@ -37,6 +37,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // Deployment Constants
@@ -372,6 +373,7 @@ func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, exe
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
 	}
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 
 	minRepl := int32(execStrategy.MinScale)
 	if minRepl == 0 {
@@ -410,7 +412,7 @@ func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, exe
 			existingHpa.Spec = hpa.Spec
 			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
-				deploy.logger.Warn("error adopting HPA", zap.Error(err),
+				logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
 				return nil, err
 			}
@@ -426,6 +428,7 @@ func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, exe
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForHPA(cHpa)...)
 		return cHpa, nil
 	}
 	return nil, err
@@ -445,6 +448,7 @@ func (deploy *NewDeploy) deleteHpa(ctx context.Context, ns string, name string) 
 }
 
 func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
@@ -476,7 +480,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 			existingSvc.Spec.Type = service.Spec.Type
 			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
 			if err != nil {
-				deploy.logger.Warn("error adopting service", zap.Error(err),
+				logger.Warn("error adopting service", zap.Error(err),
 					zap.String("service", svcName), zap.String("ns", svcNamespace))
 				return nil, err
 			}
@@ -492,6 +496,8 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 				return nil, err
 			}
 		}
+		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForSvc(svc)...)
+
 		return svc, nil
 	}
 	return nil, err
@@ -503,11 +509,13 @@ func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) 
 
 func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
 	oldStatus := depl.Status
-
+	otelUtils.SpanTrackEvent(ctx, "waitingForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
 	// if no specializationTimeout is set, use default value
 	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
 		specializationTimeout = fv1.DefaultSpecializationTimeOut
 	}
+
+	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 
 	for i := 0; i < specializationTimeout; i++ {
 		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
@@ -518,12 +526,13 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
 		if latestDepl.Status.AvailableReplicas >= replicas {
+			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)
 	}
 
-	deploy.logger.Error("Deployment provision failed within timeout window",
+	logger.Error("Deployment provision failed within timeout window",
 		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
 		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 

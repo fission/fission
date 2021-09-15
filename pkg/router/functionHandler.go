@@ -33,7 +33,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -196,7 +195,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var err error
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
 
-	logger := roundTripper.logger.With(zap.String("function", fnMeta.Name), zap.String("namespace", fnMeta.Namespace))
+	logger := otelUtils.LoggerWithTraceID(ctx, roundTripper.logger).With(zap.String("function", fnMeta.Name), zap.String("namespace", fnMeta.Namespace))
 
 	dumpReqFunc := func(request *http.Request) {
 		if request == nil {
@@ -225,6 +224,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// set service url of target service of request only when
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
+			otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace})...)
 			// get function service url from cache or executor
 			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.funcHandler.getServiceEntry(ctx)
 			if err != nil {
@@ -254,6 +256,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 				continue
 			}
+			otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"service-entry":      roundTripper.serviceURL.String()})...)
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
 					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
@@ -328,6 +334,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			ocRoundTripper := &ochttp.Transport{Base: transport}
 			resp, err = ocRoundTripper.RoundTrip(newReq)
 		} else {
+			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"function-url":       newReq.URL.String(),
+				"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
 			otelRoundTripper := otelhttp.NewTransport(transport)
 			resp, err = otelRoundTripper.RoundTrip(newReq)
 		}
@@ -515,10 +526,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		rrt.closeContext()
 	}()
 
-	// add attributes to current span
-	span := trace.SpanFromContext(request.Context())
-	span.SetAttributes(otelUtils.GetAttributesForFunction(fh.function)...)
-
+	otelUtils.SpanTrackEvent(request.Context(), "functionRequestProxy", otelUtils.GetAttributesForFunction(fh.function)...)
 	proxy.ServeHTTP(responseWriter, request)
 }
 
@@ -652,6 +660,7 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 }
 
 func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
 	// send a request to executor to specialize a new pod
 	fh.logger.Debug("function timeout specified", zap.Int("timeout", fh.function.Spec.FunctionTimeout))
 
@@ -668,7 +677,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 	service, err := fh.executor.GetServiceForFunction(fContext, fh.function)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
-		fh.logger.Error("error from GetServiceForFunction",
+		logger.Error("error from GetServiceForFunction",
 			zap.Error(err),
 			zap.String("error_message", errMsg),
 			zap.Any("function", fh.function),
@@ -678,7 +687,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 	// parse the address into url
 	svcURL, err := url.Parse(fmt.Sprintf("http://%v", service))
 	if err != nil {
-		fh.logger.Error("error parsing service url",
+		logger.Error("error parsing service url",
 			zap.Error(err),
 			zap.String("service_url", svcURL.String()))
 		return nil, err
@@ -735,6 +744,8 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 	return func(rw http.ResponseWriter, req *http.Request, err error) {
 		var status int
 		var msg string
+		ctx := req.Context()
+		logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
 		switch err {
 		case context.Canceled:
 			// 499 CLIENT CLOSED REQUEST
@@ -743,16 +754,16 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			// Reference: https://httpstatuses.com/499
 			status = 499
 			msg = "client closes the connection"
-			fh.logger.Debug(msg, zap.Any("function", fh.function), zap.String("status", "Client Closed Request"))
+			logger.Debug(msg, zap.Any("function", fh.function), zap.String("status", "Client Closed Request"))
 		case context.DeadlineExceeded:
 			status = http.StatusGatewayTimeout
 			msg := "no response from function before timeout"
-			fh.logger.Error(msg, zap.Any("function", fh.function), zap.String("status", http.StatusText(status)))
+			logger.Error(msg, zap.Any("function", fh.function), zap.String("status", http.StatusText(status)))
 		default:
 			code, _ := ferror.GetHTTPError(err)
 			status = code
 			msg = "error sending request to function"
-			fh.logger.Error(msg, zap.Error(err), zap.Any("function", fh.function),
+			logger.Error(msg, zap.Error(err), zap.Any("function", fh.function),
 				zap.Any("status", http.StatusText(status)), zap.Int("code", code))
 		}
 
@@ -765,7 +776,7 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		rw.WriteHeader(status)
 		_, err = rw.Write([]byte(msg))
 		if err != nil {
-			fh.logger.Error(
+			logger.Error(
 				"error writing HTTP response",
 				zap.Error(err),
 				zap.Any("function", fh.function),

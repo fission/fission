@@ -46,6 +46,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -169,7 +170,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(context.Background(),
+				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
@@ -214,7 +215,9 @@ func (executor *Executor) serveCreateFuncServices() {
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	executor.logger.Debug("no cached function service found, creating one",
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+	otelUtils.SpanTrackEvent(ctx, "createServiceForFunction", otelUtils.GetAttributesForFunction(fn)...)
+	logger.Debug("no cached function service found, creating one",
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 
@@ -227,7 +230,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
 	if fsvcErr != nil {
 		e := "error creating service for function"
-		executor.logger.Error(e,
+		logger.Error(e,
 			zap.Error(fsvcErr),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
@@ -238,6 +241,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 }
 
 func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	otelUtils.SpanTrackEvent(ctx, "getFunctionServiceFromCache", otelUtils.GetAttributesForFunction(fn)...)
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
