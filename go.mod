@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.1
-	github.com/Azure/azure-sdk-for-go v12.4.0-beta+incompatible
+	github.com/Azure/azure-sdk-for-go v32.5.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
@@ -13,10 +13,8 @@ require (
 	github.com/blend/go-sdk v1.20210116.5 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
 	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7 // indirect
 	github.com/dchest/uniuri v0.0.0-20160212164326-8902c56451e9
-	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/dsnet/compress v0.0.1 // indirect
@@ -32,11 +30,10 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
-	github.com/graymeta/stow v0.0.0-20180719215413-7b5498c561bb
+	github.com/graymeta/stow v0.2.7
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/imdario/mergo v0.3.12
 	github.com/influxdata/influxdb v1.2.0
-	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/nats-io/nats-streaming-server v0.22.0
