@@ -355,10 +355,10 @@ openTracing:
 # It is an alternate to OpenTracing.
 openTelemetry:
   # Use this flag to set the collector endpoint for OpenTelemetry.
-  ## if enabled is true, the variable is endpoint of collector in the format shown below
-  ## collectorEndpoint: "otel-collector.observability.svc:4317"
+  # The variable is endpoint of the collector in the format shown below.
+  # otlpCollectorEndpoint: "otel-collector.observability.svc:4317"
   otlpCollectorEndpoint: ""
-  # Set this flag to false if you are using secure endpoint
+  # Set this flag to false if you are using secure endpoint for the collector.
   otlpInsecure: true
   # Key-value pairs to be used as headers associated with gRPC or HTTP requests
   # to the collector.

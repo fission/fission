@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -15,9 +16,11 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 const (
+	OtelEnvPrefix      = "OTEL_"
 	OtelEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
 	OtelInsecureEnvVar = "OTEL_EXPORTER_OTLP_INSECURE"
 )
@@ -102,4 +105,21 @@ func InitProvider(ctx context.Context, logger *zap.Logger, serviceName string) (
 			}
 		}
 	}, nil
+}
+
+// OtelEnvForContainer returns a list of environment variables
+// for the container, which start with prefix OTEL_
+func OtelEnvForContainer() []apiv1.EnvVar {
+	otelEnvs := []apiv1.EnvVar{}
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, OtelEnvPrefix) {
+			pair := strings.SplitN(e, "=", 2)
+			otelEnvs = append(otelEnvs, apiv1.EnvVar{
+				Name:  pair[0],
+				Value: pair[1],
+			})
+
+		}
+	}
+	return otelEnvs
 }
