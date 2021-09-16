@@ -18,6 +18,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 type Config struct {
@@ -289,8 +290,12 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				Value: os.Getenv("OPENTRACING_ENABLED"),
 			},
 			{
-				Name:  "OTEL_COLLECTOR_ENDPOINT",
-				Value: os.Getenv("OTEL_COLLECTOR_ENDPOINT"),
+				Name:  otel.OtelEndpointEnvVar,
+				Value: os.Getenv(otel.OtelEndpointEnvVar),
+			},
+			{
+				Name:  otel.OtelInsecureEnvVar,
+				Value: os.Getenv(otel.OtelInsecureEnvVar),
 			},
 		},
 	}
