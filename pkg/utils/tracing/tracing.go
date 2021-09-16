@@ -11,7 +11,11 @@ import (
 )
 
 func TracingEnabled(logger *zap.Logger) bool {
-	openTracingEnabled, err := strconv.ParseBool(os.Getenv("OPENTRACING_ENABLED"))
+	tracingEnabled := os.Getenv("TRACING_ENABLED")
+	if len(tracingEnabled) == 0 {
+		return false
+	}
+	openTracingEnabled, err := strconv.ParseBool(tracingEnabled)
 	if err != nil {
 		if logger != nil {
 			logger.Error("Error parsing OpenTracing enabled flag", zap.Error(err))

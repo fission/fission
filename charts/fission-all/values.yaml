@@ -352,10 +352,18 @@ openTracing:
   ## uniformly sample traces with the given probabilistic sampling rate
   #samplingRate: 0.75
 
-# Use this flag to set the collector endpoint for OpenTelemetry.
 # It is an alternate to OpenTracing.
-# OpenTracing should be disabled (openTracing.enabled: false) if you are using OpenTelemetry.
-# otelCollectorEndpoint: "otel-collector.observability.svc:4317"
+openTelemetry:
+  # Use this flag to set the collector endpoint for OpenTelemetry.
+  # The variable is endpoint of the collector in the format shown below.
+  # otlpCollectorEndpoint: "otel-collector.observability.svc:4317"
+  otlpCollectorEndpoint: ""
+  # Set this flag to false if you are using secure endpoint for the collector.
+  otlpInsecure: true
+  # Key-value pairs to be used as headers associated with gRPC or HTTP requests
+  # to the collector.
+  # Eg. otlpHeaders: "key1=value1,key2=value2"
+  otlpHeaders: ""
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 mqt_keda:

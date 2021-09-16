@@ -18,6 +18,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/otel"
 )
 
 type Config struct {
@@ -283,16 +284,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				},
 			},
 		},
-		Env: []apiv1.EnvVar{
-			{
-				Name:  "OPENTRACING_ENABLED",
-				Value: os.Getenv("OPENTRACING_ENABLED"),
-			},
-			{
-				Name:  "OTEL_COLLECTOR_ENDPOINT",
-				Value: os.Getenv("OTEL_COLLECTOR_ENDPOINT"),
-			},
-		},
+		Env: otel.OtelEnvForContainer(),
 	}
 
 	// Pod is removed from endpoints list for service when it's

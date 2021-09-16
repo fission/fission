@@ -35,40 +35,34 @@ spec:
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
         env:
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: ROUTER_ROUND_TRIP_TIMEOUT
-            value: {{ .Values.router.roundTrip.timeout | default "50ms" | quote }}
-          - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
-            value: {{ .Values.router.roundTrip.timeoutExponent | default 2 | quote }}
-          - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
-            value: {{ .Values.router.roundTrip.keepAliveTime | default "30s" | quote }}
-          - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
-            value: {{ .Values.router.roundTrip.disableKeepAlive | default true | quote }}
-          - name: ROUTER_ROUND_TRIP_MAX_RETRIES
-            value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
-          - name: ROUTER_SVC_ADDRESS_MAX_RETRIES
-            value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
-          - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
-            value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
-          - name: ROUTER_UNTAP_SERVICE_TIMEOUT
-            value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
-          - name: OTEL_COLLECTOR_ENDPOINT
-            value: "{{ .Values.otelCollectorEndpoint }}"
-          - name: OPENTRACING_ENABLED
-            value: {{ .Values.openTracing.enabled | default false | quote }}
-          - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-            value: "{{ .Values.openTracing.collectorEndpoint }}"
-          - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.router.traceSamplingRate | default "0.5" | quote }}
-          - name: USE_ENCODED_PATH
-            value: {{ .Values.router.useEncodedPath | default false | quote }}
-          - name: DEBUG_ENV
-            value: {{ .Values.debugEnv | quote }}
-          - name: DISPLAY_ACCESS_LOG
-            value: {{ .Values.router.displayAccessLog | default false | quote }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: ROUTER_ROUND_TRIP_TIMEOUT
+          value: {{ .Values.router.roundTrip.timeout | default "50ms" | quote }}
+        - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
+          value: {{ .Values.router.roundTrip.timeoutExponent | default 2 | quote }}
+        - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
+          value: {{ .Values.router.roundTrip.keepAliveTime | default "30s" | quote }}
+        - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
+          value: {{ .Values.router.roundTrip.disableKeepAlive | default true | quote }}
+        - name: ROUTER_ROUND_TRIP_MAX_RETRIES
+          value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
+        - name: ROUTER_SVC_ADDRESS_MAX_RETRIES
+          value: {{ .Values.router.svcAddressMaxRetries | default 5 | quote }}
+        - name: ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT
+          value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
+        - name: ROUTER_UNTAP_SERVICE_TIMEOUT
+          value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
+        - name: USE_ENCODED_PATH
+          value: {{ .Values.router.useEncodedPath | default false | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: DISPLAY_ACCESS_LOG
+          value: {{ .Values.router.displayAccessLog | default false | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.router.resources | indent 10 }}
         readinessProbe:

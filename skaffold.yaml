@@ -52,7 +52,8 @@ deploy:
         repository: index.docker.io
         routerServiceType: LoadBalancer
         openTracing.enabled: false
-        otelCollectorEndpoint: ""
+        openTelemetry.otlpCollectorEndpoint: ""
+        openTelemetry.otlpInsecure: true
       wait: true
     flags:
       install:
@@ -113,5 +114,5 @@ profiles:
     path: /deploy/helm/releases/0/setValues/pprof.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/otelCollectorEndpoint
+    path: /deploy/helm/releases/0/setValues/openTelemetry.otlpCollectorEndpoint
     value: "otel-collector.opentelemetry-operator-system.svc:4317"

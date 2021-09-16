@@ -63,6 +63,7 @@ func Run(logger *zap.Logger) {
 		}
 	}
 
+	ctx := context.Background()
 	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		go func() {
@@ -71,17 +72,17 @@ func Run(logger *zap.Logger) {
 			}
 		}()
 	} else {
-		shutdown, err := otelUtils.InitProvider(logger, "Fission-Fetcher")
+		shutdown, err := otelUtils.InitProvider(ctx, logger, "Fission-Fetcher")
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err))
 		}
 		if shutdown != nil {
-			defer shutdown()
+			defer shutdown(ctx)
 		}
 	}
 
 	tracer := otel.Tracer("fetcher")
-	ctx, span := tracer.Start(context.Background(), "fetcher/Run")
+	ctx, span := tracer.Start(ctx, "fetcher/Run")
 	defer span.End()
 
 	f, err := fetcher.MakeFetcher(logger, dir, *secretDir, *configDir)

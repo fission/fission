@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -225,6 +226,7 @@ Options:
 		logger.Fatal("Could not parse command line arguments", zap.Error(err))
 	}
 
+	ctx := context.Background()
 	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
@@ -232,12 +234,12 @@ Options:
 			logger.Fatal("Could not register trace exporter", zap.Error(err), zap.Any("argument", arguments))
 		}
 	} else {
-		shutdown, err := otel.InitProvider(logger, getServiceName(arguments))
+		shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
 		if err != nil {
 			logger.Fatal("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
 		}
 		if shutdown != nil {
-			defer shutdown()
+			defer shutdown(ctx)
 		}
 	}
 

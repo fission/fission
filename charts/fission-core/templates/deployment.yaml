@@ -140,20 +140,14 @@ spec:
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888"]
         env:
-          - name: OTEL_COLLECTOR_ENDPOINT
-            value: "{{ .Values.otelCollectorEndpoint }}"
-          - name: OPENTRACING_ENABLED
-            value: {{ .Values.openTracing.enabled | default false | quote }}
-          - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-            value: "{{ .Values.openTracing.collectorEndpoint }}"
-          - name: TRACING_SAMPLING_RATE
-            value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
-          - name: FISSION_FUNCTION_NAMESPACE
-            value: "{{ .Values.functionNamespace }}"
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+        - name: FISSION_FUNCTION_NAMESPACE
+          value: "{{ .Values.functionNamespace }}"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -219,14 +213,6 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: ADOPT_EXISTING_RESOURCES
           value: {{ .Values.executor.adoptExistingResources | default false | quote }}
         - name: POD_READY_TIMEOUT
@@ -241,6 +227,8 @@ spec:
           value: {{ .Values.fetcher.resource.cpu.limits | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -294,15 +282,7 @@ spec:
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY
-          value: "{{ .Values.pullPolicy }}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}      
+          value: "{{ .Values.pullPolicy }}"  
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
         - name: FETCHER_MINCPU
@@ -313,6 +293,8 @@ spec:
           value: {{ .Values.fetcher.resource.cpu.limits | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -343,14 +325,8 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -381,14 +357,8 @@ spec:
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -428,14 +398,6 @@ spec:
         env:
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
         - name: STORAGE_S3_ENDPOINT
           value: {{ .Values.persistence.s3.endPoint }}
@@ -450,6 +412,8 @@ spec:
         - name: STORAGE_S3_REGION
           value: {{ .Values.persistence.s3.region }}
         {{- end }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         {{- if ne (.Values.persistence.storageType | default "local") "s3" }}
         volumeMounts:
         - name: fission-storage
@@ -502,14 +466,6 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: CONNECTOR_IMAGE_PULL_POLICY
@@ -528,6 +484,8 @@ spec:
           value: "{{ .Values.mqt_keda.connector_images.gcp_pub_sub.image }}:{{ .Values.mqt_keda.connector_images.gcp_pub_sub.tag }}"
         - name: REDIS_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.redis.image }}:{{ .Values.mqt_keda.connector_images.redis.tag }}"
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}

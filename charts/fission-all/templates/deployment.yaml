@@ -335,14 +335,6 @@ spec:
         env:
         - name: FISSION_FUNCTION_NAMESPACE
           value: "{{ .Values.functionNamespace }}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -351,6 +343,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -429,14 +423,6 @@ spec:
           value: {{ .Values.executor.podReadyTimeout | default false | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM
@@ -449,6 +435,8 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -513,14 +501,6 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM
@@ -533,6 +513,8 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -563,18 +545,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -711,8 +687,8 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -846,18 +822,12 @@ spec:
         {{- else }}
           value: nats://{{ .Values.nats.hostaddress }}
         {{- end }}
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -903,18 +873,12 @@ spec:
           value: "{{.Values.kafka.brokers}}"
         - name: MESSAGE_QUEUE_KAFKA_VERSION
           value: "{{.Values.kafka.version}}"
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         # TLS authentication is TLS with authentication (2 way)
         # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview
         {{- if .Values.kafka.authentication.tls.enabled }}
@@ -999,14 +963,6 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: MESSAGE_QUEUE_TYPE
           value: azure-storage-queue
         - name: AZURE_STORAGE_ACCOUNT_NAME
@@ -1020,6 +976,8 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
@@ -1057,14 +1015,6 @@ spec:
         args: ["--storageServicePort", "8000", "--storageType", "local"]
         {{- end }}
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: PRUNE_INTERVAL
           value: "{{.Values.pruneInterval}}"
         - name: DEBUG_ENV
@@ -1085,6 +1035,8 @@ spec:
         - name: STORAGE_S3_REGION
           value: {{ .Values.persistence.s3.region }}
         {{- end }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
         {{- if ne (.Values.persistence.storageType | default "local") "s3" }}
         volumeMounts:
         - name: fission-storage
@@ -1154,14 +1106,6 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
-        - name: OTEL_COLLECTOR_ENDPOINT
-          value: "{{ .Values.otelCollectorEndpoint }}"
-        - name: OPENTRACING_ENABLED
-          value: {{ .Values.openTracing.enabled | default false | quote }}
-        - name: TRACE_JAEGER_COLLECTOR_ENDPOINT
-          value: "{{ .Values.openTracing.collectorEndpoint }}"
-        - name: TRACING_SAMPLING_RATE
-          value: {{ .Values.openTracing.samplingRate | default "0.5" | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: CONNECTOR_IMAGE_PULL_POLICY
@@ -1180,6 +1124,8 @@ spec:
           value: "{{ .Values.mqt_keda.connector_images.gcp_pub_sub.image }}:{{ .Values.mqt_keda.connector_images.gcp_pub_sub.tag }}"
         - name: REDIS_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.redis.image }}:{{ .Values.mqt_keda.connector_images.redis.tag }}"
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
