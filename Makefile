@@ -49,7 +49,7 @@ test-run: code-checks
 build-fission-cli:
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
 
-install-fission-cli: build-fission-cli
+install-fission-cli:
 	mv dist/fission-cli_$(GOOS)_$(GOARCH)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen

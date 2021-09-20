@@ -96,6 +96,7 @@ jobs:
 
       - name: Build and Install Fission CLI
         run: |
+          make build-fission-cli
           sudo make install-fission-cli
           sudo chmod +x /usr/local/bin/fission
 

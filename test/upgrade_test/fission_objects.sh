@@ -101,6 +101,7 @@ kind_image_load() {
 
 install_fission_cli() {
     echo "Installing new Fission cli"
+    doit make build-fission-cli
     doit sudo make install-fission-cli
     sudo chmod +x /usr/local/bin/fission
 }
