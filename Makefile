@@ -14,34 +14,23 @@
 
 .DEFAULT_GOAL := check
 
-# Platforms to build in multi-architecture images.
-PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
-
-# Repository prefix and tag to push multi-architecture images to.
-REPO ?= fission
-TAG ?= dev
-DOCKER_FLAGS ?= --push --progress plain
 SKAFFOLD_PROFILE ?= kind
 
-VERSION ?= master
+VERSION ?= v0.0.0
 TIMESTAMP ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 COMMITSHA ?= $(shell git rev-parse HEAD)
 
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-BINDIR ?= build/bin
 FISSION-CLI-SUFFIX :=
 ifeq ($(GOOS), windows)
 	FISSION-CLI-SUFFIX := .exe
 endif
 
-GO ?= go
-GO_LDFLAGS := -X github.com/fission/fission/pkg/info.GitCommit=$(COMMITSHA) $(GO_LDFLAGS)
-GO_LDFLAGS := -X github.com/fission/fission/pkg/info.BuildDate=$(TIMESTAMP)  $(GO_LDFLAGS)
-GO_LDFLAGS := -X github.com/fission/fission/pkg/info.Version=$(VERSION) $(GO_LDFLAGS)
-GCFLAGS ?= all=-trimpath=$(CURDIR)
-ASMFLAGS ?= all=-trimpath=$(CURDIR)
+# Show this help.
+help:
+	@awk '/^#/{c=substr($$0,3);next}c&&/^[[:alpha:]][[:alnum:]_-]+:/{print substr($$1,1,index($$1,":")),c}1{c=0}' $(MAKEFILE_LIST) | column -s: -t
 
 ### Static checks
 check: test-run build-fission-cli clean
@@ -57,61 +46,11 @@ test-run: code-checks
 	@rm -f coverage.txt
 
 ### Binaries
-%-cli:
-	@mkdir -p $(BINDIR)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build \
-	-gcflags '$(GCFLAGS)' \
-	-asmflags '$(ASMFLAGS)' \
-	-ldflags "$(GO_LDFLAGS)" \
-	-o $(BINDIR)/$(subst -cli,,$@)-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) ./$<
+build-fission-cli:
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
 
-fission-cli: cmd/fission-cli
-fission-bundle-cli: cmd/fission-bundle
-fetcher-cli: cmd/fetcher
-builder-cli: cmd/builder
-preupgradechecks-cli: cmd/preupgradechecks
-reporter-cli: cmd/reporter
-
-local-bins: fission-cli fission-bundle-cli fetcher-cli builder-cli preupgradechecks-cli reporter-cli
-
-all-fission-cli:
-	$(MAKE) fission-cli GOOS=windows GOARCH=amd64
-	$(MAKE) fission-cli GOOS=linux GOARCH=amd64
-	$(MAKE) fission-cli GOOS=linux GOARCH=arm
-	$(MAKE) fission-cli GOOS=linux GOARCH=arm64
-	$(MAKE) fission-cli GOOS=darwin GOARCH=amd64
-
-install-fission-cli: fission-cli
-	mv $(BINDIR)/fission-$(VERSION)-$(GOOS)-$(GOARCH)$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
-
-### Container images
-FISSION_IMGS := fission-bundle-multiarch-img \
-	fetcher-multiarch-img \
-	builder-multiarch-img\
-	pre-upgrade-checks-multiarch-img \
-	reporter-multiarch-img
-
-verify-builder:
-	@./hack/buildx.sh $(PLATFORMS)
-
-local-images:
-	PLATFORMS=linux/amd64 $(MAKE) all-images
-
-all-images: verify-builder $(FISSION_IMGS)
-
-fission-bundle-multiarch-img: cmd/fission-bundle/Dockerfile.fission-bundle
-fetcher-multiarch-img: cmd/fetcher/Dockerfile.fission-fetcher
-builder-multiarch-img: cmd/builder/Dockerfile.fission-builder
-pre-upgrade-checks-multiarch-img: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
-reporter-multiarch-img: cmd/reporter/Dockerfile.reporter
-
-%-multiarch-img:
-	@echo === Building image $(REPO)/$(subst -multiarch-img,,$@):$(TAG) using context $(CURDIR) and dockerfile $<
-	docker buildx build --platform=$(PLATFORMS) -t $(REPO)/$(subst -multiarch-img,,$@):$(TAG) \
-		--build-arg GITCOMMIT=$(COMMITSHA) \
-    	--build-arg BUILDDATE=$(TIMESTAMP) \
-		--build-arg BUILDVERSION=$(VERSION) \
-	 	$(DOCKER_FLAGS) -f $< .
+install-fission-cli: build-fission-cli
+	mv dist/fission-cli_$(GOOS)_$(GOARCH)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
 codegen:
@@ -134,12 +73,7 @@ delete-crds:
 
 ### Cleanup
 clean:
-	@rm -f cmd/fission-bundle/fission-bundle
-	@rm -f cmd/fission-cli/fission
-	@rm -f cmd/fetcher/fetcher
-	@rm -f cmd/fetcher/builder
-	@rm -f cmd/reporter/reporter
-	@rm -f pkg/apis/core/v1/types_swagger_doc_generated.go
+	@rm -f dist/
 
 ### Misc
 generate-swagger-doc:
@@ -147,12 +81,8 @@ generate-swagger-doc:
 
 all-generators: codegen generate-crds generate-swagger-doc
 
-release:
-	@./hack/release.sh $(VERSION)
-	@./hack/release-tag.sh $(VERSION)
-
 skaffold-prebuild:
-	@GOOS=linux GOARCH=amd64 goreleaser build --snapshot --rm-dist --single-target
+	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target
 	@cp -v cmd/builder/Dockerfile.fission-builder dist/builder_linux_amd64/Dockerfile
 	@cp -v cmd/fetcher/Dockerfile.fission-fetcher dist/fetcher_linux_amd64/Dockerfile
 	@cp -v cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64/Dockerfile
@@ -161,3 +91,10 @@ skaffold-prebuild:
 
 skaffold-deploy: skaffold-prebuild
 	skaffold run -p $(SKAFFOLD_PROFILE)
+
+### Release
+release:
+	@./hack/generate-helm-manifest.sh $(VERSION)
+	@./hack/release.sh $(VERSION)
+	@./hack/release-tag.sh $(VERSION)
+	@./hack/changelog.sh
