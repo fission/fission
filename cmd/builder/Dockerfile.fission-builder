@@ -1,45 +1,4 @@
-FROM golang:1.16-alpine as godep
-RUN apk add bash ca-certificates git gcc g++ libc-dev
-
-ARG GOPKG=github.com/fission/fission
-
-ENV GO111MODULE=on
-
-WORKDIR /go/src/${GOPKG}
-
-# To reuse build cache, copy go.mod & go.sum and download dependencies first.
-COPY go.* ./
-
-RUN go mod download
-
-FROM godep as builder
-
-ARG GOPKG
-WORKDIR /go/src/${GOPKG}
-
-# Copy whole fission directory to work dir
-COPY ./ ./
-
-WORKDIR /go/src/${GOPKG}/cmd/builder
-
-ARG GITCOMMIT=unknown
-# E.g. GITCOMMIT=$(git rev-parse HEAD)
-
-ARG BUILDVERSION=unknown
-# E.g. BUILDVERSION=$(git rev-parse HEAD)
-
-ARG BUILDDATE=unknown
-# E.g. BUILDDATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-
-RUN CGO_ENABLED=0 go build \
-    -o /go/bin/builder \
-    -gcflags=-trimpath=$GOPATH \
-    -asmflags=-trimpath=$GOPATH \
-    -ldflags "-X github.com/fission/fission/pkg/info.GitCommit=${GITCOMMIT} -X github.com/fission/fission/pkg/info.BuildDate=${BUILDDATE} -X github.com/fission/fission/pkg/info.Version=${BUILDVERSION}"
-
-FROM alpine:3.14 as base
+FROM alpine:3.14
 RUN apk add --update ca-certificates
-COPY --from=builder /go/bin/builder /
-EXPOSE 8001
-
+COPY builder /builder
 ENTRYPOINT ["/builder"]

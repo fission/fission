@@ -31,3 +31,5 @@ vendor/
 local/
 
 build/
+dist/
+manifest/

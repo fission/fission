@@ -56,6 +56,11 @@ jobs:
         image:  ${{ matrix.kindimage }}
         version: v0.11.1
 
+    - name: Install GoReleaser
+      uses: goreleaser/goreleaser-action@v2
+      with:
+        install-only: true
+
     - name: Setup kubectl & fetch node information
       run: |
         kubectl cluster-info --context kind-kind

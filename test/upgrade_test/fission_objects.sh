@@ -82,11 +82,12 @@ test_fission_objects() {
 
 build_docker_images() {
     echo "Building new docker images"
-    doit docker build -t fission-bundle -f cmd/fission-bundle/Dockerfile.fission-bundle .
-    doit docker build -t fetcher -f cmd/fetcher/Dockerfile.fission-fetcher .
-    doit docker build -t builder -f cmd/builder/Dockerfile.fission-builder .
-    doit docker build -t reporter -f cmd/reporter/Dockerfile.reporter .
-    doit docker build -t preupgradechecks -f cmd/preupgradechecks/Dockerfile.fission-preupgradechecks .
+    make skaffold-prebuild
+    doit docker build -t fission-bundle dist/fission-bundle_linux_amd64
+    doit docker build -t fetcher dist/fetcher_linux_amd64
+    doit docker build -t builder dist/builder_linux_amd64
+    doit docker build -t reporter dist/reporter_linux_amd64
+    doit docker build -t preupgradechecks dist/pre-upgrade-checks_linux_amd64
 }
 
 kind_image_load() {
@@ -100,6 +101,7 @@ kind_image_load() {
 
 install_fission_cli() {
     echo "Installing new Fission cli"
+    doit make build-fission-cli
     doit sudo make install-fission-cli
     sudo chmod +x /usr/local/bin/fission
 }

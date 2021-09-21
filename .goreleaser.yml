@@ -1,0 +1,245 @@
+project_name: fission
+release:
+  github:
+    owner: fission
+    name: fission
+  prerelease: true
+  draft: true
+  header: |
+    Release Highlights: https://docs.fission.io/docs/releases/{{ .Tag }}/
+    Install Guide: https://docs.fission.io/installation/
+    Full Changelog: https://github.com/fission/fission/blob/master/CHANGELOG.md
+  extra_files:
+    - glob: ./manifest/charts/*
+    - glob: ./manifest/yamls/*
+
+before:
+  hooks:
+    - go mod tidy
+snapshot:
+  name_template: "{{ .Tag }}"
+builds:
+  - &build-linux
+    id: builder
+    ldflags:
+      - -s -w
+      - -X github.com/fission/fission/pkg/info.GitCommit={{.ShortCommit}}
+      - -X github.com/fission/fission/pkg/info.BuildDate={{.Date}}
+      - -X github.com/fission/fission/pkg/info.Version={{.Tag}}
+    gcflags:
+      - all=-trimpath={{.Env.PWD}}
+    asmflags:
+      - all=-trimpath={{.Env.PWD}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+    binary: builder
+    dir: ./cmd/builder
+  - <<: *build-linux
+    id: fetcher
+    binary: fetcher
+    dir: ./cmd/fetcher
+  - <<: *build-linux
+    id: fission-bundle
+    binary: fission-bundle
+    dir: ./cmd/fission-bundle
+  - <<: *build-linux
+    id: fission-cli
+    goos:
+      - linux
+      - windows
+      - darwin
+    binary: fission
+    dir: ./cmd/fission-cli
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: darwin
+        goarch: arm
+        goarm: 7
+      - goos: windows
+        goarch: arm
+        goarm: 7
+  - <<: *build-linux
+    id: pre-upgrade-checks
+    binary: pre-upgrade-checks
+    dir: ./cmd/preupgradechecks
+  - <<: *build-linux
+    id: reporter
+    binary: reporter
+    dir: ./cmd/reporter
+dockers:
+  - &docker-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    ids:
+      - builder
+    image_templates:
+      - "fission/builder:latest-amd64"
+      - "fission/builder:{{ .Tag }}-amd64"
+    dockerfile: cmd/builder/Dockerfile.fission-builder
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
+  - <<: *docker-amd64
+    ids:
+      - fetcher
+    image_templates:
+      - "fission/fetcher:latest-amd64"
+      - "fission/fetcher:{{ .Tag }}-amd64"
+    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+  - <<: *docker-amd64
+    ids:
+      - fission-bundle
+    image_templates:
+      - "fission/fission-bundle:latest-amd64"
+      - "fission/fission-bundle:{{ .Tag }}-amd64"
+    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+  - <<: *docker-amd64
+    ids:
+      - pre-upgrade-checks
+    image_templates:
+      - "fission/pre-upgrade-checks:latest-amd64"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-amd64"
+    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+  - <<: *docker-amd64
+    ids:
+      - reporter
+    image_templates:
+      - "fission/reporter:latest-amd64"
+      - "fission/reporter:{{ .Tag }}-amd64"
+    dockerfile: cmd/reporter/Dockerfile.reporter
+  - &docker-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    ids:
+      - builder
+    image_templates:
+      - "fission/builder:latest-arm64"
+      - "fission/builder:{{ .Tag }}-arm64"
+    dockerfile: cmd/builder/Dockerfile.fission-builder
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
+  - <<: *docker-arm64
+    ids:
+      - fetcher
+    image_templates:
+      - "fission/fetcher:latest-arm64"
+      - "fission/fetcher:{{ .Tag }}-arm64"
+    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+  - <<: *docker-arm64
+    ids:
+      - fission-bundle
+    image_templates:
+      - "fission/fission-bundle:latest-arm64"
+      - "fission/fission-bundle:{{ .Tag }}-arm64"
+    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+  - <<: *docker-arm64
+    ids:
+      - pre-upgrade-checks
+    image_templates:
+      - "fission/pre-upgrade-checks:latest-arm64"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-arm64"
+    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+  - <<: *docker-arm64
+    ids:
+      - reporter
+    image_templates:
+      - "fission/reporter:latest-arm64"
+      - "fission/reporter:{{ .Tag }}-arm64"
+    dockerfile: cmd/reporter/Dockerfile.reporter
+  - &docker-armv7
+    use: buildx
+    goos: linux
+    goarch: arm
+    goarm: 7
+    ids:
+      - builder
+    image_templates:
+      - "fission/builder:latest-armv7"
+      - "fission/builder:{{ .Tag }}-armv7"
+    dockerfile: cmd/builder/Dockerfile.fission-builder
+    build_flag_templates:
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
+  - <<: *docker-armv7
+    ids:
+      - fetcher
+    image_templates:
+      - "fission/fetcher:latest-armv7"
+      - "fission/fetcher:{{ .Tag }}-armv7"
+    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+  - <<: *docker-armv7
+    ids:
+      - fission-bundle
+    image_templates:
+      - "fission/fission-bundle:latest-armv7"
+      - "fission/fission-bundle:{{ .Tag }}-armv7"
+    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+  - <<: *docker-armv7
+    ids:
+      - pre-upgrade-checks
+    image_templates:
+      - "fission/pre-upgrade-checks:latest-armv7"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-armv7"
+    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+  - <<: *docker-armv7
+    ids:
+      - reporter
+    image_templates:
+      - "fission/reporter:latest-armv7"
+      - "fission/reporter:{{ .Tag }}-armv7"
+    dockerfile: cmd/reporter/Dockerfile.reporter
+docker_manifests:
+  - name_template: fission/builder:{{ .Tag }}
+    image_templates:
+      - fission/builder:{{ .Tag }}-amd64
+      - fission/builder:{{ .Tag }}-arm64
+      - fission/builder:{{ .Tag }}-armv7
+  - name_template: fission/fetcher:{{ .Tag }}
+    image_templates:
+      - fission/fetcher:{{ .Tag }}-amd64
+      - fission/fetcher:{{ .Tag }}-arm64
+      - fission/fetcher:{{ .Tag }}-armv7
+  - name_template: fission/fission-bundle:{{ .Tag }}
+    image_templates:
+      - fission/fission-bundle:{{ .Tag }}-amd64
+      - fission/fission-bundle:{{ .Tag }}-arm64
+      - fission/fission-bundle:{{ .Tag }}-armv7
+  - name_template: fission/pre-upgrade-checks:{{ .Tag }}
+    image_templates:
+      - fission/pre-upgrade-checks:{{ .Tag }}-amd64
+      - fission/pre-upgrade-checks:{{ .Tag }}-arm64
+      - fission/pre-upgrade-checks:{{ .Tag }}-armv7
+  - name_template: fission/reporter:{{ .Tag }}
+    image_templates:
+      - fission/reporter:{{ .Tag }}-amd64
+      - fission/reporter:{{ .Tag }}-arm64
+      - fission/reporter:{{ .Tag }}-armv7
+changelog:
+  skip: true
+archives:
+  - id: fission
+    builds:
+      - fission-cli
+    name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
