@@ -340,7 +340,7 @@ canaryDeployment:
   enabled: true
 
 # Use the following flags to enable OpenTracing.
-# Note: OpenTracing support will be deprecated in an upcoming release.
+# Note: OpenTracing support will be removed in an upcoming release.
 # Please prefer using OpenTelemetry instead.
 openTracing:
   ## set this flag to true if you wish to enable OpenTracing
@@ -364,6 +364,29 @@ openTelemetry:
   # to the collector.
   # Eg. otlpHeaders: "key1=value1,key2=value2"
   otlpHeaders: ""
+  # Supported samplers:
+  # always_on - Sampler that always samples spans, regardless of the parent span's sampling decision.
+  # always_off - Sampler that never samples spans, regardless of the parent span's sampling decision.
+  # traceidratio - Sampler that samples probabalistically based on rate.
+  # parentbased_always_on - (default) Sampler that respects its parent span's sampling decision, but otherwise always samples.
+  # parentbased_always_off - Sampler that respects its parent span's sampling decision, but otherwise never samples.
+  # parentbased_traceidratio - Sampler that respects its parent span's sampling decision, but otherwise samples probabalistically based on rate.
+  tracesSampler: "parentbased_always_on"
+  # Each Sampler type defines its own expected input, if any.
+  # Currently we get trace ratio for the case of,
+  # 1. traceidratio
+  # 2. parentbased_traceidratio
+  # Sampling probability, a number in the [0..1] range, e.g. "0.25". Default is 0.25.
+  tracesSamplingRate: "0.25"
+  # Supported providers:
+  # tracecontext - W3C Trace Context
+  # baggage - W3C Baggage
+  # b3 - B3 Single
+  # b3multi - B3 Multi
+  # jaeger - Jaeger uber-trace-id header
+  # xray - AWS X-Ray (third party)
+  # ottrace - OpenTracing Trace (third party)
+  propagators: "tracecontext,baggage"
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 mqt_keda:
