@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://docs.fission.io/images/logo.png" width="300" />
+  <img src="https://docs.fission.io/images/logo-gh.svg" width="300" />
   <br>
   <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
