@@ -368,16 +368,16 @@ openTelemetry:
   # always_on - Sampler that always samples spans, regardless of the parent span's sampling decision.
   # always_off - Sampler that never samples spans, regardless of the parent span's sampling decision.
   # traceidratio - Sampler that samples probabalistically based on rate.
-  # parentbased_always_on - (default) Sampler that respects its parent span's sampling decision, but otherwise always samples.
+  # parentbased_always_on - (default if empty) Sampler that respects its parent span's sampling decision, but otherwise always samples.
   # parentbased_always_off - Sampler that respects its parent span's sampling decision, but otherwise never samples.
   # parentbased_traceidratio - Sampler that respects its parent span's sampling decision, but otherwise samples probabalistically based on rate.
-  tracesSampler: "parentbased_always_on"
+  tracesSampler: "parentbased_traceidratio"
   # Each Sampler type defines its own expected input, if any.
   # Currently we get trace ratio for the case of,
   # 1. traceidratio
   # 2. parentbased_traceidratio
-  # Sampling probability, a number in the [0..1] range, e.g. "0.25". Default is 0.25.
-  tracesSamplingRate: "0.25"
+  # Sampling probability, a number in the [0..1] range, e.g. "0.1". Default is 0.1.
+  tracesSamplingRate: "0.1"
   # Supported providers:
   # tracecontext - W3C Trace Context
   # baggage - W3C Baggage

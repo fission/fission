@@ -2,11 +2,11 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/propagators/aws/xray"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/contrib/propagators/jaeger"
@@ -116,8 +116,7 @@ OTEL_TRACES_SAMPLER - Sampler to use(one of the above samplers)
 OTEL_TRACES_SAMPLER_ARG - Argument to pass to the sampler(float value)
 */
 func GetSampler() (sdktrace.Sampler, error) {
-	samplerType := os.Getenv(OtelTracesSamplerArg)
-
+	samplerType := os.Getenv(OtelTracesSampler)
 	switch samplerType {
 	case "always_on":
 		return sdktrace.AlwaysSample(), nil
@@ -130,13 +129,13 @@ func GetSampler() (sdktrace.Sampler, error) {
 	case "traceidratio":
 		arg, err := getSamplerArg()
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid sampler arg")
+			return nil, fmt.Errorf("invalid sampler arg: %w", err)
 		}
 		return sdktrace.TraceIDRatioBased(arg), nil
 	case "parentbased_traceidratio":
 		arg, err := getSamplerArg()
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid sampler arg")
+			return nil, fmt.Errorf("invalid sampler arg: %w", err)
 		}
 		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(arg)), nil
 	default:
@@ -150,7 +149,7 @@ func parseOtelConfig() OtelConfig {
 	config.endpoint = os.Getenv(OtelEndpointEnvVar)
 	insecure, err := strconv.ParseBool(os.Getenv(OtelInsecureEnvVar))
 	if err != nil {
-		insecure = false
+		insecure = true
 	}
 	config.insecure = insecure
 	return config
