@@ -54,15 +54,19 @@ require (
 	github.com/ulikunitz/xz v0.5.9 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.23.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.22.0
-	go.opentelemetry.io/otel v1.0.0-RC2
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.0-RC2
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0-RC2
-	go.opentelemetry.io/otel/sdk v1.0.0-RC2
-	go.opentelemetry.io/otel/trace v1.0.0-RC2
-	go.uber.org/zap v1.18.1
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.23.0
+	go.opentelemetry.io/contrib/propagators/aws v0.23.0
+	go.opentelemetry.io/contrib/propagators/b3 v0.23.0
+	go.opentelemetry.io/contrib/propagators/jaeger v0.23.0
+	go.opentelemetry.io/contrib/propagators/ot v0.23.0
+	go.opentelemetry.io/otel v1.0.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0
+	go.opentelemetry.io/otel/sdk v1.0.0
+	go.opentelemetry.io/otel/trace v1.0.0
+	go.uber.org/zap v1.19.1
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
-	google.golang.org/grpc v1.39.0
+	google.golang.org/grpc v1.40.0
 	gotest.tools v2.2.0+incompatible // indirect
 	k8s.io/api v0.21.4
 	k8s.io/apiextensions-apiserver v0.21.4
@@ -70,5 +74,5 @@ require (
 	k8s.io/client-go v0.21.4
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.21.4
-	sigs.k8s.io/controller-runtime v0.9.6
+	sigs.k8s.io/controller-runtime v0.9.7
 )
