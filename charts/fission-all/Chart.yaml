@@ -1,6 +1,6 @@
 apiVersion: v2
 name: fission-all
-version: 1.14.1
+version: v1.15.0-rc1
 description: Fission is a fast serverless framework for Kubernetes.
 keywords:
 - fission
@@ -12,7 +12,7 @@ maintainers:
   - name: Sanket Sudake
     email: sanket@infracloud.io
 engine: gotpl
-appVersion: 1.14.1
+appVersion: v1.15.0-rc1
 type: application
 dependencies:
   - name: prometheus
