@@ -1,14 +1,48 @@
 # Changelog
 
+## [v1.15.0-rc1](https://github.com/fission/fission/tree/v1.15.0-rc1) (2021-09-23)
+
+[Full Changelog](https://github.com/fission/fission/compare/1.14.1...v1.15.0-rc1)
+
+**Implemented enhancements:**
+
+- Fission meets OpenTelemetry [\#2157](https://github.com/fission/fission/pull/2157) ([gauravgahlot](https://github.com/gauravgahlot))
+
+**Merged pull requests:**
+
+- enhancement: Add different samplers and propagators support with OpenTelemetry [\#2201](https://github.com/fission/fission/pull/2201) ([sanketsudake](https://github.com/sanketsudake))
+- chore\(dep\): update go dependency stow v0.2.7 [\#2195](https://github.com/fission/fission/pull/2195) ([sanketsudake](https://github.com/sanketsudake))
+- fix: Use standard env variables for opentelemtry [\#2194](https://github.com/fission/fission/pull/2194) ([sanketsudake](https://github.com/sanketsudake))
+- fix: Goreleaser for build and release [\#2189](https://github.com/fission/fission/pull/2189) ([sanketsudake](https://github.com/sanketsudake))
+- fix: Updated nats connector version to v0.9 [\#2186](https://github.com/fission/fission/pull/2186) ([blackfly19](https://github.com/blackfly19))
+- Updated versions of connectors [\#2185](https://github.com/fission/fission/pull/2185) ([blackfly19](https://github.com/blackfly19))
+- Pass podinformer to poolpodcontroller instead of reference to pool manager [\#2184](https://github.com/fission/fission/pull/2184) ([sanketsudake](https://github.com/sanketsudake))
+- Check package resource version from fetch request with fetched package [\#2183](https://github.com/fission/fission/pull/2183) ([sanketsudake](https://github.com/sanketsudake))
+- Functions with common prefix path handling with internal routes [\#2182](https://github.com/fission/fission/pull/2182) ([sanketsudake](https://github.com/sanketsudake))
+- feature: Capture important events with span in fission and add trace id in logs [\#2180](https://github.com/fission/fission/pull/2180) ([sanketsudake](https://github.com/sanketsudake))
+- Add kubernetes objects aware logger with zap [\#2179](https://github.com/fission/fission/pull/2179) ([sanketsudake](https://github.com/sanketsudake))
+- Fix pod name in port forwarding log [\#2178](https://github.com/fission/fission/pull/2178) ([sanketsudake](https://github.com/sanketsudake))
+- Added redis keda connector [\#2176](https://github.com/fission/fission/pull/2176) ([blackfly19](https://github.com/blackfly19))
+- Add correct context required in executor [\#2175](https://github.com/fission/fission/pull/2175) ([sanketsudake](https://github.com/sanketsudake))
+- Add typed informers instead of generic SharedIndexInformers [\#2174](https://github.com/fission/fission/pull/2174) ([sanketsudake](https://github.com/sanketsudake))
+- Add context for traces in executor [\#2172](https://github.com/fission/fission/pull/2172) ([gauravgahlot](https://github.com/gauravgahlot))
+- Added labels to flags '--url', '--prefix', '--method' to reflect thei… [\#2171](https://github.com/fission/fission/pull/2171) ([nickmancari](https://github.com/nickmancari))
+- Change default function timeout [\#2169](https://github.com/fission/fission/pull/2169) ([gauravgahlot](https://github.com/gauravgahlot))
+- Update go version to 1.16 and kubernetes dev dependencies to 1.21 [\#2168](https://github.com/fission/fission/pull/2168) ([sanketsudake](https://github.com/sanketsudake))
+- Change default informer resync period to 30 minutes [\#2167](https://github.com/fission/fission/pull/2167) ([sanketsudake](https://github.com/sanketsudake))
+- Organize pool manager code and few improvements [\#2166](https://github.com/fission/fission/pull/2166) ([sanketsudake](https://github.com/sanketsudake))
+- Consider newdeploy functions only for env update in newdeploy manager [\#2165](https://github.com/fission/fission/pull/2165) ([sanketsudake](https://github.com/sanketsudake))
+- fix: Add pathType to create networking/v1 ingress [\#2164](https://github.com/fission/fission/pull/2164) ([chenjr0719](https://github.com/chenjr0719))
+- Use pool pod controller with env informer  [\#2161](https://github.com/fission/fission/pull/2161) ([sanketsudake](https://github.com/sanketsudake))
+- Update alpine base image to 3.14 [\#2160](https://github.com/fission/fission/pull/2160) ([sanketsudake](https://github.com/sanketsudake))
+
 ## [1.14.1](https://github.com/fission/fission/tree/1.14.1) (2021-08-03)
 
 [Full Changelog](https://github.com/fission/fission/compare/1.14.0...1.14.1)
 
 **Merged pull requests:**
 
-- Update chart version to 1.14.1 [\#2143](https://github.com/fission/fission/pull/2143) ([sanketsudake](https://github.com/sanketsudake))
 - Fixed service name generation for function name \< 17 chars [\#2142](https://github.com/fission/fission/pull/2142) ([sanketsudake](https://github.com/sanketsudake))
-- Update changelog for 1.14.0 [\#2138](https://github.com/fission/fission/pull/2138) ([sanketsudake](https://github.com/sanketsudake))
 
 ## [1.14.0](https://github.com/fission/fission/tree/1.14.0) (2021-08-02)
 
