@@ -167,6 +167,7 @@ var (
 	EnvTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.EnvGracePeriod, Aliases: []string{"period"}, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (default value will be used if 0 is given)", DefaultValue: 360}
 	EnvVersion                = Flag{Type: Int, Name: flagkey.EnvVersion, Usage: "Environment API version (1 means v1 interface)", DefaultValue: 1}
 	EnvImagePullSecret        = Flag{Type: String, Name: flagkey.EnvImagePullSecret, Usage: "Secret for Kubernetes to pull an image from a private registry"}
+	EnvExecutorType           = Flag{Type: String, Name: flagkey.EnvExecutorType, Usage: "Executor type of pod in environment; one of 'poolmgr', 'newdeploy', 'container'"}
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}

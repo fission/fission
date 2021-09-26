@@ -27,8 +27,10 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -236,4 +238,45 @@ func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.respondWithSuccess(w, []byte(""))
+}
+
+// EnvironmentApiPodList: Get list of pods currently available in environment
+func (a *API) EnvironmentApiPodList(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	envName, ok := vars["environment"]
+	if !ok {
+		a.respondWithError(w, ferror.MakeError(http.StatusInternalServerError, "Error retrieving environment name"))
+		return
+	}
+
+	// label selector
+	selector := map[string]string{
+		fv1.ENVIRONMENT_NAME: envName,
+	}
+
+	ens := a.extractQueryParamFromRequest(r, v1.ENVIRONMENT_NAMESPACE_QS)
+	if len(ens) != 0 {
+		selector[fv1.ENVIRONMENT_NAMESPACE] = ens
+	}
+
+	et := a.extractQueryParamFromRequest(r, v1.EXECUTOR_TYPE_QS)
+	if len(et) != 0 {
+		selector[fv1.EXECUTOR_TYPE] = et
+	}
+
+	pods, err := a.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(r.Context(), metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	resp, err := json.Marshal(pods.Items)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	a.respondWithSuccess(w, resp)
 }

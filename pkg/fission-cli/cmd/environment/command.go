@@ -85,13 +85,25 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.NamespaceEnvironment},
 	})
 
+	listPodsCmd := &cobra.Command{
+		Use:     "pods",
+		Aliases: []string{"pod", "po"},
+		Short:   "List all pods currently available in environment",
+		Long:    "List all pods currently available in environment",
+		RunE:    wrapper.Wrapper(ListPods),
+	}
+	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.EnvName},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.EnvExecutorType},
+	})
+
 	command := &cobra.Command{
 		Use:     "environment",
 		Aliases: []string{"env"},
 		Short:   "Create, update and manage environments",
 	}
 
-	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd)
+	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, listPodsCmd)
 
 	return command
 }

@@ -19,12 +19,13 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
-	"github.com/fission/fission/pkg/controller/client/rest"
-
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/generator/encoder"
 	v1generator "github.com/fission/fission/pkg/generator/v1"
 )
@@ -40,6 +41,7 @@ type (
 		Update(env *fv1.Environment) (*metav1.ObjectMeta, error)
 		Delete(m *metav1.ObjectMeta) error
 		List(ns string) ([]fv1.Environment, error)
+		ListPods(m *metav1.ObjectMeta) ([]apiv1.Pod, error)
 	}
 
 	Environment struct {
@@ -162,4 +164,39 @@ func (c *Environment) List(ns string) ([]fv1.Environment, error) {
 	}
 
 	return envs, nil
+}
+
+func (c *Environment) ListPods(m *metav1.ObjectMeta) ([]apiv1.Pod, error) {
+	relativeUrl := fmt.Sprintf("environments/%s/pods", m.Name)
+
+	values := url.Values{}
+	if len(m.Labels) != 0 {
+		if envns, ok := m.Labels[fv1.ENVIRONMENT_NAMESPACE]; ok && len(envns) != 0 {
+			values.Add(fv1.ENVIRONMENT_NAMESPACE_QS, envns)
+
+		}
+		if extype, ok := m.Labels[fv1.EXECUTOR_TYPE]; ok && len(extype) != 0 {
+			values.Add(fv1.EXECUTOR_TYPE_QS, extype)
+		}
+	}
+
+	relativeUrl = fmt.Sprintf("%s?%s", relativeUrl, values.Encode())
+	resp, err := c.client.Get(relativeUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := handleResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	pods := make([]apiv1.Pod, 0)
+	err = json.Unmarshal(body, &pods)
+	if err != nil {
+		return nil, err
+	}
+
+	return pods, nil
 }

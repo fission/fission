@@ -125,6 +125,14 @@ const (
 	FUNCTION_UID              = "functionUid"
 	FUNCTION_RESOURCE_VERSION = "functionResourceVersion"
 	EXECUTOR_TYPE             = "executorType"
+	MANAGED                   = "managed"
+)
+
+// query string parameter key
+const (
+	ENVIRONMENT_NAMESPACE_QS = "environmentnamespace"
+	FUNCTION_NAMESPACE_QS    = "functionnamespace"
+	EXECUTOR_TYPE_QS         = "executortype"
 )
 
 const (

@@ -17,6 +17,7 @@ limitations under the License.
 package fake
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -52,5 +53,9 @@ func (c *FakeFunction) Delete(m *metav1.ObjectMeta) error {
 }
 
 func (c *FakeFunction) List(functionNamespace string) ([]fv1.Function, error) {
+	return nil, nil
+}
+
+func (c *FakeFunction) ListPods(m *metav1.ObjectMeta) ([]apiv1.Pod, error) {
 	return nil, nil
 }
