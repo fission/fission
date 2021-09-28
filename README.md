@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://docs.fission.io/images/logo-gh.svg" width="300" />
+  <img src="https://fission.io/images/logo-gh.svg" width="300" />
   <br>
   <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
@@ -81,10 +81,10 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ## Learn More
 
-* Understand [Fission Concepts](https://docs.fission.io/docs/concepts/).
-* See the [installation guide](https://docs.fission.io/docs/installation/) for installing and running Fission.
-* You can learn more about Fission and get started from [Fission Docs](https://docs.fission.io/docs).
-* See the [troubleshooting guide](https://docs.fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
+* Understand [Fission Concepts](https://fission.io/docs/concepts/).
+* See the [installation guide](https://fission.io/docs/installation/) for installing and running Fission.
+* You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
+* See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
 ## Contributing
 

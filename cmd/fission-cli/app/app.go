@@ -33,7 +33,7 @@ const (
 	usage = `Fission: Fast and Simple Serverless Functions for Kubernetes
 
  * Github: https://github.com/fission/fission 
- * Documentation: https://docs.fission.io/docs
+ * Documentation: https://fission.io/docs
 `
 )
 
