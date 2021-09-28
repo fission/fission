@@ -9,8 +9,8 @@ assignees: ''
 
 <!-- Please answer these questions before submitting your issue. Thanks! -->
 
-<!-- Documentation URL: https://docs.fission.io/ -->
-<!-- Troubleshooting guide: https://docs.fission.io/trouble-shooting/ -->
+<!-- Documentation URL: https://fission.io/docs -->
+<!-- Troubleshooting guide: https://fission.io/docs/trouble-shooting/ -->
 
 **Fission/Kubernetes version**
 

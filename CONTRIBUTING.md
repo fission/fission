@@ -7,4 +7,4 @@ First, please read the [code of conduct](CODE_OF_CONDUCT.md). By participating, 
 
 Please refer contributing docs for detailed guide.
 
-[https://docs.fission.io/docs/contributing/](https://docs.fission.io/docs/contributing/)
+[https://fission.io/docs/contributing/](https://fission.io/docs/contributing/)

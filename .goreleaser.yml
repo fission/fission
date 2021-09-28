@@ -6,8 +6,8 @@ release:
   prerelease: true
   draft: true
   header: |
-    Release Highlights: https://docs.fission.io/docs/releases/{{ .Tag }}/
-    Install Guide: https://docs.fission.io/installation/
+    Release Highlights: https://fission.io/docs/releases/{{ .Tag }}/
+    Install Guide: https://fission.io/docs/installation/
     Full Changelog: https://github.com/fission/fission/blob/master/CHANGELOG.md
   extra_files:
     - glob: ./manifest/charts/*

@@ -6,7 +6,7 @@
 
    a. [The fission dockerhub account](https://hub.docker.com/r/fission/), if you have access, you will see Fission listed in [your organizations](https://hub.docker.com/organizations/)
    b. [Fission-charts repo](https://github.com/fission/fission-charts)
-   c. [Fission Documentation Repo](https://github.com/fission/docs.fission.io)
+   c. [Fission Documentation Repo](https://github.com/fission/fission.io)
    d. [Fission main repo](https://github.com/fission/fission)
 
 2. Get a Github [personal access token](https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/)
@@ -76,13 +76,13 @@ b. Changelog.md
 
 Before you save the release - UNCHECK the "This is a pre-release" checkbox. This mark the release as ready for consumption (If release is stable).
 
-## Updating [Fission Docs](https://github.com/fission/docs.fission.io)
+## Updating [Fission Docs](https://github.com/fission/fission.io)
 
 1. Documentation Update
 
 a. Merge documentation PRs that are peer reviewed and get latest master locally.
 
-b. In the repo fission/docs.fission.io change version in version.sh file to latest version (x.y.z) and run build.sh script
+b. In the repo fission/fission.io change version in version.sh file to latest version (x.y.z) and run build.sh script
 
 c. **ONLY** in the dist/x.y.z directory i.e. current version directory - replace all references from previous release to current release. Please use your IDE as there will be thousands of references.
 
