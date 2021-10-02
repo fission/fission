@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -123,7 +122,7 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canaryCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(canaryCfg.ObjectMeta.Namespace).Create(context.TODO(), &canaryCfg, metav1.CreateOptions{})
+	canaryCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(canaryCfg.ObjectMeta.Namespace).Create(r.Context(), &canaryCfg, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -154,7 +153,7 @@ func (a *API) CanaryConfigApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	canaryCfg, err := a.fissionClient.CoreV1().CanaryConfigs(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	canaryCfg, err := a.fissionClient.CoreV1().CanaryConfigs(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -181,7 +180,7 @@ func (a *API) CanaryConfigApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	canaryCfgs, err := a.fissionClient.CoreV1().CanaryConfigs(ns).List(context.TODO(), metav1.ListOptions{})
+	canaryCfgs, err := a.fissionClient.CoreV1().CanaryConfigs(ns).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -216,7 +215,7 @@ func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canayCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(c.ObjectMeta.Namespace).Update(context.TODO(), &c, metav1.UpdateOptions{})
+	canayCfgNew, err := a.fissionClient.CoreV1().CanaryConfigs(c.ObjectMeta.Namespace).Update(r.Context(), &c, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -245,7 +244,7 @@ func (a *API) CanaryConfigApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().CanaryConfigs(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().CanaryConfigs(ns).Delete(r.Context(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

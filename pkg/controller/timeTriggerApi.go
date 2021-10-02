@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -106,7 +105,7 @@ func (a *API) TimeTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.CoreV1().TimeTriggers(ns).List(context.TODO(), metav1.ListOptions{})
+	triggers, err := a.fissionClient.CoreV1().TimeTriggers(ns).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -144,13 +143,13 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.ObjectMeta.Namespace)
+	err = a.createNsIfNotExists(t.ObjectMeta.Namespace, r.Context())
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Create(context.TODO(), &t, metav1.CreateOptions{})
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Create(r.Context(), &t, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -174,7 +173,7 @@ func (a *API) TimeTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.CoreV1().TimeTriggers(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	t, err := a.fissionClient.CoreV1().TimeTriggers(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -219,7 +218,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Update(context.TODO(), &t, metav1.UpdateOptions{})
+	tnew, err := a.fissionClient.CoreV1().TimeTriggers(t.ObjectMeta.Namespace).Update(r.Context(), &t, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -241,7 +240,7 @@ func (a *API) TimeTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().TimeTriggers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().TimeTriggers(ns).Delete(r.Context(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
