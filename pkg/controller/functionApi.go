@@ -147,7 +147,7 @@ func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(f.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), f.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

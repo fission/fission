@@ -136,7 +136,7 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 	// TODO check for duplicate watches
 	// TODO check for duplicate watches -> we probably wont need it?
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(watch.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), watch.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

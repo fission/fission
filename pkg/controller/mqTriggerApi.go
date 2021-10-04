@@ -133,7 +133,7 @@ func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Reques
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(mqTrigger.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), mqTrigger.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

@@ -143,7 +143,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), t.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

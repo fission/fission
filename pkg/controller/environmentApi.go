@@ -136,7 +136,7 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(env.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), env.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

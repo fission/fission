@@ -123,7 +123,7 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 }
 
 // checkHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
-func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger, ctx context.Context) error {
+func (a *API) checkHTTPTriggerDuplicates(ctx context.Context, t *fv1.HTTPTrigger) error {
 	triggers, err := a.fissionClient.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -172,14 +172,14 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
-	err = a.checkHTTPTriggerDuplicates(&t, r.Context())
+	err = a.checkHTTPTriggerDuplicates(r.Context(), &t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.ObjectMeta.Namespace, r.Context())
+	err = a.createNsIfNotExists(r.Context(), t.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -247,7 +247,7 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = a.checkHTTPTriggerDuplicates(&t, r.Context())
+	err = a.checkHTTPTriggerDuplicates(r.Context(), &t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
