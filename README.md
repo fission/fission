@@ -121,4 +121,4 @@ The following companies, organizations, and individuals support Fission's ongoin
 
 # License ![GitHub](https://img.shields.io/github/license/fission/fission)
 
-Fission is licensed under the Apache License 2.0 - see the (LICENSE)[./LICENSE] file for details
+Fission is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details
