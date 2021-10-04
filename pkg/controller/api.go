@@ -131,20 +131,20 @@ func (api *API) extractQueryParamFromRequest(r *http.Request, queryParam string)
 }
 
 // check if namespace exists, if not create it.
-func (api *API) createNsIfNotExists(ns string) error {
+func (api *API) createNsIfNotExists(ctx context.Context, ns string) error {
 	if ns == metav1.NamespaceDefault {
 		// we don't have to create default ns
 		return nil
 	}
 
-	_, err := api.kubernetesClient.CoreV1().Namespaces().Get(context.TODO(), ns, metav1.GetOptions{})
+	_, err := api.kubernetesClient.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil && kerrors.IsNotFound(err) {
 		ns := &apiv1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ns,
 			},
 		}
-		_, err = api.kubernetesClient.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
+		_, err = api.kubernetesClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 	}
 
 	return err
@@ -186,7 +186,7 @@ func (api *API) HealthHandler(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 	appLabelSelector := "application=" + r.URL.Query().Get("application")
-	services, err := api.kubernetesClient.CoreV1().Services(podNamespace).List(context.TODO(), metav1.ListOptions{
+	services, err := api.kubernetesClient.CoreV1().Services(podNamespace).List(r.Context(), metav1.ListOptions{
 		LabelSelector: appLabelSelector,
 	})
 	if err != nil || len(services.Items) > 1 || len(services.Items) == 0 {

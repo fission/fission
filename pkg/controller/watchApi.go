@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -105,7 +104,7 @@ func (a *API) WatchApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	watches, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).List(context.TODO(), metav1.ListOptions{})
+	watches, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -137,13 +136,13 @@ func (a *API) WatchApiCreate(w http.ResponseWriter, r *http.Request) {
 	// TODO check for duplicate watches
 	// TODO check for duplicate watches -> we probably wont need it?
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(watch.ObjectMeta.Namespace)
+	err = a.createNsIfNotExists(r.Context(), watch.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	wnew, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(watch.ObjectMeta.Namespace).Create(context.TODO(), &watch, metav1.CreateOptions{})
+	wnew, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(watch.ObjectMeta.Namespace).Create(r.Context(), &watch, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -167,7 +166,7 @@ func (a *API) WatchApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	watch, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	watch, err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -195,7 +194,7 @@ func (a *API) WatchApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().KubernetesWatchTriggers(ns).Delete(r.Context(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

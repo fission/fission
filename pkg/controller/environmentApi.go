@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -106,7 +105,7 @@ func (a *API) EnvironmentApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	envs, err := a.fissionClient.CoreV1().Environments(ns).List(context.TODO(), metav1.ListOptions{})
+	envs, err := a.fissionClient.CoreV1().Environments(ns).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -137,13 +136,13 @@ func (a *API) EnvironmentApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(env.ObjectMeta.Namespace)
+	err = a.createNsIfNotExists(r.Context(), env.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Create(context.TODO(), &env, metav1.CreateOptions{})
+	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Create(r.Context(), &env, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -168,7 +167,7 @@ func (a *API) EnvironmentApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	env, err := a.fissionClient.CoreV1().Environments(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	env, err := a.fissionClient.CoreV1().Environments(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -206,7 +205,7 @@ func (a *API) EnvironmentApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Update(context.TODO(), &env, metav1.UpdateOptions{})
+	enew, err := a.fissionClient.CoreV1().Environments(env.ObjectMeta.Namespace).Update(r.Context(), &env, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -230,7 +229,7 @@ func (a *API) EnvironmentApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().Environments(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().Environments(ns).Delete(r.Context(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

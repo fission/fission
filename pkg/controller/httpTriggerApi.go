@@ -107,7 +107,7 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceAll
 	}
 
-	triggers, err := a.fissionClient.CoreV1().HTTPTriggers(ns).List(context.TODO(), metav1.ListOptions{})
+	triggers, err := a.fissionClient.CoreV1().HTTPTriggers(ns).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -123,8 +123,8 @@ func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 }
 
 // checkHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
-func (a *API) checkHTTPTriggerDuplicates(t *fv1.HTTPTrigger) error {
-	triggers, err := a.fissionClient.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func (a *API) checkHTTPTriggerDuplicates(ctx context.Context, t *fv1.HTTPTrigger) error {
+	triggers, err := a.fissionClient.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -172,20 +172,20 @@ func (a *API) HTTPTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
-	err = a.checkHTTPTriggerDuplicates(&t)
+	err = a.checkHTTPTriggerDuplicates(r.Context(), &t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
 	// check if namespace exists, if not create it.
-	err = a.createNsIfNotExists(t.ObjectMeta.Namespace)
+	err = a.createNsIfNotExists(r.Context(), t.ObjectMeta.Namespace)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().HTTPTriggers(t.ObjectMeta.Namespace).Create(context.TODO(), &t, metav1.CreateOptions{})
+	tnew, err := a.fissionClient.CoreV1().HTTPTriggers(t.ObjectMeta.Namespace).Create(r.Context(), &t, metav1.CreateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -209,7 +209,7 @@ func (a *API) HTTPTriggerApiGet(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	t, err := a.fissionClient.CoreV1().HTTPTriggers(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	t, err := a.fissionClient.CoreV1().HTTPTriggers(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -247,13 +247,13 @@ func (a *API) HTTPTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = a.checkHTTPTriggerDuplicates(&t)
+	err = a.checkHTTPTriggerDuplicates(r.Context(), &t)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
 	}
 
-	tnew, err := a.fissionClient.CoreV1().HTTPTriggers(t.ObjectMeta.Namespace).Update(context.TODO(), &t, metav1.UpdateOptions{})
+	tnew, err := a.fissionClient.CoreV1().HTTPTriggers(t.ObjectMeta.Namespace).Update(r.Context(), &t, metav1.UpdateOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -275,7 +275,7 @@ func (a *API) HTTPTriggerApiDelete(w http.ResponseWriter, r *http.Request) {
 		ns = metav1.NamespaceDefault
 	}
 
-	err := a.fissionClient.CoreV1().HTTPTriggers(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := a.fissionClient.CoreV1().HTTPTriggers(ns).Delete(r.Context(), name, metav1.DeleteOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return
