@@ -86,7 +86,7 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 * You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
 * See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing ![GitHub](https://img.shields.io/github/contributors/google/docsy)
+## Contributing ![GitHub](https://img.shields.io/github/contributors/fission/fission)
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
@@ -119,6 +119,6 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# Licensing
+# License ![GitHub](https://img.shields.io/github/license/fission/fission)
 
-Fission is under the Apache 2.0 license.
+Fission is licensed under the Apache License 2.0 - see the (LICENSE)[./LICENSE] file for details
