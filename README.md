@@ -4,18 +4,18 @@
   <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
 <p align="center">
-  <a href="https://github.com/fission/fission/actions?query=workflow%3A%22Fission+CI%22">
-    <img src="https://github.com/fission/fission/workflows/Fission%20CI/badge.svg?branch=master" alt="Build Status" />
-  </a>
-  
   <a href="https://goreportcard.com/report/github.com/fission/fission">
     <img src="https://goreportcard.com/badge/github.com/fission/fission" alt="Go Report Card" />
   </a>
   <a href="https://codecov.io/gh/fission/fission">
     <img src="https://codecov.io/gh/fission/fission/branch/master/graph/badge.svg" alt="codecov" />
   </a>
+    <a href="https://github.com/fission/fission/actions?query=workflow%3A%22Fission+CI%22">
+    <img src="https://github.com/fission/fission/workflows/Fission%20CI/badge.svg?branch=master" alt="Build Status" />
+  </a>
   <br>
   <a href="http://fission.io">fission.io</a> | <a href="http://twitter.com/fissionio">@fissionio</a> | <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">Slack</a>
+  
 </p>
 
 --------------
@@ -86,22 +86,20 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 * You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
 * See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing
+## Contributing ![GitHub](https://img.shields.io/github/contributors/fission/fission) [![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/fission/fission)
+
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
-## Get Help & Community Meeting 
+## Get Help
 
 Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
-Reach us on [slack](https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE) or [twitter](https://twitter.com/fissionio).
 
-A regular community meeting takes place every other Thursday at 09:00 AM PT (Pacific Time). [Convert to your local timezone](http://www.thetimezoneconverter.com/?t=09:00&tz=PT%20%28Pacific%20Time%29).
+Reach us on [slack](https://fission.io/slack) or 
+![Twitter Follow @fissionio](https://img.shields.io/twitter/follow/fissionio?style=social).
 
-Meeting Link: https://zoom.us/j/413921817 
+## Official Releases [![Releases](https://img.shields.io/github/release-pre/fission/fission.svg)](https://github.com/fission/fission/releases)
 
-The meeting agenda for next meeting and notes from past meetings are maintained in [this document](https://docs.google.com/document/d/1E-xw4KJgka4sUpETHxr9BJBYntzrtxlAN_CE3Wt8kws). You are welcome to join to discuss direction of project, design and implementation reviews and general questions about project etc.
-
-## Official Releases
 
 Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
 Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
@@ -119,6 +117,6 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# Licensing
+# License ![GitHub](https://img.shields.io/github/license/fission/fission)
 
-Fission is under the Apache 2.0 license.
+Fission is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details
