@@ -86,7 +86,7 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 * You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
 * See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing
+## Contributing ![GitHub](https://img.shields.io/github/contributors/google/docsy)
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
