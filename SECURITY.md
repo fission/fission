@@ -2,6 +2,8 @@
 
 ## Supported Versions
 
+Please refer using [latest stable release](https://github.com/fission/fission/releases/latest) of Fission. 
+
 | Version | Supported          |
 | ------- | ------------------ |
 | >=1.14.x   | :white_check_mark: |
