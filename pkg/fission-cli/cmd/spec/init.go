@@ -67,7 +67,11 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 
 	deployID := input.String(flagkey.SpecDeployID)
 	if len(deployID) == 0 {
-		deployID = uuid.NewV4().String()
+		id, err := uuid.NewV4()
+		if err != nil {
+			return errors.Wrap(err, "error generating UUID")
+		}
+		deployID = id.String()
 	}
 
 	// Create spec dir

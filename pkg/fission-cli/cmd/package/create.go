@@ -160,7 +160,11 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 	}
 
 	if len(pkgName) == 0 {
-		pkgName = strings.ToLower(uuid.NewV4().String())
+		id, err := uuid.NewV4()
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating UUID")
+		}
+		pkgName = strings.ToLower(id.String())
 	}
 
 	pkg := &fv1.Package{

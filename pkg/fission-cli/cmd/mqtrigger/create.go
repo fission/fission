@@ -54,7 +54,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	mqtName := input.String(flagkey.MqtName)
 	if len(mqtName) == 0 {
 		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
-		mqtName = uuid.NewV4().String()
+		id, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+		mqtName = id.String()
 	}
 	fnName := input.String(flagkey.MqtFnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)
