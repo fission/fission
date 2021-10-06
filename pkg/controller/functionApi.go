@@ -385,7 +385,7 @@ func (a *API) FunctionApiPodList(w http.ResponseWriter, r *http.Request) {
 		fv1.FUNCTION_NAME: fnName,
 	}
 
-	fns := a.extractQueryParamFromRequest(r, v1.FUNCTION_NAMESPACE_QS)
+	fns := a.extractQueryParamFromRequest(r, v1.FUNCTION_NAMESPACE)
 	if len(fns) != 0 {
 		selector[fv1.FUNCTION_NAMESPACE] = fns
 	}

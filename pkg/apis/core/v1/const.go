@@ -128,13 +128,6 @@ const (
 	MANAGED                   = "managed"
 )
 
-// query string parameter key
-const (
-	ENVIRONMENT_NAMESPACE_QS = "environmentnamespace"
-	FUNCTION_NAMESPACE_QS    = "functionnamespace"
-	EXECUTOR_TYPE_QS         = "executortype"
-)
-
 const (
 	ANNOTATION_SVC_HOST = "svcHost"
 )

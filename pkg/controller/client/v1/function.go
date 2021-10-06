@@ -186,7 +186,7 @@ func (c *Function) ListPods(m *metav1.ObjectMeta) ([]apiv1.Pod, error) {
 	values := url.Values{}
 	if len(m.Labels) != 0 {
 		if fns, ok := m.Labels[fv1.FUNCTION_NAMESPACE]; ok && len(fns) != 0 {
-			values.Add(fv1.FUNCTION_NAMESPACE_QS, fns)
+			values.Add(fv1.FUNCTION_NAMESPACE, fns)
 		}
 	}
 

@@ -172,11 +172,11 @@ func (c *Environment) ListPods(m *metav1.ObjectMeta) ([]apiv1.Pod, error) {
 	values := url.Values{}
 	if len(m.Labels) != 0 {
 		if envns, ok := m.Labels[fv1.ENVIRONMENT_NAMESPACE]; ok && len(envns) != 0 {
-			values.Add(fv1.ENVIRONMENT_NAMESPACE_QS, envns)
+			values.Add(fv1.ENVIRONMENT_NAMESPACE, envns)
 
 		}
 		if extype, ok := m.Labels[fv1.EXECUTOR_TYPE]; ok && len(extype) != 0 {
-			values.Add(fv1.EXECUTOR_TYPE_QS, extype)
+			values.Add(fv1.EXECUTOR_TYPE, extype)
 		}
 	}
 

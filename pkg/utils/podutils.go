@@ -14,11 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package utils
 
 import (
 	v1 "k8s.io/api/core/v1"
 )
+
+// IsReadyPod checks both all containers in a pod are ready and whether
+// the .metadata.DeletionTimestamp is nil.
+func IsReadyPod(pod *v1.Pod) bool {
+	// since its a utility function, just ensuring there is no nil pointer exception
+	if pod == nil {
+		return false
+	}
+
+	// pod is in "Terminating" status if deletionTimestamp is not nil
+	// https://github.com/kubernetes/kubernetes/issues/61376
+	if pod.ObjectMeta.DeletionTimestamp != nil {
+		return false
+	}
+
+	// pod does not have an IP address allocated to it yet
+	if pod.Status.PodIP == "" {
+		return false
+	}
+
+	for _, cStatus := range pod.Status.ContainerStatuses {
+		if !cStatus.Ready {
+			return false
+		}
+	}
+
+	return true
+}
 
 // PodContainerReadyStatus returns the number of ready containers and total containers present in pod
 func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) {

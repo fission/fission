@@ -254,12 +254,12 @@ func (a *API) EnvironmentApiPodList(w http.ResponseWriter, r *http.Request) {
 		fv1.ENVIRONMENT_NAME: envName,
 	}
 
-	ens := a.extractQueryParamFromRequest(r, v1.ENVIRONMENT_NAMESPACE_QS)
+	ens := a.extractQueryParamFromRequest(r, v1.ENVIRONMENT_NAMESPACE)
 	if len(ens) != 0 {
 		selector[fv1.ENVIRONMENT_NAMESPACE] = ens
 	}
 
-	et := a.extractQueryParamFromRequest(r, v1.EXECUTOR_TYPE_QS)
+	et := a.extractQueryParamFromRequest(r, v1.EXECUTOR_TYPE)
 	if len(et) != 0 {
 		selector[fv1.EXECUTOR_TYPE] = et
 	}

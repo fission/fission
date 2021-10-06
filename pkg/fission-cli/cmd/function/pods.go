@@ -28,7 +28,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type ListPodsSubCommand struct {
@@ -63,7 +63,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		}
 
 		labelList := pod.GetLabels()
-		readyContainers, noOfContainers := util.PodContainerReadyStatus(&pod)
+		readyContainers, noOfContainers := utils.PodContainerReadyStatus(&pod)
 		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[v1.EXECUTOR_TYPE], labelList[v1.MANAGED])
 	}
 	w.Flush()
