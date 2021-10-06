@@ -69,3 +69,10 @@ jobs:
 
       - name: Run unit tests
         run: ./hack/runtests.sh
+
+      - name: Upload Coverage report to CodeCov
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+          flags: unittests
+          file: ./coverage.txt
