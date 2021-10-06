@@ -359,7 +359,9 @@ func TestMain(m *testing.M) {
 	panicIf(err)
 
 	// testNS isolation for running multiple CI builds concurrently.
-	testNS = uuid.NewV4().String()
+	id, err := uuid.NewV4()
+	panicIf(err)
+	testNS = id.String()
 	_, err = kubeClient.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testNS,

@@ -47,7 +47,11 @@ type (
 )
 
 func init() {
-	Tracker = &tracker{gaPropertyID: os.Getenv(GA_TRACKING_ID), cid: uuid.NewV4().String()}
+	id, err := uuid.NewV4()
+	if err != nil {
+		panic(err)
+	}
+	Tracker = &tracker{gaPropertyID: os.Getenv(GA_TRACKING_ID), cid: id.String()}
 }
 
 func (t *tracker) SendEvent(e Event) error {

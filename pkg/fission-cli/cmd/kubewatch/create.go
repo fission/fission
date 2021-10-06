@@ -53,7 +53,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	watchName := input.String(flagkey.KwName)
 	if len(watchName) == 0 {
 		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
-		watchName = uuid.NewV4().String()
+		id, err := uuid.NewV4()
+		if err != nil {
+			return errors.Wrap(err, "error generating uuid")
+		}
+		watchName = id.String()
 	}
 	fnName := input.String(flagkey.KwFnName)
 	fnNamespace := input.String(flagkey.NamespaceFunction)

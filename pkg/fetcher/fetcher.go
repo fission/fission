@@ -354,8 +354,16 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 	if archiver.Zip.Match(tmpPath) && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
-		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewV4().String())
-		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		id, err := uuid.NewV4()
+		if err != nil {
+			logger.Error("error generating uuid",
+				zap.Error(err),
+				zap.String("archive_location", tmpPath))
+			return http.StatusInternalServerError, err
+		}
+
+		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, id.String())
+		err = fetcher.unarchive(tmpPath, tmpUnarchivePath)
 		if err != nil {
 			logger.Error("error unarchive",
 				zap.Error(err),

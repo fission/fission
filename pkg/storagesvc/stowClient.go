@@ -111,7 +111,10 @@ func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 
 // putFile writes the file on the storage
 func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, error) {
-	uploadName := client.config.storage.getUploadFileName()
+	uploadName, err := client.config.storage.getUploadFileName()
+	if err != nil {
+		return "", err
+	}
 
 	// save the file to the storage backend
 	item, err := client.container.Put(uploadName, file, fileSize, nil)

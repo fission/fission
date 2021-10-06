@@ -88,7 +88,11 @@ func IsReadyPod(pod *apiv1.Pod) bool {
 
 // GetTempDir creates and return a temporary directory
 func GetTempDir() (string, error) {
-	tmpDir := uuid.NewV4().String()
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+	tmpDir := id.String()
 	dir, err := ioutil.TempDir("", tmpDir)
 	return dir, err
 }

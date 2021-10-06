@@ -124,7 +124,11 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 				return nil, err
 			}
 
-			file := filepath.Join(tmpDir, uuid.NewV4().String())
+			id, err := uuid.NewV4()
+			if err != nil {
+				return nil, err
+			}
+			file := filepath.Join(tmpDir, id.String())
 			err = utils.DownloadUrl(context.Background(), http.DefaultClient, fileURL, file)
 			if err != nil {
 				return nil, errors.Wrap(err, "error downloading file from the given URL")

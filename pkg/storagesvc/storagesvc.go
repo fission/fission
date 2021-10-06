@@ -40,7 +40,7 @@ type (
 		dial() (stow.Location, error)
 		// getSubDir() string
 		getContainerName() string
-		getUploadFileName() string
+		getUploadFileName() (string, error)
 	}
 
 	// StorageService is a struct to hold all things for storage service

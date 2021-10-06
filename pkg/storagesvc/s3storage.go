@@ -49,9 +49,12 @@ func (ss s3Storage) getContainerName() string {
 	return ss.bucketName
 }
 
-func (ss s3Storage) getUploadFileName() string {
-	uploadName := uuid.NewV4().String()
-	return path.Join(ss.subDir, uploadName)
+func (ss s3Storage) getUploadFileName() (string, error) {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+	return path.Join(ss.subDir, id.String()), nil
 }
 
 func (ss s3Storage) dial() (stow.Location, error) {

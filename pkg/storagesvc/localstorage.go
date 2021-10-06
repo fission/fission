@@ -32,10 +32,14 @@ func (ls localStorage) getStorageType() StorageType {
 	return ls.storageType
 }
 
-func (ls localStorage) getUploadFileName() string {
+func (ls localStorage) getUploadFileName() (string, error) {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
-	return uuid.NewV4().String()
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+	return id.String(), err
 }
 
 func (ls localStorage) getContainerName() string {
