@@ -28,21 +28,23 @@ require (
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/go-openapi/spec v0.19.5
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.2.7
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/imdario/mergo v0.3.12
 	github.com/influxdata/influxdb v1.2.0
-	github.com/mholt/archiver v0.0.0-20180417220235-e4ef56d48eb0
+	github.com/mholt/archiver v2.1.0+incompatible
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/nats-io/nats-streaming-server v0.22.0
 	github.com/nats-io/nats.go v1.11.0
 	github.com/nats-io/stan.go v0.9.0
-	github.com/nwaples/rardecode v1.1.0 // indirect
+	github.com/nwaples/rardecode v1.1.2 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v1.0.1 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
+	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.26.0
@@ -51,7 +53,7 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
-	github.com/ulikunitz/xz v0.5.9 // indirect
+	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.23.0
