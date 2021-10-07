@@ -204,8 +204,8 @@ func Commands() *cobra.Command {
 	listPodsCmd := &cobra.Command{
 		Use:     "pods",
 		Aliases: []string{"pod", "po"},
-		Short:   "List all pods currently used by function",
-		Long:    "List all pods currently used by function",
+		Short:   "List pods currently used by a function",
+		Long:    "List pods currently used by a function",
 		RunE:    wrapper.Wrapper(ListPods),
 	}
 	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
