@@ -54,17 +54,14 @@ PHP, Bash, and any Linux executable, with more languages coming soon.
 
 Table of Contents
 =================
-
-   * [Fission: Serverless Functions for Kubernetes](#fission-serverless-functions-for-kubernetes)
-      * [Performance: 100msec cold start](#performance-100msec-cold-start)
-      * [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
-      * [Getting Started](#getting-started)
-      * [Learn More](#learn-more)
-      * [Contributing](#contributing)
-      * [Get Help &amp; Community Meeting](#get-help--community-meeting)
-      * [Official Releases](#official-releases)
-      * [Sponsors](#sponsors)
-   * [Licensing](#licensing)
+- [Table of Contents](#table-of-contents)
+  - [Performance: 100msec cold start](#performance-100msec-cold-start)
+  - [Kubernetes is the right place for Serverless](#kubernetes-is-the-right-place-for-serverless)
+  - [Getting Started](#getting-started)
+  - [Learn More](#learn-more)
+  - [Contributing](#contributing)
+  - [Sponsors](#sponsors)
+- [License](#license)
 
 ## Performance: 100msec cold start
 
@@ -101,10 +98,10 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ## Learn More
 
-* Understand [Fission Concepts](https://fission.io/docs/concepts/).
-* See the [installation guide](https://fission.io/docs/installation/) for installing and running Fission.
-* You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
-* See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
+- Understand [Fission Concepts](https://fission.io/docs/concepts/).
+- See the [installation guide](https://fission.io/docs/installation/) for installing and running Fission.
+- You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
+- See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
 ## Contributing
 
@@ -115,11 +112,11 @@ Check out the [contributing guide](CONTRIBUTING.md).
 The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
 
 <p>
-    <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
-    <a href="https://srcmesh.com/"><img src="https://fission.io/sponsors/srcmesh.png" alt="Srcmesh" height="70"></a>
-    <a href="https://www.digitalocean.com/?utm_medium=opensource&utm_source=fissionio">
-      <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/PoweredByDO/DO_Powered_by_Badge_blue.svg" width="201px">
-    </a>
+  <a href="https://infracloud.io/"><img src="https://fission.io/sponsors/infracloud.png" alt="InfraCloud" height="70"></a>
+  <a href="https://srcmesh.com/"><img src="https://fission.io/sponsors/srcmesh.png" alt="Srcmesh" height="70"></a>
+  <a href="https://www.digitalocean.com/?utm_medium=opensource&utm_source=fissionio">
+    <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/PoweredByDO/DO_Powered_by_Badge_blue.svg" width="201px">
+  </a>
 </p>
 
 # License
