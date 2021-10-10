@@ -3,19 +3,39 @@
   <br>
   <h1 align="center">Fission: Serverless Functions for Kubernetes</h1>
 </p>
+
 <p align="center">
+  <a href="https://github.com/fission/fission/blob/master/LICENSE">
+    <img alt="Fission Licence" src="https://img.shields.io/github/license/fission/fission">
+  </a>
+  <a href="https://github.com/fission/fission/releases">
+    <img alt="Fission Releases" src="https://img.shields.io/github/release-pre/fission/fission.svg">
+  </a>
+  <a href="https://pkg.go.dev/github.com/fission/fission">
+    <img alt="go.dev reference" src="https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white">
+  </a>
   <a href="https://goreportcard.com/report/github.com/fission/fission">
     <img src="https://goreportcard.com/badge/github.com/fission/fission" alt="Go Report Card" />
   </a>
-  <a href="https://codecov.io/gh/fission/fission">
-    <img src="https://codecov.io/gh/fission/fission/branch/master/graph/badge.svg" alt="codecov" />
+  <a href="https://github.com/fission/fission/graphs/contributors">
+    <img alt="Fission contributors" src="https://img.shields.io/github/contributors/fission/fission">
   </a>
-    <a href="https://github.com/fission/fission/actions?query=workflow%3A%22Fission+CI%22">
-    <img src="https://github.com/fission/fission/workflows/Fission%20CI/badge.svg?branch=master" alt="Build Status" />
+  <a href="https://github.com/fission/fission/commits/master">
+    <img alt="Commit Activity" src="https://img.shields.io/github/commit-activity/m/fission/fission">
   </a>
   <br>
-  <a href="http://fission.io">fission.io</a> | <a href="http://twitter.com/fissionio">@fissionio</a> | <a href="https://join.slack.com/t/fissionio/shared_invite/enQtOTI3NjgyMjE5NzE3LTllODJiODBmYTBiYWUwMWQxZWRhNDhiZDMyN2EyNjAzMTFiYjE2Nzc1NzE0MTU4ZTg2MzVjMDQ1NWY3MGJhZmE">Slack</a>
-  
+  <a href="https://fission.io/">
+    <img alt="Fission website" src="https://img.shields.io/badge/website-fission.io-blue">
+  </a>
+  <a href="https://fission.io/slack">
+    <img alt="Fission slack" src="https://badgen.net/badge/slack/BotKube?icon=slack">
+  </a>
+  <a href="https://twitter.com/fissionio">
+    <img alt="Fission twitter" src="https://img.shields.io/twitter/follow/fissionio?style=social">
+  </a>
+  <a href="https://github.com/fission/fission">
+    <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/fission/fission?style=social">
+  </a>
 </p>
 
 --------------
@@ -86,24 +106,9 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 * You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
 * See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
-## Contributing ![GitHub](https://img.shields.io/github/contributors/fission/fission) [![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/fission/fission)
-
+## Contributing
 
 Check out the [contributing guide](CONTRIBUTING.md).
-
-## Get Help
-
-Fission is a project by [many contributors](https://github.com/fission/fission/graphs/contributors).
-
-Reach us on [slack](https://fission.io/slack) or 
-![Twitter Follow @fissionio](https://img.shields.io/twitter/follow/fissionio?style=social).
-
-## Official Releases [![Releases](https://img.shields.io/github/release-pre/fission/fission.svg)](https://github.com/fission/fission/releases)
-
-
-Official releases of Fission can be found on [the releases page](https://github.com/fission/fission/releases). 
-Please note that it is strongly recommended that you use official releases of Fission, as unreleased versions from 
-the master branch are subject to changes and incompatibilities that will not be supported in the official releases. 
 
 ## Sponsors
 
@@ -117,6 +122,6 @@ The following companies, organizations, and individuals support Fission's ongoin
     </a>
 </p>
 
-# License ![GitHub](https://img.shields.io/github/license/fission/fission)
+# License
 
 Fission is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details
