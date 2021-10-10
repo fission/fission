@@ -120,6 +120,7 @@ const (
 	EnvGracePeriod     = "graceperiod"
 	EnvVersion         = "version"
 	EnvImagePullSecret = "imagepullsecret"
+	EnvExecutorType    = "executortype"
 
 	KwName      = resourceName
 	KwFnName    = "function"

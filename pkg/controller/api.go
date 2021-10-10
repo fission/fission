@@ -214,6 +214,7 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/v2/functions/{function}", api.FunctionApiGet).Methods("GET")
 	r.HandleFunc("/v2/functions/{function}", api.FunctionApiUpdate).Methods("PUT")
 	r.HandleFunc("/v2/functions/{function}", api.FunctionApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/functions/{function}/pods", api.FunctionApiPodList).Methods("GET")
 
 	r.HandleFunc("/v2/triggers/http", api.HTTPTriggerApiList).Methods("GET")
 	r.HandleFunc("/v2/triggers/http", api.HTTPTriggerApiCreate).Methods("POST")
@@ -226,6 +227,7 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
 	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
 	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
+	r.HandleFunc("/v2/environments/{environment}/pods", api.EnvironmentApiPodList).Methods("GET")
 
 	r.HandleFunc("/v2/watches", api.WatchApiList).Methods("GET")
 	r.HandleFunc("/v2/watches", api.WatchApiCreate).Methods("POST")

@@ -125,6 +125,7 @@ const (
 	FUNCTION_UID              = "functionUid"
 	FUNCTION_RESOURCE_VERSION = "functionResourceVersion"
 	EXECUTOR_TYPE             = "executorType"
+	MANAGED                   = "managed"
 )
 
 const (

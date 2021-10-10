@@ -41,6 +41,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -368,4 +369,40 @@ func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWrit
 	}
 
 	return nil
+}
+
+// FunctionApiPodList: Get list of pods currently used by function
+func (a *API) FunctionApiPodList(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fnName, ok := vars["function"]
+	if !ok {
+		a.respondWithError(w, ferror.MakeError(http.StatusInternalServerError, "Error retrieving function name"))
+		return
+	}
+
+	// label selector
+	selector := map[string]string{
+		fv1.FUNCTION_NAME: fnName,
+	}
+
+	fns := a.extractQueryParamFromRequest(r, v1.FUNCTION_NAMESPACE)
+	if len(fns) != 0 {
+		selector[fv1.FUNCTION_NAMESPACE] = fns
+	}
+
+	pods, err := a.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(r.Context(), metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	resp, err := json.Marshal(pods.Items)
+	if err != nil {
+		a.respondWithError(w, err)
+		return
+	}
+
+	a.respondWithSuccess(w, resp)
 }

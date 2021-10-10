@@ -201,13 +201,25 @@ func Commands() *cobra.Command {
 		},
 	})
 
+	listPodsCmd := &cobra.Command{
+		Use:     "pods",
+		Aliases: []string{"pod", "po"},
+		Short:   "List pods currently used by a function",
+		Long:    "List pods currently used by a function",
+		RunE:    wrapper.Wrapper(ListPods),
+	}
+	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runContainerCmd, updateContainerCmd)
+		runContainerCmd, updateContainerCmd, listPodsCmd)
 
 	return command
 }
