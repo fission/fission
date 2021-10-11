@@ -28,7 +28,7 @@
     <img alt="Fission website" src="https://img.shields.io/badge/website-fission.io-blue">
   </a>
   <a href="https://fission.io/slack">
-    <img alt="Fission slack" src="https://badgen.net/badge/slack/BotKube?icon=slack">
+    <img alt="Fission slack" src="https://badgen.net/badge/slack/Fission?icon=slack">
   </a>
   <a href="https://twitter.com/fissionio">
     <img alt="Fission twitter" src="https://img.shields.io/twitter/follow/fissionio?style=social">
