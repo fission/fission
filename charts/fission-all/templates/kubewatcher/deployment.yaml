@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubewatcher
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: kubewatcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: kubewatcher
+  template:
+    metadata:
+      labels:
+        svc: kubewatcher
+    spec:
+      containers:
+      - name: kubewatcher
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}

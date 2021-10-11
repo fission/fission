@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: router
+  labels:
+    svc: router
+    application: fission-router
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+{{- if .Values.router.svcAnnotations }}
+  annotations:
+{{ toYaml .Values.router.svcAnnotations | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.routerServiceType }}
+  ports:
+  - port: 80
+    targetPort: 8888
+{{- if eq .Values.routerServiceType "NodePort" }}
+    nodePort: {{ .Values.routerPort }}
+{{- end }}
+  selector:
+    svc: router

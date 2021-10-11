@@ -1,0 +1,24 @@
+{{- if .Values.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.functionNamespace }}
+  labels:
+    name: fission-function
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    {{- if .Values.enableIstio }}
+    istio-injection: enabled
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.builderNamespace }}
+  labels:
+    name: fission-builder
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    {{- if .Values.enableIstio }}
+    istio-injection: enabled
+    {{- end }}
+{{- end }}

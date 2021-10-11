@@ -1,0 +1,46 @@
+{{- if .Values.heapster }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: heapster
+  namespace: kube-system
+  labels:
+    svc: heapster
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    kubernetes.io/cluster-service: 'true'
+    kubernetes.io/name: heapster
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8082
+  selector:
+    svc: heapster
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heapster
+  namespace: kube-system
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: heapster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: heapster
+  template:
+    metadata:
+      labels:
+        svc: heapster
+    spec:
+      containers:
+      - name: heapster
+        image: gcr.io/google_containers/heapster-amd64:v1.5.0
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command:
+        - /heapster
+        - --source=kubernetes:https://kubernetes.default
+      serviceAccountName: {{ .Release.Namespace }}/fission-svc
+{{- end }}

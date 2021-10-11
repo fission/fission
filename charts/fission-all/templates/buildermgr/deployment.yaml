@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildermgr
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: buildermgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: buildermgr
+  template:
+    metadata:
+      labels:
+        svc: buildermgr
+    spec:
+      containers:
+      - name: buildermgr
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
+        env:
+        - name: FETCHER_IMAGE
+        {{- if eq .Values.fetcher.imageTag "" }}
+          value: "{{ .Values.fetcher.image }}"
+        {{- else }}
+          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
+        {{- end }}
+        - name: FETCHER_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
+        - name: BUILDER_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
+        - name: ENABLE_ISTIO
+          value: "{{ .Values.enableIstio }}"
+        - name: FETCHER_MINCPU
+          value: {{ .Values.fetcher.resource.cpu.requests | quote }}
+        - name: FETCHER_MINMEM
+          value: {{ .Values.fetcher.resource.mem.requests | quote }}
+        - name: FETCHER_MAXCPU
+          value: {{ .Values.fetcher.resource.cpu.limits | quote }}
+        - name: FETCHER_MAXMEM
+          value: {{ .Values.fetcher.resource.mem.limits | quote }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
