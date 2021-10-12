@@ -36,13 +36,16 @@ deploy:
         preUpgradeChecksImage: pre-upgrade-checks
       namespace: fission
       setValues:
-        analytics: "false"
-        debugEnv: "false"
+        analytics: false
+        debugEnv: false
         fetcher.imageTag: ""
         imageTag: ""
         namespace: fission
         pprof.enabled: false
-        prometheus.enabled: "false"
+        prometheus.enabled: false
+        canaryDeployment.enabled: false
+        nats.enabled: false
+        influxdb.enabled: false
         pruneInterval: "60"
         repository: index.docker.io
         routerServiceType: LoadBalancer
@@ -96,6 +99,15 @@ profiles:
     value: NodePort
   - op: replace
     path: /deploy/helm/releases/0/setValues/prometheus.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/nats.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/influxdb.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/canaryDeployment.enabled
     value: true
 - name: kind-opentelemetry
   patches:
