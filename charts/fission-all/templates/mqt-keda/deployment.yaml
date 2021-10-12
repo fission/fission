@@ -1,5 +1,4 @@
 {{- if .Values.mqt_keda.enabled }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

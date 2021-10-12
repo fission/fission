@@ -4,35 +4,35 @@ metadata:
   name: fission-fetcher
   namespace: default
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - '*'
-- apiGroups:
-  - fission.io
-  resources:
-  - canaryconfigs
-  - environments
-  - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
-  - packages
-  - timetriggers
-  verbs:
-  - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - secrets
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - "*"
+  - apiGroups:
+      - fission.io
+    resources:
+      - canaryconfigs
+      - environments
+      - functions
+      - httptriggers
+      - kuberneteswatchtriggers
+      - messagequeuetriggers
+      - packages
+      - timetriggers
+    verbs:
+      - "*"
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -41,19 +41,19 @@ metadata:
   name: fission-builder
   namespace: default
 rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - canaryconfigs
-  - environments
-  - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
-  - packages
-  - timetriggers
-  verbs:
-  - '*'
+  - apiGroups:
+      - fission.io
+    resources:
+      - canaryconfigs
+      - environments
+      - functions
+      - httptriggers
+      - kuberneteswatchtriggers
+      - messagequeuetriggers
+      - packages
+      - timetriggers
+    verbs:
+      - "*"
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -62,9 +62,9 @@ metadata:
   namespace: {{ .Values.functionNamespace }}
   name: event-fetcher
 rules:
-- apiGroups: [""] # "" indicates the core API group
-  resources: ["pods"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: [""] # "" indicates the core API group
-  resources: ["events"]
-  verbs: ["*"]
+  - apiGroups: [""] # "" indicates the core API group
+    resources: ["pods"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""] # "" indicates the core API group
+    resources: ["events"]
+    verbs: ["*"]

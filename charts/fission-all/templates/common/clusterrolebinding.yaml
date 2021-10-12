@@ -3,9 +3,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: fission-crd
 subjects:
-- kind: ServiceAccount
-  name: fission-svc
-  namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: fission-svc
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: fission-cr-admin
