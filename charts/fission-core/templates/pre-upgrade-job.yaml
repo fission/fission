@@ -26,7 +26,11 @@ spec:
       restartPolicy: Never
       containers:
       - name: pre-upgrade-job
+      {{- if .Values.imageTag }}
         image: {{ .Values.preUpgradeChecksImage }}:{{ .Values.imageTag }}
+      {{- else }}
+        image: {{ .Values.preUpgradeChecksImage }}
+      {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         args: ["--fn-pod-namespace", "{{ .Values.functionNamespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
