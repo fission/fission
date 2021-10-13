@@ -69,9 +69,9 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 
 // GetFunctionCRD checks if function CRD is present on the cluster and returns it. It returns nil if not found
 // We can use this to find out if fission had been previously installed on this cluster too.
-func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1.CustomResourceDefinition {
+func (client *PreUpgradeTaskClient) GetFunctionCRD(ctx context.Context) *v1.CustomResourceDefinition {
 	for i := 0; i < maxRetries; i++ {
-		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), FunctionCRD, metav1.GetOptions{})
+		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
 		}
@@ -81,8 +81,8 @@ func (client *PreUpgradeTaskClient) GetFunctionCRD() *v1.CustomResourceDefinitio
 }
 
 // GetMqtCRD checks if MQT CRD is present on the cluster and returns it. It returns nil if not found
-func (client *PreUpgradeTaskClient) GetMqtCRD() *v1.CustomResourceDefinition {
-	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), MqtCRD, metav1.GetOptions{})
+func (client *PreUpgradeTaskClient) GetMqtCRD(ctx context.Context) *v1.CustomResourceDefinition {
+	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, MqtCRD, metav1.GetOptions{})
 	if err != nil {
 		client.logger.Error("Could not find MQT CRD", zap.Error(err))
 		return nil
@@ -92,9 +92,9 @@ func (client *PreUpgradeTaskClient) GetMqtCRD() *v1.CustomResourceDefinition {
 
 // LatestSchemaApplied ensures that the end user has applied the latest CRDs generated to the cluster.
 // For future reference: whenever a new field is added, we need to check for that field's existence in this function
-func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
+func (client *PreUpgradeTaskClient) LatestSchemaApplied(ctx context.Context) error {
 	client.logger.Info("Checking if user has applied the latest CRDs")
-	funcCRD := client.GetFunctionCRD()
+	funcCRD := client.GetFunctionCRD(ctx)
 	if funcCRD == nil {
 		return errors.New("Could not get the Function CRD")
 	}
@@ -103,7 +103,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 		return errors.New("Apply the newer CRDs before upgrading")
 	}
 
-	mqtCRD := client.GetMqtCRD()
+	mqtCRD := client.GetMqtCRD(ctx)
 	if mqtCRD == nil {
 		return errors.New("Could not get the MQT CRD")
 	}
@@ -118,14 +118,14 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied() error {
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and
 // outputs a list of functions that don't adhere to this requirement.
-func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
+func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Context) {
 	client.logger.Info("verifying function spec references for all functions in the cluster")
 
 	var err error
 	var fList *fv1.FunctionList
 
 	for i := 0; i < maxRetries; i++ {
-		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			break
 		}
@@ -143,26 +143,26 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences() {
 	for _, fn := range fList.Items {
 		secrets := fn.Spec.Secrets
 		for _, secret := range secrets {
-			if secret.Namespace != fn.ObjectMeta.Namespace {
+			if secret.Namespace != "" && secret.Namespace != fn.ObjectMeta.Namespace {
 				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
 			}
 		}
 
 		configmaps := fn.Spec.ConfigMaps
 		for _, configmap := range configmaps {
-			if configmap.Namespace != fn.ObjectMeta.Namespace {
+			if configmap.Namespace != "" && configmap.Namespace != fn.ObjectMeta.Namespace {
 				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
 			}
 		}
 
-		if fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
+		if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
 			errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
 		}
 	}
 
 	if errs.ErrorOrNil() != nil {
 		client.logger.Fatal("installation failed",
-			zap.Error(err),
+			zap.Error(errs),
 			zap.String("summary", "a function cannot reference secrets, configmaps and packages outside it's own namespace"))
 	}
 

@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"context"
+
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
 
@@ -57,15 +59,16 @@ Options:
 			zap.Error(err))
 	}
 
-	crd := crdBackedClient.GetFunctionCRD()
+	ctx := context.Background()
+	crd := crdBackedClient.GetFunctionCRD(ctx)
 	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
 
-	err = crdBackedClient.LatestSchemaApplied()
+	err = crdBackedClient.LatestSchemaApplied(ctx)
 	if err != nil {
 		logger.Fatal("New CRDs are not applied")
 	}
-	crdBackedClient.VerifyFunctionSpecReferences()
+	crdBackedClient.VerifyFunctionSpecReferences(ctx)
 }
