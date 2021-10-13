@@ -5,6 +5,7 @@ set -x
 
 DIR=$(realpath $(dirname "$0"))/../
 MANIFESTDIR=$(realpath "$DIR")/manifest
+CHARTS="fission-all"
 
 source $(realpath "${DIR}"/test/init_tools.sh)
 doit() {
@@ -23,28 +24,33 @@ check_charts_repo() {
 }
 
 update_chart_version() {
+    pushd "$DIR"/charts
     local version=$1
-    sed -i "s/^version.*/version\: ${version}/" charts/fission-core/Chart.yaml
-    sed -i "s/^version.*/version\: ${version}/" charts/fission-all/Chart.yaml
-    sed -i "s/appVersion.*/appVersion\: ${version}/" charts/fission-core/Chart.yaml
-    sed -i "s/appVersion.*/appVersion\: ${version}/" charts/fission-all/Chart.yaml
-    sed -i "s/\bimageTag:.*/imageTag\: ${version}/" charts/fission-core/values.yaml
-    sed -i "s/\bimageTag:.*/imageTag\: ${version}/" charts/fission-all/values.yaml
+    for c in $CHARTS; do
+        sed -i "s/^version.*/version\: ${version}/" $c/Chart.yaml
+        sed -i "s/appVersion.*/appVersion\: ${version}/" $c/Chart.yaml
+        sed -i "s/\bimageTag:.*/imageTag\: ${version}/" $c/values.yaml
+    done
+    popd
 }
 
 lint_charts() {
-    helm lint charts/fission-all charts/fission-core
-    if [ $? -ne 0 ]; then
-        echo "helm lint failed"
-        exit 1
-    fi
+    pushd "$DIR"/charts
+    for c in $CHARTS; do
+        doit helm lint $c
+        if [ $? -ne 0 ]; then
+            echo "helm lint failed"
+            exit 1
+        fi
+    done
+    popd
 }
 
 build_charts() {
     mkdir -p "$MANIFESTDIR"/charts
     pushd "$DIR"/charts
     find . -iname *.~?~ | xargs -r rm
-    for c in fission-all fission-core; do
+    for c in $CHARTS; do
         doit helm package -u $c/
         mv ./*.tgz "$MANIFESTDIR"/charts/
     done
@@ -60,7 +66,7 @@ build_yamls() {
 
     releaseName=fission-$(echo "${version}" | sed 's/\./-/g')
 
-    for c in fission-all fission-core; do
+    for c in $CHARTS; do
         # fetch dependencies
         pushd ${c}
         doit helm dependency update
@@ -96,9 +102,10 @@ update_github_charts_repo() {
     local chartsrepo=$2
 
     pushd "$chartsrepo"
-    cp "$MANIFESTDIR"/charts/fission-all-"${version}".tgz .
-    cp "$MANIFESTDIR"/charts/fission-core-"${version}".tgz .
-    ./index.sh
+    for c in $CHARTS; do
+        cp "$MANIFESTDIR"/charts/$c-"${version}".tgz .
+        ./index.sh
+    done
     popd
 }
 
