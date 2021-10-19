@@ -1,0 +1,53 @@
+{{- if .Values.mqt_keda.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-keda
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger-keda
+    messagequeue: keda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: mqtrigger-keda
+      messagequeue: keda
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger-keda
+        messagequeue: keda
+    spec:
+      containers:
+      - name:  mqtrigger-keda
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        env:
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: CONNECTOR_IMAGE_PULL_POLICY
+          value: "{{ .Values.pullPolicy }}"
+        - name: KAFKA_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.kafka.image }}:{{ .Values.mqt_keda.connector_images.kafka.tag }}"
+        - name: RABBITMQ_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.rabbitmq.image }}:{{ .Values.mqt_keda.connector_images.rabbitmq.tag }}"
+        - name: AWS-KINESIS-STREAM_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.awskinesis.image }}:{{ .Values.mqt_keda.connector_images.awskinesis.tag }}"
+        - name: AWS-SQS-QUEUE_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.aws_sqs.image }}:{{ .Values.mqt_keda.connector_images.aws_sqs.tag }}"
+        - name: STAN_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.nats_steaming.image }}:{{ .Values.mqt_keda.connector_images.nats_steaming.tag }}"
+        - name: GCP-PUB-SUB_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.gcp_pub_sub.image }}:{{ .Values.mqt_keda.connector_images.gcp_pub_sub.tag }}"
+        - name: REDIS_IMAGE
+          value: "{{ .Values.mqt_keda.connector_images.redis.image }}:{{ .Values.mqt_keda.connector_images.redis.tag }}"
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+      serviceAccountName: fission-svc
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}

@@ -1,0 +1,43 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-fetcher
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fission-fetcher
+subjects:
+  - kind: ServiceAccount
+    name: fission-fetcher
+    namespace: {{ .Values.functionNamespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-builder
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fission-builder
+subjects:
+  - kind: ServiceAccount
+    name: fission-builder
+    namespace: {{ .Values.builderNamespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fission-fetcher-pod-reader
+  namespace: {{ .Values.functionNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: event-fetcher
+subjects:
+  - kind: ServiceAccount
+    name: fission-fetcher
+    namespace: {{ .Values.functionNamespace }}

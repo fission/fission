@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: controller
+    application: fission-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: controller
+      application: fission-api
+  template:
+    metadata:
+      labels:
+        svc: controller
+        application: fission-api
+    spec:
+      containers:
+      - name: controller
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--controllerPort", "8888"]
+        env:
+        - name: FISSION_FUNCTION_NAMESPACE
+          value: "{{ .Values.functionNamespace }}"
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- include "opentracing.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 1
+          periodSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8888
+          initialDelaySeconds: 35
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config/config.yaml
+          subPath: config.yaml
+        ports:
+          - containerPort: 8888
+            name: http
+        {{- if .Values.pprof.enabled }}
+          - containerPort: 6060
+            name: pprof
+        {{- end }}
+      serviceAccountName: fission-svc
+      volumes:
+      - name: config-volume
+        configMap:
+          name: feature-config
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}

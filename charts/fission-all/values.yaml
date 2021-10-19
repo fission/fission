@@ -16,21 +16,17 @@ repository: index.docker.io
 ## Fission image repository
 image: fission/fission-bundle
 
-## Image pull policy
-pullPolicy: IfNotPresent
-
 ## Fission image version
 imageTag: v1.15.0-rc1
+
+## Image pull policy
+pullPolicy: IfNotPresent
 
 ## Port at which Fission controller service should be exposed
 controllerPort: 31313
 
 ## Port at which Fission router service should be exposed
 routerPort: 31314
-
-## Port at which NATS streaming service should be exposed
-## (only if nats enabled and not external)
-natsStreamingPort: 31316
 
 ## Set to false if you create the namespaces manually
 createNamespace: true
@@ -62,31 +58,6 @@ fetcher:
     mem:
       requests: "16Mi"
       limits: ""
-
-## Logger config
-logger:
-  influxdbAdmin: "admin"
-  fluentdImageRepository: index.docker.io
-  fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.5.1
-
-  ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
-  ## files and a state of offsets, this is very useful to resume a state if the ser-
-  ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
-  ## the containers are limited to write hostPath volume. Hence, we have to enable
-  ## security context and set privileged to true.
-  enableSecurityContext: false
-
-  ## Enable PodSecurityPolicies to allow privileged container
-  ## Only required in some clusters and when enableSecurityContext is true
-  podSecurityPolicy:
-    enabled: false
-
-    ## Configure additional capabilities
-    additionalCapabilities:
-    # example values for linkerd
-    #- NET_RAW
-    #- NET_ADMIN
 
 executor:
   adoptExistingResources: false
@@ -173,7 +144,7 @@ router:
 ### NATS Streaming, enabled by default
 nats:
   # whether or not to use NATS
-  enabled: true
+  enabled: false
 
   # if true, don't install NATS, but
   external: false
@@ -197,6 +168,10 @@ nats:
   # The image to use for NATS streaming server
   streamingserver:
     image: nats-streaming
+
+## Port at which NATS streaming service should be exposed
+## (only if nats enabled and not external)
+natsStreamingPort: 31316
 
 ## Azure-storage-queue: enable and configure the details
 azureStorageQueue:
@@ -303,9 +278,35 @@ gaTrackingID: UA-196546703-1
 ## Enable Heapster only in clusters where heapster does not exist already
 heapster: false
 
+## Logger config
+## This would be used if influxdb is enabled
+logger:
+  influxdbAdmin: "admin"
+  fluentdImageRepository: index.docker.io
+  fluentdImage: fluent/fluent-bit
+  fluentdImageTag: 1.5.1
+
+  ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
+  ## files and a state of offsets, this is very useful to resume a state if the ser-
+  ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
+  ## the containers are limited to write hostPath volume. Hence, we have to enable
+  ## security context and set privileged to true.
+  enableSecurityContext: false
+
+  ## Enable PodSecurityPolicies to allow privileged container
+  ## Only required in some clusters and when enableSecurityContext is true
+  podSecurityPolicy:
+    enabled: false
+
+    ## Configure additional capabilities
+    additionalCapabilities:
+    # example values for linkerd
+    #- NET_RAW
+    #- NET_ADMIN
+
 ## Enable InfluxDB
 influxdb:
-  enabled: true
+  enabled: false
   image: influxdb:1.7
 
 # Allow user to override busybox image used in fluent-bit init container
@@ -329,7 +330,7 @@ debugEnv: false
 ## Prometheus for scrapping service metrics
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
-  enabled: true
+  enabled: false
 
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
@@ -337,7 +338,7 @@ prometheus:
 
 ## set this flag to false if you dont need canary deployment feature
 canaryDeployment:
-  enabled: true
+  enabled: false
 
 # Use the following flags to enable OpenTracing.
 # Note: OpenTracing support will be removed in an upcoming release.
