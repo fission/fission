@@ -284,7 +284,7 @@ logger:
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
   fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.5.1
+  fluentdImageTag: 1.8.8
 
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
@@ -307,7 +307,7 @@ logger:
 ## Enable InfluxDB
 influxdb:
   enabled: false
-  image: influxdb:1.7
+  image: influxdb:1.8
 
 # Allow user to override busybox image used in fluent-bit init container
 busyboxImage: busybox
