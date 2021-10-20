@@ -1,3 +1,4 @@
+{{- if .Values.preUpgradeChecks.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -26,12 +27,13 @@ spec:
       restartPolicy: Never
       containers:
       - name: pre-upgrade-job
-      {{- if .Values.imageTag }}
-        image: {{ .Values.preUpgradeChecksImage }}:{{ .Values.imageTag }}
+      {{- if .Values.preUpgradeChecks.imageTag }}
+        image: {{ .Values.preUpgradeChecks.image }}:{{ .Values.preUpgradeChecks.imageTag }}
       {{- else }}
-        image: {{ .Values.preUpgradeChecksImage }}
+        image: {{ .Values.preUpgradeChecks.image }}
       {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         args: ["--fn-pod-namespace", "{{ .Values.functionNamespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
       serviceAccountName: fission-svc
+{{- end }}
