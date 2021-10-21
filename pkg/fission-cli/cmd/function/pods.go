@@ -41,6 +41,15 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
+	// validate function
+	_, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+		Name:      input.String(flagkey.FnName),
+		Namespace: input.String(flagkey.NamespaceFunction),
+	})
+	if err != nil {
+		return errors.Wrap(err, "error getting function")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name: input.String(flagkey.FnName),
 		Labels: map[string]string{
