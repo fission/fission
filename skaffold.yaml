@@ -33,13 +33,14 @@ deploy:
         fetcher.image: fetcher
         image: fission-bundle
         postInstallReportImage: reporter
-        preUpgradeChecksImage: pre-upgrade-checks
+        preUpgradeChecks.image: pre-upgrade-checks
       namespace: fission
       setValues:
         analytics: false
         debugEnv: false
         fetcher.imageTag: ""
         imageTag: ""
+        preUpgradeChecks.imageTag: ""
         namespace: fission
         pprof.enabled: false
         prometheus.enabled: false

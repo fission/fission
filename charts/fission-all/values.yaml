@@ -317,8 +317,13 @@ busyboxImage: busybox
 ## The value is in minutes.
 pruneInterval: 60
 
-## Fission pre-install/pre-upgrade checks live in this image
-preUpgradeChecksImage: fission/pre-upgrade-checks
+preUpgradeChecks:
+  ## Run pre-install/pre-upgrade checks if true
+  enabled: true
+  ## pre-install/pre-upgrade checks live in this image
+  image: fission/pre-upgrade-checks
+  ## pre-install/pre-upgrade checks image version
+  imageTag: v1.15.0-rc1
 
 ## Fission ppost-install/post-upgrade reporting live in this image
 postInstallReportImage: fission/reporter
