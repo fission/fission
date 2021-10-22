@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -94,7 +94,7 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 
 		if err == nil {
 			if resp.StatusCode == 200 {
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					logger.Error("error reading response body", zap.Error(err))
 				}

@@ -18,7 +18,7 @@ package function
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -131,7 +131,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "error reading response from function")
 	}
@@ -201,7 +201,7 @@ func printPodLogs(client client.Interface, fnMeta *metav1.ObjectMeta) (string, e
 	}
 	defer reader.Close()
 
-	body, err := ioutil.ReadAll(reader)
+	body, err := io.ReadAll(reader)
 	if err != nil {
 		return "", errors.Wrap(err, "error reading the response body")
 	}

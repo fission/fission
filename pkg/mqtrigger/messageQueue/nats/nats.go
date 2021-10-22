@@ -19,7 +19,7 @@ package nats
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -192,7 +192,7 @@ func msgHandler(nats *Nats, trigger *fv1.MessageQueueTrigger) func(*ns.Msg) {
 
 		defer resp.Body.Close()
 
-		body, bodyErr := ioutil.ReadAll(resp.Body)
+		body, bodyErr := io.ReadAll(resp.Body)
 		if bodyErr != nil {
 			nats.logger.Error("error reading function invocation response",
 				zap.Error(err),

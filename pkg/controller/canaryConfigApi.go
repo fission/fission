@@ -19,7 +19,7 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/emicklei/go-restful"
@@ -108,7 +108,7 @@ func (a *API) CanaryConfigApiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -202,7 +202,7 @@ func (a *API) CanaryConfigApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

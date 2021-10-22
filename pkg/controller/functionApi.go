@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -134,7 +133,7 @@ func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) FunctionApiCreate(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -196,7 +195,7 @@ func (a *API) FunctionApiUpdate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["function"]
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

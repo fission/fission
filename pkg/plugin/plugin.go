@@ -22,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -108,7 +107,7 @@ func FindAll() map[string]*Metadata {
 
 	dirs := strings.Split(os.Getenv("PATH"), ":")
 	for _, dir := range dirs {
-		fs, err := ioutil.ReadDir(dir)
+		fs, err := os.ReadDir(dir)
 		if err != nil {
 			continue
 		}

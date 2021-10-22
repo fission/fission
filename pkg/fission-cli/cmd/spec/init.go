@@ -18,7 +18,6 @@ package spec
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -110,7 +109,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 	}
 
 	// Add a bit of documentation to the spec dir here
-	err := ioutil.WriteFile(readme, []byte(SPEC_README), 0644)
+	err := os.WriteFile(readme, []byte(SPEC_README), 0644)
 	if err != nil {
 		return err
 	}
@@ -138,7 +137,7 @@ func writeDeploymentConfig(file string, dc *spectypes.DeploymentConfig) error {
 		"# See the README in this directory for background and usage information.\n" +
 		"# Do not edit the UID below: that will break 'fission spec apply'\n")
 
-	err = ioutil.WriteFile(file, append(msg, y...), 0644)
+	err = os.WriteFile(file, append(msg, y...), 0644)
 	if err != nil {
 		return err
 	}

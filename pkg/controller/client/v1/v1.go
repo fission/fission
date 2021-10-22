@@ -17,7 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	ferror "github.com/fission/fission/pkg/error"
@@ -87,7 +87,7 @@ func handleResponse(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, ferror.MakeErrorFromHTTP(resp)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	return body, err
 }
 
@@ -95,6 +95,6 @@ func handleCreateResponse(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode != 201 {
 		return nil, ferror.MakeErrorFromHTTP(resp)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	return body, err
 }

@@ -18,7 +18,7 @@ package error
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -66,7 +66,7 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 
 	msg := resp.Status
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err == nil && len(body) > 0 {
 		msg = strings.TrimSpace(string(body))
 	}

@@ -21,7 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -97,12 +97,12 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		return nil, errors.Wrap(err, "error making the fission / kube client")
 	}
 
-	name, err := ioutil.ReadFile(fv1.PodInfoMount + "/name")
+	name, err := os.ReadFile(fv1.PodInfoMount + "/name")
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading pod name from downward volume")
 	}
 
-	namespace, err := ioutil.ReadFile(fv1.PodInfoMount + "/namespace")
+	namespace, err := os.ReadFile(fv1.PodInfoMount + "/namespace")
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
@@ -142,7 +142,7 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 	for key, val := range dataMap {
 		writeFilePath := filepath.Join(dirPath, key)
-		err := ioutil.WriteFile(writeFilePath, val, 0750)
+		err := os.WriteFile(writeFilePath, val, 0750)
 		if err != nil {
 			return errors.Wrapf(err, "Failed to write file %s", writeFilePath)
 		}
@@ -175,7 +175,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// parse request
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -226,7 +226,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
 	// parse request
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -313,7 +313,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath
-			err := ioutil.WriteFile(tmpPath, archive.Literal, 0600)
+			err := os.WriteFile(tmpPath, archive.Literal, 0600)
 			if err != nil {
 				e := "failed to write file"
 				logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
@@ -515,7 +515,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// parse request
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error("error reading request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -614,7 +614,7 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 	}
 	if target.IsDir() {
 		// list all
-		fs, _ := ioutil.ReadDir(src)
+		fs, _ := os.ReadDir(src)
 		for _, f := range fs {
 			files = append(files, filepath.Join(src, f.Name()))
 		}

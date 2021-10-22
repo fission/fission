@@ -17,7 +17,7 @@ package azurequeuestorage
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -197,7 +197,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	).Return(
 		&http.Response{
 			StatusCode: http.StatusInternalServerError,
-			Body:       ioutil.NopCloser(strings.NewReader("server error")),
+			Body:       io.NopCloser(strings.NewReader("server error")),
 		},
 		nil,
 	).Once()
@@ -207,7 +207,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	).Return(
 		&http.Response{
 			StatusCode: http.StatusNotFound,
-			Body:       ioutil.NopCloser(strings.NewReader("not found")),
+			Body:       io.NopCloser(strings.NewReader("not found")),
 		},
 		nil,
 	).Once()
@@ -217,7 +217,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	).Return(
 		&http.Response{
 			StatusCode: http.StatusBadRequest,
-			Body:       ioutil.NopCloser(strings.NewReader("bad request")),
+			Body:       io.NopCloser(strings.NewReader("bad request")),
 		},
 		nil,
 	).Once()
@@ -227,7 +227,7 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 	).Return(
 		&http.Response{
 			StatusCode: http.StatusForbidden,
-			Body:       ioutil.NopCloser(strings.NewReader("not authorized")),
+			Body:       io.NopCloser(strings.NewReader("not authorized")),
 		},
 		nil,
 	).Once()
@@ -339,10 +339,10 @@ func TestAzureStorageQueuePoisonMessage(t *testing.T) {
 func httpRequestMatcher(t *testing.T, queue string, responseQueue string, retry string, contentType string, functionName string, body string) func(*http.Request) bool {
 	expectedURL := fmt.Sprintf("%s/fission-function/%s", DummyRouterURL, functionName)
 	return func(req *http.Request) bool {
-		requestBody, err := ioutil.ReadAll(req.Body)
+		requestBody, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 
-		req.Body = ioutil.NopCloser(strings.NewReader(string(requestBody)))
+		req.Body = io.NopCloser(strings.NewReader(string(requestBody)))
 
 		return queue == req.Header.Get("X-Fission-MQTrigger-Topic") &&
 			responseQueue == req.Header.Get("X-Fission-MQTrigger-RespTopic") &&
@@ -372,7 +372,7 @@ func runAzureStorageQueueTest(t *testing.T, count int, output bool) {
 	// Mock a HTTP client that returns http.StatusOK with "output" for the body
 	httpClient := new(azureHTTPClientMock)
 	httpClient.bodyHandler = func(res *http.Response) {
-		res.Body = ioutil.NopCloser(strings.NewReader(FunctionResponse))
+		res.Body = io.NopCloser(strings.NewReader(FunctionResponse))
 	}
 	httpClient.On(
 		"Do",

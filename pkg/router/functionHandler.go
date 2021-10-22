@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -242,7 +241,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 						Proto:         req.Proto,
 						ProtoMajor:    req.ProtoMajor,
 						ProtoMinor:    req.ProtoMinor,
-						Body:          ioutil.NopCloser(bytes.NewBufferString(errMsg)),
+						Body:          io.NopCloser(bytes.NewBufferString(errMsg)),
 						ContentLength: int64(len(errMsg)),
 						Request:       req,
 						Header:        make(http.Header),

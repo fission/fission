@@ -22,7 +22,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -65,7 +64,7 @@ func GetTempDir() (string, error) {
 		return "", err
 	}
 	tmpDir := id.String()
-	dir, err := ioutil.TempDir("", tmpDir)
+	dir, err := os.MkdirTemp("", tmpDir)
 	return dir, err
 }
 

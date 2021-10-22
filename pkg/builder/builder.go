@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -98,7 +97,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// parse request
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		e := "error reading request body"
 		builder.logger.Error(e, zap.Error(err))

@@ -19,7 +19,6 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -47,7 +46,7 @@ func TestFind(t *testing.T) {
 	if err != nil {
 		t.FailNow()
 	}
-	err = ioutil.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
+	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
 	if err != nil {
 		t.FailNow()
 	}
@@ -89,7 +88,7 @@ func TestExec(t *testing.T) {
 	if err != nil {
 		t.FailNow()
 	}
-	err = ioutil.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
+	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
 	if err != nil {
 		t.FailNow()
 	}

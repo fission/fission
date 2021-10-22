@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -39,7 +39,7 @@ import (
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
@@ -170,7 +170,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error("failed to read tap service request", zap.Error(err))
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
@@ -222,7 +222,7 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return

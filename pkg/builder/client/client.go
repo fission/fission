@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -31,7 +31,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
-	builder "github.com/fission/fission/pkg/builder"
+	"github.com/fission/fission/pkg/builder"
 	ferror "github.com/fission/fission/pkg/error"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/tracing"
@@ -91,7 +91,7 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	defer resp.Body.Close()
 
-	rBody, err := ioutil.ReadAll(resp.Body)
+	rBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("error reading resp body", zap.Error(err))
 		return nil, err

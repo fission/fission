@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -78,7 +77,7 @@ func (c *RESTClient) Delete(relativeUrl string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "error deleting")
 		} else {
