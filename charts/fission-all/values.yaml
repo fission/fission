@@ -1,86 +1,132 @@
-#
-# Fission chart configuration
-#
+## Fission chart configuration
+##
 
-## Kubernetes configuration
-## For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
+## serviceType to consider while creating Fission Controller service.
+## For minikube/kind, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
+##
 serviceType: ClusterIP
 
+## routerServiceType to consider while creating Fission Router service.
 ## For minikube, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
+##
 routerServiceType: LoadBalancer
 
-## Image base repository
-## Leave it empty for using existing local image
+## repository represents base repository for images used in the chart.
+## Keep it empty for using existing local image
+##
 repository: index.docker.io
 
-## Fission image repository
+## image represents the base image fission-bundle used by multiple Fission components.
+## We alter arguments to the image to run a particular component.
+##
 image: fission/fission-bundle
 
-## Fission image version
+## imageTag represents the tag of the base image fission-bundle used by multiple Fission components.
+## It is also used by the chart to identify version of the few more images apart from fission-bundle.
+## Keep it empty for using latest tag.
+##
 imageTag: v1.15.0-rc1
 
-## Image pull policy
+## pullPolicy represents the pull policy to use for images in the chart.
+##
 pullPolicy: IfNotPresent
 
-## Port at which Fission controller service should be exposed
+## controllerPort represents the port at which the Fission controller service should be exposed.
+##
 controllerPort: 31313
 
-## Port at which Fission router service should be exposed
+## routerPort represents the port at which the Fission Router service should be exposed.
+##
 routerPort: 31314
 
-## Set to false if you create the namespaces manually
-createNamespace: true
-
-## Namespace in which to run fission functions (this is different from
-## the release namespace)
+## functionNamespace represents the namespace in which Fission Function resources will be created.
+## This is different from the release namespace.
+##
 functionNamespace: fission-function
 
-## Namespace in which to run fission builders (this is different from
-## the release namespace)
+## builderNamespace represents the namespace in which Fission Builder resources will be created.
+## This is different from the release namespace.
+##
 builderNamespace: fission-builder
 
-## Enable istio integration
+## createNamespace decides to create namespaces by the chart.
+## If set to true, functionNamespace and builderNamespace namespaces mentioned above will be created by the chart.
+## Set to false if you want to create the namespaces manually.
+##
+createNamespace: true
+
+## enableIstio indicates whether to enable istio integration.
+##
 enableIstio: false
 
+## fetcher is a light weight component that helps in running functions.
+## fetcher helps in fetching function source code/build and uploading it when function is invoked.
+##
 fetcher:
-  ## Fetcher repository
+  ## image represents the image of the fetcher component.
   image: fission/fetcher
-  ## Fetcher image version
+  ## imageTag represents the tag of the image of the fetcher component.
   imageTag: v1.15.0-rc1
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
+  ##
   resource:
+    ## cpu represents the cpu resource required by the fetcher component.
+    ##
     cpu:
       requests: "10m"
       ## Low CPU limits will increases the function specialization time.
       limits: ""
+    ## mem represents the memory resource required by the fetcher component.
+    ##
     mem:
       requests: "16Mi"
       limits: ""
 
+## executor is responsible for providing resources to your functions.
+##
 executor:
+  ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
+  ##
   adoptExistingResources: false
+  ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.
+  ## This is applicable to Pool Manager executor type only.
+  ##
   podReadyTimeout: 300s
 
-## Router config
+## router is responsible for routing function calls to the appropriate function.
+##
 router:
+  ## deployAsDaemonSet decides whether to deploy router as a DaemonSet or a Deployment.
+  ##
   deployAsDaemonSet: false
+  ## svcAddressMaxRetries is the max times for router to retry with a specific function service address
+  ##
   svcAddressMaxRetries: 5
+  ## svcAddressUpdateTimeout is the timeout setting for a goroutine to wait for the update of a service entry.
+  ##
   svcAddressUpdateTimeout: 30s
+  ## unTapServiceTimeout is the timeout used in the request context of unTapService.
+  ## unTapService is called to free up the resources once the function invocation is done.
+  ##
   unTapServiceTimeout: 3600s
-  ## Display endpoint access logs
-  ## To be aware of enabling logging endpoint access log, it increases
+  ## displayAccessLog display endpoing access logs
+  ## Please be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.
+  ##
   displayAccessLog: false
 
-  ## Add annotations for router
+  ## svcAnnotations is the annotations to be added to the service resource created for router.
+  ##
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
 
-  ## For router to match encoded path.
+  ## useEncodedPath decideds to match encoded path.
   ## If true, "/foo%2Fbar" will match the path "/{var}";
   ## Otherwise, it will match the path "/foo/bar".
+  ## For details, see: https://github.com/fission/fission/issues/1317
+  ##
   useEncodedPath: false
 
   roundTrip:
@@ -95,22 +141,24 @@ router:
     ## so that kubernetes will be able to reap old function pod quickly.
     ##
     ## For details, see https://github.com/fission/fission/issues/723
+    ##
     disableKeepAlive: false
 
-    ## The keep-alive period for an active network connection to function pod.
+    ## keepAliveTime is period for an active network connection to function pod.
+    ##
     keepAliveTime: 30s
 
-    ## HTTP transport request timeout
+    ## timeout is HTTP transport request timeout
+    ##
     timeout: 50ms
 
     ## The length of request timeout will multiply with timeoutExponent after each retry
+    ##
     timeoutExponent: 2
 
-    ## Max retries times of a failed request
+    ## maxRetries defines no of retries of a failed request
+    ##
     maxRetries: 10
-
-  ## Sample with a rate per time window (traces/second)
-  traceSamplingRate: 0.5
 
   ## Extend the container specs for the core fission pods.
   ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
@@ -125,84 +173,107 @@ router:
   ##               operator: In
   ##               values:
   ##                 - app
+  ##
   #extraCoreComponentPodConfig:
   #  affinity:
   #  tolerations:
   #  nodeSelector:
 
-  # Pod resources as:
-  #  resources:
-  #    limits:
-  #      cpu: <tbd>
-  #      memory: <tbd>
-  #    requests:
-  #      cpu: <tbd>
-  #      memory: <tbd>
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
   resources: {}
 
 ## Message queue trigger config
-### NATS Streaming, enabled by default
+## NATS Streaming, enabled by default
+##
 nats:
-  # whether or not to use NATS
+  ## whether or not to use NATS
+  ##
   enabled: false
 
-  # if true, don't install NATS, but
+  ## if true, don't install NATS, but
+  ## use the existing NATS cluster
+  ##
   external: false
 
-  # Address of NATS server (domain:port)
-  # change from default for external NATS
+  ## Address of NATS server (domain:port)
+  ## change from default for external NATS
+  ##
   hostaddress: "nats-streaming:4222"
 
-  # Authorization token to use with NATS
+  ## Authorization token to use with NATS
+  ##
   authToken: "defaultFissionAuthToken"
 
-  # NATS streaming clusterID
+  ## NATS streaming clusterID
+  ##
   clusterID: "fissionMQTrigger"
 
-  # Client name registered with NATS streaming
+  ## Client name registered with NATS streaming
+  ##
   clientID: "fission"
 
-  # Queue group registered with NATS streaming
+  ## Queue group registered with NATS streaming
+  ##
   queueGroup: "fission-messageQueueNatsTrigger"
 
-  # The image to use for NATS streaming server
+  ## The image to use for NATS streaming server
+  ##
   streamingserver:
     image: nats-streaming
     tag: "0.23.0"
 
 ## Port at which NATS streaming service should be exposed
 ## (only if nats enabled and not external)
+##
 natsStreamingPort: 31316
 
 ## Azure-storage-queue: enable and configure the details
+##
 azureStorageQueue:
   enabled: false
   key: ""
   accountName: ""
 
 ## Kafka: enable and configure the details
+##
 kafka:
   enabled: false
-  # note: below link is only for reference.
-  # Please use the brokers link for your kafka here.
+  ## note: below link is only for reference.
+  ## Please use the brokers link for your kafka here.
+  ##
   brokers: "broker.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
+  ## Sample config for authentication
+  ## authentication:
+  ##   tls:
+  ##     enabled: true
+  ##     caCert: 'auth/kafka/ca.crt'
+  ##     userCert: 'auth/kafka/user.crt'
+  ##     userKey: 'auth/kafka/user.key'
+  ##
   authentication:
     tls:
       enabled: false
-      # InsecureSkipVerify controls whether a client verifies the server's certificate chain and host name.
-      insecureSkipVerify: false # Warning: Setting this to true, makes TLS susceptible to man-in-the-middle attacks
-      caCert: "" # path to certificate containing public key of CA authority
-      userCert: "" # path to certificate containing public key of the user signed by CA authority
-      userKey: "" # path to private key of the user
-
-  # brokers: 'my-broker.kafka:9092' # or my-bootstrap-server.kafka:9092/9093
-  # Sample config for authentication
-  #   authentication:
-  #   tls:
-  #     enabled: true
-  #     caCert: 'auth/kafka/ca.crt'
-  #     userCert: 'auth/kafka/user.crt'
-  #     userKey: 'auth/kafka/user.key'
+      ## InsecureSkipVerify controls whether a client verifies the server's certificate chain and host name.
+      ## Warning: Setting this to true, makes TLS susceptible to man-in-the-middle attacks
+      ##
+      insecureSkipVerify: false
+      ## path to certificate containing public key of CA authority
+      ##
+      caCert: ""
+      ## path to certificate containing public key of the user signed by CA authority
+      ##
+      userCert: ""
+      ## path to private key of the user
+      ##
+      userKey: ""
 
   ## version of Kafka broker
   ## For 0.x it must be a string in the format
@@ -210,9 +281,11 @@ kafka:
   ## For 1.x it must be a string in the format
   ## "major.major.veryMinor" example: 2.0.1
   ## Should be >= 0.11.2.0 to enable Kafka record headers support
+  ##
   # version: "0.11.2.0"
 
 ## Persist data to a persistent volume.
+##
 persistence:
   ## If true, fission will create/use a Persistent Volume Claim unless storageType is set to s3
   ## If false, use emptyDir
@@ -221,15 +294,17 @@ persistence:
 
   ## Must be set to either local or S3.
   ## If storateType is set(other than local), one of its backend configuration must be set as below.
+  ##
   #storageType: local | s3
 
-  ## Sample configruation for AWS s3 storage backend
-  #s3:
-  # bucketName: <awsBucketName>
-  # subDir: <sub directory within a bucket>
-  # accessKeyId: <awsAccessKeyId>
-  # secretAccessKey: <awsSecretAccessKey>
-  # region: <awsRegion>
+  ## Sample configuration for AWS s3 storage backend
+  ##
+  # s3:
+  #   bucketName: <awsBucketName>
+  #   subDir: <sub directory within a bucket>
+  #   accessKeyId: <awsAccessKeyId>
+  #   secretAccessKey: <awsSecretAccessKey>
+  #   region: <awsRegion>
 
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
@@ -261,6 +336,7 @@ persistence:
 ##               operator: In
 ##               values:
 ##                 - app
+##
 #extraCoreComponentPodConfig:
 #  affinity:
 #  tolerations:
@@ -268,19 +344,24 @@ persistence:
 
 ## Analytics let us count how many people installed fission. Set to
 ## false to disable analytics.
+##
 analytics: true
 
 ## Internally used for generating an analytics job for non-helm installs
+##
 analyticsNonHelmInstall: false
 
 ## Google Analytics Tracking ID
+##
 gaTrackingID: UA-196546703-1
 
 ## Enable Heapster only in clusters where heapster does not exist already
+##
 heapster: false
 
 ## Logger config
 ## This would be used if influxdb is enabled
+##
 logger:
   influxdbAdmin: "admin"
   fluentdImageRepository: index.docker.io
@@ -292,110 +373,137 @@ logger:
   ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
   ## the containers are limited to write hostPath volume. Hence, we have to enable
   ## security context and set privileged to true.
+  ##
   enableSecurityContext: false
 
   ## Enable PodSecurityPolicies to allow privileged container
   ## Only required in some clusters and when enableSecurityContext is true
+  ##
   podSecurityPolicy:
     enabled: false
 
     ## Configure additional capabilities
+    ##
     additionalCapabilities:
     # example values for linkerd
     #- NET_RAW
     #- NET_ADMIN
 
 ## Enable InfluxDB
+##
 influxdb:
   enabled: false
   image: influxdb:1.8
 
-# Allow user to override busybox image used in fluent-bit init container
+## Allow user to override busybox image used in fluent-bit init container
+##
 busyboxImage: busybox
 
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
+##
 pruneInterval: 60
 
 preUpgradeChecks:
   ## Run pre-install/pre-upgrade checks if true
+  ##
   enabled: true
   ## pre-install/pre-upgrade checks live in this image
+  ##
   image: fission/pre-upgrade-checks
   ## pre-install/pre-upgrade checks image version
+  ##
   imageTag: v1.15.0-rc1
 
-## Fission ppost-install/post-upgrade reporting live in this image
+## Fission post-install/post-upgrade reporting live in this image
+##
 postInstallReportImage: fission/reporter
 
-## if there are any pod specialization errors when a function is triggered and this flag is set to true, the error
-## summary is returned as part of http response
+## If there are any pod specialization errors when a function is triggered, the error
+## summary is returned as part of http response if this is set to true.
+##
 debugEnv: false
 
 ## Prometheus for scrapping service metrics
+##
 prometheus:
   ## set this flag to true if prometheus needs to be deployed along with fission
+  ##
   enabled: false
 
   ## If enabled is false, please assign the prometheus service URL
   ## that is accessible by components.
+  ##
   serviceEndpoint: ""
 
-## set this flag to false if you dont need canary deployment feature
+## set this flag to true if you need canary deployment feature
+##
 canaryDeployment:
   enabled: false
 
-# Use the following flags to enable OpenTracing.
-# Note: OpenTracing support will be removed in an upcoming release.
-# Please prefer using OpenTelemetry instead.
+## Use the following flags to enable OpenTracing.
+## Note: OpenTracing support will be removed in an upcoming release.
+## Please prefer using OpenTelemetry instead.
+##
 openTracing:
   ## set this flag to true if you wish to enable OpenTracing
+  ##
   enabled: false
 
   ## if enabled is true, the variable is endpoint of Jaeger collector in the format shown below
+  ##
   #collectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
 
   ## uniformly sample traces with the given probabilistic sampling rate
+  ##
   #samplingRate: 0.75
 
-# It is an alternate to OpenTracing.
+## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
+## distributed tracing data across function calls.
+##
 openTelemetry:
-  # Use this flag to set the collector endpoint for OpenTelemetry.
-  # The variable is endpoint of the collector in the format shown below.
-  # otlpCollectorEndpoint: "otel-collector.observability.svc:4317"
+  ## Use this flag to set the collector endpoint for OpenTelemetry.
+  ## The variable is endpoint of the collector in the format shown below.
+  ## otlpCollectorEndpoint: "otel-collector.observability.svc:4317"
+  ##
   otlpCollectorEndpoint: ""
-  # Set this flag to false if you are using secure endpoint for the collector.
+  ## Set this flag to false if you are using secure endpoint for the collector.
+  ##
   otlpInsecure: true
-  # Key-value pairs to be used as headers associated with gRPC or HTTP requests
-  # to the collector.
-  # Eg. otlpHeaders: "key1=value1,key2=value2"
+  ## Key-value pairs to be used as headers associated with gRPC or HTTP requests to the collector.
+  ## Eg. otlpHeaders: "key1=value1,key2=value2"
+  ##
   otlpHeaders: ""
-  # Supported samplers:
-  # always_on - Sampler that always samples spans, regardless of the parent span's sampling decision.
-  # always_off - Sampler that never samples spans, regardless of the parent span's sampling decision.
-  # traceidratio - Sampler that samples probabalistically based on rate.
-  # parentbased_always_on - (default if empty) Sampler that respects its parent span's sampling decision, but otherwise always samples.
-  # parentbased_always_off - Sampler that respects its parent span's sampling decision, but otherwise never samples.
-  # parentbased_traceidratio - Sampler that respects its parent span's sampling decision, but otherwise samples probabalistically based on rate.
+  ## Supported samplers:
+  ## always_on - Sampler that always samples spans, regardless of the parent span's sampling decision.
+  ## always_off - Sampler that never samples spans, regardless of the parent span's sampling decision.
+  ## traceidratio - Sampler that samples probabalistically based on rate.
+  ## parentbased_always_on - (default if empty) Sampler that respects its parent span's sampling decision, but otherwise always samples.
+  ## parentbased_always_off - Sampler that respects its parent span's sampling decision, but otherwise never samples.
+  ## parentbased_traceidratio - Sampler that respects its parent span's sampling decision, but otherwise samples probabalistically based on rate.
+  ##
   tracesSampler: "parentbased_traceidratio"
-  # Each Sampler type defines its own expected input, if any.
-  # Currently we get trace ratio for the case of,
-  # 1. traceidratio
-  # 2. parentbased_traceidratio
-  # Sampling probability, a number in the [0..1] range, e.g. "0.1". Default is 0.1.
+  ## Each Sampler type defines its own expected input, if any.
+  ## Currently we get trace ratio for the case of,
+  ## 1. traceidratio
+  ## 2. parentbased_traceidratio
+  ## Sampling probability, a number in the [0..1] range, e.g. "0.1". Default is 0.1.
+  ##
   tracesSamplingRate: "0.1"
-  # Supported providers:
-  # tracecontext - W3C Trace Context
-  # baggage - W3C Baggage
-  # b3 - B3 Single
-  # b3multi - B3 Multi
-  # jaeger - Jaeger uber-trace-id header
-  # xray - AWS X-Ray (third party)
-  # ottrace - OpenTracing Trace (third party)
+  ## Supported providers:
+  ## tracecontext - W3C Trace Context
+  ## baggage - W3C Baggage
+  ## b3 - B3 Single
+  ## b3multi - B3 Multi
+  ## jaeger - Jaeger uber-trace-id header
+  ## xray - AWS X-Ray (third party)
+  ## ottrace - OpenTracing Trace (third party)
+  ##
   propagators: "tracecontext,baggage"
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
+##
 mqt_keda:
   enabled: true
   connector_images:
@@ -421,6 +529,7 @@ mqt_keda:
       image: fission/keda-redis-http-connector
       tag: v0.1
 
-## Enable Pprof based profiling
+## Enable Pprof based profiling used mostly by Fission developers
+##
 pprof:
   enabled: false

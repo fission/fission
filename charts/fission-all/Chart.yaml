@@ -4,7 +4,7 @@ version: v1.15.0-rc1
 appVersion: v1.15.0-rc1
 description: Fission is a fast serverless framework for Kubernetes.
 home: https://fission.io/
-icon: https://fission.io/images/logo-gh.svg
+icon: https://fission.io/favicons/favicon.ico
 sources:
   - https://github.com/fission/fission
   - https://github.com/fission/keda-connectors
