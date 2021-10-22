@@ -25,7 +25,7 @@ spec:
       serviceAccount: fission-nats-streaming
       containers:
       - name: nats-streaming
-        image: {{ .Values.nats.streamingserver.image | quote }}
+        image: "{{ .Values.nats.streamingserver.image }}:{{ .Values.nats.streamingserver.tag }}"
         imagePullPolicy: {{ .Values.pullPolicy }}
         args: [
           "--cluster_id", "{{ .Values.nats.clusterID }}",
