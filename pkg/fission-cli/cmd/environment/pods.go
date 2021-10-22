@@ -41,6 +41,16 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
+	// validate environment
+	_, err := opts.Client().V1().Environment().Get(
+		&metav1.ObjectMeta{
+			Name:      input.String(flagkey.EnvName),
+			Namespace: input.String(flagkey.NamespaceEnvironment),
+		})
+	if err != nil {
+		return errors.Wrap(err, "error getting environment")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name: input.String(flagkey.EnvName),
 		Labels: map[string]string{
