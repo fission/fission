@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -354,7 +354,7 @@ func invokeTriggeredFunction(conn AzureStorageConnection, sub *AzureQueueSubscri
 		}
 		defer response.Body.Close()
 
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		if err != nil {
 			conn.logger.Error("failed to read response body from function invocation", zap.Error(err), zap.String("function_url", sub.functionURL))
 			continue

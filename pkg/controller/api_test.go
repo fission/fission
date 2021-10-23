@@ -20,7 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -396,7 +396,7 @@ func TestMain(m *testing.M) {
 	}
 	assert(found, "incorrect response content type")
 
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	panicIf(err)
 
 	os.Exit(m.Run())

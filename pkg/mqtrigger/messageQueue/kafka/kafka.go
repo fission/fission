@@ -20,14 +20,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 
-	sarama "github.com/Shopify/sarama"
+	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -307,7 +307,7 @@ func kafkaMsgHandler(kafka *Kafka, producer sarama.SyncProducer, trigger *fv1.Me
 		return
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 
 	kafka.logger.Debug("got response from function invocation",
 		zap.String("function_url", url),

@@ -19,7 +19,6 @@ package spec
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -487,7 +486,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 
 	if len(files) > 1 || !isSingleFile {
 		// zip up the file list
-		archiveFile, err := ioutil.TempFile("", fmt.Sprintf("fission-archive-%v", aus.Name))
+		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v", aus.Name))
 		if err != nil {
 			return nil, err
 		}

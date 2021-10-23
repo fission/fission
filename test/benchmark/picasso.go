@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,7 +162,7 @@ func generateChart(title string, file string, format chart.RendererProvider, ser
 		return err
 	}
 
-	err = ioutil.WriteFile(file, buffer.Bytes(), 0644)
+	err = os.WriteFile(file, buffer.Bytes(), 0644)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,6 @@ package spec
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,7 +233,7 @@ func ReadSpecs(specDir string) (*FissionResources, error) {
 			return nil
 		}
 		// read
-		b, err := ioutil.ReadFile(path)
+		b, err := os.ReadFile(path)
 		if err != nil {
 			result = multierror.Append(result, err)
 			return nil

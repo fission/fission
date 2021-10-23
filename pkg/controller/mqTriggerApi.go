@@ -18,7 +18,7 @@ package controller
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/emicklei/go-restful"
@@ -119,7 +119,7 @@ func (a *API) MessageQueueTriggerApiList(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *API) MessageQueueTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return
@@ -179,7 +179,7 @@ func (a *API) MessageQueueTriggerApiUpdate(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	name := vars["mqTrigger"]
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		a.respondWithError(w, err)
 		return

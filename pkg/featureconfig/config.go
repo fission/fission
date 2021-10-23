@@ -19,7 +19,7 @@ package featureconfig
 import (
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/ghodss/yaml"
 )
@@ -27,7 +27,7 @@ import (
 // GetFeatureConfig reads the configMap file and unmarshals the config into a feature config struct
 func GetFeatureConfig() (*FeatureConfig, error) {
 	// read the file
-	b64EncodedContent, err := ioutil.ReadFile(FeatureConfigFile)
+	b64EncodedContent, err := os.ReadFile(FeatureConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("error reading YAML file %s: %v", FeatureConfigFile, err)
 	}

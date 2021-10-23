@@ -18,7 +18,6 @@ package mqtrigger
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -87,7 +86,7 @@ func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, err
 		return nil, err
 	}
 
-	secretFiles, err := ioutil.ReadDir(secretsPath)
+	secretFiles, err := os.ReadDir(secretsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +101,7 @@ func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, err
 			logger.Info(fmt.Sprintf("Reading secret from %s", fileName))
 
 			filePath := path.Join(secretsPath, fileName)
-			secret, fileReadErr := ioutil.ReadFile(filePath)
+			secret, fileReadErr := os.ReadFile(filePath)
 			if fileReadErr != nil {
 				return nil, fileReadErr
 			}

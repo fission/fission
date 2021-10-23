@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -95,7 +95,7 @@ func (c *Client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 		return "", ferror.MakeErrorFromHTTP(resp)
 	}
 
-	svcName, err := ioutil.ReadAll(resp.Body)
+	svcName, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "error reading response body from getting service for function")
 	}

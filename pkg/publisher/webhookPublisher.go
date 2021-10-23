@@ -18,7 +18,7 @@ package publisher
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -112,7 +112,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		fields = append(fields, zap.Error(err), zap.Any("request", r))
 	} else {
 		var body []byte
-		body, err = ioutil.ReadAll(resp.Body)
+		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			fields = append(fields, zap.Error(err), zap.Any("request", r))
 			msg = "read response body error"

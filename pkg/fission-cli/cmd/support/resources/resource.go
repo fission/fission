@@ -18,7 +18,7 @@ package resources
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	"github.com/ghodss/yaml"
@@ -55,7 +55,7 @@ func writeToFile(file string, obj interface{}) {
 	// remove the empty byte from string.
 	file = string(utils.RemoveZeroBytes([]byte(file)))
 
-	err = ioutil.WriteFile(file, bs, 0644)
+	err = os.WriteFile(file, bs, 0644)
 	if err != nil {
 		console.Error(fmt.Sprintf("Error writing file %v: %v", file, err))
 	}

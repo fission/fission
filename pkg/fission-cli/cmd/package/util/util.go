@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -86,7 +85,7 @@ func UploadArchiveFile(ctx context.Context, client client.Interface, fileName st
 }
 
 func GetContents(filePath string) ([]byte, error) {
-	code, err := ioutil.ReadFile(filePath)
+	code, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error reading %v", filePath)
 	}

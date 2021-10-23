@@ -1,7 +1,7 @@
 package router
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 )
@@ -17,7 +17,7 @@ func testRequest(targetURL string, expectedResponse string) {
 		log.Panicf("response status: %v", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Panic("failed to read response")
 	}
