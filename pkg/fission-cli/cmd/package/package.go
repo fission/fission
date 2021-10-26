@@ -161,7 +161,8 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 			}
 		} else if input.Bool(flagkey.SpecSave) {
 			// check if this AUS exists in the specs; if so, don't create a new one
-			fr, err := spec.ReadSpecs(specDir)
+			specIgnore := util.GetSpecIgnore(input)
+			fr, err := spec.ReadSpecs(specDir, specIgnore)
 			if err != nil {
 				return nil, errors.Wrap(err, "error reading specs")
 			}
