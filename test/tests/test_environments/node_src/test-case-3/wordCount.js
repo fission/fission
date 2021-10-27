@@ -1,4 +1,4 @@
-module.exports = async function (context) {
+module.exports = async (context) => {
   var splitStringArray = context.request.split(" ");
 
   return {
