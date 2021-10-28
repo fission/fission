@@ -336,17 +336,13 @@ func GetSpecIgnoreParser(specDir, specIgnore string) (ignore.IgnoreParser, error
 	if _, err := os.Stat(specIgnorePath); errors.Is(err, os.ErrNotExist) {
 		// return error if it's custom spec ignore file
 		if specIgnore != SPEC_IGNORE_FILE {
-			return nil, errors.Errorf("Spec ignore file '%v' doesn't exist. "+
-				"Please check the file path: '%v'", specIgnore, specIgnorePath)
+			return nil, errors.Errorf("Spec ignore file '%s' doesn't exist. "+
+				"Please check the file path: '%s'", specIgnore, specIgnorePath)
 		}
 		return ignore.CompileIgnoreLines(), nil
 	}
 
-	ignoreParser, err := ignore.CompileIgnoreFile(specIgnorePath)
-	if err != nil {
-		return nil, err
-	}
-	return ignoreParser, nil
+	return ignore.CompileIgnoreFile(specIgnorePath)
 }
 
 func GetValidationFlag(input cli.Input) bool {
