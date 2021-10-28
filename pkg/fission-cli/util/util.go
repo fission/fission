@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fission/fission/pkg/controller/client/rest"
 	ignore "github.com/sabhiram/go-gitignore"
 
 	"github.com/hashicorp/go-multierror"
@@ -39,6 +38,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
