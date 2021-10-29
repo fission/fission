@@ -134,7 +134,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
 		specDir := util.GetSpecDir(input)
-		fr, err := spec.ReadSpecs(specDir)
+		specIgnore := util.GetSpecIgnore(input)
+		fr, err := spec.ReadSpecs(specDir, specIgnore)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 		}

@@ -151,6 +151,7 @@ const (
 	SpecDelete   = "delete"
 	SpecDry      = "dry"
 	SpecValidate = "validation"
+	SpecIgnore   = "specignore"
 
 	SupportOutput = Output
 	SupportNoZip  = "nozip"

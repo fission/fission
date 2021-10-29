@@ -38,11 +38,12 @@ func (opts *DestroySubCommand) do(input cli.Input) error {
 }
 
 func (opts *DestroySubCommand) run(input cli.Input) error {
-	// get specdir
+	// get specdir and specignore
 	specDir := util.GetSpecDir(input)
+	specIgnore := util.GetSpecIgnore(input)
 
 	// read everything
-	fr, err := ReadSpecs(specDir)
+	fr, err := ReadSpecs(specDir, specIgnore)
 	if err != nil {
 		return errors.Wrap(err, "error reading specs")
 	}

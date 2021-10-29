@@ -171,7 +171,7 @@ func SpecSave(resource interface{}, specFile string) error {
 		return err
 	}
 
-	fr, err := ReadSpecs(specDir)
+	fr, err := ReadSpecs(specDir, util.SPEC_IGNORE_FILE)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 	}

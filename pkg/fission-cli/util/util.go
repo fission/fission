@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fission/fission/pkg/controller/client/rest"
+	ignore "github.com/sabhiram/go-gitignore"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -38,6 +38,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -315,6 +316,33 @@ func GetSpecDir(input cli.Input) string {
 		specDir = "specs"
 	}
 	return specDir
+}
+
+func GetSpecIgnore(input cli.Input) string {
+	specIgnoreFile := input.String(flagkey.SpecIgnore)
+	if len(specIgnoreFile) == 0 {
+		specIgnoreFile = SPEC_IGNORE_FILE
+	}
+	return specIgnoreFile
+}
+
+// GetSpecIgnoreParser reads the specignore file and returns the ignore.IgnoreParser
+// if the specignore file does not exist it returns empty ignore.IgnoreParser
+func GetSpecIgnoreParser(specDir, specIgnore string) (ignore.IgnoreParser, error) {
+
+	specIgnorePath := filepath.Join(specDir, specIgnore)
+
+	// check for existence of spec ignore file
+	if _, err := os.Stat(specIgnorePath); errors.Is(err, os.ErrNotExist) {
+		// return error if it's custom spec ignore file
+		if specIgnore != SPEC_IGNORE_FILE {
+			return nil, errors.Errorf("Spec ignore file '%s' doesn't exist. "+
+				"Please check the file path: '%s'", specIgnore, specIgnorePath)
+		}
+		return ignore.CompileIgnoreLines(), nil
+	}
+
+	return ignore.CompileIgnoreFile(specIgnorePath)
 }
 
 func GetValidationFlag(input cli.Input) bool {

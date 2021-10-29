@@ -50,9 +50,10 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 func (opts *ListSubCommand) run(input cli.Input) error {
 	deployID := input.String(flagkey.SpecDeployID)
 	if len(deployID) == 0 {
-		// get specdir and read the deployID
+		// get specdir, specignore and read the deployID
 		specDir := util.GetSpecDir(input)
-		fr, err := ReadSpecs(specDir)
+		specIgnore := util.GetSpecIgnore(input)
+		fr, err := ReadSpecs(specDir, specIgnore)
 		if err != nil {
 			return errors.Wrap(err, "error reading specs")
 		}

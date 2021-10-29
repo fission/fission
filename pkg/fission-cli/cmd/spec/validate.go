@@ -53,7 +53,8 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 
 	// this will error on parse errors and on duplicates
 	specDir := util.GetSpecDir(input)
-	fr, err := ReadSpecs(specDir)
+	specIgnore := util.GetSpecIgnore(input)
+	fr, err := ReadSpecs(specDir, specIgnore)
 	if err != nil {
 		return errors.Wrap(err, "error reading specs")
 	}
@@ -197,12 +198,17 @@ func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, cluster
 
 // ReadSpecs reads all specs in the specified directory and returns a parsed set of
 // fission resources.
-func ReadSpecs(specDir string) (*FissionResources, error) {
+func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
 
 	// make sure spec directory exists before continue
 	if _, err := os.Stat(specDir); os.IsNotExist(err) {
 		return nil, errors.Errorf("Spec directory %v doesn't exist. "+
 			"Please check directory path or run \"fission spec init\" to create it.", specDir)
+	}
+
+	ignoreParser, err := util.GetSpecIgnoreParser(specDir, specIgnore)
+	if err != nil {
+		return nil, err
 	}
 
 	fr := FissionResources{
@@ -222,7 +228,7 @@ func ReadSpecs(specDir string) (*FissionResources, error) {
 	var result *multierror.Error
 
 	// Users can organize the specdir into subdirs if they want to.
-	err := filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -232,6 +238,11 @@ func ReadSpecs(specDir string) (*FissionResources, error) {
 		if !(strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
 			return nil
 		}
+
+		if ignoreParser.MatchesPath(path) {
+			return nil
+		}
+
 		// read
 		b, err := os.ReadFile(path)
 		if err != nil {
