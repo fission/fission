@@ -102,9 +102,6 @@ profiles:
     path: /deploy/helm/releases/0/setValues/prometheus.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/nats.enabled
-    value: true
-  - op: replace
     path: /deploy/helm/releases/0/setValues/influxdb.enabled
     value: true
   - op: replace

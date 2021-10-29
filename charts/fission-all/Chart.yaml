@@ -11,6 +11,10 @@ sources:
 keywords:
   - fission
   - serverless
+  - platform
+  - faas
+  - functions
+  - Integration & Delivery
 maintainers:
   - name: Vishal Biyani
     email: vishal@infracloud.io
