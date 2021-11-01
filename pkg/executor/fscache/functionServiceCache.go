@@ -17,11 +17,13 @@ limitations under the License.
 package fscache
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -110,7 +112,7 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunction:        cache.MakeCache(0, 0),
 		byAddress:         cache.MakeCache(0, 0),
 		byFunctionUID:     cache.MakeCache(0, 0),
-		connFunctionCache: poolcache.NewPoolCache(),
+		connFunctionCache: poolcache.NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -180,10 +182,10 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
-func (fsc *FunctionServiceCache) GetFuncSvc(m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, active, err := fsc.connFunctionCache.GetValue(key, requestsPerPod)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, key, requestsPerPod)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, active, err
@@ -220,8 +222,8 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 }
 
 // AddFunc adds a function service to pool cache.
-func (fsc *FunctionServiceCache) AddFunc(fsvc FuncSvc) {
-	fsc.connFunctionCache.SetValue(crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
+func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
+	fsc.connFunctionCache.SetValue(ctx, crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
@@ -349,8 +351,8 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 }
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].
-func (fsc *FunctionServiceCache) DeleteFunctionSvc(fsvc *FuncSvc) {
-	err := fsc.connFunctionCache.DeleteValue(crd.CacheKey(fsvc.Function), fsvc.Address)
+func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *FuncSvc) {
+	err := fsc.connFunctionCache.DeleteValue(ctx, crd.CacheKey(fsvc.Function), fsvc.Address)
 	if err != nil {
 		fsc.logger.Error(
 			"error deleting function service",
@@ -377,12 +379,12 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 }
 
 // DeleteOldPoolCache deletes aged function service entries from pool cache.
-func (fsc *FunctionServiceCache) DeleteOldPoolCache(fsvc *FuncSvc, minAge time.Duration) (bool, error) {
+func (fsc *FunctionServiceCache) DeleteOldPoolCache(ctx context.Context, fsvc *FuncSvc, minAge time.Duration) (bool, error) {
 	if time.Since(fsvc.Atime) < minAge {
 		return false, nil
 	}
 
-	fsc.DeleteFunctionSvc(fsvc)
+	fsc.DeleteFunctionSvc(ctx, fsvc)
 
 	return true, nil
 }
@@ -421,4 +423,25 @@ func (fsc *FunctionServiceCache) Log() {
 	}
 	<-responseChannel
 	fsc.logger.Info("--- FunctionService Cache Contents End")
+}
+
+func GetAttributesForFuncSvc(fsvc *FuncSvc) []attribute.KeyValue {
+	if fsvc == nil {
+		return []attribute.KeyValue{}
+	}
+	var attrs []attribute.KeyValue
+	if fsvc.Function != nil {
+		attrs = append(attrs,
+			attribute.KeyValue{Key: "function-name", Value: attribute.StringValue(fsvc.Function.Name)},
+			attribute.KeyValue{Key: "function-namespace", Value: attribute.StringValue(fsvc.Function.Namespace)})
+	}
+	if fsvc.Environment != nil {
+		attrs = append(attrs,
+			attribute.KeyValue{Key: "environment-name", Value: attribute.StringValue(fsvc.Environment.Name)},
+			attribute.KeyValue{Key: "environment-namespace", Value: attribute.StringValue(fsvc.Environment.Namespace)})
+	}
+	if fsvc.Address != "" {
+		attrs = append(attrs, attribute.KeyValue{Key: "address", Value: attribute.StringValue(fsvc.Address)})
+	}
+	return attrs
 }

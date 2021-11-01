@@ -203,12 +203,12 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 
 func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(&fn.ObjectMeta, requestsPerPod)
+	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
-	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache", otelUtils.GetAttributesForFuncSvc(fsvc)...)
-	gpm.fsCache.DeleteFunctionSvc(fsvc)
+	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache", fscache.GetAttributesForFuncSvc(fsvc)...)
+	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svcHost string) {
@@ -219,7 +219,7 @@ func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svc
 }
 
 func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) error {
-	otelUtils.SpanTrackEvent(ctx, "UnTapService",
+	otelUtils.SpanTrackEvent(ctx, "TapService",
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
 	err := gpm.fsCache.TouchByAddress(svcHost)
 	if err != nil {
@@ -231,7 +231,7 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
-	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
+	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
 			pod, err := gpm.podLister.Pods(obj.Namespace).Get(obj.Name)
@@ -636,7 +636,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 
 			go func() {
 				startTime := time.Now()
-				deleted, err := gpm.fsCache.DeleteOldPoolCache(fsvc, idlePodReapTime)
+				deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idlePodReapTime)
 				if err != nil {
 					gpm.logger.Error("error deleting Kubernetes objects for function service",
 						zap.Error(err),
@@ -734,7 +734,8 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 					gpm.logger.Error("could not covert value from PodToFsvc")
 					return
 				}
-				gpm.fsCache.DeleteFunctionSvc(fsvc)
+				ctx := context.Background()
+				gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 				for i := range fsvc.KubernetesObjects {
 					gpm.logger.Info("release idle function resources due to  inactivity",
 						zap.String("function", fsvc.Function.Name),
@@ -742,7 +743,6 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 						zap.String("executor", string(fsvc.Executor)),
 						zap.String("pod", fsvc.Name),
 					)
-					ctx := context.Background()
 					reaper.CleanupKubeObject(ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
 					time.Sleep(50 * time.Millisecond)
 				}

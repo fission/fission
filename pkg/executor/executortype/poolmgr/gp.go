@@ -568,7 +568,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
 	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
-	gp.fsCache.AddFunc(*fsvc)
+	gp.fsCache.AddFunc(ctx, *fsvc)
 
 	gp.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 
@@ -578,7 +578,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		zap.String("serviceHost", svcHost),
 		zap.String("podIP", pod.Status.PodIP))
 
-	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", otelUtils.GetAttributesForFuncSvc(fsvc)...)
+	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
 	return fsvc, nil
 }
 

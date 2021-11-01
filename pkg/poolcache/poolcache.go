@@ -19,11 +19,14 @@ limitations under the License.
 package poolcache
 
 import (
+	"context"
 	"fmt"
 
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	ferror "github.com/fission/fission/pkg/error"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type requestType int
@@ -49,10 +52,12 @@ type (
 	Cache struct {
 		cache          map[interface{}]map[interface{}]*value
 		requestChannel chan *request
+		logger         *zap.Logger
 	}
 
 	request struct {
 		requestType
+		ctx             context.Context
 		function        interface{}
 		address         interface{}
 		value           interface{}
@@ -69,10 +74,11 @@ type (
 )
 
 // NewPoolCache create a Cache object
-func NewPoolCache() *Cache {
+func NewPoolCache(logger *zap.Logger) *Cache {
 	c := &Cache{
 		cache:          make(map[interface{}]map[interface{}]*value),
 		requestChannel: make(chan *request),
+		logger:         logger,
 	}
 	go c.service()
 	return c
@@ -94,6 +100,7 @@ func (c *Cache) service() {
 					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
 						// mark active
 						values[addr].activeRequests++
+						c.logger.Info("SSS incgv", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
 						resp.value = values[addr].val
 						found = true
 						break
@@ -114,12 +121,16 @@ func (c *Cache) service() {
 			}
 			c.cache[req.function][req.address].val = req.value
 			c.cache[req.function][req.address].activeRequests++
+			otelUtils.LoggerWithTraceID(req.ctx, c.logger).Info("SSS incsv", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
 			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]interface{}, 0)
-			for _, values := range c.cache {
-				for _, value := range values {
+			for key1, values := range c.cache {
+				for key2, value := range values {
+					logger := otelUtils.LoggerWithTraceID(req.ctx, c.logger)
+					logger.Info("SSS read", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
 					if value.activeRequests == 0 {
+						logger.Info("SSS marked available", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
 						vals = append(vals, value.val)
 					}
 				}
@@ -137,6 +148,7 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
 					c.cache[req.function][req.address].activeRequests--
+					otelUtils.LoggerWithTraceID(req.ctx, c.logger).Info("SSS dec", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
 				}
 			}
 		case deleteValue:
@@ -151,9 +163,10 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(function interface{}, requestsPerPod int) (interface{}, int, error) {
+func (c *Cache) GetValue(ctx context.Context, function interface{}, requestsPerPod int) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
+		ctx:             ctx,
 		requestType:     getValue,
 		function:        function,
 		requestsPerPod:  requestsPerPod,
@@ -175,9 +188,10 @@ func (c *Cache) ListAvailableValue() []interface{} {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *Cache) SetValue(function, address, value interface{}, cpuLimit resource.Quantity) {
+func (c *Cache) SetValue(ctx context.Context, function, address, value interface{}, cpuLimit resource.Quantity) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
+		ctx:             ctx,
 		requestType:     setValue,
 		function:        function,
 		address:         address,
@@ -210,9 +224,10 @@ func (c *Cache) MarkAvailable(function, address interface{}) {
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
-func (c *Cache) DeleteValue(function, address interface{}) error {
+func (c *Cache) DeleteValue(ctx context.Context, function, address interface{}) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
+		ctx:             ctx,
 		requestType:     deleteValue,
 		function:        function,
 		address:         address,
