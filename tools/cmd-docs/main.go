@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fission/fission/cmd/fission-cli/app"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+
+	"github.com/fission/fission/cmd/fission-cli/app"
 )
 
 const fmTemplate = `---
@@ -52,5 +53,8 @@ func main() {
 	}
 	rootCmd.Flags().StringVarP(&outdir, "outdir", "o", "/tmp/cli-docs", "Output directory")
 
-	rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
