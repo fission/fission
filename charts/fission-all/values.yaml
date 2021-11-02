@@ -509,7 +509,7 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: v0.8
+      tag: v0.9
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
       tag: v0.8
