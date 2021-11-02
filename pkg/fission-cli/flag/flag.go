@@ -76,7 +76,7 @@ var (
 
 	KubeContext = Flag{Type: String, Name: flagkey.KubeContext, Usage: "Kubernetes context to be used for the execution of Fission commands", DefaultValue: ""}
 
-	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. Eg. --labels=\"environment=dev,application=analytics\""}
+	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. E.g. --labels=\"environment=dev,application=analytics\""}
 	Annotation = Flag{Type: StringSlice, Name: flagkey.Annotation, Usage: "Annotation to apply to the function. To mention multiple annotations --annotation=\"abc.com/team=dev\" --annotation=\"foo=bar\""}
 
 	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", DefaultValue: metav1.NamespaceDefault}
@@ -104,7 +104,7 @@ var (
 	FnArgs                  = Flag{Type: String, Name: flagkey.FnArgs, Usage: "Args to be passed to the command on the container. If not specified , the ones defined in the image are used"}
 	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
 	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
-	FnSecret                = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the the secrets will be replaced by the provided list of secrets."}
+	FnSecret                = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the secrets will be replaced by the provided list of secrets."}
 	FnCfgMap                = Flag{Type: StringSlice, Name: flagkey.FnCfgMap, Usage: "Function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags. In case of fn update the configmaps will be replaced by the provided list of configmaps."}
 	FnExecutorType          = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
 	FnExecutionTimeout      = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
