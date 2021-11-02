@@ -79,6 +79,9 @@ clean:
 generate-swagger-doc:
 	@./hack/update-swagger-docs.sh
 
+generate-cli-docs:
+	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/fission-cli"
+
 all-generators: codegen generate-crds generate-swagger-doc
 
 skaffold-prebuild:
