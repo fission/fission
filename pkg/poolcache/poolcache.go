@@ -100,7 +100,9 @@ func (c *Cache) service() {
 					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
 						// mark active
 						values[addr].activeRequests++
-						c.logger.Info("SSS incgv", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
+						if c.logger.Core().Enabled(zap.DebugLevel) {
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
+						}
 						resp.value = values[addr].val
 						found = true
 						break
@@ -121,16 +123,22 @@ func (c *Cache) service() {
 			}
 			c.cache[req.function][req.address].val = req.value
 			c.cache[req.function][req.address].activeRequests++
-			otelUtils.LoggerWithTraceID(req.ctx, c.logger).Info("SSS incsv", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+			if c.logger.Core().Enabled(zap.DebugLevel) {
+				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+			}
 			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]interface{}, 0)
 			for key1, values := range c.cache {
 				for key2, value := range values {
-					logger := otelUtils.LoggerWithTraceID(req.ctx, c.logger)
-					logger.Info("SSS read", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
+					if debugLevel {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+					}
 					if value.activeRequests == 0 {
-						logger.Info("SSS marked available", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+						if debugLevel {
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no acitve requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+						}
 						vals = append(vals, value.val)
 					}
 				}
@@ -148,7 +156,9 @@ func (c *Cache) service() {
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
 					c.cache[req.function][req.address].activeRequests--
-					otelUtils.LoggerWithTraceID(req.ctx, c.logger).Info("SSS dec", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+					if c.logger.Core().Enabled(zap.DebugLevel) {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+					}
 				}
 			}
 		case deleteValue:
