@@ -35,7 +35,7 @@ _See [helm install](https://helm.sh/docs/helm/helm_install/) for command documen
 
 ## Dependencies
 
-By default this chart installs additional, dependent charts:
+By default, this chart installs additional, dependent charts:
 
 - [prometheus-community/prometheus](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus)
 
@@ -92,6 +92,30 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 ### Upgrading an existing Release to a new major version
 
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an incompatible breaking change needing manual actions.
+
+### Upgrade from 1.14.x to 1.15.x
+
+With 1.15.x release, following changes are made:
+
+- `fission-core` chart is removed
+- `fission-all` chart is made similar `fission-core` chart
+- In the `fission-all` chart, the following components are disabled which were enabled by default earlier. If you want to enable them, please use `--set` flag.
+
+  - nats - Set `nats.enabled=true` to enable Fission Nats integration
+  - influxdb - Set `influxdb.enabled=true` to enable Fission InfluxDB and logger component
+  - prometheus - Set `prometheus.enabled=true` to install Prometheus with Fission
+  - canaryDeployment - Set `canaryDeployment.enabled=true` to enable Canary Deployment
+
+## Migrating from fission-core chart
+
+With the release of Fission v1.15.x, the fission-core chart was removed.
+Fission-all is now exactly similar to fission-core and can be used to migrate from fission-core.
+
+If you are upgrading from the fission-core chart, you can use the following command to migrate with required changes.
+
+```console
+ helm upgrade [RELEASE_NAME] fission-charts/fission-all --namespace fission
+ ```
 
 ## Configuration
 
