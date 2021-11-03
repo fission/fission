@@ -120,7 +120,7 @@ jobs:
 
       - name: Kind export logs
         run: |
-          kind export logs --name kind-kind kind-logs
+          kind export logs --name kind kind-logs
 
       - name: Archive fission dump
         if: ${{ failure() }}
