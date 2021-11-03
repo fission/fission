@@ -119,6 +119,7 @@ jobs:
           command -v fission && fission support dump
 
       - name: Kind export logs
+        if: ${{ always() }}
         run: |
           kind export logs --name kind kind-logs
 
@@ -131,7 +132,7 @@ jobs:
           retention-days: 5
 
       - name: Archive kind logs
-        if: ${{ failure() }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: kind-logs-${{ github.run_id }}-{{ matrix.kindversion }}
