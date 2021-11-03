@@ -5,18 +5,18 @@ on:
     branches:
       - master
     paths:
-      - '**.go'
-      - 'charts/**'
-      - 'test/**'
+      - "**.go"
+      - "charts/**"
+      - "test/**"
       - go.mod
       - go.sum
   pull_request:
     branches:
       - master
     paths:
-      - '**.go'
-      - 'charts/**'
-      - 'test/**'
+      - "**.go"
+      - "charts/**"
+      - "test/**"
       - go.mod
       - go.sum
   workflow_dispatch:
@@ -28,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage : [ 'kindest/node:v1.19.11','kindest/node:v1.20.7',  'kindest/node:v1.21.1' ]
-        os: [ ubuntu-latest ] 
+        kindversion: ["v1.19.11", "v1.20.7", "v1.21.1"]
+        os: [ubuntu-latest]
     steps:
       - name: setup go
         uses: actions/setup-go@v2
@@ -60,8 +60,8 @@ jobs:
       - name: Kind Clutser
         uses: engineerd/setup-kind@v0.5.0
         with:
-          image:  ${{ matrix.kindimage }}
-          version:  v0.11.1
+          image: kindest/node:${{ matrix.kindversion }}
+          version: v0.11.1
           config: kind.yaml
 
       - name: Configuring and testing the Installation
@@ -118,10 +118,22 @@ jobs:
         run: |
           command -v fission && fission support dump
 
+      - name: Kind export logs
+        run: |
+          kind export logs --name kind-kind kind-logs
+
       - name: Archive fission dump
         if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
-          name: fission-dump
+          name: fission-dump-${{ github.run_id }}-{{ matrix.kindversion }}
           path: fission-dump/*.zip
+          retention-days: 5
+
+      - name: Archive kind logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: kind-logs-${{ github.run_id }}-{{ matrix.kindversion }}
+          path: kind-logs/*
           retention-days: 5
