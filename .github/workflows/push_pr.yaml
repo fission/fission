@@ -127,7 +127,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
-          name: fission-dump-${{ github.run_id }}-{{ matrix.kindversion }}
+          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
           retention-days: 5
 
@@ -135,6 +135,6 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: kind-logs-${{ github.run_id }}-{{ matrix.kindversion }}
+          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
           retention-days: 5
