@@ -53,6 +53,7 @@ deploy:
         openTracing.enabled: false
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: true
+        priorityClassName: "system-cluster-critical"
       wait: true
     flags:
       install:

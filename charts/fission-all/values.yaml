@@ -31,6 +31,13 @@ imageTag: v1.15.0-rc2
 ##
 pullPolicy: IfNotPresent
 
+## priorityClassName represents the priority class name to use for Fission components.
+## Refer to https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+## executor.priorityClassName takes precedence over this value for executor.
+## router.priorityClassName takes precedence over this value for router.
+##
+priorityClassName: ""
+
 ## controllerPort represents the port at which the Fission controller service should be exposed.
 ##
 controllerPort: 31313
@@ -87,6 +94,11 @@ fetcher:
 ## executor is responsible for providing resources to your functions.
 ##
 executor:
+  ## executor priorityClassName
+  ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  ## Recommended to use system-cluster-critical for executor pods.
+  ##
+  priorityClassName: ""
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
@@ -98,6 +110,11 @@ executor:
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:
+  ## router priorityClassName
+  ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  ## Recommended to use system-cluster-critical for router pods.
+  ##
+  priorityClassName: ""
   ## deployAsDaemonSet decides whether to deploy router as a DaemonSet or a Deployment.
   ##
   deployAsDaemonSet: false
