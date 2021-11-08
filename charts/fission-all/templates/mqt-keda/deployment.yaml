@@ -47,6 +47,9 @@ spec:
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
       serviceAccountName: fission-svc
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}

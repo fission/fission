@@ -87,6 +87,9 @@ spec:
       - name: fission-storage
         emptyDir: {}
       {{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}

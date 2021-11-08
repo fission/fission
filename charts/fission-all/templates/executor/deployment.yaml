@@ -79,6 +79,11 @@ spec:
           name: pprof
         {{- end }}
       serviceAccountName: fission-svc
+{{- if .Values.executor.priorityClassName }}
+      priorityClassName: {{ .Values.executor.priorityClassName }}
+{{- else if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
