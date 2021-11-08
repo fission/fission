@@ -53,7 +53,10 @@ deploy:
         openTracing.enabled: false
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: true
-        priorityClassName: "system-cluster-critical"
+        priorityClassName: system-cluster-critical
+        # Use /var/log directory for kind logs export
+        terminationMessagePath: /var/log/termination-log
+        terminationMessagePolicy: File
       wait: true
     flags:
       install:

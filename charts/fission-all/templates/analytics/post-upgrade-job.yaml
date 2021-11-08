@@ -41,5 +41,11 @@ spec:
           env:
             - name: GA_TRACKING_ID
               value: "{{ .Values.gaTrackingID }}"
+          {{- if .Values.terminationMessagePath }}
+          terminationMessagePath: {{ .Values.terminationMessagePath }}
+          {{- end }}
+          {{- if .Values.terminationMessagePolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+          {{- end }}
       serviceAccountName: fission-svc
 {{- end }}
