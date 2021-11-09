@@ -113,10 +113,10 @@ executor:
   priorityClassName: ""
   ## terminationMessagePath is the path at which the file to which the executor will write a message upon termination.
   ##
-  terminationMessagePath: /dev/termination-log
+  terminationMessagePath: ""
   ## terminationMessagePolicy is the policy for the executor termination message.
   ##
-  terminationMessagePolicy: File
+  terminationMessagePolicy: ""
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
@@ -135,10 +135,10 @@ router:
   priorityClassName: ""
   ## terminationMessagePath is the path at which the file to which the router will write a message upon termination.
   ##
-  terminationMessagePath: /dev/termination-log
+  terminationMessagePath: ""
   ## terminationMessagePolicy is the policy for the router termination message.
   ##
-  terminationMessagePolicy: File
+  terminationMessagePolicy: ""
   ## deployAsDaemonSet decides whether to deploy router as a DaemonSet or a Deployment.
   ##
   deployAsDaemonSet: false
