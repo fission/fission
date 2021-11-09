@@ -372,10 +372,6 @@ analyticsNonHelmInstall: false
 ##
 gaTrackingID: UA-196546703-1
 
-## Enable Heapster only in clusters where heapster does not exist already
-##
-heapster: false
-
 ## Logger config
 ## This would be used if influxdb is enabled
 ##
