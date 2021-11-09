@@ -232,6 +232,31 @@ docker_manifests:
       - fission/reporter:{{ .Tag }}-amd64
       - fission/reporter:{{ .Tag }}-arm64
       - fission/reporter:{{ .Tag }}-armv7
+  - name_template: fission/builder:latest
+    image_templates:
+      - fission/builder:latest-amd64
+      - fission/builder:latest-arm64
+      - fission/builder:latest-armv7
+  - name_template: fission/fetcher:latest
+    image_templates:
+      - fission/fetcher:latest-amd64
+      - fission/fetcher:latest-arm64
+      - fission/fetcher:latest-armv7
+  - name_template: fission/fission-bundle:latest
+    image_templates:
+      - fission/fission-bundle:latest-amd64
+      - fission/fission-bundle:latest-arm64
+      - fission/fission-bundle:latest-armv7
+  - name_template: fission/pre-upgrade-checks:latest
+    image_templates:
+      - fission/pre-upgrade-checks:latest-amd64
+      - fission/pre-upgrade-checks:latest-arm64
+      - fission/pre-upgrade-checks:latest-armv7
+  - name_template: fission/reporter:latest
+    image_templates:
+      - fission/reporter:latest-amd64
+      - fission/reporter:latest-arm64
+      - fission/reporter:latest-armv7
 changelog:
   skip: true
 archives:
