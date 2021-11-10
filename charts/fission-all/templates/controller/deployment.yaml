@@ -37,6 +37,12 @@ spec:
               fieldPath: metadata.namespace
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
         readinessProbe:
           httpGet:
             path: "/healthz"
@@ -61,6 +67,7 @@ spec:
           - containerPort: 6060
             name: pprof
         {{- end }}
+  
       serviceAccountName: fission-svc
       volumes:
       - name: config-volume

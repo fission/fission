@@ -55,6 +55,12 @@ spec:
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
         {{- end }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
       serviceAccountName: fission-svc
       {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:

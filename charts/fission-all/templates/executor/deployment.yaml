@@ -78,6 +78,16 @@ spec:
         - containerPort: 6060
           name: pprof
         {{- end }}
+        {{- if .Values.executor.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.executor.terminationMessagePath }}
+        {{- else if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.executor.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.executor.terminationMessagePolicy }}
+        {{- else if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
       serviceAccountName: fission-svc
 {{- if .Values.executor.priorityClassName }}
       priorityClassName: {{ .Values.executor.priorityClassName }}

@@ -38,6 +38,18 @@ pullPolicy: IfNotPresent
 ##
 priorityClassName: ""
 
+## terminationMessagePath is the path at which the pod termination message will be written.
+## executor.terminationMessagePath takes precedence over this value for executor.
+## router.terminationMessagePath takes precedence over this value for router.
+##
+terminationMessagePath: /dev/termination-log
+
+## terminationMessagePolicy is the policy for the termination message.
+## executor.terminationMessagePolicy takes precedence over this value for executor.
+## router.terminationMessagePolicy takes precedence over this value for router.
+##
+terminationMessagePolicy: File
+
 ## controllerPort represents the port at which the Fission controller service should be exposed.
 ##
 controllerPort: 31313
@@ -99,6 +111,12 @@ executor:
   ## Recommended to use system-cluster-critical for executor pods.
   ##
   priorityClassName: ""
+  ## terminationMessagePath is the path at which the file to which the executor will write a message upon termination.
+  ##
+  terminationMessagePath: ""
+  ## terminationMessagePolicy is the policy for the executor termination message.
+  ##
+  terminationMessagePolicy: ""
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
@@ -115,6 +133,12 @@ router:
   ## Recommended to use system-cluster-critical for router pods.
   ##
   priorityClassName: ""
+  ## terminationMessagePath is the path at which the file to which the router will write a message upon termination.
+  ##
+  terminationMessagePath: ""
+  ## terminationMessagePolicy is the policy for the router termination message.
+  ##
+  terminationMessagePolicy: ""
   ## deployAsDaemonSet decides whether to deploy router as a DaemonSet or a Deployment.
   ##
   deployAsDaemonSet: false

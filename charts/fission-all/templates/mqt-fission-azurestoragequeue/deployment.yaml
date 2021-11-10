@@ -45,6 +45,12 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
       serviceAccountName: fission-svc
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
