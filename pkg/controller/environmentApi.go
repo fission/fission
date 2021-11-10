@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -254,12 +253,12 @@ func (a *API) EnvironmentApiPodList(w http.ResponseWriter, r *http.Request) {
 		fv1.ENVIRONMENT_NAME: envName,
 	}
 
-	ens := a.extractQueryParamFromRequest(r, v1.ENVIRONMENT_NAMESPACE)
+	ens := a.extractQueryParamFromRequest(r, fv1.ENVIRONMENT_NAMESPACE)
 	if len(ens) != 0 {
 		selector[fv1.ENVIRONMENT_NAMESPACE] = ens
 	}
 
-	et := a.extractQueryParamFromRequest(r, v1.EXECUTOR_TYPE)
+	et := a.extractQueryParamFromRequest(r, fv1.EXECUTOR_TYPE)
 	if len(et) != 0 {
 		selector[fv1.EXECUTOR_TYPE] = et
 	}
