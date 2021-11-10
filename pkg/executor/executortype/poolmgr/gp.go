@@ -38,6 +38,7 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -70,7 +71,8 @@ type (
 		fissionClient            *crd.FissionClient
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
-		readyPodInformer         cache.SharedIndexInformer
+		readyPodLister           corelisters.PodLister
+		readyPodListerSynced     cache.InformerSynced
 		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
@@ -145,8 +147,10 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	go gp.startReadyPodController()
+	err = gp.setupReadyPodController()
+	if err != nil {
+		return err
+	}
 	go gp.updateCPUUtilizationSvc()
 	return nil
 }
@@ -228,6 +232,10 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 	startTime := time.Now()
 	expoDelay := 100 * time.Millisecond
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
+	if !cache.WaitForCacheSync(ctx.Done(), gp.readyPodListerSynced) {
+		logger.Error("timed out waiting for ready pod lister synced")
+		return "", nil, errors.New("ready pod lister not synced")
+	}
 	for {
 		// Retries took too long, error out.
 		if time.Since(startTime) > gp.podReadyTimeout {
@@ -246,26 +254,25 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		}
 		key = item.(string)
 		logger.Debug("got key from the queue", zap.String("key", key))
-
-		obj, exists, err := gp.readyPodInformer.GetIndexer().GetByKey(key)
+		namespace, name, err := cache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			logger.Error("error splitting key", zap.Error(err), zap.String("key", key))
+			gp.readyPodQueue.Done(key)
+			return "", nil, err
+		}
+		pod, err := gp.readyPodLister.Pods(namespace).Get(name)
 		if err != nil {
 			logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
 			return "", nil, err
 		}
-
-		if !exists {
-			logger.Warn("pod deleted from store", zap.String("pod", key))
-			continue
-		}
-
-		if !utils.IsReadyPod(obj.(*apiv1.Pod)) {
+		if !utils.IsReadyPod(pod) {
 			logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
 			gp.readyPodQueue.Done(key)
 			gp.readyPodQueue.AddAfter(key, expoDelay)
 			expoDelay *= 2
 			continue
 		}
-		chosenPod = obj.(*apiv1.Pod).DeepCopy()
+		chosenPod = pod.DeepCopy()
 		otelUtils.SpanTrackEvent(ctx, "foundPod", otelUtils.GetAttributesForPod(chosenPod)...)
 
 		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
