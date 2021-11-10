@@ -407,7 +407,8 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 	if fsvc, ok := p.gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
 		fsvc, ok := fsvc.(*fscache.FuncSvc)
 		if ok {
-			p.gpm.fsCache.DeleteFunctionSvc(fsvc)
+			ctx := context.Background()
+			p.gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 			p.gpm.fsCache.DeleteEntry(fsvc)
 		} else {
 			p.logger.Error("could not covert item from PodToFsvc", zap.String("key", key))

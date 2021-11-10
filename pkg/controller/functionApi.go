@@ -40,7 +40,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -384,7 +383,7 @@ func (a *API) FunctionApiPodList(w http.ResponseWriter, r *http.Request) {
 		fv1.FUNCTION_NAME: fnName,
 	}
 
-	fns := a.extractQueryParamFromRequest(r, v1.FUNCTION_NAMESPACE)
+	fns := a.extractQueryParamFromRequest(r, fv1.FUNCTION_NAMESPACE)
 	if len(fns) != 0 {
 		selector[fv1.FUNCTION_NAMESPACE] = fns
 	}

@@ -1,6 +1,7 @@
 package fscache
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"testing"
@@ -183,8 +184,9 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		},
 	}
 
-	fsc.AddFunc(*fsvc)
-	_, active, err := fsc.GetFuncSvc(fsvc.Function, 5)
+	ctx := context.Background()
+	fsc.AddFunc(ctx, *fsvc)
+	_, active, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}
@@ -195,7 +197,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
 	fsc.MarkAvailable(key, fsvc.Address)
 
-	_, _, err = fsc.GetFuncSvc(fsvc.Function, 5)
+	_, _, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}
@@ -207,5 +209,5 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	if len(vals) != 0 {
 		logger.Panic(fmt.Sprintln("list of old values didn't matched the expected: 1", "received", len(vals)))
 	}
-	fsc.DeleteFunctionSvc(fsvc)
+	fsc.DeleteFunctionSvc(ctx, fsvc)
 }

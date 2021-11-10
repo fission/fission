@@ -190,7 +190,7 @@ func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 // Return true if no error occurs, return false otherwise.
 func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	logger := otelUtils.LoggerWithTraceID(ctx, caaf.logger)
-	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
+	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		logger.Error("address not found in function service")
 		return false

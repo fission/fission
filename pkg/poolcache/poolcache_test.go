@@ -1,10 +1,13 @@
 package poolcache
 
 import (
+	"context"
 	"log"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func checkErr(err error) {
@@ -14,15 +17,17 @@ func checkErr(err error) {
 }
 
 func TestPoolCache(t *testing.T) {
-	c := NewPoolCache()
+	ctx := context.Background()
+	logger := loggerfactory.GetLogger()
+	c := NewPoolCache(logger)
 
-	c.SetValue("func", "ip", "value", resource.MustParse("45m"))
+	c.SetValue(ctx, "func", "ip", "value", resource.MustParse("45m"))
 
-	c.SetValue("func2", "ip2", "value2", resource.MustParse("50m"))
+	c.SetValue(ctx, "func2", "ip2", "value2", resource.MustParse("50m"))
 
-	c.SetValue("func2", "ip22", "value22", resource.MustParse("33m"))
+	c.SetValue(ctx, "func2", "ip22", "value22", resource.MustParse("33m"))
 
-	checkErr(c.DeleteValue("func2", "ip2"))
+	checkErr(c.DeleteValue(ctx, "func2", "ip2"))
 
 	cc := c.ListAvailableValue()
 	if len(cc) != 0 {
@@ -31,28 +36,28 @@ func TestPoolCache(t *testing.T) {
 
 	c.MarkAvailable("func", "ip")
 
-	_, active, err := c.GetValue("func", 5)
+	_, active, err := c.GetValue(ctx, "func", 5)
 	if active != 1 {
 		log.Panicln("Expected 1 active, found", active)
 	}
 	checkErr(err)
 
-	checkErr(c.DeleteValue("func", "ip"))
+	checkErr(c.DeleteValue(ctx, "func", "ip"))
 
-	_, _, err = c.GetValue("func", 5)
+	_, _, err = c.GetValue(ctx, "func", 5)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
 
-	c.SetValue("cpulimit", "100", "value", resource.MustParse("3m"))
+	c.SetValue(ctx, "cpulimit", "100", "value", resource.MustParse("3m"))
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 
-	_, _, err = c.GetValue("cpulimit", 5)
+	_, _, err = c.GetValue(ctx, "cpulimit", 5)
 
 	if err == nil {
 		log.Panicf("received pod address with higher CPU usage than limit")
 	}
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("2m"))
-	_, _, err = c.GetValue("cpulimit", 5)
+	_, _, err = c.GetValue(ctx, "cpulimit", 5)
 	checkErr(err)
 }

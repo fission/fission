@@ -10,7 +10,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/executor/fscache"
 )
 
 /* GetAttributesForFunction returns a set of attributes for a function. Attributes returned:
@@ -52,27 +51,6 @@ func GetAttributesForPackage(pkg *fv1.Package) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		{Key: "package-name", Value: attribute.StringValue(pkg.Name)},
 		{Key: "package-namespace", Value: attribute.StringValue(pkg.Namespace)}}
-}
-
-func GetAttributesForFuncSvc(fsvc *fscache.FuncSvc) []attribute.KeyValue {
-	if fsvc == nil {
-		return []attribute.KeyValue{}
-	}
-	var attrs []attribute.KeyValue
-	if fsvc.Function != nil {
-		attrs = append(attrs,
-			attribute.KeyValue{Key: "function-name", Value: attribute.StringValue(fsvc.Function.Name)},
-			attribute.KeyValue{Key: "function-namespace", Value: attribute.StringValue(fsvc.Function.Namespace)})
-	}
-	if fsvc.Environment != nil {
-		attrs = append(attrs,
-			attribute.KeyValue{Key: "environment-name", Value: attribute.StringValue(fsvc.Environment.Name)},
-			attribute.KeyValue{Key: "environment-namespace", Value: attribute.StringValue(fsvc.Environment.Namespace)})
-	}
-	if fsvc.Address != "" {
-		attrs = append(attrs, attribute.KeyValue{Key: "address", Value: attribute.StringValue(fsvc.Address)})
-	}
-	return attrs
 }
 
 func GetAttributesForPod(pod *apiv1.Pod) []attribute.KeyValue {

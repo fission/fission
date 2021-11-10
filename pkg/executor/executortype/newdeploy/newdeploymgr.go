@@ -192,7 +192,7 @@ func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 // Return true if no error occurs, return false otherwise.
 func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-	otelUtils.SpanTrackEvent(ctx, "IsValid", otelUtils.GetAttributesForFuncSvc(fsvc)...)
+	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	if len(strings.Split(fsvc.Address, ".")) == 0 {
 		logger.Error("address not found in function service")
 		return false
@@ -370,7 +370,7 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 	if !ok {
 		logger.Panic("receive unknown object while creating function - expected pointer of function service object")
 	}
-	otelUtils.SpanTrackEvent(ctx, "fnSvcResponse", otelUtils.GetAttributesForFuncSvc(fsvc)...)
+	otelUtils.SpanTrackEvent(ctx, "fnSvcResponse", fscache.GetAttributesForFuncSvc(fsvc)...)
 
 	return fsvc, err
 }
