@@ -1,5 +1,42 @@
 # Changelog
 
+## [v1.15.0-rc2](https://github.com/fission/fission/tree/v1.15.0-rc2) (2021-11-11)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.15.0-rc1...v1.15.0-rc2)
+
+**Merged pull requests:**
+
+- Capture os signals to gracefully shutdown fission components [\#2261](https://github.com/fission/fission/pull/2261) ([sanketsudake](https://github.com/sanketsudake))
+- Capture fission-bundle exit logs with sync [\#2260](https://github.com/fission/fission/pull/2260) ([sanketsudake](https://github.com/sanketsudake))
+- Issue \#2258 Reafctor ready pod conroller to use lister and cache sync checks [\#2259](https://github.com/fission/fission/pull/2259) ([sanketsudake](https://github.com/sanketsudake))
+- Remove heapster from fission chart [\#2256](https://github.com/fission/fission/pull/2256) ([sanketsudake](https://github.com/sanketsudake))
+- Add termination policy customization in helm chart  [\#2255](https://github.com/fission/fission/pull/2255) ([sanketsudake](https://github.com/sanketsudake))
+- Add support to mention priorityClassName for Fission components [\#2254](https://github.com/fission/fission/pull/2254) ([sanketsudake](https://github.com/sanketsudake))
+- Export kind logs from CI for pod restart debugging [\#2252](https://github.com/fission/fission/pull/2252) ([sanketsudake](https://github.com/sanketsudake))
+- Run all generators with upstream 1.22 code-generator [\#2251](https://github.com/fission/fission/pull/2251) ([sanketsudake](https://github.com/sanketsudake))
+- Upgrade all dependencies [\#2250](https://github.com/fission/fission/pull/2250) ([sanketsudake](https://github.com/sanketsudake))
+- Add 1.15.x upgrade notes in chart README [\#2249](https://github.com/fission/fission/pull/2249) ([sanketsudake](https://github.com/sanketsudake))
+- Add command to generate Fission CLI docs [\#2247](https://github.com/fission/fission/pull/2247) ([sanketsudake](https://github.com/sanketsudake))
+- Changed kafka version to v0.9 [\#2246](https://github.com/fission/fission/pull/2246) ([blackfly19](https://github.com/blackfly19))
+- Pass context to functionCache functions and debug messages in pool cache [\#2244](https://github.com/fission/fission/pull/2244) ([sanketsudake](https://github.com/sanketsudake))
+- Update chart version to v1.15.0-rc2 [\#2243](https://github.com/fission/fission/pull/2243) ([sanketsudake](https://github.com/sanketsudake))
+- Disable nats test as we deprecate Fission Nats Integration [\#2241](https://github.com/fission/fission/pull/2241) ([sanketsudake](https://github.com/sanketsudake))
+- feature: Added '--specignore' option to pass file containing specs to be ignored for fission spec \[list | validate | apply | destroy\] command [\#2239](https://github.com/fission/fission/pull/2239) ([praddy26](https://github.com/praddy26))
+- refactor: move from io/ioutil to io and os package [\#2236](https://github.com/fission/fission/pull/2236) ([Juneezee](https://github.com/Juneezee))
+- Improve fission-all helm chart values documentation [\#2235](https://github.com/fission/fission/pull/2235) ([sanketsudake](https://github.com/sanketsudake))
+- Add NATS streaming image tag [\#2234](https://github.com/fission/fission/pull/2234) ([arbourd](https://github.com/arbourd))
+- Remove admin role from fission-svc service account [\#2233](https://github.com/fission/fission/pull/2233) ([sanketsudake](https://github.com/sanketsudake))
+- Remove Fission UI manifest from chart [\#2232](https://github.com/fission/fission/pull/2232) ([sanketsudake](https://github.com/sanketsudake))
+- Adding validations for env/fn before listing pods [\#2231](https://github.com/fission/fission/pull/2231) ([praddy26](https://github.com/praddy26))
+- Allow disabling preupgrade checks [\#2229](https://github.com/fission/fission/pull/2229) ([sanketsudake](https://github.com/sanketsudake))
+- security: Chart dependency update: prometheus, fluentd, influxdb [\#2227](https://github.com/fission/fission/pull/2227) ([sanketsudake](https://github.com/sanketsudake))
+- Improve namespace checks in pre-upgrade verification [\#2226](https://github.com/fission/fission/pull/2226) ([sanketsudake](https://github.com/sanketsudake))
+- refactoring: Breakdown fission-all chart into components [\#2224](https://github.com/fission/fission/pull/2224) ([sanketsudake](https://github.com/sanketsudake))
+- Add security policy [\#2217](https://github.com/fission/fission/pull/2217) ([sanketsudake](https://github.com/sanketsudake))
+- security: Update go-uuid and mholt/archiver to recommended version [\#2216](https://github.com/fission/fission/pull/2216) ([sanketsudake](https://github.com/sanketsudake))
+- refactor: Replaced context.TODO\(\) with request.Context\(\) in API files [\#2214](https://github.com/fission/fission/pull/2214) ([praddy26](https://github.com/praddy26))
+- feature: Added command to list pods managed by fission for environment/function [\#2207](https://github.com/fission/fission/pull/2207) ([praddy26](https://github.com/praddy26))
+
 ## [v1.15.0-rc1](https://github.com/fission/fission/tree/v1.15.0-rc1) (2021-09-23)
 
 [Full Changelog](https://github.com/fission/fission/compare/1.14.1...v1.15.0-rc1)
