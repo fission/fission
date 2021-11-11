@@ -54,7 +54,7 @@ func init() {
 	Tracker = &tracker{gaPropertyID: os.Getenv(GA_TRACKING_ID), cid: id.String()}
 }
 
-func (t *tracker) SendEvent(e Event) error {
+func (t *tracker) SendEvent(ctx context.Context, e Event) error {
 	if t.gaPropertyID == "" {
 		return errors.New("tracker.SendEvent: GA_TRACKING_ID env not set")
 	}
@@ -81,7 +81,7 @@ func (t *tracker) SendEvent(e Event) error {
 	}
 
 	buf := bytes.NewBufferString(v.Encode())
-	req, err := http.NewRequest("POST", GA_API_URL, buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", GA_API_URL, buf)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("User-Agent", "ga-tracker/1.0")
 	if err != nil {

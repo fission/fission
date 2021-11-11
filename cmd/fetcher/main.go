@@ -20,6 +20,7 @@ import (
 	"github.com/fission/fission/cmd/fetcher/app"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/signals"
 )
 
 // Usage: fetcher <shared volume path>
@@ -29,5 +30,6 @@ func main() {
 
 	profile.ProfileIfEnabled(logger)
 
-	app.Run(logger)
+	ctx := signals.SetupSignalHandlerWithContext(logger)
+	app.Run(ctx, logger)
 }

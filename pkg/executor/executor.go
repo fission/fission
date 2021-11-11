@@ -261,7 +261,7 @@ func serveMetric(logger *zap.Logger) {
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNamespace string, port int, openTracingEnabled bool) error {
+func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace string, envBuilderNamespace string, port int, openTracingEnabled bool) error {
 	fissionClient, kubernetesClient, _, metricsClient, err := crd.MakeFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get kubernetes client")
@@ -324,7 +324,6 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	}
 	cnmDeplInformer := cnmInformerFactory.Apps().V1().Deployments()
 	cnmSvcInformer := cnmInformerFactory.Core().V1().Services()
-	ctx := context.Background()
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
@@ -379,7 +378,7 @@ func StartExecutor(logger *zap.Logger, functionNamespace string, envBuilderNames
 	if err != nil {
 		return err
 	}
-	go reaper.CleanupRoleBindings(logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
+	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port, openTracingEnabled)
 	go serveMetric(logger)
 

@@ -35,19 +35,19 @@ type (
 	}
 )
 
-func MakeTimerSync(logger *zap.Logger, fissionClient *crd.FissionClient, timer *Timer) *TimerSync {
+func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, timer *Timer) *TimerSync {
 	ws := &TimerSync{
 		logger:        logger.Named("timer_sync"),
 		fissionClient: fissionClient,
 		timer:         timer,
 	}
-	go ws.syncSvc()
+	go ws.syncSvc(ctx)
 	return ws
 }
 
-func (ws *TimerSync) syncSvc() {
+func (ws *TimerSync) syncSvc(ctx context.Context) {
 	for {
-		triggers, err := ws.fissionClient.CoreV1().TimeTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+		triggers, err := ws.fissionClient.CoreV1().TimeTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				ws.logger.Info("encountered a network error - will retry", zap.Error(err))

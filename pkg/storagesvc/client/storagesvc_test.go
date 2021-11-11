@@ -76,7 +76,7 @@ func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
 	return resource
 }
 
-func startS3StorageService(endpoint, bucketName, subDir string) {
+func startS3StorageService(ctx context.Context, endpoint, bucketName, subDir string) {
 	// testID := uniuri.NewLen(8)
 	port := 8081
 
@@ -94,7 +94,7 @@ func startS3StorageService(endpoint, bucketName, subDir string) {
 	os.Setenv("STORAGE_S3_REGION", minioRegion)
 
 	storage := storagesvc.NewS3Storage()
-	_ = storagesvc.Start(logger, storage, port, true)
+	_ = storagesvc.Start(ctx, logger, storage, port, true)
 }
 
 func TestS3StorageService(t *testing.T) {
@@ -135,7 +135,7 @@ func TestS3StorageService(t *testing.T) {
 	// Start storagesvc
 	bucketName := "test-s3-service"
 	subDir := "x/y/z"
-	startS3StorageService(endpoint, bucketName, subDir)
+	startS3StorageService(context.Background(), endpoint, bucketName, subDir)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081))
@@ -211,7 +211,7 @@ func TestLocalStorageService(t *testing.T) {
 	localPath := fmt.Sprintf("/tmp/%v", testID)
 	_ = os.Mkdir(localPath, os.ModePerm)
 	storage := storagesvc.NewLocalStorage(localPath)
-	_ = storagesvc.Start(logger, storage, port, true)
+	_ = storagesvc.Start(context.Background(), logger, storage, port, true)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))

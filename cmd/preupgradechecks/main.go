@@ -17,13 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"context"
-
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/signals"
 )
 
 func getStringArgWithDefault(arg interface{}, defaultValue string) string {
@@ -59,7 +58,7 @@ Options:
 			zap.Error(err))
 	}
 
-	ctx := context.Background()
+	ctx := signals.SetupSignalHandlerWithContext(logger)
 	crd := crdBackedClient.GetFunctionCRD(ctx)
 	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
