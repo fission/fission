@@ -24,7 +24,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 )
 
-func Start(logger *zap.Logger, port int, unitTestFlag bool, openTracingEnabled bool) {
+func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool, openTracingEnabled bool) {
 	cLogger := logger.Named("controller")
 
 	fc, kc, apiExtClient, _, err := crd.MakeFissionClient()
@@ -42,12 +42,10 @@ func Start(logger *zap.Logger, port int, unitTestFlag bool, openTracingEnabled b
 		cLogger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	featureStatus, err := ConfigureFeatures(ctx, cLogger, unitTestFlag, fc, kc)
 	if err != nil {
 		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
 	}
-	defer cancel()
 
 	api, err := MakeAPI(cLogger, featureStatus)
 	if err != nil {

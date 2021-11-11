@@ -17,6 +17,7 @@ limitations under the License.
 package storagesvc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -221,7 +222,7 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 }
 
 // Start runs storage service
-func Start(logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
+func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
 	enablePruner := true
 	// create a storage client
 	storageClient, err := MakeStowClient(logger, storage)
@@ -244,7 +245,7 @@ func Start(logger *zap.Logger, storage Storage, port int, openTracingEnabled boo
 		if err != nil {
 			return errors.Wrap(err, "Error creating archivePruner")
 		}
-		go pruner.Start()
+		go pruner.Start(ctx)
 	}
 
 	logger.Info("storage service started")

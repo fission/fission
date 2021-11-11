@@ -216,11 +216,11 @@ func InitProvider(ctx context.Context, logger *zap.Logger, serviceName string) (
 	return func(ctx context.Context) {
 		err := tracerProvider.Shutdown(ctx)
 		if err != nil && logger != nil {
-			logger.Fatal("error shutting down trace provider", zap.Error(err))
+			logger.Error("error shutting down trace provider", zap.Error(err))
 		}
 		if traceExporter != nil {
 			if err = traceExporter.Shutdown(ctx); err != nil && logger != nil {
-				logger.Fatal("error shutting down trace exporter", zap.Error(err))
+				logger.Error("error shutting down trace exporter", zap.Error(err))
 			}
 		}
 	}, nil

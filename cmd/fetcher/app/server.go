@@ -39,7 +39,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(logger *zap.Logger) {
+func Run(ctx context.Context, logger *zap.Logger) {
 	flag.Usage = fetcherUsage
 	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
@@ -62,8 +62,6 @@ func Run(logger *zap.Logger) {
 			}
 		}
 	}
-
-	ctx := context.Background()
 	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		go func() {

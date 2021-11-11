@@ -126,7 +126,7 @@ func serveMetric(logger *zap.Logger) {
 }
 
 // Start starts a router
-func Start(logger *zap.Logger, port int, executorURL string, openTracingEnabled bool) {
+func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string, openTracingEnabled bool) {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
@@ -258,10 +258,8 @@ func Start(logger *zap.Logger, port int, executorURL string, openTracingEnabled 
 	logger.Info("starting router", zap.Int("port", port))
 
 	tracer := otel.Tracer("router")
-	ctx, span := tracer.Start(context.Background(), "router/Start")
+	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	ctxWithCancel, cancel := context.WithCancel(ctx)
-	defer cancel()
-	serve(ctxWithCancel, logger, port, tracingSamplingRate, triggers, displayAccessLog, openTracingEnabled)
+	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog, openTracingEnabled)
 }

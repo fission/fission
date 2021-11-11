@@ -41,27 +41,28 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/signals"
 	"github.com/fission/fission/pkg/utils/tracing"
 )
 
-func runController(logger *zap.Logger, port int, openTracingEnabled bool) {
-	controller.Start(logger, port, false, openTracingEnabled)
+func runController(ctx context.Context, logger *zap.Logger, port int, openTracingEnabled bool) {
+	controller.Start(ctx, logger, port, false, openTracingEnabled)
 }
 
-func runRouter(logger *zap.Logger, port int, executorUrl string, openTracingEnabled bool) {
-	router.Start(logger, port, executorUrl, openTracingEnabled)
+func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl string, openTracingEnabled bool) {
+	router.Start(ctx, logger, port, executorUrl, openTracingEnabled)
 }
 
-func runExecutor(logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string, openTracingEnabled bool) error {
-	return executor.StartExecutor(logger, functionNamespace, envBuilderNamespace, port, openTracingEnabled)
+func runExecutor(ctx context.Context, logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string, openTracingEnabled bool) error {
+	return executor.StartExecutor(ctx, logger, functionNamespace, envBuilderNamespace, port, openTracingEnabled)
 }
 
-func runKubeWatcher(logger *zap.Logger, routerUrl string) error {
-	return kubewatcher.Start(logger, routerUrl)
+func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
+	return kubewatcher.Start(ctx, logger, routerUrl)
 }
 
-func runTimer(logger *zap.Logger, routerUrl string) error {
-	return timer.Start(logger, routerUrl)
+func runTimer(ctx context.Context, logger *zap.Logger, routerUrl string) error {
+	return timer.Start(ctx, logger, routerUrl)
 }
 
 func runMessageQueueMgr(logger *zap.Logger, routerUrl string) error {
@@ -69,20 +70,20 @@ func runMessageQueueMgr(logger *zap.Logger, routerUrl string) error {
 }
 
 // KEDA based MessageQueue Trigger Manager
-func runMQManager(logger *zap.Logger, routerURL string) error {
-	return mqt.StartScalerManager(logger, routerURL)
+func runMQManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
+	return mqt.StartScalerManager(ctx, logger, routerURL)
 }
 
-func runStorageSvc(logger *zap.Logger, port int, storage storagesvc.Storage, openTracingEnabled bool) error {
-	return storagesvc.Start(logger, storage, port, openTracingEnabled)
+func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage storagesvc.Storage, openTracingEnabled bool) error {
+	return storagesvc.Start(ctx, logger, storage, port, openTracingEnabled)
 }
 
-func runBuilderMgr(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
-	return buildermgr.Start(logger, storageSvcUrl, envBuilderNamespace)
+func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
+	return buildermgr.Start(ctx, logger, storageSvcUrl, envBuilderNamespace)
 }
 
-func runLogger() {
-	functionLogger.Start()
+func runLogger(ctx context.Context, logger *zap.Logger) {
+	functionLogger.Start(ctx, logger)
 }
 
 func getPort(logger *zap.Logger, portArg interface{}) int {
@@ -129,10 +130,8 @@ func getServiceName(arguments map[string]interface{}) string {
 }
 
 func exitWithSync(logger *zap.Logger) {
-	err := logger.Sync()
-	if err != nil {
-		logger.Error("failed to sync log", zap.Error(err))
-	}
+	// Ignore error, safe to ignore as per https://github.com/uber-go/zap/issues/328
+	_ = logger.Sync()
 	os.Exit(1)
 }
 
@@ -210,7 +209,8 @@ Options:
 		return
 	}
 
-	ctx := context.Background()
+	ctx := signals.SetupSignalHandlerWithContext(logger)
+
 	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {
 		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
@@ -238,21 +238,21 @@ Options:
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])
-		runController(logger, port, openTracingEnabled)
+		runController(ctx, logger, port, openTracingEnabled)
 		logger.Error("controller exited")
 		return
 	}
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(logger, port, executorUrl, openTracingEnabled)
+		runRouter(ctx, logger, port, executorUrl, openTracingEnabled)
 		logger.Error("router exited")
 		return
 	}
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(logger, port, functionNs, envBuilderNs, openTracingEnabled)
+		err = runExecutor(ctx, logger, port, functionNs, envBuilderNs, openTracingEnabled)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return
@@ -260,7 +260,7 @@ Options:
 	}
 
 	if arguments["--kubewatcher"] == true {
-		err = runKubeWatcher(logger, routerUrl)
+		err = runKubeWatcher(ctx, logger, routerUrl)
 		if err != nil {
 			logger.Error("kubewatcher exited", zap.Error(err))
 			return
@@ -268,7 +268,7 @@ Options:
 	}
 
 	if arguments["--timer"] == true {
-		err = runTimer(logger, routerUrl)
+		err = runTimer(ctx, logger, routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
 			return
@@ -284,7 +284,7 @@ Options:
 	}
 
 	if arguments["--mqt_keda"] == true {
-		err = runMQManager(logger, routerUrl)
+		err = runMQManager(ctx, logger, routerUrl)
 		if err != nil {
 			logger.Error("mqt scaler manager exited", zap.Error(err))
 			return
@@ -292,7 +292,7 @@ Options:
 	}
 
 	if arguments["--builderMgr"] == true {
-		err = runBuilderMgr(logger, storageSvcUrl, envBuilderNs)
+		err = runBuilderMgr(ctx, logger, storageSvcUrl, envBuilderNs)
 		if err != nil {
 			logger.Error("builder manager exited", zap.Error(err))
 			return
@@ -300,7 +300,7 @@ Options:
 	}
 
 	if arguments["--logger"] == true {
-		runLogger()
+		runLogger(ctx, logger)
 		logger.Error("logger exited")
 		return
 	}
@@ -315,11 +315,13 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		err := runStorageSvc(logger, port, storage, openTracingEnabled)
+		err := runStorageSvc(ctx, logger, port, storage, openTracingEnabled)
 		if err != nil {
 			logger.Error("storage service exited", zap.Error(err))
 			return
 		}
 	}
-	select {}
+
+	<-ctx.Done()
+	logger.Error("exiting")
 }

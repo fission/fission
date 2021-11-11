@@ -17,6 +17,7 @@ limitations under the License.
 package logger
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -32,7 +33,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 var nodeName = os.Getenv("NODE_NAME")
@@ -157,10 +157,7 @@ func symlinkReaper(zapLogger *zap.Logger) {
 	}
 }
 
-func Start() {
-	logger := loggerfactory.GetLogger()
-	defer logger.Sync()
-
+func Start(ctx context.Context, logger *zap.Logger) {
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		logger.Info("symlink path not exist, create it",
 			zap.String("fissionSymlinkPath", fissionSymlinkPath))
@@ -177,6 +174,6 @@ func Start() {
 	informerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := informerFactory.Core().V1().Pods().Informer()
 	podInformer.AddEventHandler(podInformerHandlers(logger))
-	podInformer.Run(make(chan struct{}))
-	logger.Fatal("Stop watching pod changes")
+	podInformer.Run(ctx.Done())
+	logger.Error("Stop watching pod changes")
 }

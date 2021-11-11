@@ -17,6 +17,7 @@ limitations under the License.
 package buildermgr
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,7 +30,7 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
+func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
 	bmLogger := logger.Named("builder_manager")
 
 	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
@@ -56,6 +57,6 @@ func Start(logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string)
 	pkgInformer := informerFactory.Core().V1().Packages().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
 		kubernetesClient, envBuilderNamespace, storageSvcUrl, &podInformer, &pkgInformer)
-	pkgWatcher.Run()
+	pkgWatcher.Run(ctx)
 	return nil
 }

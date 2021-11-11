@@ -17,6 +17,8 @@ limitations under the License.
 package kubewatcher
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -24,7 +26,7 @@ import (
 	"github.com/fission/fission/pkg/publisher"
 )
 
-func Start(logger *zap.Logger, routerUrl string) error {
+func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
@@ -36,7 +38,7 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	kubeWatch := MakeKubeWatcher(logger, kubeClient, poster)
+	kubeWatch := MakeKubeWatcher(ctx, logger, kubeClient, poster)
 	MakeWatchSync(logger, fissionClient, kubeWatch)
 
 	return nil

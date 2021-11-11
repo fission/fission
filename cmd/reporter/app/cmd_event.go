@@ -16,6 +16,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -49,7 +50,8 @@ func eventCommandHandler(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return tracker.Tracker.SendEvent(event)
+	ctx := context.Background()
+	return tracker.Tracker.SendEvent(ctx, event)
 }
 
 //EventCommand reports an event to analytics

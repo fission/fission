@@ -77,7 +77,7 @@ type (
 	}
 )
 
-func MakeKubeWatcher(logger *zap.Logger, kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher) *KubeWatcher {
+func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		logger:           logger.Named("kube_watcher"),
 		watches:          make(map[types.UID]watchSubscription),
@@ -85,7 +85,7 @@ func MakeKubeWatcher(logger *zap.Logger, kubernetesClient *kubernetes.Clientset,
 		publisher:        publisher,
 		requestChannel:   make(chan *kubeWatcherRequest),
 	}
-	go kw.svc()
+	go kw.svc(ctx)
 	return kw
 }
 
@@ -100,7 +100,7 @@ func (kw *KubeWatcher) Sync(watches []fv1.KubernetesWatchTrigger) error {
 	return resp.error
 }
 
-func (kw *KubeWatcher) svc() {
+func (kw *KubeWatcher) svc(ctx context.Context) {
 	for {
 		req := <-kw.requestChannel
 		switch req.requestType {
@@ -118,7 +118,7 @@ func (kw *KubeWatcher) svc() {
 			// Add new watches
 			for _, w := range req.watches {
 				if _, ok := kw.watches[w.ObjectMeta.UID]; !ok {
-					kw.addWatch(&w) //nolint: errCheck
+					kw.addWatch(ctx, &w) //nolint: errCheck
 				}
 			}
 			req.responseChannel <- &kubeWatcherResponse{error: nil}
@@ -149,7 +149,7 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fv1.KubernetesWatchTrigger, resourceVersion string) (watch.Interface, error) {
+func createKubernetesWatch(ctx context.Context, kubeClient *kubernetes.Clientset, w *fv1.KubernetesWatchTrigger, resourceVersion string) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
 	var watchTimeoutSec int64 = 120
@@ -163,22 +163,22 @@ func createKubernetesWatch(kubeClient *kubernetes.Clientset, w *fv1.KubernetesWa
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.Spec.Type) {
 	case "POD":
-		wi, err = kubeClient.CoreV1().Pods(w.Spec.Namespace).Watch(context.TODO(), listOptions)
+		wi, err = kubeClient.CoreV1().Pods(w.Spec.Namespace).Watch(ctx, listOptions)
 	case "SERVICE":
-		wi, err = kubeClient.CoreV1().Services(w.Spec.Namespace).Watch(context.TODO(), listOptions)
+		wi, err = kubeClient.CoreV1().Services(w.Spec.Namespace).Watch(ctx, listOptions)
 	case "REPLICATIONCONTROLLER":
-		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Spec.Namespace).Watch(context.TODO(), listOptions)
+		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Spec.Namespace).Watch(ctx, listOptions)
 	case "JOB":
-		wi, err = kubeClient.BatchV1().Jobs(w.Spec.Namespace).Watch(context.TODO(), listOptions)
+		wi, err = kubeClient.BatchV1().Jobs(w.Spec.Namespace).Watch(ctx, listOptions)
 	default:
 		err = errors.NewBadRequest(fmt.Sprintf("Error: unknown obj type '%v'", w.Spec.Type))
 	}
 	return wi, err
 }
 
-func (kw *KubeWatcher) addWatch(w *fv1.KubernetesWatchTrigger) error {
+func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigger) error {
 	kw.logger.Info("adding watch", zap.String("name", w.ObjectMeta.Name), zap.Any("function", w.Spec.FunctionReference))
-	ws, err := MakeWatchSubscription(kw.logger.Named("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
+	ws, err := MakeWatchSubscription(ctx, kw.logger.Named("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
 	return nil
 }
 
-func MakeWatchSubscription(logger *zap.Logger, w *fv1.KubernetesWatchTrigger, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(ctx context.Context, logger *zap.Logger, w *fv1.KubernetesWatchTrigger, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
 		logger:              logger.Named("watch_subscription"),
@@ -210,16 +210,16 @@ func MakeWatchSubscription(logger *zap.Logger, w *fv1.KubernetesWatchTrigger, ku
 		lastResourceVersion: "",
 	}
 
-	err := ws.restartWatch()
+	err := ws.restartWatch(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	go ws.eventDispatchLoop()
+	go ws.eventDispatchLoop(ctx)
 	return ws, nil
 }
 
-func (ws *watchSubscription) restartWatch() error {
+func (ws *watchSubscription) restartWatch(ctx context.Context) error {
 	retries := 60
 	for {
 		ws.logger.Info("(re)starting watch",
@@ -227,7 +227,7 @@ func (ws *watchSubscription) restartWatch() error {
 			zap.String("namespace", ws.watch.Spec.Namespace),
 			zap.String("type", ws.watch.Spec.Type),
 			zap.String("last_resource_version", ws.lastResourceVersion))
-		wi, err := createKubernetesWatch(ws.kubernetesClient, &ws.watch, ws.lastResourceVersion)
+		wi, err := createKubernetesWatch(ctx, ws.kubernetesClient, &ws.watch, ws.lastResourceVersion)
 		if err != nil {
 			retries--
 			if retries > 0 {
@@ -250,7 +250,7 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 	return m.GetResourceVersion(), nil
 }
 
-func (ws *watchSubscription) eventDispatchLoop() {
+func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 	ws.logger.Info("listening to watch", zap.String("name", ws.watch.ObjectMeta.Name))
 	for {
 		// check watchSubscription is stopped or not before waiting for event
@@ -269,7 +269,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			} else {
 				// watch closed due to timeout, restart it.
 				ws.logger.Warn("watch timed out - restarting", zap.String("watch_name", ws.watch.ObjectMeta.Name))
-				err := ws.restartWatch()
+				err := ws.restartWatch(ctx)
 				if err != nil {
 					ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
 				}
@@ -283,7 +283,7 @@ func (ws *watchSubscription) eventDispatchLoop() {
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""
 			time.Sleep(time.Second)
-			err := ws.restartWatch()
+			err := ws.restartWatch(ctx)
 			if err != nil {
 				ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
 			}

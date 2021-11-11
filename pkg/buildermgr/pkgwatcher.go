@@ -322,11 +322,10 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 	}
 }
 
-func (pkgw *packageWatcher) Run() {
-	context := context.Background()
-	go (*pkgw.podInformer).Run(context.Done())
+func (pkgw *packageWatcher) Run(ctx context.Context) {
+	go (*pkgw.podInformer).Run(ctx.Done())
 	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler())
-	(*pkgw.pkgInformer).Run(context.Done())
+	(*pkgw.pkgInformer).Run(ctx.Done())
 }
 
 // setInitialBuildStatus sets initial build status to a package if it is empty.

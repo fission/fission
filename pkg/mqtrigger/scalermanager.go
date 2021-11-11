@@ -149,7 +149,7 @@ func mqTriggerEventHandlers(logger *zap.Logger, kubeClient *kubernetes.Clientset
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
-func StartScalerManager(logger *zap.Logger, routerURL string) error {
+func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
@@ -161,7 +161,7 @@ func StartScalerManager(logger *zap.Logger, routerURL string) error {
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
 	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(logger, kubeClient, routerURL))
-	mqTriggerInformer.Run(context.Background().Done())
+	mqTriggerInformer.Run(ctx.Done())
 	return nil
 }
 

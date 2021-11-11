@@ -75,13 +75,13 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 // A user may have deleted pkgs with kubectl or fission cli. That only deletes crd.Package objects from kubernetes
 // and not the archives that are referenced by them, leaving the archives as orphans.
 // getOrphanArchives reaps the orphaned archives.
-func (pruner *ArchivePruner) getOrphanArchives() {
+func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	pruner.logger.Debug("getting orphan archives")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
 	// get all pkgs from kubernetes
-	pkgList, err := pruner.crdClient.CoreV1().Packages(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	pkgList, err := pruner.crdClient.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))
 		return
@@ -137,12 +137,12 @@ func (pruner *ArchivePruner) getOrphanArchives() {
 // Start starts a go routine that listens to a channel for archive IDs that need to deleted.
 // Also wakes up at regular intervals to make a list of archive IDs that need to be reaped
 // and sends them over to the channel for deletion
-func (pruner *ArchivePruner) Start() {
+func (pruner *ArchivePruner) Start(ctx context.Context) {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
 	go pruner.pruneArchives()
 	for range ticker.C {
 		// This method fetches unused archive IDs and sends them to archiveChannel for deletion
 		// silencing the errors, hoping they go away in next iteration.
-		pruner.getOrphanArchives()
+		pruner.getOrphanArchives(ctx)
 	}
 }

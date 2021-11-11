@@ -141,7 +141,7 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), deploy.deplListerSynced, deploy.svcListerSynced); !ok {
 		deploy.logger.Fatal("failed to wait for caches to sync")
 	}
-	go deploy.idleObjectReaper()
+	go deploy.idleObjectReaper(ctx)
 }
 
 // GetTypeName returns the executor type name.
@@ -748,8 +748,7 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (deploy *NewDeploy) idleObjectReaper() {
-	ctx := context.Background()
+func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 	pollSleep := 5 * time.Second
 	for {
 		time.Sleep(pollSleep)
