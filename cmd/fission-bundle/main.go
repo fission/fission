@@ -130,10 +130,8 @@ func getServiceName(arguments map[string]interface{}) string {
 }
 
 func exitWithSync(logger *zap.Logger) {
-	err := logger.Sync()
-	if err != nil {
-		logger.Error("failed to sync log", zap.Error(err))
-	}
+	// Ignore error, safe to ignore as per https://github.com/uber-go/zap/issues/328
+	_ = logger.Sync()
 	os.Exit(1)
 }
 
