@@ -1,8 +1,8 @@
-<!--  Thanks for sending a pull request! We request you provide detailed description as much as possibe. -->
+<!--  Thanks for sending a pull request! We request you provide detailed description as much as possible. -->
 
 ## Description
-<!--- Describe your changes in detail -->
-<!-- Typically try to give details of what, why and how of the PR changes -->
+<!--- Describe your changes in detail. -->
+<!-- Typically try to give details of what, why and how of the PR changes. -->
 
 ## Which issue(s) this PR fixes:
 <!--
