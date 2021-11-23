@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.15.0](https://github.com/fission/fission/tree/v1.15.0) (2021-11-23)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.15.0-rc2...v1.15.0)
+
+**Merged pull requests:**
+
+- Update alpine base image to 3.14.3 and security fixes [\#2266](https://github.com/fission/fission/pull/2266) ([sanketsudake](https://github.com/sanketsudake))
+- Update chart logo with svg image [\#2264](https://github.com/fission/fission/pull/2264) ([sanketsudake](https://github.com/sanketsudake))
+
 ## [v1.15.0-rc2](https://github.com/fission/fission/tree/v1.15.0-rc2) (2021-11-11)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.15.0-rc1...v1.15.0-rc2)
