@@ -35,7 +35,7 @@ require (
 	github.com/nats-io/nats.go v1.13.0
 	github.com/nats-io/stan.go v0.10.0
 	github.com/nwaples/rardecode v1.1.2 // indirect
-	github.com/opencontainers/image-spec v1.0.1 // indirect
+	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opencontainers/runc v1.0.2 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/pkg/errors v0.9.1
