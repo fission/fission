@@ -1,4 +1,4 @@
-FROM alpine:3.14
+FROM alpine:3.14.3
 RUN apk add --update ca-certificates
 COPY fission-bundle /
 ENTRYPOINT ["/fission-bundle"]
