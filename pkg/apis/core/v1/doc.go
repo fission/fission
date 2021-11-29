@@ -22,10 +22,6 @@ limitations under the License.
 // +groupName=fission.io
 // +groupGoName=core
 //
-// In order not to break the backward compatibility, keep coreV1 types stay
-// at "fission.io" group instead of moving them to "core.fission.io".
-// If the value of group is different from the one we register, the
-// CRD client will not be able to get anything from the API server.
 package v1
 
 const (

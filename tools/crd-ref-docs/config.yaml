@@ -1,0 +1,7 @@
+processor:
+  ignoreTypes:
+    - "(CanaryConfig|Environment|Function|HTTPTrigger|KubernetesWatchTrigger|MessageQueueTrigger|Package|TimeTrigger)List$"
+  ignoreGroupVersions:
+render:
+  # Version of Kubernetes to use when generating links to Kubernetes API documentation.
+  kubernetesVersion: 1.22
