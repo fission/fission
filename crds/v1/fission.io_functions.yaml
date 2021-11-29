@@ -41,7 +41,7 @@ spec:
                     description: ExecutionStrategy specifies low-level parameters for function execution, such as the number of instances.
                     properties:
                       ExecutorType:
-                        description: "ExecutorType is the executor type of a function used. Defaults to \"poolmgr\". \n Available value:  - poolmgr  - newdeploy  - container"
+                        description: "ExecutorType is the executor type of function used. Defaults to \"poolmgr\". \n Available value:  - poolmgr  - newdeploy  - container"
                         type: string
                       MaxScale:
                         description: This is only for newdeploy to set up maximum replicas of deployment.
@@ -57,7 +57,7 @@ spec:
                         type: integer
                     type: object
                   StrategyType:
-                    description: StrategyType is the strategy type of a function. Now it only supports 'execution'.
+                    description: StrategyType is the strategy type of function. Now it only supports 'execution'.
                     type: string
                 type: object
               concurrency:
