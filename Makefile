@@ -82,6 +82,13 @@ generate-swagger-doc:
 generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/fission-cli"
 
+generate-crd-ref-docs:
+	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
+	crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
+	cp tools/crd-ref-docs/header.md crd_docs.md
+	cat out.md >> crd_docs.md && rm out.md
+	cp crd_docs.md ../fission.io/content/en/docs/crd/_index.md
+
 all-generators: codegen generate-crds generate-swagger-doc
 
 skaffold-prebuild:

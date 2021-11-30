@@ -33,7 +33,7 @@ spec:
             description: HTTPTriggerSpec is for router to expose user functions at the given URL path.
             properties:
               createingress:
-                description: If CreateIngress is true, router will create a ingress definition.
+                description: If CreateIngress is true, router will create an ingress definition.
                 type: boolean
               functionref:
                 description: FunctionReference is a reference to the target function.
@@ -58,12 +58,12 @@ spec:
                 description: 'TODO: remove this field since we have IngressConfig already Deprecated: the original idea of this field is not for setting Ingress. Since we have IngressConfig now, remove Host after couple releases.'
                 type: string
               ingressconfig:
-                description: 'TODO: make IngressConfig a independent Fission resource IngressConfig for router to set up Ingress.'
+                description: 'TODO: make IngressConfig an independent Fission resource IngressConfig for router to set up Ingress.'
                 properties:
                   annotations:
                     additionalProperties:
                       type: string
-                    description: Annotations will be add to metadata when creating Ingress.
+                    description: Annotations will be added to metadata when creating Ingress.
                     nullable: true
                     type: object
                   host:

@@ -50,7 +50,7 @@ spec:
                         type: string
                     type: object
                   literal:
-                    description: Literal contents of the package. Can be used for encoding packages below TODO (256KB?) size.
+                    description: Literal contents of the package. Can be used for encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
                   type:
@@ -84,7 +84,7 @@ spec:
                         type: string
                     type: object
                   literal:
-                    description: Literal contents of the package. Can be used for encoding packages below TODO (256KB?) size.
+                    description: Literal contents of the package. Can be used for encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
                   type:

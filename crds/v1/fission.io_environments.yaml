@@ -9399,7 +9399,7 @@ spec:
                 format: int64
                 type: integer
               version:
-                description: "Version is the Environment API version \n Version \"1\" allows user to run code snippet in a file and it's supported by most of environments except tensorflow-serving. \n Version \"2\" supports downloading and compiling user function if source archive is not empty. \n Version \"3\" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment."
+                description: "Version is the Environment API version \n Version \"1\" allows user to run code snippet in a file, and it's supported by most of the environments except tensorflow-serving. \n Version \"2\" supports downloading and compiling user function if source archive is not empty. \n Version \"3\" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment."
                 type: integer
             required:
             - runtime

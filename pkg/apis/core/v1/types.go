@@ -229,7 +229,7 @@ type (
 	// externally.
 	ArchiveType string
 
-	// Archive contains or references a collection of source or
+	// Archive contains or references a collection of sources or
 	// binary files.
 	Archive struct {
 		// Type defines how the package is specified: literal or URL.
@@ -240,7 +240,7 @@ type (
 		Type ArchiveType `json:"type,omitempty"`
 
 		// Literal contents of the package. Can be used for
-		// encoding packages below TODO (256KB?) size.
+		// encoding packages below TODO (256 KB?) size.
 		// +optional
 		Literal []byte `json:"literal,omitempty"`
 
@@ -254,7 +254,7 @@ type (
 		Checksum Checksum `json:"checksum,omitempty"`
 	}
 
-	// EnvironmentReference is a reference to a environment.
+	// EnvironmentReference is a reference to an environment.
 	EnvironmentReference struct {
 		Namespace string `json:"namespace"`
 		Name      string `json:"name"`
@@ -431,7 +431,7 @@ type (
 		// +optional
 		ExecutionStrategy ExecutionStrategy `json:"ExecutionStrategy"`
 
-		// StrategyType is the strategy type of a function.
+		// StrategyType is the strategy type of function.
 		// Now it only supports 'execution'.
 		// +optional
 		StrategyType StrategyType `json:"StrategyType"`
@@ -450,7 +450,7 @@ type (
 	// and resources allocated to the function pod.
 	ExecutionStrategy struct {
 
-		// ExecutorType is the executor type of a function used. Defaults to "poolmgr".
+		// ExecutorType is the executor type of function used. Defaults to "poolmgr".
 		//
 		// Available value:
 		//  - poolmgr
@@ -578,8 +578,8 @@ type (
 	EnvironmentSpec struct {
 		// Version is the Environment API version
 		//
-		// Version "1" allows user to run code snippet in a file and
-		// it's supported by most of environments except tensorflow-serving.
+		// Version "1" allows user to run code snippet in a file, and
+		// it's supported by most of the environments except tensorflow-serving.
 		//
 		// Version "2" supports downloading and compiling user function if source archive is not empty.
 		//
@@ -681,11 +681,11 @@ type (
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`
 
-		// If CreateIngress is true, router will create a ingress definition.
+		// If CreateIngress is true, router will create an ingress definition.
 		// +optional
 		CreateIngress bool `json:"createingress"`
 
-		// TODO: make IngressConfig a independent Fission resource
+		// TODO: make IngressConfig an independent Fission resource
 		// IngressConfig for router to set up Ingress.
 		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
@@ -693,7 +693,7 @@ type (
 
 	// IngressConfig is for router to set up Ingress.
 	IngressConfig struct {
-		// Annotations will be add to metadata when creating Ingress.
+		// Annotations will be added to metadata when creating Ingress.
 		// +optional
 		// +nullable
 		Annotations map[string]string `json:"annotations"`
