@@ -48,6 +48,13 @@ func IsReadyPod(pod *v1.Pod) bool {
 	return true
 }
 
+func IsPodTerminated(pod *v1.Pod) bool {
+	if phase := pod.Status.Phase; phase != v1.PodPending && phase != v1.PodRunning && phase != v1.PodUnknown {
+		return true
+	}
+	return false
+}
+
 // PodContainerReadyStatus returns the number of ready containers and total containers present in pod
 func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) {
 

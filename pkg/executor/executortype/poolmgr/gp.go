@@ -263,7 +263,13 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		pod, err := gp.readyPodLister.Pods(namespace).Get(name)
 		if err != nil {
 			logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
-			return "", nil, err
+			gp.readyPodQueue.Done(key)
+			continue
+		}
+		if utils.IsPodTerminated(pod) {
+			logger.Error("pod is terminated", zap.String("key", key))
+			gp.readyPodQueue.Done(key)
+			continue
 		}
 		if !utils.IsReadyPod(pod) {
 			logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
