@@ -80,7 +80,10 @@ func getContainer(loc stow.Location, containerName string, cursor string) (stow.
 		}
 	}
 	if con == nil && !stow.IsCursorEnd(cursorNew) {
-		getContainer(loc, containerName, cursorNew)
+		_, err := getContainer(loc, containerName, cursorNew)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return con, nil
 }
