@@ -17,6 +17,7 @@ limitations under the License.
 package storagesvc
 
 import (
+	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
@@ -62,6 +63,43 @@ var (
 	ErrWritingFileIntoResponse = errors.New("unable to copy item into http response")
 )
 
+func getContainer(loc stow.Location, containerName string, cursor string) (stow.Container, error) {
+	// use location.Containers to find containers that match the prefix (container name)
+	cons, cursorNew, err := loc.Containers(containerName, cursor, 1)
+	if err != nil {
+		return nil, err
+	}
+	var con stow.Container
+	for _, v := range cons {
+		c, err := loc.Container(v.ID())
+		if err != nil {
+			return nil, err
+		}
+		if c.Name() == containerName {
+			con = cons[0]
+			break
+		}
+	}
+	if con == nil && !stow.IsCursorEnd(cursorNew) {
+		_, err := getContainer(loc, containerName, cursorNew)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return con, nil
+}
+
+func getOrCreateContainer(loc stow.Location, containerName string, cursor string) (stow.Container, error) {
+	con, err := loc.CreateContainer(containerName)
+	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
+		con, err = getContainer(loc, containerName, stow.CursorStart)
+	}
+	if con == nil && err == nil {
+		err = fmt.Errorf("Storage container %s not found", containerName)
+	}
+	return con, err
+}
+
 // MakeStowClient create a new StowClient for given storage
 func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 	storageType := getStorageType(storage)
@@ -84,23 +122,7 @@ func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 	}
 	stowClient.location = loc
 
-	con, err := loc.CreateContainer(config.storage.getContainerName())
-	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
-		var cons []stow.Container
-		var cursor string
-
-		// use location.Containers to find containers that match the prefix (container name)
-		cons, cursor, err = loc.Containers(config.storage.getContainerName(), stow.CursorStart, 1)
-		if err == nil {
-			con = cons[0]
-			if !stow.IsCursorEnd(cursor) {
-				// Should only have one storage container
-				err = errors.New("Found more than one matched storage containers")
-			} else {
-				con = cons[0]
-			}
-		}
-	}
+	con, err := getOrCreateContainer(loc, config.storage.getContainerName(), stow.CursorStart)
 	if err != nil {
 		return nil, err
 	}
