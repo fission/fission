@@ -88,6 +88,17 @@ func getContainer(loc stow.Location, containerName string, cursor string) (stow.
 	return con, nil
 }
 
+func getOrCreateContainer(loc stow.Location, containerName string, cursor string) (stow.Container, error) {
+	con, err := loc.CreateContainer(containerName)
+	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
+		con, err = getContainer(loc, containerName, stow.CursorStart)
+	}
+	if con == nil {
+		err = errors.New("Storage container not found")
+	}
+	return con, err
+}
+
 // MakeStowClient create a new StowClient for given storage
 func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 	storageType := getStorageType(storage)
@@ -109,16 +120,8 @@ func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 		return nil, err
 	}
 	stowClient.location = loc
-	con, err := loc.CreateContainer(config.storage.getContainerName())
-	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
-		con, err = getContainer(loc, config.storage.getContainerName(), stow.CursorStart)
-		if err != nil {
-			return nil, err
-		}
-		if con == nil {
-			err = errors.New("Storage container not found")
-		}
-	}
+
+	con, err := getOrCreateContainer(loc, config.storage.getContainerName(), stow.CursorStart)
 	if err != nil {
 		return nil, err
 	}
