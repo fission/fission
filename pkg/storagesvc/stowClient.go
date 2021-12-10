@@ -17,6 +17,7 @@ limitations under the License.
 package storagesvc
 
 import (
+	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
@@ -93,8 +94,8 @@ func getOrCreateContainer(loc stow.Location, containerName string, cursor string
 	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
 		con, err = getContainer(loc, containerName, stow.CursorStart)
 	}
-	if con == nil {
-		err = errors.New("Storage container not found")
+	if con == nil && err == nil {
+		err = fmt.Errorf("Storage container %s not found", containerName)
 	}
 	return con, err
 }
