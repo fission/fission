@@ -128,7 +128,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 		if toSpec {
 
-			fr, err := spec.ReadSpecs(specDir, specIgnore)
+			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}
@@ -169,7 +169,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 		if toSpec {
 
-			fr, err := spec.ReadSpecs(specDir, specIgnore)
+			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}

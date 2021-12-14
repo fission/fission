@@ -43,7 +43,7 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	specIgnore := util.GetSpecIgnore(input)
 
 	// read everything
-	fr, err := ReadSpecs(specDir, specIgnore)
+	fr, err := ReadSpecs(specDir, specIgnore, false)
 	if err != nil {
 		return errors.Wrap(err, "error reading specs")
 	}

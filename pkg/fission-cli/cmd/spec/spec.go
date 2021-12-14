@@ -171,7 +171,7 @@ func SpecSave(resource interface{}, specFile string) error {
 		return err
 	}
 
-	fr, err := ReadSpecs(specDir, util.SPEC_IGNORE_FILE)
+	fr, err := ReadSpecs(specDir, util.SPEC_IGNORE_FILE, false)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 	}
@@ -526,9 +526,19 @@ func (fr *FissionResources) trackSourceMap(kind string, newobj *metav1.ObjectMet
 	return nil
 }
 
+// Apply commit label to the object metadata
+func applyCommitLabel(commitLabelVal string, m *metav1.ObjectMeta) {
+	if len(commitLabelVal) != 0 {
+		if m.Labels == nil {
+			m.Labels = make(map[string]string)
+		}
+		m.Labels[util.COMMIT_LABEL] = commitLabelVal
+	}
+}
+
 // ParseYaml takes one yaml document, figures out its type, parses it, and puts it in
 // the right list in the given fission resources set.
-func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
+func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal string) error {
 	var m *metav1.ObjectMeta
 
 	// Figure out the object type by unmarshaling into the TypeMeta struct; then
@@ -547,6 +557,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.Packages = append(fr.Packages, v)
 	case "Function":
 		var v fv1.Function
@@ -555,6 +566,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.Functions = append(fr.Functions, v)
 	case "Environment":
 		var v fv1.Environment
@@ -563,6 +575,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.Environments = append(fr.Environments, v)
 	case "HTTPTrigger":
 		var v fv1.HTTPTrigger
@@ -570,8 +583,8 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
-
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.HttpTriggers = append(fr.HttpTriggers, v)
 	case "KubernetesWatchTrigger":
 		var v fv1.KubernetesWatchTrigger
@@ -580,6 +593,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.KubernetesWatchTriggers = append(fr.KubernetesWatchTriggers, v)
 	case "TimeTrigger":
 		var v fv1.TimeTrigger
@@ -588,6 +602,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.TimeTriggers = append(fr.TimeTriggers, v)
 	case "MessageQueueTrigger":
 		var v fv1.MessageQueueTrigger
@@ -596,6 +611,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
 		m = &v.ObjectMeta
+		applyCommitLabel(commitLabelVal, m)
 		fr.MessageQueueTriggers = append(fr.MessageQueueTriggers, v)
 
 	// The following are not CRDs
@@ -606,6 +622,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
+
 		fr.DeploymentConfig = v
 	case "ArchiveUploadSpec":
 		var v types.ArchiveUploadSpec
@@ -613,10 +630,12 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Failed to parse %v in %v", tm.Kind, loc))
 		}
+
 		m = &metav1.ObjectMeta{
 			Name:      v.Name,
 			Namespace: "",
 		}
+		applyCommitLabel(commitLabelVal, m)
 		fr.ArchiveUploadSpecs = append(fr.ArchiveUploadSpecs, v)
 	default:
 		// no need to error out just because there's some extra files around;

@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/gitrepo"
 )
 
 type ValidateSubCommand struct {
@@ -54,7 +55,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 	// this will error on parse errors and on duplicates
 	specDir := util.GetSpecDir(input)
 	specIgnore := util.GetSpecIgnore(input)
-	fr, err := ReadSpecs(specDir, specIgnore)
+	fr, err := ReadSpecs(specDir, specIgnore, false)
 	if err != nil {
 		return errors.Wrap(err, "error reading specs")
 	}
@@ -198,7 +199,7 @@ func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, cluster
 
 // ReadSpecs reads all specs in the specified directory and returns a parsed set of
 // fission resources.
-func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
+func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResources, error) {
 
 	// make sure spec directory exists before continue
 	if _, err := os.Stat(specDir); os.IsNotExist(err) {
@@ -225,6 +226,21 @@ func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
 		},
 	}
 
+	// get absolute path of specdir
+	if !filepath.IsAbs(specDir) {
+		cwd, err := filepath.Abs("./")
+		if err != nil {
+			return nil, err
+		}
+		specDir = filepath.Join(cwd, specDir)
+	}
+
+	var gr *gitrepo.GitRepo
+	// check if applyCommitLabel flag is true
+	if applyCommitLabel {
+		gr = gitrepo.NewGitRepo(specDir)
+	}
+
 	var result *multierror.Error
 
 	// Users can organize the specdir into subdirs if they want to.
@@ -239,8 +255,15 @@ func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
 			return nil
 		}
 
+		// check if file matches any path in .specignore file
 		if ignoreParser.MatchesPath(path) {
 			return nil
+		}
+
+		var fileCommitLabelVal string
+		// check if applyCommitLabel is true and specdir is tracked by git repo
+		if applyCommitLabel {
+			fileCommitLabelVal, _ = gr.GetFileCommitLabel(path)
 		}
 
 		// read
@@ -249,6 +272,7 @@ func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
 			result = multierror.Append(result, err)
 			return nil
 		}
+
 		// handle the case where there are multiple YAML docs per file. go-yaml
 		// doesn't support this directly, yet.
 		docs := bytes.Split(b, []byte("\n---"))
@@ -260,7 +284,7 @@ func ReadSpecs(specDir, specIgnore string) (*FissionResources, error) {
 				err = fr.ParseYaml(d, &Location{
 					Path: path,
 					Line: lines,
-				})
+				}, fileCommitLabelVal)
 				if err != nil {
 					// collect all errors so user can fix them all
 					result = multierror.Append(result, err)

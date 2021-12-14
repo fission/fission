@@ -87,7 +87,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		specDir = util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
-		fr, err := spec.ReadSpecs(specDir, specIgnore)
+		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 		}
@@ -186,7 +186,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 
 	if input.Bool(flagkey.SpecSave) {
 		// if a package with the same spec exists, don't create a new spec file
-		fr, err := spec.ReadSpecs(util.GetSpecDir(input), util.GetSpecIgnore(input))
+		fr, err := spec.ReadSpecs(util.GetSpecDir(input), util.GetSpecIgnore(input), false)
 		if err != nil {
 			return nil, errors.Wrap(err, "error reading specs")
 		}
