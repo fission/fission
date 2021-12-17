@@ -55,40 +55,12 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	}
 
 	existingDepl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
-	if err == nil {
-		// Try to adopt orphan deployment created by the old executor.
-		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
-			existingDepl.Annotations = deployment.Annotations
-			existingDepl.Labels = deployment.Labels
-			existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
-			existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
-			existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
+	if err != nil && !k8s_err.IsNotFound(err) {
+		return nil, err
+	}
 
-			// Update with the latest deployment spec. Kubernetes will trigger
-			// rolling update if spec is different from the one in the cluster.
-			existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
-			if err != nil {
-				logger.Warn("error adopting cn", zap.Error(err),
-					zap.String("cn", deployName), zap.String("ns", deployNamespace))
-				return nil, err
-			}
-			// In this case, we just return without waiting for it for fast bootstraping.
-			return existingDepl, nil
-		}
-
-		if *existingDepl.Spec.Replicas < minScale {
-			err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
-			if err != nil {
-				logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
-				return nil, err
-			}
-		}
-		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = cn.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
-		}
-
-		return existingDepl, err
-	} else if k8s_err.IsNotFound(err) {
+	// Create new deployment if one does not previously exist
+	if k8s_err.IsNotFound(err) {
 		depl, err := cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
@@ -109,7 +81,39 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		}
 		return depl, err
 	}
-	return nil, err
+
+	// Try to adopt orphan deployment created by the old executor.
+	if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
+		existingDepl.Annotations = deployment.Annotations
+		existingDepl.Labels = deployment.Labels
+		existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
+		existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
+		existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
+
+		// Update with the latest deployment spec. Kubernetes will trigger
+		// rolling update if spec is different from the one in the cluster.
+		existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
+		if err != nil {
+			logger.Warn("error adopting cn", zap.Error(err),
+				zap.String("cn", deployName), zap.String("ns", deployNamespace))
+			return nil, err
+		}
+		// In this case, we just return without waiting for it for fast bootstraping.
+		return existingDepl, nil
+	}
+
+	if *existingDepl.Spec.Replicas < minScale {
+		err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
+		if err != nil {
+			logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
+			return nil, err
+		}
+	}
+	if existingDepl.Status.AvailableReplicas < minScale {
+		existingDepl, err = cn.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
+	}
+
+	return existingDepl, err
 }
 
 func (cn *Container) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, ns string) error {
