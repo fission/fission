@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage : [ 'kindest/node:v1.19.11' ]
+        kindimage : [ 'kindest/node:v1.19.11', 'kindest/node:v1.23.0' ]
         os: [ ubuntu-latest ]
     steps:
     - name: Setup go
