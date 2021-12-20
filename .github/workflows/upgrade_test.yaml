@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage: ["kindest/node:v1.19.16"]
+        kindimage: ["kindest/node:v1.21.14"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout action sources

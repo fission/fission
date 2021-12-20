@@ -50,6 +50,6 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error deleting canary config")
 	}
 
-	fmt.Printf("canaryconfig '%v.%v' deleted\n", input.String(flagkey.CanaryName), namespace)
+	fmt.Printf("canaryconfig '%s.%s' deleted\n", input.String(flagkey.CanaryName), namespace)
 	return nil
 }
