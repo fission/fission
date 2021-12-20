@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.19.16", "v1.20.15", "v1.21.14"]
+        kindversion: ["v1.21.14", "v1.23.13", "v1.25.3"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
@@ -175,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.19.16"]
+        kindversion: ["v1.21.14"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
