@@ -8,7 +8,6 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/Shopify/sarama v1.30.0
 	github.com/blend/go-sdk v1.20211025.3 // indirect
-	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/containerd/continuity v0.2.1 // indirect
 	github.com/dchest/uniuri v0.0.0-20200228104902-7aecb25e1fe5
 	github.com/docker/go-connections v0.4.0 // indirect
