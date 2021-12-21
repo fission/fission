@@ -67,7 +67,7 @@ Options:
 
 	err = crdBackedClient.LatestSchemaApplied(ctx)
 	if err != nil {
-		logger.Fatal("New CRDs are not applied")
+		logger.Fatal("New CRDs are not applied", zap.Error(err))
 	}
 	crdBackedClient.VerifyFunctionSpecReferences(ctx)
 }
