@@ -690,7 +690,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 			if fsvc, ok := gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
 				fsvc, ok := fsvc.(*fscache.FuncSvc)
 				if !ok {
-					gpm.logger.Error("could not covert item from PodToFsvc")
+					gpm.logger.Error("could not convert item from PodToFsvc")
 					return
 				}
 				gpm.fsCache.WebsocketFsvc.Store(fsvc.Name, true)
@@ -731,7 +731,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubern
 			if fsvc, ok := gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
 				fsvc, ok := fsvc.(*fscache.FuncSvc)
 				if !ok {
-					gpm.logger.Error("could not covert value from PodToFsvc")
+					gpm.logger.Error("could not convert value from PodToFsvc")
 					return
 				}
 				ctx := context.Background()

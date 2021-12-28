@@ -299,7 +299,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		funcInformer, pkgInformer, envInformer,
 		gpmPodInformer, gpmRsInformer)
 	if err != nil {
-		return errors.Wrap(err, "pool manager creation faied")
+		return errors.Wrap(err, "pool manager creation failed")
 	}
 
 	ndmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
@@ -315,7 +315,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		funcInformer, envInformer,
 		ndmDeplInformer, ndmSvcInformer)
 	if err != nil {
-		return errors.Wrap(err, "new deploy manager creation faied")
+		return errors.Wrap(err, "new deploy manager creation failed")
 	}
 
 	cnmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeContainer, time.Minute*30)
@@ -330,7 +330,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		functionNamespace, executorInstanceID, funcInformer,
 		cnmDeplInformer, cnmSvcInformer)
 	if err != nil {
-		return errors.Wrap(err, "container manager creation faied")
+		return errors.Wrap(err, "container manager creation failed")
 	}
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)

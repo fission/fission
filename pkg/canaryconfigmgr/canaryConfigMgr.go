@@ -77,7 +77,7 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, k
 
 	_, err := url.Parse(prometheusSvc)
 	if err != nil {
-		return nil, errors.Errorf("prometheus service url not found/invalid, cant create canary config manager: %v", prometheusSvc)
+		return nil, errors.Errorf("prometheus service url not found/invalid, can't create canary config manager: %v", prometheusSvc)
 	}
 
 	promClient, err := MakePrometheusClient(logger, prometheusSvc)
@@ -140,7 +140,7 @@ func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(canaryConfig *fv1.CanaryCon
 	// for each canary config, create a ticker with increment interval
 	interval, err := time.ParseDuration(canaryConfig.Spec.WeightIncrementDuration)
 	if err != nil {
-		canaryCfgMgr.logger.Error("error parsing duration - cant proceed with this canaryConfig",
+		canaryCfgMgr.logger.Error("error parsing duration - can't proceed with this canaryConfig",
 			zap.Error(err),
 			zap.String("duration", canaryConfig.Spec.WeightIncrementDuration),
 			zap.String("name", canaryConfig.ObjectMeta.Name),
@@ -351,7 +351,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 		err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(canaryConfig.ObjectMeta.Name, canaryConfig.ObjectMeta.Namespace,
 			fv1.CanaryConfigStatusSucceeded)
 		if err != nil {
-			// cant do much after max retries other than logging it.
+			// can't do much after max retries other than logging it.
 			canaryCfgMgr.logger.Error("error updating canary config after max retries",
 				zap.Error(err),
 				zap.String("name", canaryConfig.ObjectMeta.Name),

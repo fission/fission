@@ -174,7 +174,7 @@ func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]str
 func (gp *GenericPool) checkMetricsApi() bool {
 	apiGroups, err := gp.metricsClient.DiscoveryClient.ServerGroups()
 	if err != nil {
-		gp.logger.Error("faied to discover API groups", zap.Error(err))
+		gp.logger.Error("failed to discover API groups", zap.Error(err))
 		return false
 	}
 	return utils.SupportedMetricsAPIVersionAvailable(apiGroups)

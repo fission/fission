@@ -62,7 +62,7 @@ type (
 		// to "/".
 		URL string `json:"url"`
 
-		// Metatdata
+		// Metadata
 		FunctionMetadata *metav1.ObjectMeta
 
 		EnvVersion int `json:"envVersion"`

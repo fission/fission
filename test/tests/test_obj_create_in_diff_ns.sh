@@ -218,7 +218,7 @@ pool_mgr_test_1() {
 
 main() {
     # extract the test-id generated for this CI test run, so that they can be suffixed to namespaces created as part of
-    # this test and namespaces wont clash when fission CI tests are run in parallel in the future.
+    # this test and namespaces won't clash when fission CI tests are run in parallel in the future.
     id=`echo $FISSION_NAMESPACE| cut -d"-" -f2`
 
     echo "test_id : $id"

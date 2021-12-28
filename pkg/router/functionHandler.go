@@ -152,7 +152,7 @@ func (w *fakeCloseReadCloser) RealClose() error {
 // In such a case, the RoundTripper will retry requests against the new address and give up after maxRetries.
 // However, the subsequent http call for this function will ensure the cache is invalidated.
 //
-// If GetServiceForFunction returns an error or if RoundTripper exits with an error, it get's translated into 502
+// If GetServiceForFunction returns an error or if RoundTripper exits with an error, it gets translated into 502
 // inside ServeHttp function of the reverseProxy.
 // Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
 // if it returned an error.

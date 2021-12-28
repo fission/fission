@@ -401,7 +401,7 @@ func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) 
 	return resp.objects, resp.error
 }
 
-// ListOldForPool returns a list of aged function serices in cache for pooling.
+// ListOldForPool returns a list of aged function services in cache for pooling.
 func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, error) {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{

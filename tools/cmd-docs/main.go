@@ -41,7 +41,7 @@ func main() {
 		Short: "Generate docs for fission-cli",
 		Long:  "Generate docs for fission-cli",
 		Run: func(cmd *cobra.Command, args []string) {
-			log.Printf("Generting docs in directory %s", outdir)
+			log.Printf("Generating docs in directory %s", outdir)
 			fissionApp := app.App()
 			fissionApp.DisableAutoGenTag = true
 			fissionApp.Short = "Serverless framework for Kubernetes"

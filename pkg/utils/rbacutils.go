@@ -211,7 +211,7 @@ func RemoveSAFromRoleBindingWithRetries(ctx context.Context, logger *zap.Logger,
 
 		rbObj.Subjects = newSubjects
 
-		// cant use patch for deletes, the results become in-deterministic, so using update.
+		// can't use patch for deletes, the results become in-deterministic, so using update.
 		_, err = k8sClient.RbacV1().RoleBindings(rbObj.Namespace).Update(ctx, rbObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:

@@ -457,7 +457,7 @@ func (config IngressConfig) Validate() error {
 
 	// In Ingress, to accept requests from all host, the host field will
 	// be an empty string instead of "*" shown in kubectl. The router replaces
-	// the asterisk with "" when creating/updateing the Ingress, so here we
+	// the asterisk with "" when creating/updating the Ingress, so here we
 	// skip the check if the Host is equal to "*".
 	if len(config.Host) > 0 && config.Host != "*" {
 		if strings.Contains(config.Host, "*") {
